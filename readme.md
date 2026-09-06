@@ -1,7 +1,14 @@
 Check modal version:
 ```bash
+# Activate the virtual environment
+source .venv/bin/activate
+# Deactivate the virtual environment
+deactivate 2>/dev/null
+
 # if virtual env is activated
 modal --version
+modal app list
+modal app stop <app-id|app-name>
 
 # or directly using the binary path:
 .venv/bin/modal --version
@@ -17,4 +24,6 @@ python3 -m modal setup
 Run code:
 ```bash
 modal run get_started.py
+
+python launch-opencode.py --github-repo <owner/repo> --github-token <token>
 ``
