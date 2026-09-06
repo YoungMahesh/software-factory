@@ -12,7 +12,6 @@
 # on Modal and you've got "coding agents at home"!
 
 # Coding agents are most useful when they have context and tools.
-# By default, this script clones the [Modal examples repo](https://github.com/modal-labs/modal-examples).
 # Meta.
 
 # ![A screenshot of the OpenCode Web UI showing this coding agent running its own code](https://modal-cdn.com/examples-opencode-server-webui.png)
@@ -27,7 +26,6 @@ import modal
 MINUTES = 60
 HOURS = 60 * MINUTES
 OPENCODE_PORT = 4096
-DEFAULT_GITHUB_REPO = "modal-labs/modal-examples"
 
 # First, we define a Modal container [Image](https://modal.com/docs/guide/images)
 # with OpenCode installed.
@@ -67,20 +65,21 @@ def define_base_image() -> modal.Image:
 
 
 def clone_github_repo(
-    image: modal.Image, repo: str, ref: str, token: str | None = None
+    image: modal.Image, ref: str, secret: modal.Secret
 ) -> modal.Image:
     git_config = "git config --global advice.detachedHead false"
+    clone_cmd = (
+        f'REPO_NAME=$(basename "$GH_REPO") && '
+        f'GIT_ASKPASS=echo git clone --quiet --depth 1 --branch {ref} --no-single-branch '
+        f'https://oauth2:$GH_TOKEN@github.com/"$GH_REPO".git "/root/$REPO_NAME" && '
+        f'if [ -n "$DOTENV_PRIVATE_KEY" ]; then echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > "/root/$REPO_NAME/.env.keys"; fi && '
+        f'cd "/root/$REPO_NAME" && pnpm install'
+    )
 
-    # For private repositories, pass a GitHub personal access token via `--github-token`.
-    # For public repositories, no token is needed.
-
-    if token:
-        clone_cmd = f"GIT_ASKPASS=echo git clone --quiet --depth 1 --branch {ref} --no-single-branch https://oauth2:{token}@github.com/{repo}.git /root/code"
-    else:
-        clone_cmd = f"GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 --branch {ref} --no-single-branch https://github.com/{repo}.git /root/code"
-
-    print(f"🏖️  Cloning {repo}@{ref} to /root/code")
-    return image.run_commands(git_config, clone_cmd, force_build=True)
+    print(f"🏖️  Cloning repository from secret at ref {ref}")
+    return image.run_commands(
+        git_config, clone_cmd, secrets=[secret], force_build=True
+    )
 
 
 # ## Start the Sandbox
@@ -97,24 +96,36 @@ def create_sandbox(
     timeout: int,
     app: modal.App,
     secrets: list[modal.Secret],
-    working_dir: str | None = None,
 ) -> modal.Sandbox:
     print("🏖️  Creating sandbox")
 
+    start_cmd = (
+        f'if [ -n "$OPENCODE_GO_API_KEY" ]; then '
+        f'mkdir -p ~/.local/share/opencode && '
+        f'cat <<EOF > ~/.local/share/opencode/auth.json\n'
+        f'{{\n'
+        f'  "opencode-go": {{\n'
+        f'    "type": "api",\n'
+        f'    "key": "$OPENCODE_GO_API_KEY"\n'
+        f'  }}\n'
+        f'}}\n'
+        f'EOF\n'
+        f'fi && '
+        f'REPO_NAME=$(basename "$GH_REPO") && '
+        f'cd "/root/$REPO_NAME" && '
+        f'exec opencode serve --hostname=0.0.0.0 --port={OPENCODE_PORT} --log-level=DEBUG --print-logs'
+    )
+
     with modal.enable_output():
         return modal.Sandbox.create(
-            "opencode",
-            "serve",
-            "--hostname=0.0.0.0",
-            f"--port={OPENCODE_PORT}",
-            "--log-level=DEBUG",
-            "--print-logs",
+            "bash",
+            "-c",
+            start_cmd,
             encrypted_ports=[OPENCODE_PORT],
             secrets=secrets,
             timeout=timeout,
             image=image,
             app=app,
-            workdir=working_dir,
         )
 
 
@@ -126,7 +137,7 @@ def create_sandbox(
 # - accessing the TUI from your local terminal
 
 
-def print_access_info(sandbox: modal.Sandbox, password_secret_name: str):
+def print_access_info(sandbox: modal.Sandbox, secret_collection: str):
     print(
         "🏖️  Access the sandbox directly:",
         f"modal shell {sandbox.object_id}",
@@ -147,15 +158,19 @@ def print_access_info(sandbox: modal.Sandbox, password_secret_name: str):
     )
     print(
         "🏖️  Display the password:",
-        f"modal shell --secret {password_secret_name} --cmd 'env | grep OPENCODE_SERVER_PASSWORD='",
+        f"modal shell --secret {secret_collection} --cmd 'env | grep OPENCODE_SERVER_PASSWORD='",
         sep="\n\t",
     )
 
 
-# The server is secured via a password in a [Modal Secret](https://modal.com/docs/guide/secrets).
+# The server is secured via secrets in a [Modal Secret](https://modal.com/docs/guide/secrets).
 # You can create one by heading to the [Secrets Dashboard](https://modal.com/secrets)
-# and creating a new "Custom" Secret. Use `OPENCODE_SERVER_PASSWORD` as the key
-# and the password as the value.
+# and creating a new "Custom" Secret. The secret collection should define:
+# - `OPENCODE_SERVER_PASSWORD`: password for server authentication
+# - `GH_TOKEN`: GitHub personal access token for git authentication
+# - `GH_REPO`: GitHub repository in owner/repo format (e.g. anveshak71/db-manage)
+# - `DOTENV_PRIVATE_KEY`: private key for dotenv decryption (creates .env.keys)
+# - `OPENCODE_GO_API_KEY`: API key for OpenCode Go (creates ~/.local/share/opencode/auth.json)
 
 # The CLI will also give you a helpful one-liner you can use to recover the password
 # with your Modal credentials in case you forget it.
@@ -167,37 +182,25 @@ def print_access_info(sandbox: modal.Sandbox, password_secret_name: str):
 def main(
     timeout: int,
     app_name: str,
-    github_repo: str,
     github_ref: str,
-    github_token: str | None,
-    password_secret_name: str,
+    secret_collection: str,
 ):
     app = modal.App.lookup(app_name, create_if_missing=True)
     image = define_base_image()
 
-    image = clone_github_repo(image, github_repo, github_ref, github_token)
+    secret = modal.Secret.from_name(secret_collection)
+    image = clone_github_repo(image, github_ref, secret)
 
-    password_secret = modal.Secret.from_name(password_secret_name)
+    sandbox_secrets = [secret]
 
-    sandbox_secrets = [password_secret]
-    if github_token:
-        sandbox_secrets.append(modal.Secret.from_dict({"GH_TOKEN": github_token}))
-
-    sandbox = create_sandbox(image, timeout, app, sandbox_secrets, "/root/code")
-    print_access_info(sandbox, password_secret_name)
+    sandbox = create_sandbox(image, timeout, app, sandbox_secrets)
+    print_access_info(sandbox, secret_collection)
 
 
 # ## Command-line options
 
 # This script supports configuration via command-line arguments.
 # Run with `--help` to see all options.
-
-# To grant the agent the same GitHub permissions you have, you can pass a GitHub personal access token.
-# If you use the `gh` CLI, you can use shell command substitution to pass your current auth:
-
-# ```bash
-#     python 13_sandboxes/opencode_server.py --github-token $(gh auth token)
-# ```
 
 
 def parse_timeout(timeout_str: str) -> int:
@@ -231,28 +234,18 @@ if __name__ == "__main__":
         help="Modal app name. Default: nodejs-opencode-server",
     )
     parser.add_argument(
-        "--password-secret",
-        dest="password_secret_name",
-        help="Name",
-        default="opencode-secret",
-    )
-    parser.add_argument(
-        "--github-repo",
-        type=str,
-        default=DEFAULT_GITHUB_REPO,
-        help=f"GitHub repo in owner/repo format. Default: {DEFAULT_GITHUB_REPO}",
-    )
-    parser.add_argument(
         "--github-ref",
         type=str,
         default="main",
         help="Git ref to checkout (branch, tag, SHA). Default: main",
     )
     parser.add_argument(
-        "--github-token",
+        "--secret-collection",
+        "--secret",
+        dest="secret_collection",
         type=str,
-        default=None,
-        help="GitHub PAT for private repos and gh CLI auth. Tip: use $(gh auth token)",
+        required=True,
+        help="Modal secret collection name containing credentials and configuration.",
     )
 
     args = parser.parse_args()
@@ -260,8 +253,6 @@ if __name__ == "__main__":
     main(
         parse_timeout(args.timeout),
         args.app_name,
-        args.github_repo,
         args.github_ref,
-        args.github_token,
-        args.password_secret_name,
+        args.secret_collection,
     )

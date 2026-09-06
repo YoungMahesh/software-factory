@@ -25,5 +25,5 @@ Run code:
 ```bash
 modal run get_started.py
 
-python launch-opencode.py --github-repo <owner/repo> --github-token <token>
+python launch-opencode.py --app-name <app-name> --secret-collection <modal-secret-collection-name> 
 ``
