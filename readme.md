@@ -25,5 +25,5 @@ Run code:
 ```bash
 modal run get_started.py
 
-python launch-opencode.py --app-name <app-name> --secret-collection <modal-secret-collection-name> 
-``
+python launch-opencode.py --secret-collection <modal-secret-collection-name>
+```
