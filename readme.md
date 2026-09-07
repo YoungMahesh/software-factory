@@ -24,6 +24,4 @@ python3 -m modal setup
 Run code:
 ```bash
 modal run get_started.py
-
-python launch-opencode.py --secret-collection <modal-secret-collection-name>
 ```
