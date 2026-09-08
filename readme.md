@@ -3,7 +3,7 @@ Check modal version:
 # Activate the virtual environment
 source .venv/bin/activate
 # Deactivate the virtual environment
-deactivate 2>/dev/null
+deactivate
 
 # if virtual env is activated
 modal --version
