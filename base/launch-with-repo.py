@@ -37,9 +37,11 @@ def parse_timeout(timeout_str: str) -> int:
 
 
 def print_access_info(sandbox: modal.Sandbox, secret_collection: str, app_name: str):
+    tunnel = sandbox.tunnels()[3000]
     print("\n" + "=" * 50)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:     {app_name}")
+    print(f"  • WebUI:   {tunnel.url}")
     print(f"  • Shell:   modal shell {sandbox.object_id}")
     print("=" * 50 + "\n")
 

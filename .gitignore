@@ -3,3 +3,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
+
+# SSH keys
+ssh/id_*
+*.pub
