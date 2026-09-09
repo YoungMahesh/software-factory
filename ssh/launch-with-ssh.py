@@ -6,6 +6,9 @@ import modal
 LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
+# Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
+TIMEOUT_SECS = 12 * 60 * 60  # 12 hours
+
 
 # Static base image: built once and cached by Modal
 base_image = (
@@ -25,20 +28,6 @@ base_image = (
         LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True
     )
 )
-
-
-def parse_timeout(timeout_str: str) -> int:
-    """Parses human-friendly timeout (e.g. '2h', '90m', '12') into seconds."""
-    if timeout_str.endswith("h"):
-        minutes = int(timeout_str[:-1]) * 60
-    elif timeout_str.endswith("m"):
-        minutes = int(timeout_str[:-1])
-    else:
-        minutes = int(timeout_str) * 60
-
-    if not (1 <= minutes <= 24 * 60):
-        raise argparse.ArgumentTypeError("Timeout must be between 1 minute and 24 hours.")
-    return minutes * 60
 
 
 def load_ssh_pubkey(key_path_str: str) -> tuple[str, Path]:
@@ -92,11 +81,6 @@ def print_access_info(
 def main():
     parser = argparse.ArgumentParser(description="Launch a repository in a Modal Sandbox with SSH & Web URL")
     parser.add_argument(
-        "--timeout",
-        default="12",
-        help="Timeout (e.g., 2h, 90m, or raw hours). Default: 12h",
-    )
-    parser.add_argument(
         "--github-ref",
         default="main",
         help="Git ref to checkout (branch, tag, commit). Default: main",
@@ -135,7 +119,7 @@ def main():
             REMOTE_STARTUP_SCRIPT,
             args.github_ref,
             secrets=[secret],
-            timeout=parse_timeout(args.timeout),
+            timeout=TIMEOUT_SECS,
             image=base_image,
             app=app,
             unencrypted_ports=[22],
