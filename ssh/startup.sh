@@ -30,7 +30,7 @@ git config --global user.email "maheshghamand@gmail.com"
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "🏝️  Cloning $GH_REPO (ref: $REF)..."
-    GIT_ASKPASS=echo git clone --quiet --depth 1 --branch "$REF" --no-single-branch \
+    GIT_ASKPASS=echo git clone --quiet --branch "$REF" --single-branch \
         "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
 fi
 
