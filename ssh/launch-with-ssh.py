@@ -1,6 +1,7 @@
 import argparse
-from pathlib import Path
 import uuid
+from pathlib import Path
+
 import modal
 
 LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
@@ -15,8 +16,16 @@ TIMEOUT_SECS = 12 * 60 * 60  # 12 hours
 # Static base image: built once and cached by Modal
 base_image = (
     modal.Image.from_registry("node:24-bookworm-slim")
-    # wget is necessory for connecting vscode or antigravity-ide via ssh; not required for zed-editor
-    .apt_install("curl", "git", "gh", "openssh-server", "wget")
+    # Silently accepts default answers (or preseeded values) and never prompts the user.
+    # If an issue requires manual intervention, it logs the error rather than waiting indefinitely.
+    .env({"DEBIAN_FRONTEND": "noninteractive"})
+    # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
+    .apt_install(
+        "curl",
+        "git",
+        "openssh-server",
+        "wget",
+    )
     .run_commands(
         "corepack enable pnpm",
         "corepack prepare pnpm@10.31.0 --activate",
@@ -26,15 +35,11 @@ base_image = (
         "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config.d/modal.conf",
         "ssh-keygen -A",
     )
-    .add_local_file(
-        LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True
-    )
+    .add_local_file(LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True)
 )
 
 if LOCAL_GIT_BASH.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True
-    )
+    base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
 
 
 def load_ssh_pubkey(key_path_str: str) -> tuple[str, Path]:
@@ -86,14 +91,18 @@ def print_access_info(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Launch a repository in a Modal Sandbox with SSH & Web URL")
+    parser = argparse.ArgumentParser(
+        description="Launch a repository in a Modal Sandbox with SSH & Web URL"
+    )
     parser.add_argument(
         "--github-ref",
         default="main",
         help="Git ref to checkout (branch, tag, commit). Default: main",
     )
     parser.add_argument(
-        "-s", "--secret", "--secret-collection",
+        "-s",
+        "--secret",
+        "--secret-collection",
         dest="secret_collection",
         required=True,
         help="Modal Secret collection name.",
@@ -109,6 +118,11 @@ def main():
         default=3000,
         help="Web application port to expose over public HTTPS URL (default: 3000)",
     )
+    parser.add_argument(
+        "--vm",
+        action="store_true",
+        help="Launch inside a VM Sandbox with full Linux kernel (default: standard container sandbox)",
+    )
     args = parser.parse_args()
 
     pubkey_content, priv_key_path = load_ssh_pubkey(args.ssh_key)
@@ -119,7 +133,12 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
-    print(f"🏝️  Launching Modal Sandbox with SSH & Web Port {args.web_port} (App: {app_name})...")
+    experimental_options = {"vm_runtime": True} if args.vm else None
+    runtime_desc = "VM Sandbox" if args.vm else "Standard Sandbox"
+
+    print(
+        f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port} (App: {app_name})..."
+    )
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
             "bash",
@@ -129,6 +148,7 @@ def main():
             timeout=TIMEOUT_SECS,
             image=base_image,
             app=app,
+            experimental_options=experimental_options,
             unencrypted_ports=[22],
             encrypted_ports=[args.web_port],
             env={
