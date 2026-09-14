@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import secrets
 import uuid
 import modal
 
@@ -53,15 +54,15 @@ def parse_timeout(timeout_str: str) -> int:
     return minutes * 60
 
 
-def print_access_info(sandbox: modal.Sandbox, secret_collection: str, app_name: str):
+def print_access_info(sandbox: modal.Sandbox, app_name: str, password: str):
     tunnel = sandbox.tunnels()[OPENCODE_PORT]
     print("\n" + "=" * 50)
     print("🏖️  OpenCode Sandbox Ready!")
-    print(f"  • App:     {app_name}")
-    print(f"  • WebUI:   {tunnel.url} (User: opencode)")
-    print(f"  • Attach:  OPENCODE_SERVER_PASSWORD=YOUR_PASSWORD opencode attach {tunnel.url}")
-    print(f"  • Shell:   modal shell {sandbox.object_id}")
-    print(f"  • View PW: modal shell --secret {secret_collection} --cmd 'env | grep OPENCODE_SERVER_PASSWORD='")
+    print(f"  • App:      {app_name}")
+    print(f"  • WebUI:    {tunnel.url} (User: opencode)")
+    print(f"  • Password: {password}")
+    print(f"  • Attach:   OPENCODE_SERVER_PASSWORD={password} opencode attach {tunnel.url}")
+    print(f"  • Shell:    modal shell {sandbox.object_id}")
     print("=" * 50 + "\n")
 
 
@@ -87,9 +88,13 @@ def main():
 
     random_id = uuid.uuid4().hex[:8]
     app_name = f"{args.secret_collection}-{random_id}"
+    server_password = secrets.token_urlsafe(16)
 
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
+    password_secret = modal.Secret.from_dict(
+        {"OPENCODE_SERVER_PASSWORD": server_password}
+    )
 
     print(f"🏖️  Launching Modal Sandbox (App: {app_name})...")
     with modal.enable_output():
@@ -98,13 +103,13 @@ def main():
             REMOTE_STARTUP_SCRIPT,
             args.github_ref,
             encrypted_ports=[OPENCODE_PORT],
-            secrets=[secret],
+            secrets=[secret, password_secret],
             timeout=parse_timeout(args.timeout),
             image=base_image,
             app=app,
         )
 
-    print_access_info(sandbox, args.secret_collection, app_name)
+    print_access_info(sandbox, app_name, server_password)
 
 
 if __name__ == "__main__":
