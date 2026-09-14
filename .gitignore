@@ -6,4 +6,5 @@ __pycache__/
 
 # SSH keys
 ssh/id_*
+ssh_docker/id_*
 *.pub
