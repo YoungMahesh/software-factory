@@ -23,6 +23,7 @@ base_image = (
     .apt_install(
         "curl",
         "git",
+        "htop",
         "openssh-server",
         "wget",
     )
@@ -76,8 +77,14 @@ def print_access_info(
         print(f"  • Web URL: {web_url} (port {web_port})")
     if ssh_info:
         ssh_host, ssh_port = ssh_info
-        key_arg = f"-i {private_key_path} " if private_key_path and private_key_path.exists() else ""
-        ssh_cmd = f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
+        key_arg = (
+            f"-i {private_key_path} "
+            if private_key_path and private_key_path.exists()
+            else ""
+        )
+        ssh_cmd = (
+            f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
+        )
         print(f"  • SSH:     {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
         print(f"Host {app_name}")

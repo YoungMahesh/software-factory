@@ -23,7 +23,14 @@ base_image = (
     # `docker.io`, `docker-buildx` for docker
     # unzip for fnm
     .apt_install(
-        "curl", "git", "openssh-server", "wget", "docker.io", "docker-buildx", "unzip"
+        "curl",
+        "git",
+        "htop",
+        "openssh-server",
+        "wget",
+        "docker.io",
+        "docker-buildx",
+        "unzip",
     )
     .run_commands(
         # Download and install fnm:
