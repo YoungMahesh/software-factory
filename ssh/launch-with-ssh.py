@@ -79,14 +79,14 @@ def print_access_info(
         key_arg = f"-i {private_key_path} " if private_key_path and private_key_path.exists() else ""
         ssh_cmd = f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
         print(f"  • SSH:     {ssh_cmd}")
-        print("\n  VS Code / SSH Config snippet:")
-        print(f"    Host {app_name}")
-        print(f"        HostName {ssh_host}")
-        print(f"        Port {ssh_port}")
-        print(f"        User root")
+        print("\nVS Code / SSH Config snippet:")
+        print(f"Host {app_name}")
+        print(f"  HostName {ssh_host}")
+        print(f"  Port {ssh_port}")
+        print(f"  User root")
         if private_key_path and private_key_path.exists():
-            print(f"        IdentityFile {private_key_path.resolve()}")
-        print("        StrictHostKeyChecking no")
+            print(f"  IdentityFile {private_key_path.resolve()}")
+        print("  StrictHostKeyChecking no")
     print("=" * 60 + "\n")
 
 
