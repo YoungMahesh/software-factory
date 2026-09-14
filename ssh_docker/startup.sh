@@ -3,17 +3,6 @@ set -euo pipefail
 
 REF="${1:-main}"
 
-
-# 0. fnm installation script appends `fnm` path to `/root/.bashrc`
-#   hence we need to source bashrc to make fnm cmd available for nodejs installation
-source /root/.bashrc
-# Download and install Node.js:
-fnm install 24
-node -v
-npm -v
-corepack enable pnpm
-corepack prepare pnpm@10.31.0 --activate
-
 # 0. Setup and start SSH server
 mkdir -p /run/sshd /root/.ssh
 ssh-keygen -A 2>/dev/null || true
@@ -25,6 +14,36 @@ if [ -f /root/.ssh/authorized_keys ]; then
     chmod 600 /root/.ssh/authorized_keys
 fi
 /usr/sbin/sshd
+
+# Start Docker daemon in background
+echo "Starting dockerd..."
+/usr/bin/dockerd > /var/log/dockerd.log 2>&1 &
+# Wait for Docker daemon to become ready (up to 30s)
+echo "Waiting for dockerd to be ready..."
+for i in $(seq 1 30); do
+    if [ -S /var/run/docker.sock ] && docker info >/dev/null 2>&1; then
+        echo "Docker is ready!"
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "ERROR: dockerd failed to start within 30s. Logs:" >&2
+        cat /var/log/dockerd.log >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+# make fnm path available to shell (logs of fnm-installation mention this path)
+FNM_PATH="/root/.local/share/fnm"
+export PATH="$FNM_PATH:$PATH"
+eval "$(fnm env --shell bash)"
+# Download and install Node.js:
+fnm install 24
+node -v
+npm -v
+corepack enable pnpm
+corepack prepare pnpm@10.31.0 --activate
+
 
 # 1. Clone repository
 if [ -z "${GH_REPO:-}" ]; then
@@ -58,6 +77,14 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
+# Allocate 4GB swap space
+if ! swapon --show | grep -q '/swapfile'; then
+    fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+fi
+
 # 3. Install dependencies if package manifest exists
 if [ -f "pnpm-lock.yaml" ]; then
     pnpm install
@@ -65,8 +92,6 @@ elif [ -f "package.json" ]; then
     npm install
 fi
 
-# 4. starts a long-running Docker daemon.
-/usr/bin/dockerd -D
 
 # 4. Keep sandbox alive for interaction via modal shell / ssh
 echo "🏝️  Sandbox Ready!"

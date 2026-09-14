@@ -22,7 +22,9 @@ base_image = (
     # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
     # `docker.io`, `docker-buildx` for docker
     # unzip for fnm
-    .apt_install("curl", "git", "openssh-server", "wget", "docker.io", "docker-buildx", "unzip")
+    .apt_install(
+        "curl", "git", "openssh-server", "wget", "docker.io", "docker-buildx", "unzip"
+    )
     .run_commands(
         # Download and install fnm:
         "curl -o- https://fnm.vercel.app/install | bash",
@@ -146,6 +148,12 @@ def main():
             timeout=TIMEOUT_SECS,
             image=base_image,
             app=app,
+            # default memory is 1GB, for heavy workload increase it to 2 to 4GB
+            # For VM, requested memory this is the maximum memory you can use
+            #   - although you can use swap memory, it is 10x to 50x slower than real RAM
+            #   - Rule of thumb: Keep swap between 1× to 2× your physical RAM
+            #   - script for allocating swap memory is written in ./startup script
+            # memory=4096,
             experimental_options=experimental_options,
             unencrypted_ports=[22],
             encrypted_ports=[args.web_port],
@@ -167,6 +175,12 @@ def main():
             web_url = tunnels[args.web_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
+
+    #  print the startup progress in your terminal in real time
+    for line in sandbox.stdout:
+        print(line, end="")
+        if "Sandbox Ready" in line:
+            break
 
     print_access_info(
         sandbox,
