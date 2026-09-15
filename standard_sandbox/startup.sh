@@ -27,6 +27,7 @@ TARGET_DIR="/root/$REPO_NAME"
 git config --global advice.detachedHead false
 git config --global user.name "Mahesh"
 git config --global user.email "maheshghamand@gmail.com"
+git config --global init.defaultBranch $REF
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "🏝️  Cloning $GH_REPO (ref: $REF)..."

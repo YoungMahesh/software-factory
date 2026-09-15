@@ -143,6 +143,9 @@ def main():
     experimental_options = {"vm_runtime": True} if args.vm else None
     runtime_desc = "VM Sandbox" if args.vm else "Standard Sandbox"
 
+    # Default minimum memory: 128 MiB for standard container sandboxes, 1024 MiB (1 GiB) for VM sandboxes
+    min_memory = 1024 if args.vm else 128
+
     print(
         f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port} (App: {app_name})..."
     )
@@ -158,6 +161,16 @@ def main():
             experimental_options=experimental_options,
             unencrypted_ports=[22],
             encrypted_ports=[args.web_port],
+            # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
+            # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
+            # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
+            #   Exceeding host capacity raises InvalidError at creation time.
+            cpu=(0.125, 8.0),
+            # Memory format: (request, limit) in MiB.
+            # - Default request: 128 MiB (standard container) or 1024 MiB (VM).
+            # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
+            #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
+            memory=(min_memory, 32768),
             env={
                 "SSH_AUTHORIZED_KEY": pubkey_content,
                 "PORT": str(args.web_port),
