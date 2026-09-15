@@ -155,12 +155,18 @@ def main():
             timeout=TIMEOUT_SECS,
             image=base_image,
             app=app,
-            # default memory is 1GB, for heavy workload increase it to 2 to 4GB
-            # For VM, requested memory this is the maximum memory you can use
-            #   - although you can use swap memory, it is 10x to 50x slower than real RAM
-            #   - Rule of thumb: Keep swap between 1× to 2× your physical RAM
-            #   - script for allocating swap memory is written in ./startup script
-            # memory=4096,
+            # cpu and memory are deliberately left at Modal's VM defaults: the default
+            # request is 1024 MiB (1 GiB) for VM sandboxes and the limit extends well beyond
+            # that. Pass an explicit (request, limit) tuple to raise either.
+            # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
+            # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
+            # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
+            #   Exceeding host capacity raises InvalidError at creation time.
+            # Memory format: (request, limit) in MiB.
+            # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
+            #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
+            # Swap is 10x to 50x slower than real RAM; keep it between 1× and 2× physical RAM.
+            #   ./startup.sh allocates a 4GB swapfile.
             experimental_options=experimental_options,
             unencrypted_ports=[22],
             encrypted_ports=[args.web_port],

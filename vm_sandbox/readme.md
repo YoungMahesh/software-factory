@@ -1,6 +1,8 @@
-# Modal Sandbox with SSH & Web Port Forwarding
+# Modal VM Sandbox with SSH & Web Port Forwarding
 
-Launch a Modal sandbox container with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000). Pass `--vm` to launch inside a full Linux VM Sandbox with Docker support.
+Launch a Modal **VM** Sandbox (full Linux kernel, Docker support) with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000).
+
+For a standard container sandbox without a VM, use [`standard_sandbox/launch-with-ssh.py`](../standard_sandbox/launch-with-ssh.py) instead.
 
 
 ## Required Modal Secret Variables
@@ -18,11 +20,11 @@ The secret collection passed to `--secret-collection` (or `-s`) must define the 
 ## Quickstart
 
 ```bash
-# Launch VM sandbox 
-python launch-with-ssh.py --secret-collection <modal-secret-collection-name> 
+# Launch VM sandbox
+python launch_vm-ssh.py --secret-collection <modal-secret-collection-name>
 
 # Custom SSH key and/or web port in VM
-python launch-with-ssh.py \
+python launch_vm-ssh.py \
     --secret-collection <modal-secret-collection-name> \
     --ssh-key ~/.ssh/id_ed25519 \
     --web-port 3000

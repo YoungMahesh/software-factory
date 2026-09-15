@@ -1,4 +1,5 @@
 import argparse
+import secrets
 import uuid
 from pathlib import Path
 
@@ -8,9 +9,12 @@ LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
 LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
 REMOTE_GIT_BASH = "/root/.git.bash"
+LOCAL_OPENCODE_CONFIG = Path(__file__).parent / "opencode.json"
+REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 12 * 60 * 60  # 12 hours
+DEFAULT_OPENCODE_PORT = 4096
 
 
 # Static base image: built once and cached by Modal
@@ -42,6 +46,18 @@ base_image = (
 if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
 
+# OpenCode layers on top of the base image. Only used when --opencode is passed, so
+# plain launches never pay to build these layers. Images are lazy: this costs nothing
+# unless a sandbox actually uses it.
+opencode_image = base_image.run_commands(
+    "curl -fsSL https://opencode.ai/install | bash",
+).env({"PATH": "/root/.opencode/bin:${PATH}"})
+
+if LOCAL_OPENCODE_CONFIG.exists():
+    opencode_image = opencode_image.add_local_file(
+        LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
+    )
+
 
 def load_ssh_pubkey(key_path_str: str) -> tuple[str, Path]:
     """Loads SSH public key content and returns (pubkey_content, private_key_path)."""
@@ -68,13 +84,26 @@ def print_access_info(
     private_key_path: Path | None = None,
     web_url: str | None = None,
     web_port: int | None = None,
+    opencode_url: str | None = None,
+    opencode_port: int | None = None,
+    opencode_password: str | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
-    print(f"  • App:     {app_name}")
-    print(f"  • Shell:   modal shell {sandbox.object_id}")
+    print(f"  • App:      {app_name}")
+    print(f"  • Shell:    modal shell {sandbox.object_id}")
     if web_url:
-        print(f"  • Web URL: {web_url} (port {web_port})")
+        print(f"  • Web URL:  {web_url} (port {web_port})")
+    if opencode_url:
+        print(
+            f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)"
+        )
+        if opencode_password:
+            print(f"  • Password: {opencode_password}")
+            print(
+                f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
+                f"opencode attach {opencode_url}"
+            )
     if ssh_info:
         ssh_host, ssh_port = ssh_info
         key_arg = (
@@ -85,12 +114,12 @@ def print_access_info(
         ssh_cmd = (
             f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
         )
-        print(f"  • SSH:     {ssh_cmd}")
+        print(f"  • SSH:      {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
         print(f"Host {app_name}")
         print(f"  HostName {ssh_host}")
         print(f"  Port {ssh_port}")
-        print(f"  User root")
+        print("  User root")
         if private_key_path and private_key_path.exists():
             print(f"  IdentityFile {private_key_path.resolve()}")
         print("  StrictHostKeyChecking no")
@@ -126,11 +155,22 @@ def main():
         help="Web application port to expose over public HTTPS URL (default: 3000)",
     )
     parser.add_argument(
-        "--vm",
+        "--opencode",
         action="store_true",
-        help="Launch inside a VM Sandbox with full Linux kernel (default: standard container sandbox)",
+        help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
+    )
+    parser.add_argument(
+        "--opencode-port",
+        type=int,
+        default=DEFAULT_OPENCODE_PORT,
+        help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
     )
     args = parser.parse_args()
+
+    if args.opencode and args.opencode_port == args.web_port:
+        parser.error(
+            "--opencode-port and --web-port must differ: a port can only be exposed once."
+        )
 
     pubkey_content, priv_key_path = load_ssh_pubkey(args.ssh_key)
 
@@ -140,53 +180,68 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
-    experimental_options = {"vm_runtime": True} if args.vm else None
-    runtime_desc = "VM Sandbox" if args.vm else "Standard Sandbox"
+    image = opencode_image if args.opencode else base_image
+    encrypted_ports = [args.web_port]
+    sandbox_secrets = [secret]
+    env: dict[str, str | None] = {
+        "SSH_AUTHORIZED_KEY": pubkey_content,
+        "PORT": str(args.web_port),
+        "HOSTNAME": "0.0.0.0",
+    }
 
-    # Default minimum memory: 128 MiB for standard container sandboxes, 1024 MiB (1 GiB) for VM sandboxes
-    min_memory = 1024 if args.vm else 128
+    opencode_password = None
+    if args.opencode:
+        encrypted_ports.append(args.opencode_port)
+        # Fresh password per launch, so nothing has to be pre-provisioned in the secret.
+        opencode_password = secrets.token_urlsafe(16)
+        sandbox_secrets.append(
+            modal.Secret.from_dict({"OPENCODE_SERVER_PASSWORD": opencode_password})
+        )
+        # Explicit trigger for startup.sh; OPENCODE_PORT is only the port value.
+        env["ENABLE_OPENCODE"] = "1"
+        env["OPENCODE_PORT"] = str(args.opencode_port)
 
+    opencode_suffix = " & OpenCode" if args.opencode else ""
     print(
-        f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port} (App: {app_name})..."
+        f"🏝️  Launching Modal Sandbox with SSH & Web Port {args.web_port}"
+        f"{opencode_suffix} (App: {app_name})..."
     )
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
             "bash",
             REMOTE_STARTUP_SCRIPT,
             args.github_ref,
-            secrets=[secret],
+            secrets=sandbox_secrets,
             timeout=TIMEOUT_SECS,
-            image=base_image,
+            image=image,
             app=app,
-            experimental_options=experimental_options,
             unencrypted_ports=[22],
-            encrypted_ports=[args.web_port],
+            encrypted_ports=encrypted_ports,
             # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
             # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
             # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
             #   Exceeding host capacity raises InvalidError at creation time.
             cpu=(0.125, 8.0),
             # Memory format: (request, limit) in MiB.
-            # - Default request: 128 MiB (standard container) or 1024 MiB (VM).
+            # - Default request: 128 MiB for standard container sandboxes.
             # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
             #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
-            memory=(min_memory, 32768),
-            env={
-                "SSH_AUTHORIZED_KEY": pubkey_content,
-                "PORT": str(args.web_port),
-                "HOSTNAME": "0.0.0.0",
-            },
+            memory=(128, 32768),
+            env=env,
         )
 
     # Retrieve forwarded tunnels
     ssh_info = None
     web_url = None
+    opencode_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
             ssh_info = tunnels[22].tcp_socket
         if args.web_port in tunnels:
             web_url = tunnels[args.web_port].url
+        if args.opencode and args.opencode_port in tunnels:
+            opencode_url = tunnels[args.opencode_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
 
@@ -197,6 +252,9 @@ def main():
         private_key_path=priv_key_path,
         web_url=web_url,
         web_port=args.web_port,
+        opencode_url=opencode_url,
+        opencode_port=args.opencode_port if args.opencode else None,
+        opencode_password=opencode_password,
     )
 
 
