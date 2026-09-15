@@ -27,8 +27,11 @@ python launch_vm-ssh.py --secret-collection <modal-secret-collection-name>
 python launch_vm-ssh.py \
     --secret-collection <modal-secret-collection-name> \
     --ssh-key ~/.ssh/id_ed25519 \
-    --web-port 3000
+    --web-port 3000 \
+    --memory 2
 ```
+
+`--memory N` allocates `N` GB of RAM to the VM, with a swapfile of `2N` GB (e.g. `--memory 2` -> 2 GB RAM + 4 GB swap). Default: `1`.
 
 Once running, the script prints:
 

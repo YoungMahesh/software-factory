@@ -73,11 +73,14 @@ def print_access_info(
     private_key_path: Path | None = None,
     web_url: str | None = None,
     web_port: int | None = None,
+    memory_gb: int | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:     {app_name}")
     print(f"  • Shell:   modal shell {sandbox.object_id}")
+    if memory_gb:
+        print(f"  • Memory:  {memory_gb} GB RAM + {memory_gb * 2} GB swap")
     if web_url:
         print(f"  • Web URL: {web_url} (port {web_port})")
     if ssh_info:
@@ -130,7 +133,20 @@ def main():
         default=3000,
         help="Web application port to expose over public HTTPS URL (default: 3000)",
     )
+    parser.add_argument(
+        "--memory",
+        type=int,
+        default=1,
+        metavar="GB",
+        help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Default: 1",
+    )
     args = parser.parse_args()
+
+    if args.memory < 1:
+        parser.error("--memory must be a positive integer number of GB.")
+
+    memory_mib = args.memory * 1024
+    swap_gb = args.memory * 2
 
     pubkey_content, priv_key_path = load_ssh_pubkey(args.ssh_key)
 
@@ -155,9 +171,8 @@ def main():
             timeout=TIMEOUT_SECS,
             image=base_image,
             app=app,
-            # cpu and memory are deliberately left at Modal's VM defaults: the default
-            # request is 1024 MiB (1 GiB) for VM sandboxes and the limit extends well beyond
-            # that. Pass an explicit (request, limit) tuple to raise either.
+            # cpu and memory are set explicitly below. Modal's VM defaults would be a
+            # 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
             # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
             # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
             # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
@@ -166,7 +181,12 @@ def main():
             # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
             #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
             # Swap is 10x to 50x slower than real RAM; keep it between 1× and 2× physical RAM.
-            #   ./startup.sh allocates a 4GB swapfile.
+            #   ./startup.sh allocates a swapfile of 2× the VM RAM (SWAP_GB env var).
+            cpu=(0.125, 4.0),
+            # VM sandboxes do not get dynamically expandable RAM, so memory must be a single
+            # int (MiB): memory=(1024, 4096) would still cap the VM at the 1024 MiB request.
+            # --memory N (GB) maps to N * 1024 MiB here.
+            memory=memory_mib,
             experimental_options=experimental_options,
             unencrypted_ports=[22],
             encrypted_ports=[args.web_port],
@@ -174,6 +194,7 @@ def main():
                 "SSH_AUTHORIZED_KEY": pubkey_content,
                 "PORT": str(args.web_port),
                 "HOSTNAME": "0.0.0.0",
+                "SWAP_GB": str(swap_gb),
             },
         )
 
@@ -202,6 +223,7 @@ def main():
         private_key_path=priv_key_path,
         web_url=web_url,
         web_port=args.web_port,
+        memory_gb=args.memory,
     )
 
 

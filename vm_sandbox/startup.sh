@@ -77,9 +77,10 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-# Allocate 4GB swap space
+# Allocate swap space: 2× the VM RAM (SWAP_GB is exported by launch_vm-ssh.py)
+SWAP_GB="${SWAP_GB:-2}"
 if ! swapon --show | grep -q '/swapfile'; then
-    fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096
+    fallocate -l "${SWAP_GB}G" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=$((SWAP_GB * 1024))
     chmod 600 /swapfile
     mkswap /swapfile
     swapon /swapfile
