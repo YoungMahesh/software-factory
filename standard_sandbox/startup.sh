@@ -66,6 +66,6 @@ echo "🏝️  Sandbox Ready!"
 if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     OPENCODE_PORT="${OPENCODE_PORT:-4096}"
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
-    exec opencode serve --hostname=0.0.0.0 --port="$OPENCODE_PORT" --log-level=DEBUG --print-logs
+    nohup opencode serve --hostname=0.0.0.0 --port="$OPENCODE_PORT" --log-level=DEBUG --print-logs > /tmp/opencode.log 2>&1 &
 fi
 exec sleep infinity
