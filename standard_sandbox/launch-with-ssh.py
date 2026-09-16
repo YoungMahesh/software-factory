@@ -221,12 +221,12 @@ def main():
             # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
             # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
             #   Exceeding host capacity raises InvalidError at creation time.
-            cpu=(0.125, 8.0),
+            cpu=(0.125, 4.0),
             # Memory format: (request, limit) in MiB.
             # - Default request: 128 MiB for standard container sandboxes.
             # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
             #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
-            memory=(128, 32768),
+            memory=(128, 16384),
             env=env,
         )
 
