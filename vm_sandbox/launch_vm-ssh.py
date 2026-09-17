@@ -10,7 +10,7 @@ LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
 REMOTE_GIT_BASH = "/root/.git.bash"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
-TIMEOUT_SECS = 12 * 60 * 60  # 12 hours
+TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 
 
 # Static base image: built once and cached by Modal

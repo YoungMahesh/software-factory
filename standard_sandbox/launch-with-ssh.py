@@ -13,7 +13,7 @@ LOCAL_OPENCODE_CONFIG = Path(__file__).parent / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
-TIMEOUT_SECS = 12 * 60 * 60  # 12 hours
+TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
 
 
