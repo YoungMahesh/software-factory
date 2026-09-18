@@ -11,6 +11,12 @@ LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
 REMOTE_GIT_BASH = "/root/.git.bash"
 LOCAL_OPENCODE_CONFIG = Path(__file__).parent / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
+LOCAL_ANTIGRAVITY_SETTINGS = Path(__file__).parent / "settings.json"
+REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
+LOCAL_ANTIGRAVITY_KEYBINDINGS = Path(__file__).parent / "keybindings.json"
+REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
+LOCAL_ANTIGRAVITY_TOKEN = Path(__file__).parent / "antigravity-oauth-token"
+REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
@@ -45,18 +51,6 @@ base_image = (
 
 if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
-
-# OpenCode layers on top of the base image. Only used when --opencode is passed, so
-# plain launches never pay to build these layers. Images are lazy: this costs nothing
-# unless a sandbox actually uses it.
-opencode_image = base_image.run_commands(
-    "curl -fsSL https://opencode.ai/install | bash",
-).env({"PATH": "/root/.opencode/bin:${PATH}"})
-
-if LOCAL_OPENCODE_CONFIG.exists():
-    opencode_image = opencode_image.add_local_file(
-        LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
-    )
 
 
 def load_ssh_pubkey(key_path_str: str) -> tuple[str, Path]:
@@ -160,6 +154,11 @@ def main():
         help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
     )
     parser.add_argument(
+        "--agy",
+        action="store_true",
+        help="Also set up antigravity-cli in the sandbox (with settings, keybindings and OAuth token if present).",
+    )
+    parser.add_argument(
         "--opencode-port",
         type=int,
         default=DEFAULT_OPENCODE_PORT,
@@ -180,7 +179,45 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
-    image = opencode_image if args.opencode else base_image
+    # Build the image incrementally based on the CLI flags passed. Layers are only
+    # added (and built/cached by Modal) for the features actually requested.
+    image = base_image
+    path_prefixes: list[str] = []
+
+    if args.opencode:
+        image = image.run_commands("curl -fsSL https://opencode.ai/install | bash")
+        path_prefixes.append("/root/.opencode/bin")
+        if LOCAL_OPENCODE_CONFIG.exists():
+            image = image.add_local_file(
+                LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
+            )
+
+    if args.agy:
+        image = image.run_commands(
+            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+            "mkdir -p /root/.gemini/antigravity-cli",
+        )
+        path_prefixes.append("/root/.local/bin")
+        if LOCAL_ANTIGRAVITY_SETTINGS.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_TOKEN.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_TOKEN, REMOTE_ANTIGRAVITY_TOKEN, copy=True
+            )
+        else:
+            print(
+                f"⚠️  {LOCAL_ANTIGRAVITY_TOKEN.name} not found; antigravity-cli will not be pre-authenticated."
+            )
+
+    if path_prefixes:
+        image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
+
     encrypted_ports = [args.web_port]
     sandbox_secrets = [secret]
     env: dict[str, str | None] = {
@@ -201,7 +238,17 @@ def main():
         env["ENABLE_OPENCODE"] = "1"
         env["OPENCODE_PORT"] = str(args.opencode_port)
 
-    opencode_suffix = " & OpenCode" if args.opencode else ""
+    if args.agy:
+        # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
+        env["ENABLE_ANTIGRAVITY"] = "1"
+
+    opencode_suffix = ""
+    if args.agy and args.opencode:
+        opencode_suffix = " & Antigravity & OpenCode"
+    elif args.agy:
+        opencode_suffix = " & Antigravity"
+    elif args.opencode:
+        opencode_suffix = " & OpenCode"
     print(
         f"🏝️  Launching Modal Sandbox with SSH & Web Port {args.web_port}"
         f"{opencode_suffix} (App: {app_name})..."
