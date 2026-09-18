@@ -19,7 +19,8 @@ LOCAL_ANTIGRAVITY_TOKEN = Path(__file__).parent / "antigravity-oauth-token"
 REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
-TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
+TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
+IDLE_TIMEOUT_SECS = 4 * 60 * 60 # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
 
 
@@ -260,6 +261,7 @@ def main():
             args.github_ref,
             secrets=sandbox_secrets,
             timeout=TIMEOUT_SECS,
+            idle_timeout=IDLE_TIMEOUT_SECS,
             image=image,
             app=app,
             unencrypted_ports=[22],
