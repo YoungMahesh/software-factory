@@ -26,7 +26,7 @@ DEFAULT_OPENCODE_PORT = 4096
 
 # Static base image: built once and cached by Modal
 base_image = (
-    modal.Image.from_registry("node:24-bookworm-slim")
+    modal.Image.from_registry("node:24.21-bookworm-slim")
     # Silently accepts default answers (or preseeded values) and never prompts the user.
     # If an issue requires manual intervention, it logs the error rather than waiting indefinitely.
     .env({"DEBIAN_FRONTEND": "noninteractive"})
