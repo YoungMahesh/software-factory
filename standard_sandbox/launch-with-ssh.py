@@ -20,7 +20,7 @@ REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-toke
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
-IDLE_TIMEOUT_SECS = 4 * 60 * 60 # 4 hours
+IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
 
 
@@ -31,13 +31,8 @@ base_image = (
     # If an issue requires manual intervention, it logs the error rather than waiting indefinitely.
     .env({"DEBIAN_FRONTEND": "noninteractive"})
     # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
-    .apt_install(
-        "curl",
-        "git",
-        "htop",
-        "openssh-server",
-        "wget",
-    )
+    # ripgrep: ai agents use this tool to search text in codebase
+    .apt_install("curl", "git", "htop", "openssh-server", "wget", "ripgrep")
     .run_commands(
         "corepack enable pnpm",
         "corepack prepare pnpm@10.31.0 --activate",
@@ -90,9 +85,7 @@ def print_access_info(
     if web_url:
         print(f"  • Web URL:  {web_url} (port {web_port})")
     if opencode_url:
-        print(
-            f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)"
-        )
+        print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
         if opencode_password:
             print(f"  • Password: {opencode_password}")
             print(
