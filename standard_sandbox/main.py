@@ -22,6 +22,7 @@ DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
+DEFAULT_METRO_PORT = 8081
 
 
 # Static base image: built once and cached by Modal
@@ -77,6 +78,8 @@ def print_access_info(
     opencode_url: str | None = None,
     opencode_port: int | None = None,
     opencode_password: str | None = None,
+    metro_url: str | None = None,
+    metro_port: int | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
@@ -84,6 +87,8 @@ def print_access_info(
     print(f"  • Shell:    modal shell {sandbox.object_id}")
     if web_url:
         print(f"  • Web URL:  {web_url} (port {web_port})")
+    if metro_url:
+        print(f"  • Metro:    {metro_url} (port {metro_port})")
     if opencode_url:
         print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
         if opencode_password:
@@ -158,12 +163,36 @@ def main():
         default=DEFAULT_OPENCODE_PORT,
         help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
     )
+    parser.add_argument(
+        "--react-native",
+        action="store_true",
+        help="Also configure Android SDK, NDK, OpenJDK 17, and Metro bundler port forwarding for React Native.",
+    )
+    parser.add_argument(
+        "--metro-port",
+        type=int,
+        default=DEFAULT_METRO_PORT,
+        help=f"Port for the React Native Metro bundler, only used with --react-native (default: {DEFAULT_METRO_PORT})",
+    )
     args = parser.parse_args()
 
-    if args.opencode and args.opencode_port == args.web_port:
-        parser.error(
-            "--opencode-port and --web-port must differ: a port can only be exposed once."
-        )
+    active_ports = {"--web-port": args.web_port}
+    if args.opencode:
+        if args.opencode_port in active_ports.values():
+            parser.error(
+                "--opencode-port and --web-port must differ: a port can only be exposed once."
+            )
+        active_ports["--opencode-port"] = args.opencode_port
+
+    if args.react_native:
+        if args.metro_port in active_ports.values():
+            conflicting_flag = [
+                flag for flag, port in active_ports.items() if port == args.metro_port
+            ][0]
+            parser.error(
+                f"--metro-port and {conflicting_flag} must differ: a port can only be exposed once."
+            )
+        active_ports["--metro-port"] = args.metro_port
 
     pubkey_content, priv_key_path = load_ssh_pubkey(args.ssh_key)
 
@@ -209,6 +238,37 @@ def main():
                 f"⚠️  {LOCAL_ANTIGRAVITY_TOKEN.name} not found; antigravity-cli will not be pre-authenticated."
             )
 
+    if args.react_native:
+        image = (
+            image.apt_install("openjdk-17-jdk-headless", "unzip")
+            .env(
+                {
+                    "ANDROID_HOME": "/opt/android-sdk",
+                    "ANDROID_SDK_ROOT": "/opt/android-sdk",
+                    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+                }
+            )
+            .run_commands(
+                "mkdir -p /opt/android-sdk/cmdline-tools",
+                "wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip",
+                "unzip -q /tmp/cmdline-tools.zip -d /opt/android-sdk/cmdline-tools",
+                "mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest",
+                "rm -f /tmp/cmdline-tools.zip",
+                "yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses",
+                "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "
+                '"platform-tools" '
+                '"platforms;android-34" "build-tools;34.0.0" '
+                '"platforms;android-35" "build-tools;35.0.0" '
+                '"ndk;26.1.10909125" "cmake;3.22.1"',
+            )
+        )
+        path_prefixes.extend(
+            [
+                "/opt/android-sdk/cmdline-tools/latest/bin",
+                "/opt/android-sdk/platform-tools",
+            ]
+        )
+
     if path_prefixes:
         image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
 
@@ -236,16 +296,23 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
-    opencode_suffix = ""
-    if args.agy and args.opencode:
-        opencode_suffix = " & Antigravity & OpenCode"
-    elif args.agy:
-        opencode_suffix = " & Antigravity"
-    elif args.opencode:
-        opencode_suffix = " & OpenCode"
+    if args.react_native:
+        encrypted_ports.append(args.metro_port)
+        env["ENABLE_REACT_NATIVE"] = "1"
+        env["METRO_PORT"] = str(args.metro_port)
+
+    features = []
+    if args.react_native:
+        features.append("React Native")
+    if args.agy:
+        features.append("Antigravity")
+    if args.opencode:
+        features.append("OpenCode")
+
+    features_suffix = f" & {' & '.join(features)}" if features else ""
     print(
         f"🏝️  Launching Modal Sandbox with SSH & Web Port {args.web_port}"
-        f"{opencode_suffix} (App: {app_name})..."
+        f"{features_suffix} (App: {app_name})..."
     )
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
@@ -276,6 +343,7 @@ def main():
     ssh_info = None
     web_url = None
     opencode_url = None
+    metro_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
@@ -284,6 +352,8 @@ def main():
             web_url = tunnels[args.web_port].url
         if args.opencode and args.opencode_port in tunnels:
             opencode_url = tunnels[args.opencode_port].url
+        if args.react_native and args.metro_port in tunnels:
+            metro_url = tunnels[args.metro_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
 
@@ -297,6 +367,8 @@ def main():
         opencode_url=opencode_url,
         opencode_port=args.opencode_port if args.opencode else None,
         opencode_password=opencode_password,
+        metro_url=metro_url,
+        metro_port=args.metro_port if args.react_native else None,
     )
 
 

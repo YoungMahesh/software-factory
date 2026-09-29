@@ -19,3 +19,11 @@ _Avoid_: OpenCode IDE, code server
 **Antigravity CLI**:
 Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
 _Avoid_: Gemini CLI, antigravity-ide
+
+**React Native Tooling**:
+A pre-baked Android development toolchain within the sandbox image including OpenJDK 17, Android SDK platforms, build-tools, NDK, and CMake.
+_Avoid_: Android environment, mobile dependencies, Android emulator
+
+**Metro Tunnel**:
+A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Metro bundler development server running inside the sandbox.
+_Avoid_: Metro proxy, bundler forward, mobile tunnel
