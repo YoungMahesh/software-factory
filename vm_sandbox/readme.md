@@ -2,7 +2,7 @@
 
 Launch a Modal **VM** Sandbox (full Linux kernel, Docker support) with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000). Pass `--opencode` to run an OpenCode server inside the VM sandbox and expose its WebUI over HTTPS, and `--agy` to provision the Antigravity CLI.
 
-For a standard container sandbox without a VM, use [`standard_sandbox/launch-with-ssh.py`](../standard_sandbox/launch-with-ssh.py) instead.
+For a standard container sandbox without a VM, use [`standard_sandbox/main.py`](../standard_sandbox/main.py) instead.
 
 
 ## Required Modal Secret Variables
@@ -21,13 +21,13 @@ The secret collection passed to `--secret-collection` (or `-s`) must define the 
 
 ```bash
 # Launch VM sandbox
-python launch_vm-ssh.py --secret-collection <modal-secret-collection-name>
+python main.py --secret-collection <modal-secret-collection-name>
 
 # Launch VM with OpenCode and Antigravity CLI
-python launch_vm-ssh.py --secret-collection <modal-secret-collection-name> --opencode --agy
+python main.py --secret-collection <modal-secret-collection-name> --opencode --agy
 
 # Custom SSH key, web port, OpenCode port, and memory allocation
-python launch_vm-ssh.py \
+python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --agy \

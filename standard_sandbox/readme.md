@@ -2,7 +2,7 @@
 
 Launch a Modal sandbox container with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000). Pass `--opencode` to additionally run an OpenCode server inside the sandbox and expose its WebUI over HTTPS.
 
-For a full Linux VM Sandbox with Docker support, use [`vm_sandbox/launch_vm-ssh.py`](../vm_sandbox/launch_vm-ssh.py) instead.
+For a full Linux VM Sandbox with Docker support, use [`vm_sandbox/main.py`](../vm_sandbox/main.py) instead.
 
 
 ## Required Modal Secret Variables
@@ -24,10 +24,10 @@ The secret collection passed to `--secret-collection` (or `-s`) must define the 
 python launch-with-ssh.py --secret-collection <modal-secret-collection-name>
 
 # Launch with an OpenCode server (WebUI on port 4096)
-python launch-with-ssh.py --secret-collection <modal-secret-collection-name> --opencode
+python main.py --secret-collection <modal-secret-collection-name> --opencode
 
 # Custom SSH key, web port and OpenCode port
-python launch-with-ssh.py \
+python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --ssh-key ~/.ssh/id_ed25519 \
