@@ -8,3 +8,6 @@ __pycache__/
 id_*
 
 antigravity-oauth-token
+
+launch.sh
+llm-response.md

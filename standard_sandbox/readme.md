@@ -21,7 +21,7 @@ The secret collection passed to `--secret-collection` (or `-s`) must define the 
 
 ```bash
 # Launch standard sandbox (default)
-python launch-with-ssh.py --secret-collection <modal-secret-collection-name>
+python main.py --secret-collection <modal-secret-collection-name>
 
 # Launch with an OpenCode server (WebUI on port 4096)
 python main.py --secret-collection <modal-secret-collection-name> --opencode
