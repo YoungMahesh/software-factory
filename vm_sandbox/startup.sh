@@ -72,6 +72,18 @@ grep -qxF "cd $TARGET_DIR" ~/.bashrc 2>/dev/null || echo "cd $TARGET_DIR" >> ~/.
 grep -qxF "export HOSTNAME=0.0.0.0" ~/.bashrc 2>/dev/null || echo "export HOSTNAME=0.0.0.0" >> ~/.bashrc
 grep -qxF "export PORT=${PORT:-3000}" ~/.bashrc 2>/dev/null || echo "export PORT=${PORT:-3000}" >> ~/.bashrc
 
+# sshd builds a clean environment for login sessions, so the image-level PATH alone
+# does not reach interactive shells.
+grep -qxF 'export PATH="/root/.local/share/fnm:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.local/share/fnm:$PATH"' >> ~/.bashrc
+grep -qxF 'eval "$(fnm env --shell bash)"' ~/.bashrc 2>/dev/null || echo 'eval "$(fnm env --shell bash)"' >> ~/.bashrc
+
+if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
+    grep -qxF 'export PATH="/root/.opencode/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.opencode/bin:$PATH"' >> ~/.bashrc
+fi
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+    grep -qxF 'export PATH="/root/.local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
+fi
+
 # 2. Decrypt / write environment keys if provided
 if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
@@ -94,6 +106,12 @@ elif [ -f "package.json" ]; then
 fi
 
 
-# 4. Keep sandbox alive for interaction via modal shell / ssh
+# 4. Keep sandbox alive for interaction via modal shell / ssh, or run the
+#    OpenCode server as a background process when requested.
 echo "🏝️  Sandbox Ready!"
+if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
+    OPENCODE_PORT="${OPENCODE_PORT:-4096}"
+    echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
+    (cd /root && nohup opencode serve --hostname=0.0.0.0 --port="$OPENCODE_PORT" --log-level=DEBUG --print-logs > /tmp/opencode.log 2>&1 &)
+fi
 exec sleep infinity

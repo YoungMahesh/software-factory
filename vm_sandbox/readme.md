@@ -1,6 +1,6 @@
 # Modal VM Sandbox with SSH & Web Port Forwarding
 
-Launch a Modal **VM** Sandbox (full Linux kernel, Docker support) with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000).
+Launch a Modal **VM** Sandbox (full Linux kernel, Docker support) with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000). Pass `--opencode` to run an OpenCode server inside the VM sandbox and expose its WebUI over HTTPS, and `--agy` to provision the Antigravity CLI.
 
 For a standard container sandbox without a VM, use [`standard_sandbox/launch-with-ssh.py`](../standard_sandbox/launch-with-ssh.py) instead.
 
@@ -23,11 +23,17 @@ The secret collection passed to `--secret-collection` (or `-s`) must define the 
 # Launch VM sandbox
 python launch_vm-ssh.py --secret-collection <modal-secret-collection-name>
 
-# Custom SSH key and/or web port in VM
+# Launch VM with OpenCode and Antigravity CLI
+python launch_vm-ssh.py --secret-collection <modal-secret-collection-name> --opencode --agy
+
+# Custom SSH key, web port, OpenCode port, and memory allocation
 python launch_vm-ssh.py \
     --secret-collection <modal-secret-collection-name> \
+    --opencode \
+    --agy \
     --ssh-key ~/.ssh/id_ed25519 \
     --web-port 3000 \
+    --opencode-port 4096 \
     --memory 2
 ```
 
@@ -37,8 +43,18 @@ Once running, the script prints:
 
 - Standard `modal shell <sandbox-id>` access command
 - **Web URL**: Public HTTPS URL forwarding directly to port 3000 inside the sandbox (e.g. `https://<id>-3000.modal.host`)
+- **OpenCode Web & Attach Command** (when `--opencode` is passed): Public HTTPS URL and one-time launch password, with attach command:
+  ```bash
+  OPENCODE_SERVER_PASSWORD=<password> opencode attach <opencode-url>
+  ```
 - Direct `ssh` command: `ssh -i <key> -o StrictHostKeyChecking=no -p <port> root@<host>`
 - VS Code Remote - SSH configuration block
+
+## Agent Tooling & Configuration
+
+- **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `vm_sandbox/opencode.json`.
+- **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `vm_sandbox/settings.json` and `vm_sandbox/keybindings.json`. Pre-authenticates if `vm_sandbox/antigravity-oauth-token` is present.
+- **Code Search**: `ripgrep` is pre-installed in the base Ubuntu VM image for agent text search.
 
 ## Running Next.js inside the Sandbox
 

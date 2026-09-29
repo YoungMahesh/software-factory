@@ -1,6 +1,7 @@
 import argparse
-import uuid
 from pathlib import Path
+import secrets
+import uuid
 
 import modal
 
@@ -8,10 +9,19 @@ LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
 LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
 REMOTE_GIT_BASH = "/root/.git.bash"
+LOCAL_OPENCODE_CONFIG = Path(__file__).parent / "opencode.json"
+REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
+LOCAL_ANTIGRAVITY_SETTINGS = Path(__file__).parent / "settings.json"
+REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
+LOCAL_ANTIGRAVITY_KEYBINDINGS = Path(__file__).parent / "keybindings.json"
+REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
+LOCAL_ANTIGRAVITY_TOKEN = Path(__file__).parent / "antigravity-oauth-token"
+REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
 DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
-IDLE_TIMEOUT_SECS = 4 * 60 * 60 # 4 hours
+IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
+DEFAULT_OPENCODE_PORT = 4096
 
 
 # Static base image: built once and cached by Modal
@@ -23,6 +33,7 @@ base_image = (
     # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
     # `docker.io`, `docker-buildx` for docker
     # unzip for fnm
+    # ripgrep: ai agents use this tool to search text in codebase
     .apt_install(
         "curl",
         "git",
@@ -32,6 +43,7 @@ base_image = (
         "docker.io",
         "docker-buildx",
         "unzip",
+        "ripgrep",
     )
     .run_commands(
         # Download and install fnm:
@@ -74,16 +86,27 @@ def print_access_info(
     private_key_path: Path | None = None,
     web_url: str | None = None,
     web_port: int | None = None,
+    opencode_url: str | None = None,
+    opencode_port: int | None = None,
+    opencode_password: str | None = None,
     memory_gb: int | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
-    print(f"  • App:     {app_name}")
-    print(f"  • Shell:   modal shell {sandbox.object_id}")
+    print(f"  • App:      {app_name}")
+    print(f"  • Shell:    modal shell {sandbox.object_id}")
     if memory_gb:
-        print(f"  • Memory:  {memory_gb} GB RAM + {memory_gb * 2} GB swap")
+        print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
     if web_url:
-        print(f"  • Web URL: {web_url} (port {web_port})")
+        print(f"  • Web URL:  {web_url} (port {web_port})")
+    if opencode_url:
+        print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
+        if opencode_password:
+            print(f"  • Password: {opencode_password}")
+            print(
+                f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
+                f"opencode attach {opencode_url}"
+            )
     if ssh_info:
         ssh_host, ssh_port = ssh_info
         key_arg = (
@@ -94,12 +117,12 @@ def print_access_info(
         ssh_cmd = (
             f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
         )
-        print(f"  • SSH:     {ssh_cmd}")
+        print(f"  • SSH:      {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
         print(f"Host {app_name}")
         print(f"  HostName {ssh_host}")
         print(f"  Port {ssh_port}")
-        print(f"  User root")
+        print("  User root")
         if private_key_path and private_key_path.exists():
             print(f"  IdentityFile {private_key_path.resolve()}")
         print("  StrictHostKeyChecking no")
@@ -108,7 +131,7 @@ def print_access_info(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Launch a repository in a Modal Sandbox with SSH & Web URL"
+        description="Launch a repository in a Modal VM Sandbox with SSH & Web URL"
     )
     parser.add_argument(
         "--github-ref",
@@ -135,6 +158,22 @@ def main():
         help="Web application port to expose over public HTTPS URL (default: 3000)",
     )
     parser.add_argument(
+        "--opencode",
+        action="store_true",
+        help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
+    )
+    parser.add_argument(
+        "--agy",
+        action="store_true",
+        help="Also set up antigravity-cli in the sandbox (with settings, keybindings and OAuth token if present).",
+    )
+    parser.add_argument(
+        "--opencode-port",
+        type=int,
+        default=DEFAULT_OPENCODE_PORT,
+        help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
+    )
+    parser.add_argument(
         "--memory",
         type=int,
         default=1,
@@ -145,6 +184,11 @@ def main():
 
     if args.memory < 1:
         parser.error("--memory must be a positive integer number of GB.")
+
+    if args.opencode and args.opencode_port == args.web_port:
+        parser.error(
+            "--opencode-port and --web-port must differ: a port can only be exposed once."
+        )
 
     memory_mib = args.memory * 1024
     swap_gb = args.memory * 2
@@ -160,18 +204,91 @@ def main():
     experimental_options = {"vm_runtime": True}
     runtime_desc = "VM Sandbox"
 
+    # Build the image incrementally based on the CLI flags passed. Layers are only
+    # added (and built/cached by Modal) for the features actually requested.
+    image = base_image
+    path_prefixes: list[str] = []
+
+    if args.opencode:
+        image = image.run_commands("curl -fsSL https://opencode.ai/install | bash")
+        path_prefixes.append("/root/.opencode/bin")
+        if LOCAL_OPENCODE_CONFIG.exists():
+            image = image.add_local_file(
+                LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
+            )
+
+    if args.agy:
+        image = image.run_commands(
+            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+            "mkdir -p /root/.gemini/antigravity-cli",
+        )
+        path_prefixes.append("/root/.local/bin")
+        if LOCAL_ANTIGRAVITY_SETTINGS.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_TOKEN.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_TOKEN, REMOTE_ANTIGRAVITY_TOKEN, copy=True
+            )
+        else:
+            print(
+                f"⚠️  {LOCAL_ANTIGRAVITY_TOKEN.name} not found; antigravity-cli will not be pre-authenticated."
+            )
+
+    if path_prefixes:
+        image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
+
+    encrypted_ports = [args.web_port]
+    sandbox_secrets = [secret]
+    env: dict[str, str | None] = {
+        "SSH_AUTHORIZED_KEY": pubkey_content,
+        "PORT": str(args.web_port),
+        "HOSTNAME": "0.0.0.0",
+        "SWAP_GB": str(swap_gb),
+    }
+
+    opencode_password = None
+    if args.opencode:
+        encrypted_ports.append(args.opencode_port)
+        # Fresh password per launch, so nothing has to be pre-provisioned in the secret.
+        opencode_password = secrets.token_urlsafe(16)
+        sandbox_secrets.append(
+            modal.Secret.from_dict({"OPENCODE_SERVER_PASSWORD": opencode_password})
+        )
+        # Explicit trigger for startup.sh; OPENCODE_PORT is only the port value.
+        env["ENABLE_OPENCODE"] = "1"
+        env["OPENCODE_PORT"] = str(args.opencode_port)
+
+    if args.agy:
+        # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
+        env["ENABLE_ANTIGRAVITY"] = "1"
+
+    opencode_suffix = ""
+    if args.agy and args.opencode:
+        opencode_suffix = " & Antigravity & OpenCode"
+    elif args.agy:
+        opencode_suffix = " & Antigravity"
+    elif args.opencode:
+        opencode_suffix = " & OpenCode"
+
     print(
-        f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port} (App: {app_name})..."
+        f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port}"
+        f"{opencode_suffix} (App: {app_name})..."
     )
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
             "bash",
             REMOTE_STARTUP_SCRIPT,
             args.github_ref,
-            secrets=[secret],
+            secrets=sandbox_secrets,
             timeout=TIMEOUT_SECS,
             idle_timeout=IDLE_TIMEOUT_SECS,
-            image=base_image,
+            image=image,
             app=app,
             # cpu and memory are set explicitly below. Modal's VM defaults would be a
             # 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
@@ -191,24 +308,22 @@ def main():
             memory=memory_mib,
             experimental_options=experimental_options,
             unencrypted_ports=[22],
-            encrypted_ports=[args.web_port],
-            env={
-                "SSH_AUTHORIZED_KEY": pubkey_content,
-                "PORT": str(args.web_port),
-                "HOSTNAME": "0.0.0.0",
-                "SWAP_GB": str(swap_gb),
-            },
+            encrypted_ports=encrypted_ports,
+            env=env,
         )
 
     # Retrieve forwarded tunnels
     ssh_info = None
     web_url = None
+    opencode_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
             ssh_info = tunnels[22].tcp_socket
         if args.web_port in tunnels:
             web_url = tunnels[args.web_port].url
+        if args.opencode and args.opencode_port in tunnels:
+            opencode_url = tunnels[args.opencode_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
 
@@ -225,6 +340,9 @@ def main():
         private_key_path=priv_key_path,
         web_url=web_url,
         web_port=args.web_port,
+        opencode_url=opencode_url,
+        opencode_port=args.opencode_port if args.opencode else None,
+        opencode_password=opencode_password,
         memory_gb=args.memory,
     )
 
