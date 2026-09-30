@@ -100,11 +100,11 @@ elif [ -f "package.json" ]; then
 fi
 
 # 4. Keep the sandbox alive for interaction via modal shell / ssh, or run the
-#    OpenCode server as the main process when requested.
+#    OpenCode server when requested.
 echo "🏝️  Sandbox Ready!"
 if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     OPENCODE_PORT="${OPENCODE_PORT:-4096}"
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
-    nohup opencode serve --hostname=0.0.0.0 --port="$OPENCODE_PORT" --log-level=DEBUG --print-logs > /tmp/opencode.log 2>&1 &
+    nohup opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" > /tmp/opencode.log 2>&1 &
 fi
 exec sleep infinity

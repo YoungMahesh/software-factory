@@ -208,7 +208,7 @@ def main():
     path_prefixes: list[str] = []
 
     if args.opencode:
-        image = image.run_commands("curl -fsSL https://opencode.ai/install | bash")
+        image = image.run_commands("curl -fsSL https://opencode.ai/v2/install | bash")
         path_prefixes.append("/root/.opencode/bin")
         if LOCAL_OPENCODE_CONFIG.exists():
             image = image.add_local_file(
