@@ -95,7 +95,7 @@ def print_access_info(
             print(f"  • Password: {opencode_password}")
             print(
                 f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
-                f"opencode attach {opencode_url}"
+                f"opencode --server {opencode_url}"
             )
     if ssh_info:
         ssh_host, ssh_port = ssh_info
