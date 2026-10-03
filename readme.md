@@ -25,3 +25,20 @@ Run code:
 ```bash
 modal run get_started.py
 ```
+
+### If repository directory is moved or renamed
+
+Python virtual environments contain hardcoded absolute paths. If you rename or move the repository folder, recreate `.venv`:
+
+```bash
+# Deactivate if currently active
+deactivate
+
+# Delete and recreate the virtual environment
+rm -rf .venv
+python3 -m venv .venv
+
+# Activate and reinstall dependencies
+source .venv/bin/activate
+pip install --upgrade pip modal
+```
