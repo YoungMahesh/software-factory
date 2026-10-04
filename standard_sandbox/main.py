@@ -37,8 +37,13 @@ base_image = (
     .env({"DEBIAN_FRONTEND": "noninteractive"})
     # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
     # ripgrep: ai agents use this tool to search text in codebase
-    .apt_install("curl", "git", "htop", "openssh-server", "wget", "ripgrep")
+    # age: A simple, modern, and fast file/stream encryption tool designed to replace PGP/GnuPG
+    # sops: An automated encryption/decryption editor created by Mozilla that encrypts specific values inside structured configuration files 
+    #       while leaving keys and file formatting readable.
+    .apt_install("curl", "git", "htop", "openssh-server", "wget", "ripgrep", "age")
     .run_commands(
+        "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
+        "chmod +x /usr/local/bin/sops",
         "corepack enable pnpm",
         "corepack prepare pnpm@10.31.0 --activate",
         "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
