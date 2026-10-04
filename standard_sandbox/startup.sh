@@ -88,24 +88,39 @@ EOF
 fi
 
 if [ "${ENABLE_PYTHON:-}" = "1" ]; then
-    grep -qxF 'export PIP_BREAK_SYSTEM_PACKAGES=1' ~/.bashrc 2>/dev/null || echo 'export PIP_BREAK_SYSTEM_PACKAGES=1' >> ~/.bashrc
-    grep -qxF 'PIP_BREAK_SYSTEM_PACKAGES=1' /etc/environment 2>/dev/null || echo 'PIP_BREAK_SYSTEM_PACKAGES=1' >> /etc/environment
+    VENV_DIR="$TARGET_DIR/.venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo "🐍 Creating virtual environment at $VENV_DIR..."
+        python3 -m venv "$VENV_DIR"
+    fi
+
+    grep -qxF "source $VENV_DIR/bin/activate" ~/.bashrc 2>/dev/null || echo "source $VENV_DIR/bin/activate" >> ~/.bashrc
+    grep -qxF "VIRTUAL_ENV=\"$VENV_DIR\"" /etc/environment 2>/dev/null || echo "VIRTUAL_ENV=\"$VENV_DIR\"" >> /etc/environment
+
+    # Also persist to /etc/profile.d for system-wide login shell activation
+    cat << EOF > /etc/profile.d/python-venv.sh
+if [ -f "$VENV_DIR/bin/activate" ]; then
+    source "$VENV_DIR/bin/activate"
+fi
+EOF
+    chmod +x /etc/profile.d/python-venv.sh 2>/dev/null || true
 
     # Quick verification banner
-    PYTHON_VER=$(python3 --version 2>&1 | cut -d' ' -f2 || echo "Not found")
-    PIP_VER=$(pip --version 2>&1 | cut -d' ' -f2 || echo "Not found")
+    PYTHON_VER=$("$VENV_DIR/bin/python3" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
+    PIP_VER=$("$VENV_DIR/bin/pip" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
 
     echo "🐍 Python Tooling Active:"
+    echo "   • Virtualenv: $VENV_DIR"
     echo "   • Python: $PYTHON_VER"
-    echo "   • Pip: $PIP_VER (break-system-packages enabled)"
+    echo "   • Pip: $PIP_VER"
 
     # Install on-demand inspection utility
-    cat << 'EOF' > /usr/local/bin/check-python
+    cat << EOF > /usr/local/bin/check-python
 #!/usr/bin/env bash
-echo "=== Python ===" && python3 --version
-echo "=== Pip ===" && pip --version
-echo "=== Environment Variables ===" && echo "PIP_BREAK_SYSTEM_PACKAGES: ${PIP_BREAK_SYSTEM_PACKAGES:-not set}"
-echo "=== Installed Packages ===" && pip list
+echo "=== Python ===" && "$VENV_DIR/bin/python3" --version
+echo "=== Pip ===" && "$VENV_DIR/bin/pip" --version
+echo "=== Virtual Environment ===" && echo "VIRTUAL_ENV: \${VIRTUAL_ENV:-$VENV_DIR}"
+echo "=== Installed Packages in .venv ===" && "$VENV_DIR/bin/pip" list
 EOF
     chmod +x /usr/local/bin/check-python 2>/dev/null || true
 fi
@@ -145,8 +160,8 @@ elif [ -f "package.json" ]; then
 fi
 
 if [ "${ENABLE_PYTHON:-}" = "1" ] && [ -f "requirements.txt" ]; then
-    echo "📦 Installing Python dependencies from requirements.txt..."
-    pip install -r requirements.txt
+    echo "📦 Installing Python dependencies from requirements.txt into .venv..."
+    "$TARGET_DIR/.venv/bin/pip" install -r requirements.txt
 fi
 
 # 4. Keep the sandbox alive for interaction via modal shell / ssh, or run the

@@ -13,8 +13,8 @@ modal app stop <app-id|app-name>
 # or directly using the binary path:
 .venv/bin/modal --version
 
-# upgrade
-pip install --upgrade modal
+# install or upgrade dependencies
+pip install -r requirements.txt
 
 # authenticate
 python3 -m modal setup
@@ -40,5 +40,5 @@ python3 -m venv .venv
 
 # Activate and reinstall dependencies
 source .venv/bin/activate
-pip install --upgrade pip modal
+pip install -r requirements.txt
 ```

@@ -29,7 +29,7 @@ A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Me
 _Avoid_: Metro proxy, bundler forward, mobile tunnel
 
 **Python Tooling**:
-A pre-baked Python 3 and pip runtime environment within the sandbox image configured with global package installation privileges and automatic dependency resolution.
+A pre-baked Python 3 and venv runtime environment within the sandbox image configured to automatically provision an isolated virtual environment (`.venv`) in the cloned repository root, install dependencies from `requirements.txt`, and auto-activate in developer login sessions.
 _Avoid_: Python environment, pip runner, Python container
 
 **SOPS Decryption**:
