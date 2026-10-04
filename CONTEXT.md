@@ -27,3 +27,8 @@ _Avoid_: Android environment, mobile dependencies, Android emulator
 **Metro Tunnel**:
 A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Metro bundler development server running inside the sandbox.
 _Avoid_: Metro proxy, bundler forward, mobile tunnel
+
+**Python Tooling**:
+A pre-baked Python 3 and pip runtime environment within the sandbox image configured with global package installation privileges and automatic dependency resolution.
+_Avoid_: Python environment, pip runner, Python container
+

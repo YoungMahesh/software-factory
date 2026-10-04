@@ -173,6 +173,11 @@ def main():
         help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
     )
     parser.add_argument(
+        "--python",
+        action="store_true",
+        help="Also configure Python 3, pip, and automatic dependency installation for Python projects.",
+    )
+    parser.add_argument(
         "--metro-port",
         type=int,
         default=DEFAULT_METRO_PORT,
@@ -273,6 +278,14 @@ def main():
             ]
         )
 
+    if args.python:
+        image = image.apt_install(
+            "python3", "python3-pip", "python3-venv", "python-is-python3"
+        ).run_commands(
+            "mkdir -p /etc",
+            "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
+        )
+
     if path_prefixes:
         image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
 
@@ -300,6 +313,9 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
+    if args.python:
+        env["ENABLE_PYTHON"] = "1"
+
     volumes = {}
     if args.react_native:
         encrypted_ports.append(args.metro_port)
@@ -315,6 +331,8 @@ def main():
         features.append("Antigravity")
     if args.opencode:
         features.append("OpenCode")
+    if args.python:
+        features.append("Python")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(

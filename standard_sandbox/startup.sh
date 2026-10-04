@@ -87,6 +87,29 @@ EOF
     chmod +x /usr/local/bin/check-react-native 2>/dev/null || true
 fi
 
+if [ "${ENABLE_PYTHON:-}" = "1" ]; then
+    grep -qxF 'export PIP_BREAK_SYSTEM_PACKAGES=1' ~/.bashrc 2>/dev/null || echo 'export PIP_BREAK_SYSTEM_PACKAGES=1' >> ~/.bashrc
+    grep -qxF 'PIP_BREAK_SYSTEM_PACKAGES=1' /etc/environment 2>/dev/null || echo 'PIP_BREAK_SYSTEM_PACKAGES=1' >> /etc/environment
+
+    # Quick verification banner
+    PYTHON_VER=$(python3 --version 2>&1 | cut -d' ' -f2 || echo "Not found")
+    PIP_VER=$(pip --version 2>&1 | cut -d' ' -f2 || echo "Not found")
+
+    echo "🐍 Python Tooling Active:"
+    echo "   • Python: $PYTHON_VER"
+    echo "   • Pip: $PIP_VER (break-system-packages enabled)"
+
+    # Install on-demand inspection utility
+    cat << 'EOF' > /usr/local/bin/check-python
+#!/usr/bin/env bash
+echo "=== Python ===" && python3 --version
+echo "=== Pip ===" && pip --version
+echo "=== Environment Variables ===" && echo "PIP_BREAK_SYSTEM_PACKAGES: ${PIP_BREAK_SYSTEM_PACKAGES:-not set}"
+echo "=== Installed Packages ===" && pip list
+EOF
+    chmod +x /usr/local/bin/check-python 2>/dev/null || true
+fi
+
 # 2. Decrypt / write environment keys if provided
 if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
@@ -97,6 +120,11 @@ if [ -f "pnpm-lock.yaml" ]; then
     pnpm install
 elif [ -f "package.json" ]; then
     npm install
+fi
+
+if [ "${ENABLE_PYTHON:-}" = "1" ] && [ -f "requirements.txt" ]; then
+    echo "📦 Installing Python dependencies from requirements.txt..."
+    pip install -r requirements.txt
 fi
 
 # 4. Keep the sandbox alive for interaction via modal shell / ssh, or run the
