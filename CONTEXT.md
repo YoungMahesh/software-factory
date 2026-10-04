@@ -32,3 +32,7 @@ _Avoid_: Metro proxy, bundler forward, mobile tunnel
 A pre-baked Python 3 and pip runtime environment within the sandbox image configured with global package installation privileges and automatic dependency resolution.
 _Avoid_: Python environment, pip runner, Python container
 
+**SOPS Decryption**:
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures the Age key file at `~/.config/sops/age/keys.txt` (mode 0600), and executes repository decryption scripts (`secrets/setup.sh`).
+_Avoid_: Sops setup, age injection, secret script
+

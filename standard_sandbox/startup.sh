@@ -115,6 +115,28 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
+if [ "${ENABLE_SOPS:-}" = "1" ]; then
+    if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
+        echo "ERROR: --sops was specified but AGE_PRIVATE_KEY is not set in the environment." >&2
+        exit 1
+    fi
+
+    mkdir -p ~/.config/sops/age
+    echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
+    chmod 600 ~/.config/sops/age/keys.txt
+
+    if [ -f "secrets/setup.sh" ]; then
+        echo "🔐 Decrypting secrets with SOPS..."
+        bash secrets/setup.sh || {
+            echo "ERROR: secrets/setup.sh failed to execute." >&2
+            exit 1
+        }
+    fi
+
+    grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
+    unset AGE_PRIVATE_KEY
+fi
+
 # 3. Install dependencies if package manifest exists
 if [ -f "pnpm-lock.yaml" ]; then
     pnpm install
