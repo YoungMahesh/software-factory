@@ -107,8 +107,13 @@ def print_access_info(
             )
     if ssh_info:
         ssh_host, ssh_port = ssh_info
+        key_display = (
+            f"~/{private_key_path.relative_to(Path.home())}"
+            if private_key_path and private_key_path.is_relative_to(Path.home())
+            else str(private_key_path)
+        )
         key_arg = (
-            f"-i {private_key_path} "
+            f"-i {key_display} "
             if private_key_path and private_key_path.exists()
             else ""
         )
@@ -122,7 +127,7 @@ def print_access_info(
         print(f"  Port {ssh_port}")
         print("  User root")
         if private_key_path and private_key_path.exists():
-            print(f"  IdentityFile {private_key_path.resolve()}")
+            print(f"  IdentityFile {key_display}")
         print("  StrictHostKeyChecking no")
     print("=" * 60 + "\n")
 
