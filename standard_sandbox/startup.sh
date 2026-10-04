@@ -140,16 +140,21 @@ if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
     chmod 600 ~/.config/sops/age/keys.txt
 
+    setup_status=0
     if [ -f "scripts/setup.sh" ]; then
         echo "🔐 Decrypting secrets with SOPS..."
-        bash scripts/setup.sh || {
-            echo "ERROR: scripts/setup.sh failed to execute." >&2
-            exit 1
-        }
+        bash scripts/setup.sh || setup_status=$?
     fi
 
+    rm -rf ~/.config/sops
+    echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
     grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
     unset AGE_PRIVATE_KEY
+
+    if [ "$setup_status" -ne 0 ]; then
+        echo "ERROR: scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
+        exit "$setup_status"
+    fi
 fi
 
 # 3. Install dependencies if package manifest exists

@@ -33,7 +33,7 @@ A pre-baked Python 3 and venv runtime environment within the sandbox image confi
 _Avoid_: Python environment, pip runner, Python container
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures the Age key file at `~/.config/sops/age/keys.txt` (mode 0600), and executes repository decryption scripts (`scripts/setup.sh`).
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
