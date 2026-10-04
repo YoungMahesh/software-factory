@@ -29,6 +29,9 @@ python main.py --secret-collection <modal-secret-collection-name> --opencode
 # Launch with React Native & Android tooling (Metro bundler on port 8081)
 python main.py --secret-collection <modal-secret-collection-name> --react-native
 
+# Launch with Antigravity CLI and SOPS secrets
+python main.py --secret-collection <modal-secret-collection-name> --agy
+
 # Custom web port, Metro port, and OpenCode port
 python main.py \
     --secret-collection <modal-secret-collection-name> \
@@ -48,6 +51,12 @@ Once running, the script prints:
 - **Metro**: Public HTTPS URL forwarding directly to port 8081 inside the sandbox when `--react-native` is passed (e.g. `https://<id>-8081.modal.host`)
 - Direct `ssh` command: `ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p <port> root@<host>`
 - VS Code Remote - SSH configuration block
+
+## Agent Tooling & Configuration
+
+- **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `shared/opencode.json`.
+- **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `shared/antigravity-settings.json` and `shared/antigravity-keybindings.json`. Automatically enables SOPS secret decryption inside the sandbox to provision `secrets/antigravity-oauth-token.json` to `~/.gemini/antigravity-cli/antigravity-oauth-token`.
+- **Code Search**: `ripgrep` is pre-installed in the base image for agent text search.
 
 ## Running Next.js inside the Sandbox
 

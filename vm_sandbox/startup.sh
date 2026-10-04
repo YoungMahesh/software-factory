@@ -91,7 +91,7 @@ fi
 
 if [ "${ENABLE_SOPS:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: --sops was specified but AGE_PRIVATE_KEY is not set in the environment." >&2
+        echo "ERROR: SOPS decryption is enabled (via --sops or --agy), but AGE_PRIVATE_KEY is not set in the environment." >&2
         exit 1
     fi
 

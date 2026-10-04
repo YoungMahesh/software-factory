@@ -40,3 +40,12 @@ _Avoid_: Sops setup, age injection, secret script
 The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` and injected into the container's `/root/.ssh/authorized_keys`, while the private key is encrypted with SOPS at `secrets/ssh-private-key` and decrypted locally to `~/.ssh/modal-sandbox` (mode 0600).
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
+**Antigravity OAuth Token**:
+The authenticated session credential for the Antigravity CLI, encrypted with SOPS at `secrets/antigravity-oauth-token.json` and decrypted inside the sandbox (or locally) to `~/.gemini/antigravity-cli/antigravity-oauth-token` (mode 0600) via `scripts/setup.sh`.
+_Avoid_: Gemini token, antigravity auth token, cli token
+
+**Shared Agent Configuration**:
+Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`) and mounted into sandboxes at runtime.
+_Avoid_: Sandbox config, local config, runner settings
+
+

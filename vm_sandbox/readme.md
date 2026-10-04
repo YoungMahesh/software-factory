@@ -54,8 +54,8 @@ Once running, the script prints:
 
 ## Agent Tooling & Configuration
 
-- **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `vm_sandbox/opencode.json`.
-- **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `vm_sandbox/settings.json` and `vm_sandbox/keybindings.json`. Pre-authenticates if `vm_sandbox/antigravity-oauth-token` is present.
+- **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `shared/opencode.json`.
+- **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `shared/antigravity-settings.json` and `shared/antigravity-keybindings.json`. Automatically enables SOPS secret decryption inside the sandbox to provision `secrets/antigravity-oauth-token.json` to `~/.gemini/antigravity-cli/antigravity-oauth-token`.
 - **Code Search**: `ripgrep` is pre-installed in the base Ubuntu VM image for agent text search.
 
 ## Running Next.js inside the Sandbox

@@ -9,15 +9,14 @@ LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
 LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
 REMOTE_GIT_BASH = "/root/.git.bash"
-LOCAL_OPENCODE_CONFIG = Path(__file__).parent / "opencode.json"
+SHARED_DIR = Path(__file__).resolve().parent.parent / "shared"
+LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
-LOCAL_ANTIGRAVITY_SETTINGS = Path(__file__).parent / "settings.json"
+LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
 REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
-LOCAL_ANTIGRAVITY_KEYBINDINGS = Path(__file__).parent / "keybindings.json"
+LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
-LOCAL_ANTIGRAVITY_TOKEN = Path(__file__).parent / "antigravity-oauth-token"
-REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
-SHARED_SSH_PUB_KEY = Path(__file__).resolve().parent.parent / "shared" / "ssh-key.pub"
+SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
 HOST_SSH_PRIV_KEY = Path.home() / ".ssh" / "modal-sandbox"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
@@ -160,7 +159,7 @@ def main():
     parser.add_argument(
         "--agy",
         action="store_true",
-        help="Also set up antigravity-cli in the sandbox (with settings, keybindings and OAuth token if present).",
+        help="Also set up antigravity-cli in the sandbox (mounts shared settings & keybindings and automatically enables SOPS secret decryption).",
     )
     parser.add_argument(
         "--opencode-port",
@@ -244,14 +243,6 @@ def main():
             image = image.add_local_file(
                 LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
             )
-        if LOCAL_ANTIGRAVITY_TOKEN.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_TOKEN, REMOTE_ANTIGRAVITY_TOKEN, copy=True
-            )
-        else:
-            print(
-                f"⚠️  {LOCAL_ANTIGRAVITY_TOKEN.name} not found; antigravity-cli will not be pre-authenticated."
-            )
 
     if args.react_native:
         image = (
@@ -322,7 +313,7 @@ def main():
     if args.python:
         env["ENABLE_PYTHON"] = "1"
 
-    if args.sops:
+    if args.sops or args.agy:
         env["ENABLE_SOPS"] = "1"
 
     volumes = {}
@@ -342,7 +333,7 @@ def main():
         features.append("OpenCode")
     if args.python:
         features.append("Python")
-    if args.sops:
+    if args.sops or args.agy:
         features.append("SOPS")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
