@@ -130,9 +130,9 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_SOPS:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: SOPS decryption is enabled (via --sops or --agy), but AGE_PRIVATE_KEY is not set in the environment." >&2
+        echo "ERROR: Antigravity CLI is enabled (via --agy), but AGE_PRIVATE_KEY is not set in the environment." >&2
         exit 1
     fi
 
@@ -143,7 +143,7 @@ if [ "${ENABLE_SOPS:-}" = "1" ]; then
     setup_status=0
     if [ -f "scripts/setup.sh" ]; then
         echo "🔐 Decrypting secrets with SOPS..."
-        bash scripts/setup.sh || setup_status=$?
+        bash scripts/setup.sh --agy || setup_status=$?
     fi
 
     rm -rf ~/.config/sops

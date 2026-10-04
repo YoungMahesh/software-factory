@@ -2,6 +2,7 @@
 set -euo pipefail
 
 DECRYPT_MODAL=false
+DECRYPT_AGY=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -9,13 +10,17 @@ while [ "$#" -gt 0 ]; do
             DECRYPT_MODAL=true
             shift
             ;;
+        --agy)
+            DECRYPT_AGY=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--modal]"
+            echo "Usage: $0 [--modal] [--agy]"
             exit 0
             ;;
         *)
             echo "ERROR: Unknown option: $1" >&2
-            echo "Usage: $0 [--modal]" >&2
+            echo "Usage: $0 [--modal] [--agy]" >&2
             exit 1
             ;;
     esac
@@ -26,6 +31,8 @@ if [ "$DECRYPT_MODAL" = true ]; then
     chmod 600 ~/.modal.toml
 fi
 
-mkdir -p ~/.gemini/antigravity-cli
-sops decrypt secrets/antigravity-oauth-token.json > ~/.gemini/antigravity-cli/antigravity-oauth-token
-chmod 600 ~/.gemini/antigravity-cli/antigravity-oauth-token
+if [ "$DECRYPT_AGY" = true ]; then
+    mkdir -p ~/.gemini/antigravity-cli
+    sops decrypt secrets/antigravity-oauth-token.json > ~/.gemini/antigravity-cli/antigravity-oauth-token
+    chmod 600 ~/.gemini/antigravity-cli/antigravity-oauth-token
+fi

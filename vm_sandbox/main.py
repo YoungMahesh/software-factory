@@ -165,11 +165,6 @@ def main():
         metavar="GB",
         help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Default: 1",
     )
-    parser.add_argument(
-        "--sops",
-        action="store_true",
-        help="Configure SOPS age key from AGE_PRIVATE_KEY secret and run scripts/setup.sh if present.",
-    )
     args = parser.parse_args()
 
     if args.memory < 1:
@@ -250,16 +245,11 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
-    if args.sops or args.agy:
-        env["ENABLE_SOPS"] = "1"
-
     features: list[str] = []
     if args.agy:
         features.append("Antigravity")
     if args.opencode:
         features.append("OpenCode")
-    if args.sops or args.agy:
-        features.append("SOPS")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(

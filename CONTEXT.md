@@ -33,7 +33,7 @@ A pre-baked Python 3 and venv runtime environment within the sandbox image confi
 _Avoid_: Python environment, pip runner, Python container
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh --agy`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
@@ -41,7 +41,7 @@ The dedicated SSH key pair used to authenticate into running sandboxes. The publ
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
 **Antigravity OAuth Token**:
-The authenticated session credential for the Antigravity CLI, encrypted with SOPS at `secrets/antigravity-oauth-token.json` and decrypted inside the sandbox (or locally) to `~/.gemini/antigravity-cli/antigravity-oauth-token` (mode 0600) via `scripts/setup.sh`.
+The authenticated session credential for the Antigravity CLI, encrypted with SOPS at `secrets/antigravity-oauth-token.json` and decrypted inside the sandbox (or locally) to `~/.gemini/antigravity-cli/antigravity-oauth-token` (mode 0600) via `scripts/setup.sh --agy`.
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
@@ -49,7 +49,7 @@ Common editor and AI agent configuration files tracked in the repository root `s
 _Avoid_: Sandbox config, local config, runner settings
 
 **Modal Client Credentials**:
-The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK on host workstations to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` only when explicitly requested via `scripts/setup.sh --modal` (mode 0600), and intentionally withheld from automated sandbox initialization to enforce credential isolation.
+The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK on host workstations to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` independently from other secrets via `scripts/setup.sh --modal` (mode 0600), and intentionally withheld from automated sandbox initialization to enforce credential isolation.
 _Avoid_: Modal token, modal config, modal credentials
 
 

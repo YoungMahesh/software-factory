@@ -26,12 +26,11 @@ python main.py --secret-collection <modal-secret-collection-name>
 # Launch VM with OpenCode and Antigravity CLI
 python main.py --secret-collection <modal-secret-collection-name> --opencode --agy
 
-# Custom web port, OpenCode port, SOPS secrets, and memory allocation
+# Custom web port, OpenCode port, Antigravity CLI, and memory allocation
 python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --agy \
-    --sops \
     --web-port 3000 \
     --opencode-port 4096 \
     --memory 2

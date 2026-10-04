@@ -165,11 +165,6 @@ def main():
         help="Also configure Python 3, pip, and automatic dependency installation for Python projects.",
     )
     parser.add_argument(
-        "--sops",
-        action="store_true",
-        help="Configure SOPS age key from AGE_PRIVATE_KEY secret and run scripts/setup.sh if present.",
-    )
-    parser.add_argument(
         "--metro-port",
         type=int,
         default=DEFAULT_METRO_PORT,
@@ -300,9 +295,6 @@ def main():
     if args.python:
         env["ENABLE_PYTHON"] = "1"
 
-    if args.sops or args.agy:
-        env["ENABLE_SOPS"] = "1"
-
     volumes = {}
     if args.react_native:
         encrypted_ports.append(args.metro_port)
@@ -320,8 +312,6 @@ def main():
         features.append("OpenCode")
     if args.python:
         features.append("Python")
-    if args.sops or args.agy:
-        features.append("SOPS")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(
