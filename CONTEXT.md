@@ -48,4 +48,9 @@ _Avoid_: Gemini token, antigravity auth token, cli token
 Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
+**Modal Client Credentials**:
+The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK on host workstations to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` only when explicitly requested via `scripts/setup.sh --modal` (mode 0600), and intentionally withheld from automated sandbox initialization to enforce credential isolation.
+_Avoid_: Modal token, modal config, modal credentials
+
+
 

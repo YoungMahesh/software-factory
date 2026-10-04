@@ -23,7 +23,10 @@ python3 -m modal setup
 
 ### Setup credentials & SSH keys:
 ```bash
-# Decrypt ~/.modal.toml credentials and ~/.ssh/modal-sandbox SSH private key
+# Decrypt ~/.modal.toml credentials, ~/.ssh/modal-sandbox SSH private key, and Antigravity tokens
+bash scripts/setup.sh --modal
+
+# Or omit --modal to decrypt only sandbox SSH keys and Antigravity tokens:
 bash scripts/setup.sh
 ```
 
