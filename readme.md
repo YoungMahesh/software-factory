@@ -21,12 +21,12 @@ python3 -m modal setup
 # credentials will be stored at: ~/.modal/toml
 ```
 
-### Setup credentials & SSH keys:
+### Setup credentials:
 ```bash
-# Decrypt ~/.modal.toml credentials, ~/.ssh/modal-sandbox SSH private key, and Antigravity tokens
+# Decrypt ~/.modal.toml credentials and Antigravity tokens
 bash scripts/setup.sh --modal
 
-# Or omit --modal to decrypt only sandbox SSH keys and Antigravity tokens:
+# Or omit --modal to decrypt only Antigravity tokens:
 bash scripts/setup.sh
 ```
 

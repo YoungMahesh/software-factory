@@ -42,7 +42,7 @@ python main.py \
     --opencode-port 4096
 ```
 
-SSH access automatically uses `shared/ssh-key.pub` for container authorization and `~/.ssh/modal-sandbox` for client authentication (provisioned via `bash scripts/setup.sh`).
+SSH access automatically uses `shared/ssh-key.pub` for container authorization and `~/.ssh/modal-sandbox` for client authentication.
 
 Once running, the script prints:
 

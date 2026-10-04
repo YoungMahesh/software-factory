@@ -17,7 +17,6 @@ REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
 LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
-HOST_SSH_PRIV_KEY = Path.home() / ".ssh" / "modal-sandbox"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
@@ -59,28 +58,22 @@ if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
 
 
-def load_ssh_key_pair() -> tuple[str, Path]:
-    """Loads SSH public key content and validates the host private key.
+def load_ssh_pub_key() -> str:
+    """Loads SSH public key content from the repository.
 
-    Returns (pubkey_content, host_private_key_path).
-    Raises FileNotFoundError if the public key or host private key is missing.
+    Raises FileNotFoundError if the shared public key is missing.
     """
     if not SHARED_SSH_PUB_KEY.exists():
         raise FileNotFoundError(
             f"SSH public key not found at {SHARED_SSH_PUB_KEY}."
         )
-    if not HOST_SSH_PRIV_KEY.exists():
-        raise FileNotFoundError(
-            f"SSH private key not found at {HOST_SSH_PRIV_KEY}. Please run 'bash scripts/setup.sh' to decrypt it."
-        )
-    return SHARED_SSH_PUB_KEY.read_text().strip(), HOST_SSH_PRIV_KEY
+    return SHARED_SSH_PUB_KEY.read_text().strip()
 
 
 def print_access_info(
     sandbox: modal.Sandbox,
     app_name: str,
     ssh_info: tuple[str, int] | None = None,
-    private_key_path: Path | None = None,
     web_url: str | None = None,
     web_port: int | None = None,
     opencode_url: str | None = None,
@@ -107,18 +100,8 @@ def print_access_info(
             )
     if ssh_info:
         ssh_host, ssh_port = ssh_info
-        key_display = (
-            f"~/{private_key_path.relative_to(Path.home())}"
-            if private_key_path and private_key_path.is_relative_to(Path.home())
-            else str(private_key_path)
-        )
-        key_arg = (
-            f"-i {key_display} "
-            if private_key_path and private_key_path.exists()
-            else ""
-        )
         ssh_cmd = (
-            f"ssh {key_arg}-o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
+            f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
         )
         print(f"  • SSH:      {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
@@ -126,8 +109,7 @@ def print_access_info(
         print(f"  HostName {ssh_host}")
         print(f"  Port {ssh_port}")
         print("  User root")
-        if private_key_path and private_key_path.exists():
-            print(f"  IdentityFile {key_display}")
+        print("  IdentityFile ~/.ssh/modal-sandbox")
         print("  StrictHostKeyChecking no")
     print("=" * 60 + "\n")
 
@@ -213,7 +195,7 @@ def main():
             )
         active_ports["--metro-port"] = args.metro_port
 
-    pubkey_content, priv_key_path = load_ssh_key_pair()
+    pubkey_content = load_ssh_pub_key()
 
     random_id = uuid.uuid4().hex[:8]
     app_name = f"{args.secret_collection}-{random_id}"
@@ -394,7 +376,6 @@ def main():
         sandbox,
         app_name,
         ssh_info=ssh_info,
-        private_key_path=priv_key_path,
         web_url=web_url,
         web_port=args.web_port,
         opencode_url=opencode_url,

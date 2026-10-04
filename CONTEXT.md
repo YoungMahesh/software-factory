@@ -37,7 +37,7 @@ A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVA
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
-The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` and injected into the container's `/root/.ssh/authorized_keys`, while the private key is encrypted with SOPS at `secrets/ssh-private-key` and decrypted locally to `~/.ssh/modal-sandbox` (mode 0600).
+The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` and injected into the container's `/root/.ssh/authorized_keys`, while the private key is maintained out-of-band by developers at `~/.ssh/modal-sandbox` (mode 0600) and never tracked, stored, or decrypted in repository secrets or sandbox environments.
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
 **Antigravity OAuth Token**:
