@@ -24,6 +24,10 @@ IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
 DEFAULT_METRO_PORT = 8081
 
+gradle_cache_vol = modal.Volume.from_name("gradle-caches", create_if_missing=True)
+gradle_wrapper_vol = modal.Volume.from_name("gradle-wrapper", create_if_missing=True)
+GRADLE_CACHE_PATH = "/root/.gradle/caches"
+GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"
 
 # Static base image: built once and cached by Modal
 base_image = (
@@ -166,7 +170,7 @@ def main():
     parser.add_argument(
         "--react-native",
         action="store_true",
-        help="Also configure Android SDK, NDK, OpenJDK 17, and Metro bundler port forwarding for React Native.",
+        help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
     )
     parser.add_argument(
         "--metro-port",
@@ -296,10 +300,13 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
+    volumes = {}
     if args.react_native:
         encrypted_ports.append(args.metro_port)
         env["ENABLE_REACT_NATIVE"] = "1"
         env["METRO_PORT"] = str(args.metro_port)
+        volumes[GRADLE_CACHE_PATH] = gradle_cache_vol
+        volumes[GRADLE_WRAPPER_PATH] = gradle_wrapper_vol
 
     features = []
     if args.react_native:
@@ -324,6 +331,7 @@ def main():
             idle_timeout=IDLE_TIMEOUT_SECS,
             image=image,
             app=app,
+            volumes=volumes,
             unencrypted_ports=[22],
             encrypted_ports=encrypted_ports,
             # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
