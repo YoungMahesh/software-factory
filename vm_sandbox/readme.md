@@ -26,11 +26,15 @@ python main.py --secret-collection <modal-secret-collection-name>
 # Launch VM with OpenCode and Antigravity CLI
 python main.py --secret-collection <modal-secret-collection-name> --opencode --agy
 
+# Launch VM with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
+python main.py --secret-collection <modal-secret-collection-name> --modal
+
 # Custom web port, OpenCode port, Antigravity CLI, and memory allocation
 python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --agy \
+    --modal \
     --web-port 3000 \
     --opencode-port 4096 \
     --memory 2
@@ -68,3 +72,14 @@ PORT=3000
 
 Simply start Next.js: `pnpm run dev`
 And open the printed **Web URL** in your browser!
+
+## Running Modal Tooling inside the Sandbox
+
+When started with `--modal`:
+- Python 3, `pip`, `venv`, and `python-is-python3` are pre-installed.
+- An isolated virtual environment (`.venv`) is provisioned at the repository root and auto-activated across login and interactive shells.
+- The `modal` Python client package is pre-installed in `.venv`.
+- Project dependencies are installed automatically from `requirements.txt` if present.
+- SOPS secret decryption provisions `secrets/modal.toml` into `~/.modal.toml` (mode 0600).
+- An on-demand inspection utility `check-modal` (and `check-python`) is available at `/usr/local/bin/check-modal`.
+

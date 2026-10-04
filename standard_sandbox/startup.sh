@@ -87,10 +87,10 @@ EOF
     chmod +x /usr/local/bin/check-react-native 2>/dev/null || true
 fi
 
-if [ "${ENABLE_PYTHON:-}" = "1" ]; then
+if [ "${ENABLE_MODAL:-}" = "1" ]; then
     VENV_DIR="$TARGET_DIR/.venv"
     if [ ! -d "$VENV_DIR" ]; then
-        echo "🐍 Creating virtual environment at $VENV_DIR..."
+        echo "⚡ Creating virtual environment at $VENV_DIR..."
         python3 -m venv "$VENV_DIR"
     fi
 
@@ -105,24 +105,32 @@ fi
 EOF
     chmod +x /etc/profile.d/python-venv.sh 2>/dev/null || true
 
+    echo "⚡ Installing Modal client package into .venv..."
+    "$VENV_DIR/bin/pip" install --quiet modal
+
     # Quick verification banner
     PYTHON_VER=$("$VENV_DIR/bin/python3" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
     PIP_VER=$("$VENV_DIR/bin/pip" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
+    MODAL_VER=$("$VENV_DIR/bin/modal" --version 2>&1 | cut -d' ' -f3 || echo "Installed")
 
-    echo "🐍 Python Tooling Active:"
+    echo "⚡ Modal Development Tooling Active:"
     echo "   • Virtualenv: $VENV_DIR"
     echo "   • Python: $PYTHON_VER"
     echo "   • Pip: $PIP_VER"
+    echo "   • Modal SDK: $MODAL_VER"
 
     # Install on-demand inspection utility
-    cat << EOF > /usr/local/bin/check-python
+    cat << EOF > /usr/local/bin/check-modal
 #!/usr/bin/env bash
 echo "=== Python ===" && "$VENV_DIR/bin/python3" --version
 echo "=== Pip ===" && "$VENV_DIR/bin/pip" --version
 echo "=== Virtual Environment ===" && echo "VIRTUAL_ENV: \${VIRTUAL_ENV:-$VENV_DIR}"
+echo "=== Modal CLI ===" && "$VENV_DIR/bin/modal" --version
+echo "=== Modal Profile ===" && ("$VENV_DIR/bin/modal" profile current 2>/dev/null || echo "Configured at ~/.modal.toml")
 echo "=== Installed Packages in .venv ===" && "$VENV_DIR/bin/pip" list
 EOF
-    chmod +x /usr/local/bin/check-python 2>/dev/null || true
+    chmod +x /usr/local/bin/check-modal 2>/dev/null || true
+    ln -sf /usr/local/bin/check-modal /usr/local/bin/check-python
 fi
 
 # 2. Decrypt / write environment keys if provided
@@ -130,9 +138,9 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: Antigravity CLI is enabled (via --agy), but AGE_PRIVATE_KEY is not set in the environment." >&2
+        echo "ERROR: Credentials decryption requested (--agy or --modal), but AGE_PRIVATE_KEY is not set in the environment." >&2
         exit 1
     fi
 
@@ -140,10 +148,18 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
     echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
     chmod 600 ~/.config/sops/age/keys.txt
 
+    setup_args=()
+    if [ "${ENABLE_MODAL:-}" = "1" ]; then
+        setup_args+=("--modal")
+    fi
+    if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+        setup_args+=("--agy")
+    fi
+
     setup_status=0
     if [ -f "scripts/setup.sh" ]; then
         echo "🔐 Decrypting secrets with SOPS..."
-        bash scripts/setup.sh --agy || setup_status=$?
+        bash scripts/setup.sh "${setup_args[@]}" || setup_status=$?
     fi
 
     rm -rf ~/.config/sops
@@ -164,7 +180,7 @@ elif [ -f "package.json" ]; then
     npm install
 fi
 
-if [ "${ENABLE_PYTHON:-}" = "1" ] && [ -f "requirements.txt" ]; then
+if [ "${ENABLE_MODAL:-}" = "1" ] && [ -f "requirements.txt" ]; then
     echo "📦 Installing Python dependencies from requirements.txt into .venv..."
     "$TARGET_DIR/.venv/bin/pip" install -r requirements.txt
 fi

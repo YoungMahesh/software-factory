@@ -28,12 +28,12 @@ _Avoid_: Android environment, mobile dependencies, Android emulator
 A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Metro bundler development server running inside the sandbox.
 _Avoid_: Metro proxy, bundler forward, mobile tunnel
 
-**Python Tooling**:
-A pre-baked Python 3 and venv runtime environment within the sandbox image configured to automatically provision an isolated virtual environment (`.venv`) in the cloned repository root, install dependencies from `requirements.txt`, and auto-activate in developer login sessions.
-_Avoid_: Python environment, pip runner, Python container
+**Modal Development Tooling**:
+A runtime development environment within the sandbox combining a pre-baked Python 3 runtime, an automated virtual environment (`.venv`) pre-installed with the Modal SDK and project dependencies, and opt-in decrypted Modal Client Credentials (`~/.modal.toml`) for developing and running Modal workloads from within the sandbox.
+_Avoid_: Python tooling, python runner, modal env
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh --agy`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy` and/or `--modal`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
@@ -49,7 +49,7 @@ Common editor and AI agent configuration files tracked in the repository root `s
 _Avoid_: Sandbox config, local config, runner settings
 
 **Modal Client Credentials**:
-The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK on host workstations to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` independently from other secrets via `scripts/setup.sh --modal` (mode 0600), and intentionally withheld from automated sandbox initialization to enforce credential isolation.
+The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` via `scripts/setup.sh --modal` (mode 0600), withheld from automated sandbox initialization by default to enforce credential isolation, and provisioned into sandboxes strictly when `--modal` is explicitly passed.
 _Avoid_: Modal token, modal config, modal credentials
 
 

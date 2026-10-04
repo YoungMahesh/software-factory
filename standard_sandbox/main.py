@@ -160,9 +160,9 @@ def main():
         help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
     )
     parser.add_argument(
-        "--python",
+        "--modal",
         action="store_true",
-        help="Also configure Python 3, pip, and automatic dependency installation for Python projects.",
+        help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
     )
     parser.add_argument(
         "--metro-port",
@@ -257,7 +257,7 @@ def main():
             ]
         )
 
-    if args.python:
+    if args.modal:
         image = image.apt_install(
             "python3", "python3-pip", "python3-venv", "python-is-python3"
         ).run_commands(
@@ -292,8 +292,8 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
-    if args.python:
-        env["ENABLE_PYTHON"] = "1"
+    if args.modal:
+        env["ENABLE_MODAL"] = "1"
 
     volumes = {}
     if args.react_native:
@@ -310,8 +310,8 @@ def main():
         features.append("Antigravity")
     if args.opencode:
         features.append("OpenCode")
-    if args.python:
-        features.append("Python")
+    if args.modal:
+        features.append("Modal")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(

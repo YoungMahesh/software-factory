@@ -159,6 +159,11 @@ def main():
         help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
     )
     parser.add_argument(
+        "--modal",
+        action="store_true",
+        help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
+    )
+    parser.add_argument(
         "--memory",
         type=int,
         default=1,
@@ -217,6 +222,14 @@ def main():
                 LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
             )
 
+    if args.modal:
+        image = image.apt_install(
+            "python3", "python3-pip", "python3-venv", "python-is-python3"
+        ).run_commands(
+            "mkdir -p /etc",
+            "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
+        )
+
     if path_prefixes:
         image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
 
@@ -245,11 +258,16 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
+    if args.modal:
+        env["ENABLE_MODAL"] = "1"
+
     features: list[str] = []
     if args.agy:
         features.append("Antigravity")
     if args.opencode:
         features.append("OpenCode")
+    if args.modal:
+        features.append("Modal")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(

@@ -32,6 +32,9 @@ python main.py --secret-collection <modal-secret-collection-name> --react-native
 # Launch with Antigravity CLI and SOPS secrets
 python main.py --secret-collection <modal-secret-collection-name> --agy
 
+# Launch with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
+python main.py --secret-collection <modal-secret-collection-name> --modal
+
 # Custom web port, Metro port, and OpenCode port
 python main.py \
     --secret-collection <modal-secret-collection-name> \
@@ -77,3 +80,14 @@ When started with `--react-native`:
 - Android command-line tools, platform-tools, platforms 34 & 35, build-tools 34 & 35, NDK (`26.1.10909125`), and CMake (`3.22.1`) are pre-baked into `/opt/android-sdk`.
 - `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `PATH` are pre-configured in both `/etc/environment` and `~/.bashrc`.
 - Metro bundler port 8081 (or custom `--metro-port`) is exposed via a secure HTTPS tunnel.
+
+## Running Modal Tooling inside the Sandbox
+
+When started with `--modal`:
+- Python 3, `pip`, `venv`, and `python-is-python3` are pre-installed.
+- An isolated virtual environment (`.venv`) is provisioned at the repository root and auto-activated across login and interactive shells.
+- The `modal` Python client package is pre-installed in `.venv`.
+- Project dependencies are installed automatically from `requirements.txt` if present.
+- SOPS secret decryption provisions `secrets/modal.toml` into `~/.modal.toml` (mode 0600).
+- An on-demand inspection utility `check-modal` (and `check-python`) is available at `/usr/local/bin/check-modal`.
+
