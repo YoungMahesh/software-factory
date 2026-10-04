@@ -21,9 +21,16 @@ python3 -m modal setup
 # credentials will be stored at: ~/.modal/toml
 ```
 
-Run code:
+### Setup credentials & SSH keys:
 ```bash
-modal run get_started.py
+# Decrypt ~/.modal.toml credentials and ~/.ssh/modal-sandbox SSH private key
+bash scripts/setup.sh
+```
+
+Encrypt/Decrypt file:
+```bash
+sops encrypt --in-place secrets/file1
+sops decrypt secrets/file1
 ```
 
 ### If repository directory is moved or renamed

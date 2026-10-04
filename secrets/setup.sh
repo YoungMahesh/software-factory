@@ -1,1 +1,0 @@
-sops decrypt secrets/modal.toml > ~/.modal.toml

@@ -17,7 +17,8 @@ LOCAL_ANTIGRAVITY_KEYBINDINGS = Path(__file__).parent / "keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
 LOCAL_ANTIGRAVITY_TOKEN = Path(__file__).parent / "antigravity-oauth-token"
 REMOTE_ANTIGRAVITY_TOKEN = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
-DEFAULT_SSH_KEY = Path(__file__).parent / "id_ed25519"
+SHARED_SSH_PUB_KEY = Path(__file__).resolve().parent.parent / "shared" / "ssh-key.pub"
+HOST_SSH_PRIV_KEY = Path.home() / ".ssh" / "modal-sandbox"
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
@@ -44,10 +45,13 @@ base_image = (
         "docker-buildx",
         "unzip",
         "ripgrep",
+        "age",
     )
     .run_commands(
         # Download and install fnm:
         "curl -o- https://fnm.vercel.app/install | bash",
+        "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
+        "chmod +x /usr/local/bin/sops",
         "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
         "echo 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/modal.conf",
         "echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config.d/modal.conf",
@@ -61,22 +65,21 @@ if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
 
 
-def load_ssh_pubkey(key_path_str: str) -> tuple[str, Path]:
-    """Loads SSH public key content and returns (pubkey_content, private_key_path)."""
-    p = Path(key_path_str).expanduser()
-    if p.suffix == ".pub":
-        pub_path = p
-        priv_path = p.with_suffix("")
-    else:
-        pub_path = p.with_name(p.name + ".pub")
-        priv_path = p
+def load_ssh_key_pair() -> tuple[str, Path]:
+    """Loads SSH public key content and validates the host private key.
 
-    if not pub_path.exists():
-        if p.exists() and p.read_text().startswith("ssh-"):
-            return p.read_text().strip(), priv_path
-        raise FileNotFoundError(f"SSH public key not found at {pub_path} or {p}")
-
-    return pub_path.read_text().strip(), priv_path
+    Returns (pubkey_content, host_private_key_path).
+    Raises FileNotFoundError if the public key or host private key is missing.
+    """
+    if not SHARED_SSH_PUB_KEY.exists():
+        raise FileNotFoundError(
+            f"SSH public key not found at {SHARED_SSH_PUB_KEY}."
+        )
+    if not HOST_SSH_PRIV_KEY.exists():
+        raise FileNotFoundError(
+            f"SSH private key not found at {HOST_SSH_PRIV_KEY}. Please run 'bash scripts/setup.sh' to decrypt it."
+        )
+    return SHARED_SSH_PUB_KEY.read_text().strip(), HOST_SSH_PRIV_KEY
 
 
 def print_access_info(
@@ -146,11 +149,7 @@ def main():
         required=True,
         help="Modal Secret collection name.",
     )
-    parser.add_argument(
-        "--ssh-key",
-        default=str(DEFAULT_SSH_KEY),
-        help=f"Path to SSH key (default: {DEFAULT_SSH_KEY})",
-    )
+
     parser.add_argument(
         "--web-port",
         type=int,
@@ -180,6 +179,11 @@ def main():
         metavar="GB",
         help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Default: 1",
     )
+    parser.add_argument(
+        "--sops",
+        action="store_true",
+        help="Configure SOPS age key from AGE_PRIVATE_KEY secret and run scripts/setup.sh if present.",
+    )
     args = parser.parse_args()
 
     if args.memory < 1:
@@ -193,7 +197,7 @@ def main():
     memory_mib = args.memory * 1024
     swap_gb = args.memory * 2
 
-    pubkey_content, priv_key_path = load_ssh_pubkey(args.ssh_key)
+    pubkey_content, priv_key_path = load_ssh_key_pair()
 
     random_id = uuid.uuid4().hex[:8]
     app_name = f"{args.secret_collection}-{random_id}"
@@ -268,17 +272,21 @@ def main():
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
 
-    opencode_suffix = ""
-    if args.agy and args.opencode:
-        opencode_suffix = " & Antigravity & OpenCode"
-    elif args.agy:
-        opencode_suffix = " & Antigravity"
-    elif args.opencode:
-        opencode_suffix = " & OpenCode"
+    if args.sops:
+        env["ENABLE_SOPS"] = "1"
 
+    features: list[str] = []
+    if args.agy:
+        features.append("Antigravity")
+    if args.opencode:
+        features.append("OpenCode")
+    if args.sops:
+        features.append("SOPS")
+
+    features_suffix = f" & {' & '.join(features)}" if features else ""
     print(
         f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port}"
-        f"{opencode_suffix} (App: {app_name})..."
+        f"{features_suffix} (App: {app_name})..."
     )
     with modal.enable_output():
         sandbox = modal.Sandbox.create(

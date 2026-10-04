@@ -26,18 +26,20 @@ python main.py --secret-collection <modal-secret-collection-name>
 # Launch VM with OpenCode and Antigravity CLI
 python main.py --secret-collection <modal-secret-collection-name> --opencode --agy
 
-# Custom SSH key, web port, OpenCode port, and memory allocation
+# Custom web port, OpenCode port, SOPS secrets, and memory allocation
 python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --agy \
-    --ssh-key ~/.ssh/id_ed25519 \
+    --sops \
     --web-port 3000 \
     --opencode-port 4096 \
     --memory 2
 ```
 
 `--memory N` allocates `N` GB of RAM to the VM, with a swapfile of `2N` GB (e.g. `--memory 2` -> 2 GB RAM + 4 GB swap). Default: `1`.
+
+SSH access automatically uses `shared/ssh-key.pub` for container authorization and `~/.ssh/modal-sandbox` for client authentication (provisioned via `bash scripts/setup.sh`).
 
 Once running, the script prints:
 
@@ -47,7 +49,7 @@ Once running, the script prints:
   ```bash
   OPENCODE_SERVER_PASSWORD=<password> opencode attach <opencode-url>
   ```
-- Direct `ssh` command: `ssh -i <key> -o StrictHostKeyChecking=no -p <port> root@<host>`
+- Direct `ssh` command: `ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p <port> root@<host>`
 - VS Code Remote - SSH configuration block
 
 ## Agent Tooling & Configuration

@@ -29,23 +29,24 @@ python main.py --secret-collection <modal-secret-collection-name> --opencode
 # Launch with React Native & Android tooling (Metro bundler on port 8081)
 python main.py --secret-collection <modal-secret-collection-name> --react-native
 
-# Custom SSH key, web port, Metro port, and OpenCode port
+# Custom web port, Metro port, and OpenCode port
 python main.py \
     --secret-collection <modal-secret-collection-name> \
     --react-native \
     --opencode \
-    --ssh-key ~/.ssh/id_ed25519 \
     --web-port 3000 \
     --metro-port 8081 \
     --opencode-port 4096
 ```
+
+SSH access automatically uses `shared/ssh-key.pub` for container authorization and `~/.ssh/modal-sandbox` for client authentication (provisioned via `bash scripts/setup.sh`).
 
 Once running, the script prints:
 
 - Standard `modal shell <sandbox-id>` access command
 - **Web URL**: Public HTTPS URL forwarding directly to port 3000 inside the sandbox (e.g. `https://<id>-3000.modal.host`)
 - **Metro**: Public HTTPS URL forwarding directly to port 8081 inside the sandbox when `--react-native` is passed (e.g. `https://<id>-8081.modal.host`)
-- Direct `ssh` command: `ssh -i <key> -o StrictHostKeyChecking=no -p <port> root@<host>`
+- Direct `ssh` command: `ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p <port> root@<host>`
 - VS Code Remote - SSH configuration block
 
 ## Running Next.js inside the Sandbox

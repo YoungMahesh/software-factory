@@ -140,10 +140,10 @@ if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
     chmod 600 ~/.config/sops/age/keys.txt
 
-    if [ -f "secrets/setup.sh" ]; then
+    if [ -f "scripts/setup.sh" ]; then
         echo "🔐 Decrypting secrets with SOPS..."
-        bash secrets/setup.sh || {
-            echo "ERROR: secrets/setup.sh failed to execute." >&2
+        bash scripts/setup.sh || {
+            echo "ERROR: scripts/setup.sh failed to execute." >&2
             exit 1
         }
     fi
