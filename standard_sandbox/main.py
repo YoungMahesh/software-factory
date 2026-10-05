@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
     REMOTE_STARTUP_SCRIPT,
+    SHARED_SECRET_NAME,
     browser_enabled,
     build_sandbox_image,
     get_gradle_volumes,
@@ -175,6 +176,8 @@ def main():
 
     encrypted_ports = [args.web_port]
     sandbox_secrets = [secret]
+    if args.agy or args.modal or args.opencode:
+        sandbox_secrets.append(modal.Secret.from_name(SHARED_SECRET_NAME))
     env: dict[str, str | None] = {
         "SSH_AUTHORIZED_KEY": pubkey_content,
         "PORT": str(args.web_port),

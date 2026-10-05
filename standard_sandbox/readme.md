@@ -7,13 +7,23 @@ For a full Linux VM Sandbox with Docker support, use [`vm_sandbox/main.py`](../v
 
 ## Required Modal Secret Variables
 
-The secret collection passed to `--secret-collection` (or `-s`) must define the following environment variables:
+### Repository Secret Collection (`--secret-collection` or `-s`)
+
+The repository secret collection passed to `--secret-collection` (or `-s`) must define the following environment variables:
 
 | Variable             | Status       | Description                                       | Example            |
 | :------------------- | :----------- | :------------------------------------------------ | :----------------- |
 | `GH_REPO`            | **Required** | GitHub repository in `owner/repo` format          | `octocat/my-repo`  |
 | `GH_TOKEN`           | **Required** | GitHub Personal Access Token for cloning          | `ghp_xxxxxxxxxxxx` |
 | `DOTENV_PRIVATE_KEY` | _Optional_   | Key to decrypt `.env.vault` if using dotenv-vault | `dotenv_key_...`   |
+
+### Shared Workspace Secret (`share0`)
+
+When launching with features that require in-sandbox credential decryption (`--agy`, `--modal`, or `--opencode`), the shared Modal secret named `share0` is automatically mounted and must define:
+
+| Variable          | Status                                             | Description                                     | Example               |
+| :---------------- | :------------------------------------------------- | :---------------------------------------------- | :-------------------- |
+| `AGE_PRIVATE_KEY` | **Required** with `--agy`, `--modal`, `--opencode` | Master Age private key used for SOPS decryption | `AGE-SECRET-KEY-1...` |
 
 > Set these secrets in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI.
 

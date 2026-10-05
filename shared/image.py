@@ -13,6 +13,7 @@ REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
 LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
 GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"

@@ -36,8 +36,12 @@ _Avoid_: Metro proxy, bundler forward, mobile tunnel
 A runtime development environment within the sandbox combining a pre-baked Python 3 runtime, an automated virtual environment (`.venv`) pre-installed with the Modal SDK and project dependencies, and opt-in decrypted Modal Client Credentials (`~/.modal.toml`) for developing and running Modal workloads from within the sandbox.
 _Avoid_: Python tooling, python runner, modal env
 
+**Shared Workspace Secret**:
+The centralized Modal secret collection (`share0`) mounted into sandboxes when credentials decryption is requested, providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—independent of repository-specific secret collections.
+_Avoid_: Global secret, root secret, default secret
+
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`), configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:

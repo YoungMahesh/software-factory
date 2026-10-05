@@ -198,7 +198,7 @@ fi
 
 if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: Credentials decryption requested (--agy, --modal, or --opencode), but AGE_PRIVATE_KEY is not set in the environment." >&2
+        echo "ERROR: Credentials decryption requested (--agy, --modal, or --opencode), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
         exit 1
     fi
 
