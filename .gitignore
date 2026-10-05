@@ -4,10 +4,7 @@ __pycache__/
 # Virtual environments
 .venv/
 
-# SSH keys
-id_*
-
-antigravity-oauth-token
+.playwright-mcp
 
 launch.sh
 llm-response.md
