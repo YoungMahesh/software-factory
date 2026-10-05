@@ -1,73 +1,26 @@
 import argparse
-import secrets
-import uuid
 from pathlib import Path
+import secrets
+import sys
+import uuid
 
 import modal
 
-LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
-REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
-LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
-REMOTE_GIT_BASH = "/root/.git.bash"
-SHARED_DIR = Path(__file__).resolve().parent.parent / "shared"
-LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
-REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
-LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
-REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
-LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
-REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
-SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+# Ensure repository root is on sys.path for shared imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from shared.image import (
+    REMOTE_STARTUP_SCRIPT,
+    build_sandbox_image,
+    get_gradle_volumes,
+    load_ssh_pub_key,
+)
+
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
 DEFAULT_METRO_PORT = 8081
-
-gradle_cache_vol = modal.Volume.from_name("gradle-caches", create_if_missing=True)
-gradle_wrapper_vol = modal.Volume.from_name("gradle-wrapper", create_if_missing=True)
-GRADLE_CACHE_PATH = "/root/.gradle/caches"
-GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"
-
-# Static base image: built once and cached by Modal
-base_image = (
-    modal.Image.from_registry("node:24.21-bookworm-slim")
-    # Silently accepts default answers (or preseeded values) and never prompts the user.
-    # If an issue requires manual intervention, it logs the error rather than waiting indefinitely.
-    .env({"DEBIAN_FRONTEND": "noninteractive"})
-    # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
-    # ripgrep: ai agents use this tool to search text in codebase
-    # age: A simple, modern, and fast file/stream encryption tool designed to replace PGP/GnuPG
-    # sops: An automated encryption/decryption editor created by Mozilla that encrypts specific values inside structured configuration files 
-    #       while leaving keys and file formatting readable.
-    .apt_install("curl", "git", "htop", "openssh-server", "wget", "ripgrep", "age")
-    .run_commands(
-        "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
-        "chmod +x /usr/local/bin/sops",
-        "corepack enable pnpm",
-        "corepack prepare pnpm@10.31.0 --activate",
-        "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
-        "echo 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/modal.conf",
-        "echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config.d/modal.conf",
-        "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config.d/modal.conf",
-        "ssh-keygen -A",
-    )
-    .add_local_file(LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True)
-)
-
-if LOCAL_GIT_BASH.exists():
-    base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
-
-
-def load_ssh_pub_key() -> str:
-    """Loads SSH public key content from the repository.
-
-    Raises FileNotFoundError if the shared public key is missing.
-    """
-    if not SHARED_SSH_PUB_KEY.exists():
-        raise FileNotFoundError(
-            f"SSH public key not found at {SHARED_SSH_PUB_KEY}."
-        )
-    return SHARED_SSH_PUB_KEY.read_text().strip()
 
 
 def print_access_info(
@@ -198,75 +151,13 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
-    # Build the image incrementally based on the CLI flags passed. Layers are only
-    # added (and built/cached by Modal) for the features actually requested.
-    image = base_image
-    path_prefixes: list[str] = []
-
-    if args.opencode:
-        image = image.run_commands("curl -fsSL https://opencode.ai/v2/install | bash")
-        path_prefixes.append("/root/.opencode/bin")
-        if LOCAL_OPENCODE_CONFIG.exists():
-            image = image.add_local_file(
-                LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
-            )
-
-    if args.agy:
-        image = image.run_commands(
-            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-            "mkdir -p /root/.gemini/antigravity-cli",
-        )
-        path_prefixes.append("/root/.local/bin")
-        if LOCAL_ANTIGRAVITY_SETTINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS, copy=True
-            )
-        if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
-            )
-
-    if args.react_native:
-        image = (
-            image.apt_install("openjdk-17-jdk-headless", "unzip")
-            .env(
-                {
-                    "ANDROID_HOME": "/opt/android-sdk",
-                    "ANDROID_SDK_ROOT": "/opt/android-sdk",
-                    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
-                }
-            )
-            .run_commands(
-                "mkdir -p /opt/android-sdk/cmdline-tools",
-                "wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip",
-                "unzip -q /tmp/cmdline-tools.zip -d /opt/android-sdk/cmdline-tools",
-                "mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest",
-                "rm -f /tmp/cmdline-tools.zip",
-                "yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses",
-                "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "
-                '"platform-tools" '
-                '"platforms;android-34" "build-tools;34.0.0" '
-                '"platforms;android-35" "build-tools;35.0.0" '
-                '"ndk;26.1.10909125" "cmake;3.22.1"',
-            )
-        )
-        path_prefixes.extend(
-            [
-                "/opt/android-sdk/cmdline-tools/latest/bin",
-                "/opt/android-sdk/platform-tools",
-            ]
-        )
-
-    if args.modal:
-        image = image.apt_install(
-            "python3", "python3-pip", "python3-venv", "python-is-python3"
-        ).run_commands(
-            "mkdir -p /etc",
-            "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
-        )
-
-    if path_prefixes:
-        image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
+    # Build the image incrementally based on the CLI flags passed.
+    image = build_sandbox_image(
+        opencode=args.opencode,
+        agy=args.agy,
+        modal_tooling=args.modal,
+        react_native=args.react_native,
+    )
 
     encrypted_ports = [args.web_port]
     sandbox_secrets = [secret]
@@ -300,8 +191,7 @@ def main():
         encrypted_ports.append(args.metro_port)
         env["ENABLE_REACT_NATIVE"] = "1"
         env["METRO_PORT"] = str(args.metro_port)
-        volumes[GRADLE_CACHE_PATH] = gradle_cache_vol
-        volumes[GRADLE_WRAPPER_PATH] = gradle_wrapper_vol
+        volumes.update(get_gradle_volumes())
 
     features = []
     if args.react_native:

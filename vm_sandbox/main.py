@@ -1,78 +1,26 @@
 import argparse
 from pathlib import Path
 import secrets
+import sys
 import uuid
 
 import modal
 
-LOCAL_STARTUP_SCRIPT = Path(__file__).parent / "startup.sh"
-REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
-LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
-REMOTE_GIT_BASH = "/root/.git.bash"
-SHARED_DIR = Path(__file__).resolve().parent.parent / "shared"
-LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
-REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
-LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
-REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
-LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
-REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
-SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+# Ensure repository root is on sys.path for shared imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from shared.image import (
+    REMOTE_STARTUP_SCRIPT,
+    build_sandbox_image,
+    get_gradle_volumes,
+    load_ssh_pub_key,
+)
+
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_OPENCODE_PORT = 4096
-
-
-# Static base image: built once and cached by Modal
-base_image = (
-    modal.Image.from_registry("ubuntu:24.04")
-    # Silently accepts default answers (or preseeded values) and never prompts the user.
-    # If an issue requires manual intervention, it logs the error rather than waiting indefinitely.
-    .env({"DEBIAN_FRONTEND": "noninteractive"})
-    # wget is necessary for connecting vscode or antigravity-ide via ssh; not required for zed-editor
-    # `docker.io`, `docker-buildx` for docker
-    # unzip for fnm
-    # ripgrep: ai agents use this tool to search text in codebase
-    .apt_install(
-        "curl",
-        "git",
-        "htop",
-        "openssh-server",
-        "wget",
-        "docker.io",
-        "docker-buildx",
-        "unzip",
-        "ripgrep",
-        "age",
-    )
-    .run_commands(
-        # Download and install fnm:
-        "curl -o- https://fnm.vercel.app/install | bash",
-        "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
-        "chmod +x /usr/local/bin/sops",
-        "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
-        "echo 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/modal.conf",
-        "echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config.d/modal.conf",
-        "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config.d/modal.conf",
-        "ssh-keygen -A",
-    )
-    .add_local_file(LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True)
-)
-
-if LOCAL_GIT_BASH.exists():
-    base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
-
-
-def load_ssh_pub_key() -> str:
-    """Loads SSH public key content from the repository.
-
-    Raises FileNotFoundError if the shared public key is missing.
-    """
-    if not SHARED_SSH_PUB_KEY.exists():
-        raise FileNotFoundError(
-            f"SSH public key not found at {SHARED_SSH_PUB_KEY}."
-        )
-    return SHARED_SSH_PUB_KEY.read_text().strip()
+DEFAULT_METRO_PORT = 8081
 
 
 def print_access_info(
@@ -84,6 +32,8 @@ def print_access_info(
     opencode_url: str | None = None,
     opencode_port: int | None = None,
     opencode_password: str | None = None,
+    metro_url: str | None = None,
+    metro_port: int | None = None,
     memory_gb: int | None = None,
 ):
     print("\n" + "=" * 60)
@@ -94,6 +44,8 @@ def print_access_info(
         print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
     if web_url:
         print(f"  • Web URL:  {web_url} (port {web_port})")
+    if metro_url:
+        print(f"  • Metro:    {metro_url} (port {metro_port})")
     if opencode_url:
         print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
         if opencode_password:
@@ -159,6 +111,17 @@ def main():
         help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
     )
     parser.add_argument(
+        "--react-native",
+        action="store_true",
+        help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
+    )
+    parser.add_argument(
+        "--metro-port",
+        type=int,
+        default=DEFAULT_METRO_PORT,
+        help=f"Port for the React Native Metro bundler, only used with --react-native (default: {DEFAULT_METRO_PORT})",
+    )
+    parser.add_argument(
         "--modal",
         action="store_true",
         help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
@@ -175,10 +138,23 @@ def main():
     if args.memory < 1:
         parser.error("--memory must be a positive integer number of GB.")
 
-    if args.opencode and args.opencode_port == args.web_port:
-        parser.error(
-            "--opencode-port and --web-port must differ: a port can only be exposed once."
-        )
+    active_ports = {"--web-port": args.web_port}
+    if args.opencode:
+        if args.opencode_port in active_ports.values():
+            parser.error(
+                "--opencode-port and --web-port must differ: a port can only be exposed once."
+            )
+        active_ports["--opencode-port"] = args.opencode_port
+
+    if args.react_native:
+        if args.metro_port in active_ports.values():
+            conflicting_flag = [
+                flag for flag, port in active_ports.items() if port == args.metro_port
+            ][0]
+            parser.error(
+                f"--metro-port and {conflicting_flag} must differ: a port can only be exposed once."
+            )
+        active_ports["--metro-port"] = args.metro_port
 
     memory_mib = args.memory * 1024
     swap_gb = args.memory * 2
@@ -194,44 +170,13 @@ def main():
     experimental_options = {"vm_runtime": True}
     runtime_desc = "VM Sandbox"
 
-    # Build the image incrementally based on the CLI flags passed. Layers are only
-    # added (and built/cached by Modal) for the features actually requested.
-    image = base_image
-    path_prefixes: list[str] = []
-
-    if args.opencode:
-        image = image.run_commands("curl -fsSL https://opencode.ai/install | bash")
-        path_prefixes.append("/root/.opencode/bin")
-        if LOCAL_OPENCODE_CONFIG.exists():
-            image = image.add_local_file(
-                LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
-            )
-
-    if args.agy:
-        image = image.run_commands(
-            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-            "mkdir -p /root/.gemini/antigravity-cli",
-        )
-        path_prefixes.append("/root/.local/bin")
-        if LOCAL_ANTIGRAVITY_SETTINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS, copy=True
-            )
-        if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
-            )
-
-    if args.modal:
-        image = image.apt_install(
-            "python3", "python3-pip", "python3-venv", "python-is-python3"
-        ).run_commands(
-            "mkdir -p /etc",
-            "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
-        )
-
-    if path_prefixes:
-        image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
+    # Build the image incrementally based on the CLI flags passed.
+    image = build_sandbox_image(
+        opencode=args.opencode,
+        agy=args.agy,
+        modal_tooling=args.modal,
+        react_native=args.react_native,
+    )
 
     encrypted_ports = [args.web_port]
     sandbox_secrets = [secret]
@@ -240,6 +185,7 @@ def main():
         "PORT": str(args.web_port),
         "HOSTNAME": "0.0.0.0",
         "SWAP_GB": str(swap_gb),
+        "ENABLE_DOCKER": "1",
     }
 
     opencode_password = None
@@ -261,7 +207,16 @@ def main():
     if args.modal:
         env["ENABLE_MODAL"] = "1"
 
+    volumes = {}
+    if args.react_native:
+        encrypted_ports.append(args.metro_port)
+        env["ENABLE_REACT_NATIVE"] = "1"
+        env["METRO_PORT"] = str(args.metro_port)
+        volumes.update(get_gradle_volumes())
+
     features: list[str] = []
+    if args.react_native:
+        features.append("React Native")
     if args.agy:
         features.append("Antigravity")
     if args.opencode:
@@ -284,6 +239,7 @@ def main():
             idle_timeout=IDLE_TIMEOUT_SECS,
             image=image,
             app=app,
+            volumes=volumes,
             # cpu and memory are set explicitly below. Modal's VM defaults would be a
             # 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
             # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
@@ -310,6 +266,7 @@ def main():
     ssh_info = None
     web_url = None
     opencode_url = None
+    metro_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
@@ -318,6 +275,8 @@ def main():
             web_url = tunnels[args.web_port].url
         if args.opencode and args.opencode_port in tunnels:
             opencode_url = tunnels[args.opencode_port].url
+        if args.react_native and args.metro_port in tunnels:
+            metro_url = tunnels[args.metro_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
 
@@ -336,6 +295,8 @@ def main():
         opencode_url=opencode_url,
         opencode_port=args.opencode_port if args.opencode else None,
         opencode_password=opencode_password,
+        metro_url=metro_url,
+        metro_port=args.metro_port if args.react_native else None,
         memory_gb=args.memory,
     )
 

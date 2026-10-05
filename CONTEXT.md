@@ -56,5 +56,6 @@ _Avoid_: Modal token, modal config, modal credentials
 A set of API keys and remote service tokens (`OPENCODE_GO_API_KEY`, `EXA_API_KEY`, `CONTEXT7_API_KEY`) encrypted with SOPS at `secrets/opencode.env` and decrypted inside the sandbox to `~/.config/opencode/opencode.env` (mode 0600) via `scripts/setup.sh --opencode`.
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
-
-
+**Shared Base Image**:
+A cached Modal image definition built on Ubuntu 24.04 providing the foundational filesystem for both Standard Sandboxes and VM Sandboxes, pre-baked with common tooling including SSH server, SOPS, age, Git, ripgrep, Docker CLI binaries, Node.js 24, and pnpm.
+_Avoid_: Base container, root image, runner image

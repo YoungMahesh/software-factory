@@ -29,14 +29,19 @@ python main.py --secret-collection <modal-secret-collection-name> --opencode --a
 # Launch VM with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
 python main.py --secret-collection <modal-secret-collection-name> --modal
 
-# Custom web port, OpenCode port, Antigravity CLI, and memory allocation
+# Launch VM with React Native & Android tooling (Metro bundler on port 8081)
+python main.py --secret-collection <modal-secret-collection-name> --react-native
+
+# Custom web port, OpenCode port, Antigravity CLI, Metro port, and memory allocation
 python main.py \
     --secret-collection <modal-secret-collection-name> \
     --opencode \
     --agy \
     --modal \
+    --react-native \
     --web-port 3000 \
     --opencode-port 4096 \
+    --metro-port 8081 \
     --memory 2
 ```
 
