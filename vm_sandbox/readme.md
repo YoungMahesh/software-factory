@@ -32,6 +32,9 @@ python main.py --secret-collection <modal-secret-collection-name> --modal
 # Launch VM with React Native & Android tooling (Metro bundler on port 8081)
 python main.py --secret-collection <modal-secret-collection-name> --react-native
 
+# Launch VM with Browser Tooling only (headless Chrome for the browser MCP servers)
+python main.py --secret-collection <modal-secret-collection-name> --browser
+
 # Custom web port, OpenCode port, Antigravity CLI, Metro port, and memory allocation
 python main.py \
     --secret-collection <modal-secret-collection-name> \
@@ -64,6 +67,7 @@ Once running, the script prints:
 
 - **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `shared/opencode.json`.
 - **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `shared/antigravity-settings.json` and `shared/antigravity-keybindings.json`. Automatically enables SOPS secret decryption inside the sandbox to provision `secrets/antigravity-oauth-token.json` to `~/.gemini/antigravity-cli/antigravity-oauth-token`.
+- **Browser Tooling**: A headless Google Chrome (`/opt/google/chrome/chrome`) is pre-baked via dynamic image layer when `--browser` is specified, and is implied by `--opencode` and `--agy`. It backs the Playwright and Chrome DevTools MCP servers in `shared/opencode.json`, which run headless with Chrome's sandbox disabled (required under root). The on-demand inspection utility `check-browser` is available at `/usr/local/bin/check-browser`.
 - **Code Search**: `ripgrep` is pre-installed in the base Ubuntu VM image for agent text search.
 
 ## Running Next.js inside the Sandbox

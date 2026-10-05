@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
     REMOTE_STARTUP_SCRIPT,
+    browser_enabled,
     build_sandbox_image,
     get_gradle_volumes,
     load_ssh_pub_key,
@@ -97,6 +98,11 @@ def main():
         help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
     )
     parser.add_argument(
+        "--browser",
+        action="store_true",
+        help="Also pre-bake a headless Google Chrome shared by the Playwright and Chrome DevTools MCP servers. Implied by --opencode and --agy.",
+    )
+    parser.add_argument(
         "--agy",
         action="store_true",
         help="Also set up antigravity-cli in the sandbox (mounts shared settings & keybindings and automatically enables SOPS secret decryption).",
@@ -151,10 +157,15 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
+    browser_active = browser_enabled(
+        browser=args.browser, opencode=args.opencode, agy=args.agy
+    )
+
     # Build the image incrementally based on the CLI flags passed.
     image = build_sandbox_image(
         opencode=args.opencode,
         agy=args.agy,
+        browser=browser_active,
         modal_tooling=args.modal,
         react_native=args.react_native,
     )
@@ -186,6 +197,9 @@ def main():
     if args.modal:
         env["ENABLE_MODAL"] = "1"
 
+    if browser_active:
+        env["ENABLE_BROWSER"] = "1"
+
     volumes = {}
     if args.react_native:
         encrypted_ports.append(args.metro_port)
@@ -202,6 +216,8 @@ def main():
         features.append("OpenCode")
     if args.modal:
         features.append("Modal")
+    if browser_active:
+        features.append("Browser")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(

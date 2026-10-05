@@ -81,10 +81,23 @@ def load_ssh_pub_key() -> str:
     return SHARED_SSH_PUB_KEY.read_text().strip()
 
 
+def browser_enabled(
+    *, browser: bool = False, opencode: bool = False, agy: bool = False
+) -> bool:
+    """Resolves whether Browser Tooling should be provisioned.
+
+    A standalone `--browser` launch is supported, but any agent surface that can
+    drive a browser implies it: `--opencode` and `--agy` enable it so their
+    browser MCP servers work out of the box.
+    """
+    return browser or opencode or agy
+
+
 def build_sandbox_image(
     *,
     opencode: bool = False,
     agy: bool = False,
+    browser: bool = False,
     modal_tooling: bool = False,
     react_native: bool = False,
 ) -> modal.Image:
@@ -114,6 +127,13 @@ def build_sandbox_image(
             image = image.add_local_file(
                 LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
             )
+
+    if browser:
+        # Single shared Google Chrome used by both the Playwright and Chrome
+        # DevTools MCP servers. Playwright installs it at
+        # /opt/google/chrome/chrome -- the "chrome"/"stable" channel both MCP
+        # servers resolve to by default -- and pulls the OS libraries it needs.
+        image = image.run_commands("npx -y playwright install --with-deps chrome")
 
     if react_native:
         image = (

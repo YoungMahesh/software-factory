@@ -155,6 +155,29 @@ EOF
     ln -sf /usr/local/bin/check-modal /usr/local/bin/check-python
 fi
 
+if [ "${ENABLE_BROWSER:-}" = "1" ]; then
+    CHROME_BIN="/opt/google/chrome/chrome"
+    if [ -x "$CHROME_BIN" ]; then
+        CHROME_VER=$("$CHROME_BIN" --version 2>/dev/null | awk '{print $3}' || echo "unknown")
+        echo "🌐 Browser Tooling Active:"
+        echo "   • Chrome: $CHROME_BIN (v${CHROME_VER:-unknown})"
+        echo "   • MCP: Playwright & Chrome DevTools (headless, sandbox-free)"
+    else
+        echo "⚠️  Browser Tooling enabled but Chrome was not found at $CHROME_BIN" >&2
+    fi
+
+    # Install on-demand inspection utility
+    cat << 'EOF' > /usr/local/bin/check-browser
+#!/usr/bin/env bash
+CHROME_BIN="/opt/google/chrome/chrome"
+echo "=== Chrome Binary ===" && ls -l "$CHROME_BIN"
+echo "=== Chrome Version ===" && "$CHROME_BIN" --version
+echo "=== Headless Smoke Test ===" && "$CHROME_BIN" --headless --no-sandbox --disable-dev-shm-usage --dump-dom about:blank
+echo "=== MCP Runtime ===" && node --version && npx --version
+EOF
+    chmod +x /usr/local/bin/check-browser 2>/dev/null || true
+fi
+
 # 2. Decrypt / write environment keys if provided
 if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys

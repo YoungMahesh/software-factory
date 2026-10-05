@@ -59,3 +59,7 @@ _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 **Shared Base Image**:
 A cached Modal image definition built on Ubuntu 24.04 providing the foundational filesystem for both Standard Sandboxes and VM Sandboxes, pre-baked with common tooling including SSH server, SOPS, age, Git, ripgrep, Docker CLI binaries, Node.js 24, and pnpm.
 _Avoid_: Base container, root image, runner image
+
+**Browser Tooling**:
+A pre-baked, headless Google Chrome instance installed by the `--browser` flag and shared by the Playwright and Chrome DevTools MCP servers, launched with the sandbox-free flags required when running as root.
+_Avoid_: Browser MCP, headless browser setup, chrome layer

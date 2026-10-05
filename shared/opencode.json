@@ -32,17 +32,21 @@
       },
       "enabled": true
     },
+    // Both servers drive the single pre-baked Chrome at /opt/google/chrome/chrome
+    // (the default "chrome"/"stable" channel). --headless because sandboxes have
+    // no DISPLAY; --no-sandbox because they run as root.
     // https://github.com/microsoft/playwright-mcp?tab=readme-ov-file#getting-started
     "playwright": {
       "type": "local",
-      "command": ["npx", "@playwright/mcp@latest"],
+      "command": ["npx", "@playwright/mcp@latest", "--browser", "chrome", "--headless", "--no-sandbox"],
       "enabled": true
       //   "timeout": 1800000
     },
     // https://github.com/ChromeDevTools/chrome-devtools-mcp#mcp-client-configuration
     "chrome-devtools": {
       "type": "local",
-      "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--headless",
+                  "--chrome-arg=--no-sandbox", "--chrome-arg=--disable-dev-shm-usage"]
       // in milliseconds, 0 means no timeout, for 30 minutes, use 1800000
       //   "timeout": 1800000
     }
