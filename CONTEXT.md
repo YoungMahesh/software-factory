@@ -20,6 +20,10 @@ _Avoid_: OpenCode IDE, code server
 Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
 _Avoid_: Gemini CLI, antigravity-ide
 
+**Antigravity Remote Control**:
+A background reverse tunnel connection between the sandbox's Antigravity CLI and Google's Antigravity platform (https://antigravity.google.com), authenticated via the Antigravity OAuth Token, permitting remote monitoring, actuation, and interaction from a web browser without inbound open ports or Modal tunnel URLs.
+_Avoid_: Antigravity web, agy proxy, remote tunnel
+
 **React Native Tooling**:
 A pre-baked Android development toolchain within the sandbox image including OpenJDK 17, Android SDK platforms, build-tools, NDK, and CMake.
 _Avoid_: Android environment, mobile dependencies, Android emulator

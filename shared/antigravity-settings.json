@@ -1,5 +1,15 @@
 {
   "colorScheme": "dark",
   "editorMode": "vim",
-  "vimInsertFirst": true
+  "vimInsertFirst": true,
+  "permissions": {
+    "allow": [
+      "command(*)",
+      "read_file(*)",
+      "write_file(*)",
+      "read_url(*)",
+      "execute_url(*)",
+      "mcp(*)"
+    ]
+  }
 }

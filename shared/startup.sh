@@ -70,6 +70,7 @@ if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
 fi
 if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
     grep -qxF 'export PATH="/root/.local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
+    grep -qxF "alias agy='agy --dangerously-skip-permissions'" ~/.bashrc 2>/dev/null || echo "alias agy='agy --dangerously-skip-permissions'" >> ~/.bashrc
 fi
 
 if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
@@ -178,6 +179,18 @@ EOF
     chmod +x /usr/local/bin/check-browser 2>/dev/null || true
 fi
 
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+    cat << 'EOF' > /usr/local/bin/check-antigravity
+#!/usr/bin/env bash
+echo "=== Antigravity CLI ===" && agy --version 2>/dev/null || true
+echo "=== Antigravity Remote Control Status ===" && agy remote-control status 2>/dev/null || true
+echo "=== Antigravity Settings ===" && cat ~/.gemini/antigravity-cli/settings.json 2>/dev/null || true
+echo "=== OAuth Token ===" && ls -la ~/.gemini/antigravity-cli/antigravity-oauth-token 2>/dev/null || true
+EOF
+    chmod +x /usr/local/bin/check-antigravity 2>/dev/null || true
+    ln -sf /usr/local/bin/check-antigravity /usr/local/bin/check-agy
+fi
+
 # 2. Decrypt / write environment keys if provided
 if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
@@ -247,6 +260,13 @@ fi
 # 4. Keep the sandbox alive for interaction via modal shell / ssh, or run the
 #    OpenCode server when requested.
 echo "🏝️  Sandbox Ready!"
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+    INSTANCE_NAME="${APP_NAME:-$(basename "$TARGET_DIR")-sandbox}"
+    export PATH="/root/.local/bin:$PATH"
+    echo "🏝️  Starting Antigravity Remote Control daemon ($INSTANCE_NAME)..."
+    agy remote-control start --name "$INSTANCE_NAME" > /tmp/agy-remote-control.log 2>&1 || true
+fi
+
 if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     OPENCODE_PORT="${OPENCODE_PORT:-4096}"
     if [ -f /root/.config/opencode/opencode.env ]; then

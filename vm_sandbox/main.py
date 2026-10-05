@@ -36,6 +36,7 @@ def print_access_info(
     metro_url: str | None = None,
     metro_port: int | None = None,
     memory_gb: int | None = None,
+    agy_enabled: bool = False,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
@@ -55,6 +56,8 @@ def print_access_info(
                 f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
                 f"opencode attach {opencode_url}"
             )
+    if agy_enabled:
+        print(f"  • Remote Control: https://antigravity.google.com (Instance: {app_name})")
     if ssh_info:
         ssh_host, ssh_port = ssh_info
         ssh_cmd = (
@@ -108,7 +111,7 @@ def main():
     parser.add_argument(
         "--agy",
         action="store_true",
-        help="Also set up antigravity-cli in the sandbox (mounts shared settings & keybindings and automatically enables SOPS secret decryption).",
+        help="Also set up antigravity-cli and launch the background Antigravity Remote Control daemon (mounts shared settings & keybindings and automatically enables SOPS secret decryption).",
     )
     parser.add_argument(
         "--opencode-port",
@@ -197,6 +200,7 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "SWAP_GB": str(swap_gb),
         "ENABLE_DOCKER": "1",
+        "APP_NAME": app_name,
     }
 
     opencode_password = None
@@ -314,6 +318,7 @@ def main():
         metro_url=metro_url,
         metro_port=args.metro_port if args.react_native else None,
         memory_gb=args.memory,
+        agy_enabled=args.agy,
     )
 
 

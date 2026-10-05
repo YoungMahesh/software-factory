@@ -1,0 +1,18 @@
+# Antigravity Remote Control and Unattended Permissions
+
+Previously, passing `--agy` installed the Antigravity CLI and decrypted the Antigravity OAuth token, but required an interactive terminal (SSH or `modal shell`) to operate. Users had no web-based graphical interface for Antigravity equivalent to OpenCode WebUI, and commands or file edits requested approval prompts by default. We decided to automatically launch the background Antigravity Remote Control daemon on container initialization when `--agy` is specified, assign the instance name to match the sandbox's unique Modal `app_name`, pre-configure wildcard permissions in `shared/antigravity-settings.json`, and alias `agy` in `~/.bashrc` to pass `--dangerously-skip-permissions` for fully unattended execution.
+
+## Considered Options
+
+- **Manual on-demand daemon startup**: Require users to SSH into the sandbox and run `agy remote-control start` manually. Rejected because it breaks workflow parity with `--opencode`, which boots the web server automatically on sandbox launch.
+- **Dedicated `--agy-remote` launcher flag**: Introduce a separate flag that must be passed in addition to `--agy`. Rejected because Antigravity Remote Control establishes an outbound reverse tunnel requiring no allocated ports or Modal tunnel URLs, and `--agy` already indicates explicit intent to drive Antigravity workloads in the sandbox.
+- **Interactive flag-only permissions (`--dangerously-skip-permissions` without settings allowlist)**: Only alias `agy` to include `--dangerously-skip-permissions` in `~/.bashrc`. Rejected because the headless Remote Control daemon runs `agy remote-control serve` in the background and evaluates tool permissions against `settings.json`; without settings allowlists, web-driven operations would still trigger interactive confirmation prompts that cannot be answered non-interactively.
+- **Unified automated daemon startup with layered unattended permissions**: Start `agy remote-control start --name "$APP_NAME"` automatically in `shared/startup.sh` upon Antigravity token decryption, pre-configure wildcard permissions (`command(*)`, `read_file(*)`, `write_file(*)`, `read_url(*)`, `execute_url(*)`, `mcp(*)`) in `shared/antigravity-settings.json`, add `alias agy="agy --dangerously-skip-permissions"` to `~/.bashrc`, and display the Remote Control dashboard URL and instance name in `print_access_info`. Accepted because it provides seamless, zero-prompt web and terminal agent actuation in isolated ephemeral sandboxes while preserving distinct instance names in multi-sandbox environments.
+
+## Consequences
+
+- When `--agy` is passed to `standard_sandbox/main.py` or `vm_sandbox/main.py`, `APP_NAME` is passed in the sandbox environment, and `print_access_info` outputs the Antigravity Remote Control dashboard link (`https://antigravity.google.com`) and instance name.
+- `shared/startup.sh` automatically launches the Remote Control daemon with `--name "$APP_NAME"` once `secrets/antigravity-oauth-token.json` is decrypted by SOPS, and provisions `check-antigravity` / `check-agy` diagnostic scripts.
+- `shared/antigravity-settings.json` includes an `allow` permission list with wildcards for commands, files, URLs, and MCP tools, allowing the Remote Control daemon to execute operations without interactive approval prompts.
+- Interactive SSH and shell sessions automatically inherit `alias agy="agy --dangerously-skip-permissions"` from `~/.bashrc`.
+- No additional inbound ports, tunnels, or network policies are required on Modal because Remote Control uses outbound reverse connections to Google infrastructure.
