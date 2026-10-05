@@ -205,18 +205,10 @@ if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
         source /root/.config/opencode/opencode.env
         set +a
     fi
+    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
+        export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
+    fi
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
     (cd /root && nohup opencode serve --hostname=0.0.0.0 --port="$OPENCODE_PORT" --log-level=DEBUG --print-logs > /tmp/opencode.log 2>&1 &)
-
-    if [ -n "${OPENCODE_GO_API_KEY:-}" ] && [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
-        echo "⚡ Registering OpenCode Go provider integration..."
-        for i in $(seq 1 15); do
-            if curl -s "http://127.0.0.1:$OPENCODE_PORT" >/dev/null 2>&1; then
-                OPENCODE_PASSWORD="$OPENCODE_SERVER_PASSWORD" opencode api --server "http://127.0.0.1:$OPENCODE_PORT" POST /api/integration/opencode-go/connect/key -d "{\"key\":\"$OPENCODE_GO_API_KEY\"}" >/dev/null 2>&1 && echo "✅ OpenCode Go connected!" || echo "⚠️  Failed to register OpenCode Go key via API."
-                break
-            fi
-            sleep 1
-        done
-    fi
 fi
 exec sleep infinity

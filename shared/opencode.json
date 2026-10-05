@@ -1,6 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": true,
+  "provider": {
+    "opencode-go": {
+      "env": ["OPENCODE_GO_API_KEY"]
+    }
+  },
   "formatter": {
     "prettier": {
       "disabled": false,
