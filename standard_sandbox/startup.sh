@@ -138,9 +138,9 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: Credentials decryption requested (--agy or --modal), but AGE_PRIVATE_KEY is not set in the environment." >&2
+        echo "ERROR: Credentials decryption requested (--agy, --modal, or --opencode), but AGE_PRIVATE_KEY is not set in the environment." >&2
         exit 1
     fi
 
@@ -154,6 +154,9 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ]; then
     fi
     if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
         setup_args+=("--agy")
+    fi
+    if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
+        setup_args+=("--opencode")
     fi
 
     setup_status=0
@@ -190,7 +193,23 @@ fi
 echo "🏝️  Sandbox Ready!"
 if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     OPENCODE_PORT="${OPENCODE_PORT:-4096}"
+    if [ -f /root/.config/opencode/opencode.env ]; then
+        set -a
+        source /root/.config/opencode/opencode.env
+        set +a
+    fi
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
     nohup opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" > /tmp/opencode.log 2>&1 &
+
+    if [ -n "${OPENCODE_GO_API_KEY:-}" ] && [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+        echo "⚡ Registering OpenCode Go provider integration..."
+        for i in $(seq 1 15); do
+            if curl -s "http://127.0.0.1:$OPENCODE_PORT" >/dev/null 2>&1; then
+                OPENCODE_PASSWORD="$OPENCODE_SERVER_PASSWORD" opencode api --server "http://127.0.0.1:$OPENCODE_PORT" POST /api/integration/opencode-go/connect/key -d "{\"key\":\"$OPENCODE_GO_API_KEY\"}" >/dev/null 2>&1 && echo "✅ OpenCode Go connected!" || echo "⚠️  Failed to register OpenCode Go key via API."
+                break
+            fi
+            sleep 1
+        done
+    fi
 fi
 exec sleep infinity

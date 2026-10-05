@@ -23,12 +23,13 @@ python3 -m modal setup
 
 ### Setup credentials:
 ```bash
-# Decrypt both Modal client credentials and Antigravity tokens:
-bash scripts/setup.sh --modal --agy
+# Decrypt all credentials:
+bash scripts/setup.sh --modal --agy --opencode
 
 # Or decrypt individually:
 bash scripts/setup.sh --modal    # Modal credentials only (~/.modal.toml)
 bash scripts/setup.sh --agy      # Antigravity token only (~/.gemini/antigravity-cli/)
+bash scripts/setup.sh --opencode # OpenCode & MCP credentials (~/.config/opencode/opencode.env)
 ```
 
 Encrypt/Decrypt file:

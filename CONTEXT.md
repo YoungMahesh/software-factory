@@ -33,7 +33,7 @@ A runtime development environment within the sandbox combining a pre-baked Pytho
 _Avoid_: Python tooling, python runner, modal env
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy` and/or `--modal`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from Modal Secrets, configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
@@ -51,6 +51,10 @@ _Avoid_: Sandbox config, local config, runner settings
 **Modal Client Credentials**:
 The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` via `scripts/setup.sh --modal` (mode 0600), withheld from automated sandbox initialization by default to enforce credential isolation, and provisioned into sandboxes strictly when `--modal` is explicitly passed.
 _Avoid_: Modal token, modal config, modal credentials
+
+**OpenCode Credentials**:
+A set of API keys and remote service tokens (`OPENCODE_GO_API_KEY`, `EXA_API_KEY`, `CONTEXT7_API_KEY`) encrypted with SOPS at `secrets/opencode.env` and decrypted inside the sandbox to `~/.config/opencode/opencode.env` (mode 0600) via `scripts/setup.sh --opencode`.
+_Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 
 

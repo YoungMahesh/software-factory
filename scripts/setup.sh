@@ -3,6 +3,7 @@ set -euo pipefail
 
 DECRYPT_MODAL=false
 DECRYPT_AGY=false
+DECRYPT_OPENCODE=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -14,13 +15,17 @@ while [ "$#" -gt 0 ]; do
             DECRYPT_AGY=true
             shift
             ;;
+        --opencode)
+            DECRYPT_OPENCODE=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--modal] [--agy]"
+            echo "Usage: $0 [--modal] [--agy] [--opencode]"
             exit 0
             ;;
         *)
             echo "ERROR: Unknown option: $1" >&2
-            echo "Usage: $0 [--modal] [--agy]" >&2
+            echo "Usage: $0 [--modal] [--agy] [--opencode]" >&2
             exit 1
             ;;
     esac
@@ -35,4 +40,19 @@ if [ "$DECRYPT_AGY" = true ]; then
     mkdir -p ~/.gemini/antigravity-cli
     sops decrypt secrets/antigravity-oauth-token.json > ~/.gemini/antigravity-cli/antigravity-oauth-token
     chmod 600 ~/.gemini/antigravity-cli/antigravity-oauth-token
+fi
+
+if [ "$DECRYPT_OPENCODE" = true ]; then
+    mkdir -p ~/.config/opencode
+    sops decrypt secrets/opencode.env > ~/.config/opencode/opencode.env
+    chmod 600 ~/.config/opencode/opencode.env
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        if [ -w /etc/environment ]; then
+            grep -qxF "$line" /etc/environment 2>/dev/null || echo "$line" >> /etc/environment
+        fi
+        grep -qxF "export $line" ~/.bashrc 2>/dev/null || echo "export $line" >> ~/.bashrc
+    done < ~/.config/opencode/opencode.env
 fi
