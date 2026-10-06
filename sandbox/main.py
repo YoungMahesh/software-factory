@@ -10,6 +10,7 @@ import modal
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
+    REMOTE_FETCH_SECRET,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
     browser_enabled,
@@ -90,10 +91,9 @@ def main():
     parser.add_argument(
         "-s",
         "--secret",
-        "--secret-collection",
-        dest="secret_collection",
+        dest="secret",
         required=True,
-        help="Modal Secret collection name.",
+        help="Repository secret name under secrets/<secret-name>/fetch.env",
     )
 
     parser.add_argument(
@@ -158,6 +158,13 @@ def main():
     )
     args = parser.parse_args()
 
+    repo_root = Path(__file__).resolve().parent.parent
+    secret_file = repo_root / "secrets" / args.secret / "fetch.env"
+    if not secret_file.is_file():
+        parser.error(
+            f"Repository secret file not found: {secret_file} (expected secrets/{args.secret}/fetch.env)."
+        )
+
     if args.memory is not None:
         if not args.vm:
             parser.error("--memory can only be used with --vm.")
@@ -185,10 +192,9 @@ def main():
     pubkey_content = load_ssh_pub_key()
 
     random_id = uuid.uuid4().hex[:8]
-    app_name = f"{args.secret_collection}-{random_id}"
+    app_name = f"{args.secret}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
-    secret = modal.Secret.from_name(args.secret_collection)
 
     runtime_desc = "VM Sandbox" if args.vm else "Sandbox"
 
@@ -204,13 +210,12 @@ def main():
         modal_tooling=args.modal,
         react_native=args.react_native,
     )
+    image = image.add_local_file(secret_file, REMOTE_FETCH_SECRET, copy=True)
 
     cloudflare_active = not args.no_cloudflare
 
     encrypted_ports = [args.web_port]
-    sandbox_secrets = [secret]
-    if cloudflare_active or args.agy or args.modal or args.opencode:
-        sandbox_secrets.append(modal.Secret.from_name(SHARED_SECRET_NAME))
+    sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
     env: dict[str, str | None] = {
         "SSH_AUTHORIZED_KEY": pubkey_content,
         "PORT": str(args.web_port),

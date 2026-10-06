@@ -8,11 +8,13 @@ The unified runner supports two execution models:
 
 ---
 
-## Required Modal Secret Variables
+## Required Secret Configuration
 
-### Repository Secret Collection (`--secret-collection` or `-s`)
+### Repository Fetch Secret (`--secret` or `-s`)
 
-The repository secret collection passed to `--secret-collection` (or `-s`) must define the following environment variables:
+The repository fetch secret is stored as a SOPS-encrypted file at `secrets/<secret-name>/fetch.env`. It is baked into the container image at `/root/secrets/fetch.env` and decrypted in memory during sandbox boot using `AGE_PRIVATE_KEY` before being scrubbed from disk.
+
+The encrypted `fetch.env` must define the following environment variables:
 
 | Variable             | Status       | Description                                       | Example            |
 | :------------------- | :----------- | :------------------------------------------------ | :----------------- |
@@ -22,13 +24,13 @@ The repository secret collection passed to `--secret-collection` (or `-s`) must 
 
 ### Shared Workspace Secret (`share0`)
 
-The shared Modal secret named `share0` is automatically mounted by default to decrypt the Cloudflare Tunnel token (`secrets/cloudflare.env`) and whenever credential decryption is requested (`--agy`, `--modal`, or `--opencode`), and must define:
+The shared Modal secret named `share0` is mounted unconditionally across all sandboxes to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`), the Cloudflare Tunnel token (`secrets/cloudflare.env`), and opt-in credentials (`--agy`, `--modal`, or `--opencode`), and must define:
 
-| Variable          | Status                                                                                      | Description                                     | Example               |
-| :---------------- | :------------------------------------------------------------------------------------------ | :---------------------------------------------- | :-------------------- |
-| `AGE_PRIVATE_KEY` | **Required** (by default for Cloudflare Tunnel, and with `--agy`, `--modal`, `--opencode`) | Master Age private key used for SOPS decryption | `AGE-SECRET-KEY-1...` |
+| Variable          | Status       | Description                                     | Example               |
+| :---------------- | :----------- | :---------------------------------------------- | :-------------------- |
+| `AGE_PRIVATE_KEY` | **Required** | Master Age private key used for SOPS decryption | `AGE-SECRET-KEY-1...` |
 
-> Set these secrets in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI. Note: Bare sandboxes without `share0` can be launched by opting out of the Cloudflare Tunnel using `--no-cloudflare`.
+> Set `share0` in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI.
 
 ---
 
@@ -36,32 +38,32 @@ The shared Modal secret named `share0` is automatically mounted by default to de
 
 ```bash
 # 1. Launch a Standard Sandbox (default container runtime)
-python sandbox/main.py --secret-collection <modal-secret-collection-name>
+python sandbox/main.py --secret <secret-name>
 
 # 2. Launch a VM Sandbox (full Linux VM with Docker and swap)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm
+python sandbox/main.py --secret <secret-name> --vm
 
 # 3. Launch a VM Sandbox with custom RAM (e.g. 2 GB RAM + 4 GB swap)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm --memory 2
+python sandbox/main.py --secret <secret-name> --vm --memory 2
 
 # 4. Launch with an OpenCode server (WebUI on port 4096)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --opencode
+python sandbox/main.py --secret <secret-name> --opencode
 
 # 5. Launch with Antigravity CLI and SOPS secrets
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --agy
+python sandbox/main.py --secret <secret-name> --agy
 
 # 6. Launch with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --modal
+python sandbox/main.py --secret <secret-name> --modal
 
 # 7. Launch with React Native & Android tooling (Metro bundler on port 8081)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --react-native
+python sandbox/main.py --secret <secret-name> --react-native
 
 # 8. Launch with Browser Tooling only (headless Chrome for the browser MCP servers)
-python sandbox/main.py --secret-collection <modal-secret-collection-name> --browser
+python sandbox/main.py --secret <secret-name> --browser
 
 # 9. Full-featured VM launch with custom ports
 python sandbox/main.py \
-    --secret-collection <modal-secret-collection-name> \
+    --secret <secret-name> \
     --vm \
     --memory 2 \
     --opencode \

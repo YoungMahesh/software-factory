@@ -97,9 +97,48 @@ if [ "${ENABLE_DOCKER:-}" = "1" ]; then
     done
 fi
 
-# 1. Clone repository
+# 1. Decrypt repository fetch secret and clone repository
+FETCH_SECRET_FILE="/root/secrets/fetch.env"
+if [ ! -f "$FETCH_SECRET_FILE" ]; then
+    echo "ERROR: Repository fetch secret file not found at $FETCH_SECRET_FILE." >&2
+    exit 1
+fi
+
+if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
+    echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
+    exit 1
+fi
+
+echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
+DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
+if [ -z "$DECRYPTED_FETCH" ]; then
+    echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+    exit 1
+fi
+
+while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        var_name="${BASH_REMATCH[1]}"
+        var_val="${BASH_REMATCH[2]}"
+        if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
+            var_val="${BASH_REMATCH[1]}"
+        fi
+        export "$var_name"="$var_val"
+    fi
+done <<< "$DECRYPTED_FETCH"
+
+rm -f "$FETCH_SECRET_FILE"
+echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
+
 if [ -z "${GH_REPO:-}" ]; then
-    echo "ERROR: GH_REPO environment variable is not set." >&2
+    echo "ERROR: GH_REPO is not set in the decrypted fetch secret." >&2
+    exit 1
+fi
+
+if [ -z "${GH_TOKEN:-}" ]; then
+    echo "ERROR: GH_TOKEN is not set in the decrypted fetch secret." >&2
     exit 1
 fi
 
@@ -308,6 +347,13 @@ if [ -n "${AGE_PRIVATE_KEY:-}" ] || [ -d ~/.config/sops ]; then
     grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
     unset AGE_PRIVATE_KEY
 fi
+
+# Unconditionally scrub GH_TOKEN and ephemeral repository credentials from memory
+grep -qxF "unset GH_TOKEN" ~/.bashrc 2>/dev/null || echo "unset GH_TOKEN" >> ~/.bashrc
+grep -qxF "unset DOTENV_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset DOTENV_PRIVATE_KEY" >> ~/.bashrc
+unset GH_TOKEN
+unset DOTENV_PRIVATE_KEY
+unset DECRYPTED_FETCH
 
 if [ "${setup_status:-0}" -ne 0 ]; then
     echo "ERROR: scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
