@@ -1,4 +1,26 @@
-Check modal version:
+## Launching Modal Sandboxes
+
+Launch a sandbox environment using the unified runner at `sandbox/main.py`:
+
+```bash
+# Launch a Standard Sandbox (container runtime, burstable RAM):
+python sandbox/main.py --secret-collection <modal-secret-collection-name>
+
+# Launch a VM Sandbox (virtualized Linux kernel, Docker daemon, swapfile):
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm
+
+# Launch a VM Sandbox with custom RAM (e.g., 2 GB RAM + 4 GB swap):
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm --memory 2
+
+# Launch with agent tooling (OpenCode, Antigravity CLI, Modal development tooling):
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --opencode --agy --modal
+```
+
+See [`sandbox/readme.md`](sandbox/readme.md) for full configuration flags, ports, and secret requirements.
+
+---
+
+### Check modal version:
 ```bash
 # Activate the virtual environment
 source .venv/bin/activate

@@ -58,7 +58,7 @@ def print_access_info(
             print(f"  • Password: {opencode_password}")
             print(
                 f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
-                f"opencode attach {opencode_url}"
+                f"opencode --server {opencode_url}"
             )
     if agy_enabled:
         print(f"  • Remote Control: https://antigravity.google.com (Instance: {app_name})")
@@ -80,7 +80,7 @@ def print_access_info(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Launch a repository in a Modal VM Sandbox with SSH & Web URL"
+        description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Web URL"
     )
     parser.add_argument(
         "--github-ref",
@@ -129,22 +129,27 @@ def main():
         help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
     )
     parser.add_argument(
+        "--modal",
+        action="store_true",
+        help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
+    )
+    parser.add_argument(
         "--metro-port",
         type=int,
         default=DEFAULT_METRO_PORT,
         help=f"Port for the React Native Metro bundler, only used with --react-native (default: {DEFAULT_METRO_PORT})",
     )
     parser.add_argument(
-        "--modal",
+        "--vm",
         action="store_true",
-        help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
+        help="Launch as a full Linux VM Sandbox (virtualization, Docker daemon, custom kernel privileges, swapfile allocation).",
     )
     parser.add_argument(
         "--memory",
         type=int,
-        default=1,
+        default=None,
         metavar="GB",
-        help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Default: 1",
+        help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Only valid with --vm (default with --vm: 1).",
     )
     parser.add_argument(
         "--no-cloudflare",
@@ -153,8 +158,11 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.memory < 1:
-        parser.error("--memory must be a positive integer number of GB.")
+    if args.memory is not None:
+        if not args.vm:
+            parser.error("--memory can only be used with --vm.")
+        if args.memory < 1:
+            parser.error("--memory must be a positive integer number of GB.")
 
     active_ports = {"--web-port": args.web_port}
     if args.opencode:
@@ -174,9 +182,6 @@ def main():
             )
         active_ports["--metro-port"] = args.metro_port
 
-    memory_mib = args.memory * 1024
-    swap_gb = args.memory * 2
-
     pubkey_content = load_ssh_pub_key()
 
     random_id = uuid.uuid4().hex[:8]
@@ -185,8 +190,7 @@ def main():
     app = modal.App.lookup(app_name, create_if_missing=True)
     secret = modal.Secret.from_name(args.secret_collection)
 
-    experimental_options = {"vm_runtime": True}
-    runtime_desc = "VM Sandbox"
+    runtime_desc = "VM Sandbox" if args.vm else "Sandbox"
 
     browser_active = browser_enabled(
         browser=args.browser, opencode=args.opencode, agy=args.agy
@@ -209,12 +213,18 @@ def main():
         "SSH_AUTHORIZED_KEY": pubkey_content,
         "PORT": str(args.web_port),
         "HOSTNAME": "0.0.0.0",
-        "SWAP_GB": str(swap_gb),
-        "ENABLE_DOCKER": "1",
         "APP_NAME": app_name,
     }
     if args.no_cloudflare:
         env["ENABLE_CLOUDFLARE"] = "0"
+
+    memory_gb: int | None = None
+    if args.vm:
+        memory_gb = args.memory if args.memory is not None else 1
+        memory_mib = memory_gb * 1024
+        swap_gb = memory_gb * 2
+        env["SWAP_GB"] = str(swap_gb)
+        env["ENABLE_DOCKER"] = "1"
 
     opencode_password = None
     if args.opencode:
@@ -245,7 +255,7 @@ def main():
         env["METRO_PORT"] = str(args.metro_port)
         volumes.update(get_gradle_volumes())
 
-    features: list[str] = []
+    features = []
     if not args.no_cloudflare:
         features.append("Cloudflare Tunnel")
     if args.react_native:
@@ -264,37 +274,48 @@ def main():
         f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port}"
         f"{features_suffix} (App: {app_name})..."
     )
+
+    # Sandbox resource configuration:
+    # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
+    # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
+    # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
+    #   Exceeding host capacity raises InvalidError at creation time.
+    #
+    # Memory format:
+    # - VM Sandbox: VM sandboxes do not get dynamically expandable RAM, so memory must be a single
+    #   int (MiB): memory=(1024, 4096) would still cap the VM at the 1024 MiB request.
+    #   --memory N (GB) maps to N * 1024 MiB here (default: 1024 MiB).
+    #   Modal's VM defaults would be a 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
+    #   Swap is 10x to 50x slower than real RAM; keep it between 1× and 2× physical RAM.
+    #   ./startup.sh allocates a swapfile of 2× the VM RAM (SWAP_GB env var).
+    # - Standard Sandbox: Container sandboxes support (request, limit) in MiB with dynamic burstable memory.
+    #   Default request: 128 MiB for standard container sandboxes, up to 16384 MiB (16 GiB) soft limit.
+    #   Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
+    #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
+    sandbox_kwargs: dict = {
+        "timeout": TIMEOUT_SECS,
+        "idle_timeout": IDLE_TIMEOUT_SECS,
+        "image": image,
+        "app": app,
+        "volumes": volumes,
+        "unencrypted_ports": [22],
+        "encrypted_ports": encrypted_ports,
+        "cpu": (0.125, 4.0),
+        "env": env,
+    }
+    if args.vm:
+        sandbox_kwargs["memory"] = memory_mib
+        sandbox_kwargs["experimental_options"] = {"vm_runtime": True}
+    else:
+        sandbox_kwargs["memory"] = (128, 16384)
+
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
             "bash",
             REMOTE_STARTUP_SCRIPT,
             args.github_ref,
             secrets=sandbox_secrets,
-            timeout=TIMEOUT_SECS,
-            idle_timeout=IDLE_TIMEOUT_SECS,
-            image=image,
-            app=app,
-            volumes=volumes,
-            # cpu and memory are set explicitly below. Modal's VM defaults would be a
-            # 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
-            # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
-            # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
-            # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
-            #   Exceeding host capacity raises InvalidError at creation time.
-            # Memory format: (request, limit) in MiB.
-            # - Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
-            #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
-            # Swap is 10x to 50x slower than real RAM; keep it between 1× and 2× physical RAM.
-            #   ./startup.sh allocates a swapfile of 2× the VM RAM (SWAP_GB env var).
-            cpu=(0.125, 4.0),
-            # VM sandboxes do not get dynamically expandable RAM, so memory must be a single
-            # int (MiB): memory=(1024, 4096) would still cap the VM at the 1024 MiB request.
-            # --memory N (GB) maps to N * 1024 MiB here.
-            memory=memory_mib,
-            experimental_options=experimental_options,
-            unencrypted_ports=[22],
-            encrypted_ports=encrypted_ports,
-            env=env,
+            **sandbox_kwargs,
         )
 
     # Retrieve forwarded tunnels
@@ -315,12 +336,6 @@ def main():
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
 
-    #  print the startup progress in your terminal in real time
-    for line in sandbox.stdout:
-        print(line, end="")
-        if "Sandbox Ready" in line:
-            break
-
     print_access_info(
         sandbox,
         app_name,
@@ -332,7 +347,7 @@ def main():
         opencode_password=opencode_password,
         metro_url=metro_url,
         metro_port=args.metro_port if args.react_native else None,
-        memory_gb=args.memory,
+        memory_gb=memory_gb,
         agy_enabled=args.agy,
         cloudflare_enabled=not args.no_cloudflare,
     )

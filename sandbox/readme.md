@@ -1,9 +1,12 @@
-# Modal VM Sandbox with SSH & Web Port Forwarding
+# Modal Sandbox with SSH & Web Port Forwarding
 
-Launch a Modal **VM** Sandbox (full Linux kernel, Docker support) with SSH access and a public HTTPS URL for web servers (e.g. Next.js on port 3000). Pass `--opencode` to run an OpenCode server inside the VM sandbox and expose its WebUI over HTTPS, and `--agy` to provision the Antigravity CLI.
+Launch a Modal sandbox environment with SSH access, a public HTTPS URL for web servers (e.g. Next.js on port 3000), and a default Cloudflare Tunnel (`https://3000.mahesh0.dev`).
 
-For a standard container sandbox without a VM, use [`standard_sandbox/main.py`](../standard_sandbox/main.py) instead.
+The unified runner supports two execution models:
+- **Standard Sandbox (Default)**: Lightweight container sandbox on Modal running directly on the container runtime with dynamic burstable memory (128 MiB request up to 16 GiB limit) and fast startup.
+- **VM Sandbox (`--vm`)**: Full Linux virtual machine on Modal with custom kernel privileges, Docker daemon support (`ENABLE_DOCKER=1`), and automated swapfile allocation (2× RAM).
 
+---
 
 ## Required Modal Secret Variables
 
@@ -27,58 +30,74 @@ When launching with features that require in-sandbox credential decryption (`--a
 
 > Set these secrets in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI.
 
+---
+
 ## Quickstart
 
 ```bash
-# Launch VM sandbox
-python main.py --secret-collection <modal-secret-collection-name>
+# 1. Launch a Standard Sandbox (default container runtime)
+python sandbox/main.py --secret-collection <modal-secret-collection-name>
 
-# Launch VM with OpenCode and Antigravity CLI
-python main.py --secret-collection <modal-secret-collection-name> --opencode --agy
+# 2. Launch a VM Sandbox (full Linux VM with Docker and swap)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm
 
-# Launch VM with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
-python main.py --secret-collection <modal-secret-collection-name> --modal
+# 3. Launch a VM Sandbox with custom RAM (e.g. 2 GB RAM + 4 GB swap)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --vm --memory 2
 
-# Launch VM with React Native & Android tooling (Metro bundler on port 8081)
-python main.py --secret-collection <modal-secret-collection-name> --react-native
+# 4. Launch with an OpenCode server (WebUI on port 4096)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --opencode
 
-# Launch VM with Browser Tooling only (headless Chrome for the browser MCP servers)
-python main.py --secret-collection <modal-secret-collection-name> --browser
+# 5. Launch with Antigravity CLI and SOPS secrets
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --agy
 
-# Custom web port, OpenCode port, Antigravity CLI, Metro port, and memory allocation
-python main.py \
+# 6. Launch with Modal Development Tooling (Python 3, venv, Modal SDK, and credentials)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --modal
+
+# 7. Launch with React Native & Android tooling (Metro bundler on port 8081)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --react-native
+
+# 8. Launch with Browser Tooling only (headless Chrome for the browser MCP servers)
+python sandbox/main.py --secret-collection <modal-secret-collection-name> --browser
+
+# 9. Full-featured VM launch with custom ports
+python sandbox/main.py \
     --secret-collection <modal-secret-collection-name> \
+    --vm \
+    --memory 2 \
     --opencode \
     --agy \
     --modal \
     --react-native \
     --web-port 3000 \
     --opencode-port 4096 \
-    --metro-port 8081 \
-    --memory 2
+    --metro-port 8081
 ```
-
-`--memory N` allocates `N` GB of RAM to the VM, with a swapfile of `2N` GB (e.g. `--memory 2` -> 2 GB RAM + 4 GB swap). Default: `1`.
 
 SSH access automatically uses `shared/ssh-key.pub` for container authorization and `~/.ssh/modal-sandbox` for client authentication.
 
 Once running, the script prints:
-
 - Standard `modal shell <sandbox-id>` access command
+- **Cloudflare Tunnel**: `https://3000.mahesh0.dev` (port 3000, managed via port-watcher daemon)
 - **Web URL**: Public HTTPS URL forwarding directly to port 3000 inside the sandbox (e.g. `https://<id>-3000.modal.host`)
-- **OpenCode Web & Attach Command** (when `--opencode` is passed): Public HTTPS URL and one-time launch password, with attach command:
+- **OpenCode Web & Attach Command** (when `--opencode` is passed): Public HTTPS URL and one-time launch password:
   ```bash
-  OPENCODE_SERVER_PASSWORD=<password> opencode attach <opencode-url>
+  OPENCODE_SERVER_PASSWORD=<password> opencode --server <opencode-url>
   ```
+- **Metro**: Public HTTPS URL forwarding directly to port 8081 when `--react-native` is passed
+- **Antigravity Remote Control**: Link to dashboard (`https://antigravity.google.com`) when `--agy` is passed
 - Direct `ssh` command: `ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p <port> root@<host>`
-- VS Code Remote - SSH configuration block
+- VS Code Remote - SSH configuration snippet
+
+---
 
 ## Agent Tooling & Configuration
 
 - **OpenCode**: Installed via dynamic image layer when `--opencode` is specified. Server runs in background from `/root` on port 4096 (or custom `--opencode-port`). Configured via `shared/opencode.json`.
 - **Antigravity CLI**: Installed via dynamic image layer when `--agy` is specified. User configuration and keybindings are mounted from `shared/antigravity-settings.json` and `shared/antigravity-keybindings.json`. Automatically enables SOPS secret decryption inside the sandbox to provision `secrets/antigravity-oauth-token.json` to `~/.gemini/antigravity-cli/antigravity-oauth-token`, launches the background **Antigravity Remote Control** daemon (`https://antigravity.google.com`), configures unattended wildcard permissions in `settings.json`, and aliases `agy` to `--dangerously-skip-permissions` in `~/.bashrc`. Diagnostic checks are available via `check-antigravity`.
 - **Browser Tooling**: A headless Google Chrome (`/opt/google/chrome/chrome`) is pre-baked via dynamic image layer when `--browser` is specified, and is implied by `--opencode` and `--agy`. It backs the Playwright and Chrome DevTools MCP servers in `shared/opencode.json`, which run headless with Chrome's sandbox disabled (required under root). The on-demand inspection utility `check-browser` is available at `/usr/local/bin/check-browser`.
-- **Code Search**: `ripgrep` is pre-installed in the base Ubuntu VM image for agent text search.
+- **Code Search**: `ripgrep` is pre-installed in the base Ubuntu image for agent text search.
+
+---
 
 ## Running Next.js inside the Sandbox
 
@@ -90,7 +109,20 @@ PORT=3000
 ```
 
 Simply start Next.js: `pnpm run dev`
-And open the printed **Web URL** in your browser!
+And open the printed **Web URL** or **Cloudflare Tunnel** in your browser!
+
+---
+
+## Running React Native inside the Sandbox
+
+When started with `--react-native`:
+- OpenJDK 17 (`JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64`) is pre-installed.
+- Android command-line tools, platform-tools, platforms 34 & 35, build-tools 34 & 35, NDK (`26.1.10909125`), and CMake (`3.22.1`) are pre-baked into `/opt/android-sdk`.
+- `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `PATH` are pre-configured in both `/etc/environment` and `~/.bashrc`.
+- Metro bundler port 8081 (or custom `--metro-port`) is exposed via a secure HTTPS tunnel.
+- Diagnostic checks are available via `check-react-native`.
+
+---
 
 ## Running Modal Tooling inside the Sandbox
 
@@ -100,5 +132,4 @@ When started with `--modal`:
 - The `modal` Python client package is pre-installed in `.venv`.
 - Project dependencies are installed automatically from `requirements.txt` if present.
 - SOPS secret decryption provisions `secrets/modal.toml` into `~/.modal.toml` (mode 0600).
-- An on-demand inspection utility `check-modal` (and `check-python`) is available at `/usr/local/bin/check-modal`.
-
+- Diagnostic checks are available via `check-modal` (and `check-python`).
