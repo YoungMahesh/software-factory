@@ -13,6 +13,16 @@ REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
 LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+LOCAL_SETUP_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "setup.sh"
+REMOTE_SETUP_SCRIPT = "/root/scripts/setup.sh"
+LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
+REMOTE_OPENCODE_SECRET = "/root/secrets/opencode.env"
+LOCAL_ANTIGRAVITY_SECRET = (
+    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
+)
+REMOTE_ANTIGRAVITY_SECRET = "/root/secrets/antigravity-oauth-token.json"
+LOCAL_MODAL_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "modal.toml"
+REMOTE_MODAL_SECRET = "/root/secrets/modal.toml"
 LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
 REMOTE_CLOUDFLARE_SECRET = "/root/secrets/cloudflare.env"
 REMOTE_FETCH_SECRET = "/root/secrets/fetch.env"
@@ -76,6 +86,11 @@ base_image = (
 if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
 
+if LOCAL_SETUP_SCRIPT.exists():
+    base_image = base_image.add_local_file(
+        LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT, copy=True
+    )
+
 if LOCAL_CLOUDFLARE_SECRET.exists():
     base_image = base_image.add_local_file(
         LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET, copy=True
@@ -125,6 +140,10 @@ def build_sandbox_image(
             image = image.add_local_file(
                 LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
             )
+        if LOCAL_OPENCODE_SECRET.exists():
+            image = image.add_local_file(
+                LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET, copy=True
+            )
 
     if agy:
         image = image.run_commands(
@@ -139,6 +158,10 @@ def build_sandbox_image(
         if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
             image = image.add_local_file(
                 LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_SECRET.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET, copy=True
             )
 
     if browser:
@@ -186,6 +209,10 @@ def build_sandbox_image(
             "mkdir -p /etc",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
         )
+        if LOCAL_MODAL_SECRET.exists():
+            image = image.add_local_file(
+                LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET, copy=True
+            )
 
     if path_prefixes:
         image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})

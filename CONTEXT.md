@@ -53,8 +53,12 @@ The configuration file (`secrets/<secret-name>/env.map`) that defines explicit k
 _Avoid_: Location file, env config, secret locations
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`) and Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`) and Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute the Tooling Setup Script (`/root/scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
+
+**Tooling Setup Script**:
+A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that decrypts opt-in tooling credentials (`--modal`, `--agy`, `--opencode`) from the secrets directory into user configuration directories, running identically on host workstations and inside sandboxes.
+_Avoid_: Repo setup script, secret decrypter, install script
 
 **Modal Sandbox SSH Key**:
 The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` and injected into the container's `/root/.ssh/authorized_keys`, while the private key is maintained out-of-band by developers at `~/.ssh/modal-sandbox` (mode 0600) and never tracked, stored, or decrypted in repository secrets or sandbox environments.

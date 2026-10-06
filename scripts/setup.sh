@@ -31,20 +31,23 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SECRETS_DIR="${SECRETS_DIR:-$SCRIPT_DIR/../secrets}"
+
 if [ "$DECRYPT_MODAL" = true ]; then
-    sops decrypt secrets/modal.toml > ~/.modal.toml
+    sops decrypt "$SECRETS_DIR/modal.toml" > ~/.modal.toml
     chmod 600 ~/.modal.toml
 fi
 
 if [ "$DECRYPT_AGY" = true ]; then
     mkdir -p ~/.gemini/antigravity-cli
-    sops decrypt secrets/antigravity-oauth-token.json > ~/.gemini/antigravity-cli/antigravity-oauth-token
+    sops decrypt "$SECRETS_DIR/antigravity-oauth-token.json" > ~/.gemini/antigravity-cli/antigravity-oauth-token
     chmod 600 ~/.gemini/antigravity-cli/antigravity-oauth-token
 fi
 
 if [ "$DECRYPT_OPENCODE" = true ]; then
     mkdir -p ~/.config/opencode
-    sops decrypt secrets/opencode.env > ~/.config/opencode/opencode.env
+    sops decrypt "$SECRETS_DIR/opencode.env" > ~/.config/opencode/opencode.env
     chmod 600 ~/.config/opencode/opencode.env
 
     while IFS= read -r line || [ -n "$line" ]; do

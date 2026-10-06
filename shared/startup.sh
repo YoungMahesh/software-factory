@@ -381,11 +381,14 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
     fi
 
     setup_status=0
-    if [ -f "scripts/setup.sh" ]; then
-        echo "🔐 Decrypting secrets with SOPS..."
-        bash scripts/setup.sh "${setup_args[@]}" || setup_status=$?
+    if [ -f "/root/scripts/setup.sh" ]; then
+        echo "🔐 Decrypting tooling credentials with SOPS..."
+        bash /root/scripts/setup.sh "${setup_args[@]}" || setup_status=$?
     fi
 fi
+
+# Scrub staged encrypted tooling secrets immediately after decryption
+rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token.json /root/secrets/modal.toml
 
 # Unconditionally scrub AGE_PRIVATE_KEY and temporary SOPS state across all sandboxes
 if [ -n "${AGE_PRIVATE_KEY:-}" ] || [ -d ~/.config/sops ]; then
@@ -403,7 +406,7 @@ unset DOTENV_PRIVATE_KEY
 unset DECRYPTED_FETCH
 
 if [ "${setup_status:-0}" -ne 0 ]; then
-    echo "ERROR: scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
+    echo "ERROR: /root/scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
     exit "$setup_status"
 fi
 
