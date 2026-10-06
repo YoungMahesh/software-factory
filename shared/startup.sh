@@ -98,9 +98,12 @@ if [ "${ENABLE_DOCKER:-}" = "1" ]; then
 fi
 
 # 1. Decrypt repository fetch secret and clone repository
-FETCH_SECRET_FILE="/root/secrets/fetch.env"
-if [ ! -f "$FETCH_SECRET_FILE" ]; then
-    echo "ERROR: Repository fetch secret file not found at $FETCH_SECRET_FILE." >&2
+if [ -f "/root/secrets/repo/fetch.env" ]; then
+    FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
+elif [ -f "/root/secrets/fetch.env" ]; then
+    FETCH_SECRET_FILE="/root/secrets/fetch.env"
+else
+    echo "ERROR: Repository fetch secret file not found at /root/secrets/repo/fetch.env or /root/secrets/fetch.env." >&2
     exit 1
 fi
 
@@ -113,6 +116,7 @@ echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
 DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
 if [ -z "$DECRYPTED_FETCH" ]; then
     echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+    rm -rf /root/secrets/repo
     exit 1
 fi
 
@@ -157,6 +161,49 @@ if [ ! -d "$TARGET_DIR" ]; then
 fi
 
 cd "$TARGET_DIR"
+
+# Decrypt repository environment secrets if env.map is present
+ENV_MAP_FILE="/root/secrets/repo/env.map"
+if [ -f "$ENV_MAP_FILE" ]; then
+    echo "📄 Decrypting repository environment secrets into $TARGET_DIR..."
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
+            src_rel="${BASH_REMATCH[1]}"
+            dest_rel="${BASH_REMATCH[2]}"
+            # Trim whitespace and carriage returns
+            src_rel=$(echo "$src_rel" | tr -d '\r' | xargs)
+            dest_rel=$(echo "$dest_rel" | tr -d '\r' | xargs)
+            dest_rel="${dest_rel#/}"
+
+            src_file="/root/secrets/repo/$src_rel"
+            dest_file="$TARGET_DIR/$dest_rel"
+
+            if [ ! -f "$src_file" ]; then
+                echo "ERROR: Mapped repository secret file not found at $src_file." >&2
+                rm -rf /root/secrets/repo
+                exit 1
+            fi
+
+            mkdir -p "$(dirname "$dest_file")"
+            if ! SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$src_file" > "$dest_file"; then
+                echo "ERROR: Failed to decrypt $src_file using AGE_PRIVATE_KEY." >&2
+                rm -f "$dest_file"
+                rm -rf /root/secrets/repo
+                exit 1
+            fi
+            chmod 600 "$dest_file"
+            echo "   • Decrypted $src_rel -> $dest_rel"
+        fi
+    done < "$ENV_MAP_FILE"
+fi
+
+if [ -d /root/secrets/repo ]; then
+    rm -rf /root/secrets/repo
+    echo "🧹 Purged repository secrets staging directory (/root/secrets/repo)."
+fi
+
 if [ -f /root/.git.bash ]; then
     grep -qxF "source /root/.git.bash" ~/.bashrc 2>/dev/null || echo "source /root/.git.bash" >> ~/.bashrc
 fi

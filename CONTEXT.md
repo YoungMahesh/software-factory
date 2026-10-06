@@ -41,8 +41,16 @@ The centralized Modal secret collection (`share0`) mounted into all sandboxes un
 _Avoid_: Global secret, root secret, default secret
 
 **Repository Fetch Secret**:
-A SOPS-encrypted environment file stored in version control at `secrets/<secret-name>/fetch.env`, mounted into the sandbox image at `/root/secrets/fetch.env` and decrypted ephemerally into memory at container boot in `startup.sh` using `AGE_PRIVATE_KEY` to supply repository clone credentials (`GH_REPO`, `GH_TOKEN`, and optional `DOTENV_PRIVATE_KEY`), immediately scrubbed from disk before interactive shells or servers initialize.
+A SOPS-encrypted environment file stored in version control at `secrets/<secret-name>/fetch.env`, staged into the sandbox image under `/root/secrets/repo/` and decrypted ephemerally into memory at container boot in `startup.sh` using `AGE_PRIVATE_KEY` to supply repository clone credentials (`GH_REPO`, `GH_TOKEN`, and optional `DOTENV_PRIVATE_KEY`), immediately scrubbed from disk before interactive shells or servers initialize.
 _Avoid_: Repo secret, secret collection, fetch config, local secret
+
+**Repository Environment Secrets**:
+SOPS-encrypted environment files stored alongside `fetch.env` under `secrets/<secret-name>/` and mapped to destination file paths in the cloned repository via `secrets/<secret-name>/env.map`, decrypted ephemerally into the repository during container boot in `startup.sh` before staging files and `AGE_PRIVATE_KEY` are scrubbed.
+_Avoid_: Dotenv secrets, repo envs, app secrets, env mappings
+
+**Repository Env Mapping**:
+The configuration file (`secrets/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
+_Avoid_: Location file, env config, secret locations
 
 **SOPS Decryption**:
 A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`) and Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.

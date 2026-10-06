@@ -22,6 +22,19 @@ The encrypted `fetch.env` must define the following environment variables:
 | `GH_TOKEN`           | **Required** | GitHub Personal Access Token for cloning          | `ghp_xxxxxxxxxxxx` |
 | `DOTENV_PRIVATE_KEY` | _Optional_   | Key to decrypt `.env.vault` if using dotenv-vault | `dotenv_key_...`   |
 
+### Repository Environment Secrets (`env.map`)
+
+For repositories that require `.env` files (e.g. monorepos with multiple applications), co-locate SOPS-encrypted `.env` files under `secrets/<secret-name>/` and map them to their relative file paths inside the repository via `secrets/<secret-name>/env.map`:
+
+```ini
+# secrets/<secret-name>/env.map
+# <source_encrypted_file>=<repo_relative_destination_path>
+web.env=apps/web/.env
+mobile.env=apps/mobile/.env
+```
+
+During startup, `startup.sh` parses `env.map`, creates any necessary parent directories, decrypts each file using `AGE_PRIVATE_KEY`, sets `chmod 600`, and purges all staging files from `/root/secrets/repo/` before interactive handoff.
+
 ### Shared Workspace Secret (`share0`)
 
 The shared Modal secret named `share0` is mounted unconditionally across all sandboxes to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`), the Cloudflare Tunnel token (`secrets/cloudflare.env`), and opt-in credentials (`--agy`, `--modal`, or `--opencode`), and must define:

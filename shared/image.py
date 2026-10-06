@@ -16,6 +16,7 @@ SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
 LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
 REMOTE_CLOUDFLARE_SECRET = "/root/secrets/cloudflare.env"
 REMOTE_FETCH_SECRET = "/root/secrets/fetch.env"
+REMOTE_REPO_SECRETS_DIR = "/root/secrets/repo"
 SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
     REMOTE_FETCH_SECRET,
+    REMOTE_REPO_SECRETS_DIR,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
     browser_enabled,
@@ -210,7 +211,7 @@ def main():
         modal_tooling=args.modal,
         react_native=args.react_native,
     )
-    image = image.add_local_file(secret_file, REMOTE_FETCH_SECRET, copy=True)
+    image = image.add_local_dir(secret_file.parent, REMOTE_REPO_SECRETS_DIR, copy=True)
 
     cloudflare_active = not args.no_cloudflare
 
