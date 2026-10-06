@@ -37,11 +37,14 @@ def print_access_info(
     metro_url: str | None = None,
     metro_port: int | None = None,
     agy_enabled: bool = False,
+    cloudflare_enabled: bool = True,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:      {app_name}")
     print(f"  • Shell:    modal shell {sandbox.object_id}")
+    if cloudflare_enabled:
+        print("  • Cloudflare: https://3000.mahesh0.dev (port 3000)")
     if web_url:
         print(f"  • Web URL:  {web_url} (port {web_port})")
     if metro_url:
@@ -133,6 +136,11 @@ def main():
         default=DEFAULT_METRO_PORT,
         help=f"Port for the React Native Metro bundler, only used with --react-native (default: {DEFAULT_METRO_PORT})",
     )
+    parser.add_argument(
+        "--no-cloudflare",
+        action="store_true",
+        help="Disable the default Cloudflare Tunnel (3000.mahesh0.dev) for this sandbox.",
+    )
     args = parser.parse_args()
 
     active_ports = {"--web-port": args.web_port}
@@ -184,6 +192,8 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
     }
+    if args.no_cloudflare:
+        env["ENABLE_CLOUDFLARE"] = "0"
 
     opencode_password = None
     if args.opencode:
@@ -215,6 +225,8 @@ def main():
         volumes.update(get_gradle_volumes())
 
     features = []
+    if not args.no_cloudflare:
+        features.append("Cloudflare Tunnel")
     if args.react_native:
         features.append("React Native")
     if args.agy:
@@ -287,6 +299,7 @@ def main():
         metro_url=metro_url,
         metro_port=args.metro_port if args.react_native else None,
         agy_enabled=args.agy,
+        cloudflare_enabled=not args.no_cloudflare,
     )
 
 

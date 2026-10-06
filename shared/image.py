@@ -56,6 +56,9 @@ base_image = (
         # Install SOPS
         "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
         "chmod +x /usr/local/bin/sops",
+        # Install Cloudflared
+        "curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared",
+        "chmod +x /usr/local/bin/cloudflared",
         # Configure SSH daemon
         "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
         "echo 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/modal.conf",

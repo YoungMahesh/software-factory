@@ -38,11 +38,14 @@ def print_access_info(
     metro_port: int | None = None,
     memory_gb: int | None = None,
     agy_enabled: bool = False,
+    cloudflare_enabled: bool = True,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:      {app_name}")
     print(f"  • Shell:    modal shell {sandbox.object_id}")
+    if cloudflare_enabled:
+        print("  • Cloudflare: https://3000.mahesh0.dev (port 3000)")
     if memory_gb:
         print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
     if web_url:
@@ -143,6 +146,11 @@ def main():
         metavar="GB",
         help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Default: 1",
     )
+    parser.add_argument(
+        "--no-cloudflare",
+        action="store_true",
+        help="Disable the default Cloudflare Tunnel (3000.mahesh0.dev) for this sandbox.",
+    )
     args = parser.parse_args()
 
     if args.memory < 1:
@@ -205,6 +213,8 @@ def main():
         "ENABLE_DOCKER": "1",
         "APP_NAME": app_name,
     }
+    if args.no_cloudflare:
+        env["ENABLE_CLOUDFLARE"] = "0"
 
     opencode_password = None
     if args.opencode:
@@ -236,6 +246,8 @@ def main():
         volumes.update(get_gradle_volumes())
 
     features: list[str] = []
+    if not args.no_cloudflare:
+        features.append("Cloudflare Tunnel")
     if args.react_native:
         features.append("React Native")
     if args.agy:
@@ -322,6 +334,7 @@ def main():
         metro_port=args.metro_port if args.react_native else None,
         memory_gb=args.memory,
         agy_enabled=args.agy,
+        cloudflare_enabled=not args.no_cloudflare,
     )
 
 

@@ -71,3 +71,7 @@ _Avoid_: Base container, root image, runner image
 **Browser Tooling**:
 A pre-baked, headless Google Chrome instance installed by the `--browser` flag and shared by the Playwright and Chrome DevTools MCP servers, launched with the sandbox-free flags required when running as root.
 _Avoid_: Browser MCP, headless browser setup, chrome layer
+
+**Cloudflare Tunnel**:
+A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
+_Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel

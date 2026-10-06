@@ -15,6 +15,51 @@ if [ -f /root/.ssh/authorized_keys ]; then
 fi
 /usr/sbin/sshd
 
+# Start Cloudflare Tunnel service and port watcher if enabled (default: enabled)
+if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
+    CF_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-eyJhIjoiOWE5YWUxNGRmOTYzNmFhOWYyMmRmOTcyYWYyMzA4ODUiLCJ0IjoiZTQ4YjRkMGYtNmQwNS00NzFiLTlmMjEtN2I0YzFjZmIzMjZjIiwicyI6IlkySmlOVEk1WmpVdFpUQmxZaTAwTXpsakxUZzFaak10WWprMU4yWmlObUkwTm1KaCJ9}"
+    if [ ! -f /etc/init.d/cloudflared ]; then
+        echo "🚇 Installing Cloudflare Tunnel service..."
+        cloudflared service install "$CF_TOKEN"
+    elif [ -f /etc/cloudflared/token ]; then
+        CURRENT_TOKEN=$(cat /etc/cloudflared/token 2>/dev/null || true)
+        if [ "$CURRENT_TOKEN" != "$CF_TOKEN" ]; then
+            echo "$CF_TOKEN" > /etc/cloudflared/token
+        fi
+    fi
+
+    # Initially stop the service until the target web port actually opens
+    /etc/init.d/cloudflared stop >/dev/null 2>&1 || true
+
+    # Port watcher daemon: starts cloudflared only when the port is listening,
+    # and immediately stops it when the app stops, preventing traffic hijacking.
+    cat << 'EOF' > /usr/local/bin/cloudflared-port-watcher
+#!/usr/bin/env bash
+TARGET_PORT="${1:-3000}"
+CHECK_INTERVAL=2
+
+while true; do
+    if (echo > /dev/tcp/127.0.0.1/"$TARGET_PORT") 2>/dev/null; then
+        # Port is OPEN: ensure cloudflared is running
+        if ! /etc/init.d/cloudflared status >/dev/null 2>&1; then
+            echo "[$(date +%T)] 🚇 Port $TARGET_PORT is active. Starting Cloudflare Tunnel..."
+            /etc/init.d/cloudflared start >/dev/null 2>&1 || true
+        fi
+    else
+        # Port is CLOSED: ensure cloudflared is stopped so it doesn't take traffic
+        if /etc/init.d/cloudflared status >/dev/null 2>&1; then
+            echo "[$(date +%T)] 🚇 Port $TARGET_PORT is closed. Stopping Cloudflare Tunnel..."
+            /etc/init.d/cloudflared stop >/dev/null 2>&1 || true
+        fi
+    fi
+    sleep "$CHECK_INTERVAL"
+done
+EOF
+    chmod +x /usr/local/bin/cloudflared-port-watcher
+
+    nohup /usr/local/bin/cloudflared-port-watcher "${PORT:-3000}" > /var/log/cloudflared-watcher.log 2>&1 &
+fi
+
 # Start Docker daemon in background if enabled (VM Sandbox)
 if [ "${ENABLE_DOCKER:-}" = "1" ]; then
     echo "Starting dockerd..."
@@ -189,6 +234,20 @@ echo "=== OAuth Token ===" && ls -la ~/.gemini/antigravity-cli/antigravity-oauth
 EOF
     chmod +x /usr/local/bin/check-antigravity 2>/dev/null || true
     ln -sf /usr/local/bin/check-antigravity /usr/local/bin/check-agy
+fi
+
+if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
+    cat << 'EOF' > /usr/local/bin/check-cloudflare
+#!/usr/bin/env bash
+echo "=== Cloudflared Version ===" && cloudflared --version
+echo "=== Service Status ===" && /etc/init.d/cloudflared status
+echo "=== Process ===" && ps aux | grep [c]loudflared
+echo "=== Port Watcher Process ===" && ps aux | grep [c]loudflared-port-watcher
+echo "=== Port Watcher Log ===" && cat /var/log/cloudflared-watcher.log 2>/dev/null || true
+echo "=== Config / Token ===" && ls -la /etc/cloudflared/
+EOF
+    chmod +x /usr/local/bin/check-cloudflare 2>/dev/null || true
+    ln -sf /usr/local/bin/check-cloudflare /usr/local/bin/check-cf
 fi
 
 # 2. Decrypt / write environment keys if provided
