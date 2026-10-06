@@ -37,11 +37,11 @@ A runtime development environment within the sandbox combining a pre-baked Pytho
 _Avoid_: Python tooling, python runner, modal env
 
 **Shared Workspace Secret**:
-The centralized Modal secret collection (`share0`) mounted into sandboxes when credentials decryption is requested, providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—independent of repository-specific secret collections.
+The centralized Modal secret collection (`share0`) mounted into sandboxes by default to enable Cloudflare Tunnel ingress and whenever credentials decryption is requested (`--agy`, `--modal`, `--opencode`), providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—independent of repository-specific secret collections.
 _Avoid_: Global secret, root secret, default secret
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts the `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`), configures a temporary Age key file at `~/.config/sops/age/keys.txt` (mode 0600), executes repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and immediately purges `~/.config/sops` and unsets the key from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute repository decryption scripts (`scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.
 _Avoid_: Sops setup, age injection, secret script
 
 **Modal Sandbox SSH Key**:
@@ -73,5 +73,5 @@ A pre-baked, headless Google Chrome instance installed by the `--browser` flag a
 _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
-A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
+A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel

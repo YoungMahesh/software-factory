@@ -22,13 +22,13 @@ The repository secret collection passed to `--secret-collection` (or `-s`) must 
 
 ### Shared Workspace Secret (`share0`)
 
-When launching with features that require in-sandbox credential decryption (`--agy`, `--modal`, or `--opencode`), the shared Modal secret named `share0` is automatically mounted and must define:
+The shared Modal secret named `share0` is automatically mounted by default to decrypt the Cloudflare Tunnel token (`secrets/cloudflare.env`) and whenever credential decryption is requested (`--agy`, `--modal`, or `--opencode`), and must define:
 
-| Variable          | Status                                             | Description                                     | Example               |
-| :---------------- | :------------------------------------------------- | :---------------------------------------------- | :-------------------- |
-| `AGE_PRIVATE_KEY` | **Required** with `--agy`, `--modal`, `--opencode` | Master Age private key used for SOPS decryption | `AGE-SECRET-KEY-1...` |
+| Variable          | Status                                                                                      | Description                                     | Example               |
+| :---------------- | :------------------------------------------------------------------------------------------ | :---------------------------------------------- | :-------------------- |
+| `AGE_PRIVATE_KEY` | **Required** (by default for Cloudflare Tunnel, and with `--agy`, `--modal`, `--opencode`) | Master Age private key used for SOPS decryption | `AGE-SECRET-KEY-1...` |
 
-> Set these secrets in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI.
+> Set these secrets in your Modal dashboard at [modal.com/secrets](https://modal.com/secrets) or via the Modal CLI. Note: Bare sandboxes without `share0` can be launched by opting out of the Cloudflare Tunnel using `--no-cloudflare`.
 
 ---
 

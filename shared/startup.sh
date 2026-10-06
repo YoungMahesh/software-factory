@@ -17,7 +17,24 @@ fi
 
 # Start Cloudflare Tunnel service and port watcher if enabled (default: enabled)
 if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
-    CF_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-eyJhIjoiOWE5YWUxNGRmOTYzNmFhOWYyMmRmOTcyYWYyMzA4ODUiLCJ0IjoiZTQ4YjRkMGYtNmQwNS00NzFiLTlmMjEtN2I0YzFjZmIzMjZjIiwicyI6IlkySmlOVEk1WmpVdFpUQmxZaTAwTXpsakxUZzFaak10WWprMU4yWmlObUkwTm1KaCJ9}"
+    if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
+        echo "ERROR: Cloudflare Tunnel is enabled, but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY or launch with --no-cloudflare." >&2
+        exit 1
+    fi
+
+    CLOUDFLARE_SECRET_FILE="/root/secrets/cloudflare.env"
+    if [ ! -f "$CLOUDFLARE_SECRET_FILE" ]; then
+        echo "ERROR: Cloudflare Tunnel secret file not found at $CLOUDFLARE_SECRET_FILE." >&2
+        exit 1
+    fi
+
+    echo "🚇 Decrypting Cloudflare Tunnel token from $CLOUDFLARE_SECRET_FILE..."
+    CF_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt --extract '["CF_TOKEN"]' "$CLOUDFLARE_SECRET_FILE" 2>/dev/null || true)
+    if [ -z "$CF_TOKEN" ]; then
+        echo "ERROR: Failed to decrypt CF_TOKEN from $CLOUDFLARE_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+        exit 1
+    fi
+
     if [ ! -f /etc/init.d/cloudflared ]; then
         echo "🚇 Installing Cloudflare Tunnel service..."
         cloudflared service install "$CF_TOKEN"
@@ -245,6 +262,7 @@ echo "=== Process ===" && ps aux | grep [c]loudflared
 echo "=== Port Watcher Process ===" && ps aux | grep [c]loudflared-port-watcher
 echo "=== Port Watcher Log ===" && cat /var/log/cloudflared-watcher.log 2>/dev/null || true
 echo "=== Config / Token ===" && ls -la /etc/cloudflared/
+echo "=== Secret File ===" && ls -la /root/secrets/cloudflare.env 2>/dev/null || true
 EOF
     chmod +x /usr/local/bin/check-cloudflare 2>/dev/null || true
     ln -sf /usr/local/bin/check-cloudflare /usr/local/bin/check-cf
@@ -281,16 +299,19 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
         echo "🔐 Decrypting secrets with SOPS..."
         bash scripts/setup.sh "${setup_args[@]}" || setup_status=$?
     fi
+fi
 
+# Unconditionally scrub AGE_PRIVATE_KEY and temporary SOPS state across all sandboxes
+if [ -n "${AGE_PRIVATE_KEY:-}" ] || [ -d ~/.config/sops ]; then
     rm -rf ~/.config/sops
     echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
     grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
     unset AGE_PRIVATE_KEY
+fi
 
-    if [ "$setup_status" -ne 0 ]; then
-        echo "ERROR: scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
-        exit "$setup_status"
-    fi
+if [ "${setup_status:-0}" -ne 0 ]; then
+    echo "ERROR: scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
+    exit "$setup_status"
 fi
 
 # Allocate swap space if requested (VM Sandbox only, e.g. SWAP_GB > 0)

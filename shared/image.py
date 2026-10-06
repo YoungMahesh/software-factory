@@ -13,6 +13,8 @@ REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
 LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
+REMOTE_CLOUDFLARE_SECRET = "/root/secrets/cloudflare.env"
 SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
@@ -71,6 +73,11 @@ base_image = (
 
 if LOCAL_GIT_BASH.exists():
     base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
+
+if LOCAL_CLOUDFLARE_SECRET.exists():
+    base_image = base_image.add_local_file(
+        LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET, copy=True
+    )
 
 
 def load_ssh_pub_key() -> str:

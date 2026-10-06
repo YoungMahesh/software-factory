@@ -205,9 +205,11 @@ def main():
         react_native=args.react_native,
     )
 
+    cloudflare_active = not args.no_cloudflare
+
     encrypted_ports = [args.web_port]
     sandbox_secrets = [secret]
-    if args.agy or args.modal or args.opencode:
+    if cloudflare_active or args.agy or args.modal or args.opencode:
         sandbox_secrets.append(modal.Secret.from_name(SHARED_SECRET_NAME))
     env: dict[str, str | None] = {
         "SSH_AUTHORIZED_KEY": pubkey_content,
@@ -215,7 +217,7 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
     }
-    if args.no_cloudflare:
+    if not cloudflare_active:
         env["ENABLE_CLOUDFLARE"] = "0"
 
     memory_gb: int | None = None
