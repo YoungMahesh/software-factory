@@ -57,6 +57,7 @@ base_image = (
         "wget",
         "docker.io",
         "docker-buildx",
+        "docker-compose-v2",
         "unzip",
         "ripgrep",
         "age",

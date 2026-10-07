@@ -4,7 +4,7 @@ Launch a Modal sandbox environment with SSH access and a default Cloudflare Tunn
 
 The unified runner supports two execution models:
 - **Standard Sandbox (Default)**: Lightweight container sandbox on Modal running directly on the container runtime with dynamic burstable memory (128 MiB request up to 16 GiB limit) and fast startup.
-- **VM Sandbox (`--vm`)**: Full Linux virtual machine on Modal with custom kernel privileges, Docker daemon support (`ENABLE_DOCKER=1`), and automated swapfile allocation (2× RAM).
+- **VM Sandbox (`--vm`)**: Full Linux virtual machine on Modal with custom kernel privileges, Docker daemon support (`ENABLE_DOCKER=1`), Docker Compose v2 (`docker compose`), and automated swapfile allocation (2× RAM).
 
 ---
 
