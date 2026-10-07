@@ -1,15 +1,16 @@
-# 05: Modal Factory Orchestrator and Ephemeral Sandbox Spawner
+# 05: Modal Factory Sandbox Spawner and Container Entrypoint
 
-**What to build:** A serverless Modal application that acts as the cloud orchestrator for the software factory. When given a target repository secret and feature/ticket parameters, it provisions an ephemeral Modal Sandbox (Standard Sandbox by default, dynamically promoted to VM Sandbox when Docker daemon or swap is required). It mounts organization secrets (`share0` for SOPS decryption), decrypts repository fetch credentials ephemerally, stages the factory assembly line harness, clones the target repository into the sandbox, and executes the assembly line while streaming execution logs back to the caller.
+**What to build:** The Modal sandbox provisioning engine and container entrypoint for the software factory. When given a target repository secret name (`secrets/<project-name>`), feature slug, and optional ticket ID, it provisions an ephemeral Modal Sandbox (Standard Sandbox by default, dynamically promoted to VM Sandbox when `--vm` is requested) with a 16-hour timeout. It mounts organization secrets (`share0` for SOPS bootstrap), stages project secrets (`secrets/<project-name>/`), and mounts the local factory harness (`sandbox/factory/`) into `/root/factory/`. Inside the container, a dedicated factory entrypoint decrypts fetch credentials, clones the target repository, checks out `factory/<feature>`, preserves `GH_TOKEN` for assembly line pushing, decrypts OpenCode credentials, and invokes the in-sandbox pipeline.
 
 **Blocked by:** 04: Assembly Line Pipeline and Self-Correction Loop
 
 **Status:** ready-for-agent
 
-- [ ] Implements the serverless Modal application for the Factory Orchestrator
-- [ ] Provisions ephemeral Modal Sandboxes using the unified base image
-- [ ] Defaults to Standard Sandboxes with burstable memory, supporting dynamic promotion to VM Sandboxes
-- [ ] Ephemerally mounts `share0` and decrypts repository fetch credentials and OpenCode keys during boot
-- [ ] Clones the target repository and invokes the in-sandbox assembly line pipeline
-- [ ] Streams live execution logs from the running sandbox back to the caller
-- [ ] Terminates the ephemeral sandbox cleanly upon pipeline completion or error
+- [ ] Implements the Modal sandbox creation helper using `modal.Sandbox.create()` and the unified base image
+- [ ] Mounts the local factory TypeScript harness (`sandbox/factory/`) to `/root/factory/` inside the sandbox
+- [ ] Reuses standard sandbox timeout configuration (16 hours) from `sandbox/main.py`
+- [ ] Defaults to Standard Sandboxes with burstable memory, supporting dynamic promotion to VM Sandboxes with `--vm`
+- [ ] Provides a dedicated in-sandbox factory entrypoint script that clones the target repository and checks out `factory/<feature>`
+- [ ] Preserves `GH_TOKEN` in the assembly line environment for git branch pushing
+- [ ] Decrypts OpenCode credentials ephemerally into `/root/.config/opencode/opencode.env`
+- [ ] Streams live execution logs from the running sandbox and exits cleanly with the pipeline's exit code

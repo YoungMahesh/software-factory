@@ -125,7 +125,7 @@ The LLM inference provider authenticated via `OPENCODE_GO_API_KEY` from OpenCode
 _Avoid_: OpenCode LLM, custom AI endpoint
 
 **Autonomous Feature Batch**:
-A continuous dispatch mode (`--all`) that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature in the target project's `.scratch/`.
+A continuous execution mode that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature in the target project's cloned `.scratch/` inside a single warm sandbox.
 _Avoid_: Batch mode, multi-run, auto sweep
 
 **Ticket Lifecycle**:
@@ -137,7 +137,7 @@ An automated feedback cycle where test execution logs or reviewer rejections are
 _Avoid_: Auto-heal loop, infinite retry
 
 **CLI Dispatcher**:
-The local command-line interface used to inspect `.scratch/` tickets, dispatch jobs to the Factory Orchestrator, and stream progress logs.
+The local command-line interface (`factory/run.py`) used to validate target project secrets (`secrets/<project-name>`), provision autonomous factory sandboxes, and stream progress logs.
 _Avoid_: Job submitter, factory CLI
 
 **Pi Agent Harness**:

@@ -15,8 +15,9 @@
 
 ## Comments
 
-Implemented the Pre-flight Guard and Issue Tracker Parser across both TypeScript (`sandbox/factory/preflight.ts`) and Python (`factory/preflight.py`):
-1. **Pre-flight Guard**: `validatePreflight` / `validate_preflight` and `assertPreflight` / `assert_preflight` validate the presence of `.scratch/<feature>/spec.md`, `CONTEXT.md` (at repo root or under domain directories), and issue tracking configuration (`docs/agents/issue-tracker.md` or `## Agent skills` in `AGENTS.md` / `CLAUDE.md`), throwing a descriptive `PreflightError` with actionable remediation messages if any are missing.
-2. **Issue Tracker Parser**: `parseTicket` / `parse_ticket` parses markdown ticket headers (`Status:`, `Blocked by:`) handling bold formatting and multiple blockers. `parseTickets` / `parse_tickets` discovers all tickets in `.scratch/<feature>/issues/` sorted numerically.
-3. **Frontier Resolution**: `getFrontierTickets` / `get_frontier_tickets` identifies open, unblocked tickets on the frontier in numerical order where all dependencies in `Blocked by:` are resolved.
-4. **Test Suite & Typechecking**: 100% test coverage with automated unit and smoke tests in Node.js (`sandbox/factory/preflight.test.ts`, tested via `node --test --experimental-strip-types`) and Python (`tests/test_preflight.py`, tested via `pytest`), fully typed and verified clean with `tsc` and `mypy`.
+Implemented the Pre-flight Guard and Issue Tracker Parser in TypeScript (`sandbox/factory/preflight.ts`) per ADR 0028:
+1. **Pre-flight Guard**: `validatePreflight` and `assertPreflight` validate the presence of `.scratch/<feature>/spec.md`, `CONTEXT.md` (at repo root or under domain directories), and issue tracking configuration (`docs/agents/issue-tracker.md` or `## Agent skills` in `AGENTS.md` / `CLAUDE.md`), throwing a descriptive `PreflightError` with actionable remediation messages if any are missing.
+2. **Issue Tracker Parser**: `parseTicket` parses markdown ticket headers (`Status:`, `Blocked by:`) handling bold formatting and multiple blockers. `parseTickets` discovers all tickets in `.scratch/<feature>/issues/` sorted numerically.
+3. **Frontier Resolution**: `getFrontierTickets` and `getNextFrontierTicket` identify open, unblocked tickets on the frontier in numerical order where all dependencies in `Blocked by:` are resolved.
+4. **Architecture Refinement (ADR 0028)**: Per ADR 0028, target repositories co-locate tickets in version control and discovery occurs strictly inside the sandbox. The redundant host Python parser was retired in favor of the in-sandbox TypeScript engine.
+5. **Test Suite & Typechecking**: 100% test coverage with automated unit and smoke tests in Node.js (`sandbox/factory/preflight.test.ts`, tested via `node --test --experimental-strip-types`), fully typed and verified clean with `pnpm --filter ./sandbox/factory typecheck` (`tsc --noEmit`).

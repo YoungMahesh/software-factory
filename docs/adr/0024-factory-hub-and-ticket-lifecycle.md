@@ -1,5 +1,7 @@
 # Factory Hub and Ticket Lifecycle Architecture
 
+**Status**: Superseded by [ADR 0028](0028-target-repo-ticket-colocation-and-in-sandbox-batch-execution.md)
+
 To manage multi-repo development cleanly, we decided to establish `software-factory` as a Factory Hub maintaining local markdown tickets in `.scratch/`, executing single-ephemeral-sandbox ticket lifecycles per issue with a 2-retry self-correction loop, and dispatching runs via a local CLI dispatcher.
 
 ## Considered Options

@@ -8,26 +8,26 @@ Software engineers wanting to automate feature development, bug fixing, and code
 
 ## Solution
 
-A cloud-native Software Factory operating as a Factory Hub that executes engineering tasks from a Local Markdown Issue Tracker inside ephemeral Modal Sandboxes.
+A cloud-native Software Factory operating as a Factory Hub that provisions ephemeral Modal Sandboxes to execute engineering tasks from target repositories' Local Markdown Issue Trackers.
 
-A local CLI Dispatcher invokes a serverless Factory Orchestrator on Modal, which provisions an isolated ephemeral sandbox per ticket lifecycle. Inside the sandbox, the repository is verified against a Pre-flight Guard (ensuring `/setup-matt-pocock-skills` configuration), and an Assembly Line Pipeline powered by the Pi Agent Harness (`@earendil-works/pi-agent-core`) executes specialized least-privilege stages:
+A local Python launcher (`factory/run.py`) takes a target project name (`secrets/<project-name>`), feature slug, and optional issue ID, and provisions an isolated ephemeral Modal Sandbox with mounted factory harness code. Inside the sandbox, the target repository is cloned, smart branch detection checks out `factory/<feature>`, the repository is verified against the in-sandbox Pre-flight Guard (ensuring `/setup-matt-pocock-skills` configuration), and an Assembly Line Pipeline powered by the Pi Agent Harness (`@earendil-works/pi-agent-core`) executes specialized least-privilege stages:
 1. **Planner Agent** (read-only): inspects the codebase, drafts `plan.md`, and discovers test commands.
 2. **Coder Agent** (read/write/bash): writes implementation and reproduction tests on a shared Feature Branch (`factory/<feature>`).
 3. **Deterministic Verifier**: executes test suites as a non-agentic test runner (exit codes cannot be hallucinated).
 4. **Reviewer Agent** (read-only): audits the git diff and plan against repository standards.
 
-If verification or review fails, a Self-Correction Loop feeds errors back to the Coder for up to 2 retries before escalating to `Status: ready-for-human`. Upon passing the Quality Gate, verified commits are pushed to the target remote, and the ticket is updated inline with `Status: resolved` and a comprehensive audit trail.
+If verification or review fails, a Self-Correction Loop feeds errors back to the Coder for up to 2 retries before escalating to `Status: ready-for-human`. Upon passing the Quality Gate, verified commits are pushed to the target remote, and the ticket is updated inline with `Status: resolved` and a comprehensive audit trail. An in-sandbox autonomous batch loop sequentially iterates through unblocked tickets on the frontier within the single warm sandbox.
 
 ## User Stories
 
-1. As a software engineer, I want to define features and tickets in a Local Markdown Issue Tracker (`.scratch/<feature>/`), so that my task specifications are structured, offline-first, and tracked in version control.
-2. As a software engineer, I want to run `python factory/dispatch.py --feature <slug>` from my terminal, so that the factory automatically finds and executes the next unblocked ticket on the frontier.
-3. As a software engineer, I want an `--all` autonomous batch mode on the CLI Dispatcher, so that the factory can sequentially claim, execute, and resolve all tickets across a feature tree without manual intervention.
-4. As a factory operator, I want the Factory Orchestrator to run as a serverless Modal application, so that I incur zero idle compute costs when no jobs are active.
+1. As a software engineer, I want to define features and tickets in a Local Markdown Issue Tracker (`.scratch/<feature>/`) in the target repository's version control, so that my task specifications are co-located, offline-first, and tracked in Git.
+2. As a software engineer, I want to run `python factory/run.py --project <project-name> --feature <slug> [--issue <id>]` from my terminal, so that the factory launches a sandbox to execute unblocked tickets on that project's frontier.
+3. As a software engineer, I want autonomous feature batch execution inside a single warm sandbox, so that all unblocked tickets across a feature tree are sequentially executed, committed, and pushed with zero repeated container startup overhead.
+4. As a factory operator, I want the factory runner to use Modal's direct Python client SDK (`modal.Sandbox.create`) with mounted factory code and the standard 16-hour execution timeout, so that jobs run reliably without deploying intermediate serverless worker applications.
 5. As a security-conscious engineer, I want every ticket execution to run inside an ephemeral Modal Sandbox, so that untrusted code, external dependency installs, and agent tool commands are completely isolated.
 6. As a developer, I want the factory to provision a fast Standard Sandbox by default and dynamically promote to a VM Sandbox when Docker daemon or swap memory is required, so that simple tasks launch in seconds while heavy builds retain full virtualization.
 7. As a project owner, I want the factory to execute a Pre-flight Guard on checkout, so that jobs fail immediately with an actionable message if the target repository has not completed `/setup-matt-pocock-skills`.
-8. As a maintainer, I want `software-factory`'s root `.scratch/` directory to be reserved strictly for modifying the factory itself, so that target repository tickets remain co-located within their own repositories.
+8. As a maintainer, I want `software-factory`'s root `.scratch/` directory to be reserved strictly for modifying the factory itself, while target projects maintain their own independent `.scratch/` directories in version control.
 9. As an engineer, I want the in-sandbox pipeline to use the Pi Agent Harness (`@earendil-works/pi-agent-core`), so that file reading, AST-safe editing, and terminal execution rely on a battle-tested coding engine.
 10. As a factory operator, I want model inference to use my OpenCode Go subscription via `OPENCODE_GO_API_KEY` (decrypted from `secrets/opencode.env`), so that all stages use an active subscription without managing separate commercial vendor keys.
 11. As an engineer, I want the assembly line to use a homogeneous flagship model (`DeepSeek V4.1 Flash` by default, or `MiMo-V2.6-Flash` via `--model mimo`), so that all stages maintain deep reasoning consistency without tool-calling degradation.
@@ -42,9 +42,8 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 
 ## Implementation Decisions
 
-- **Control Plane Architecture**: The Factory Orchestrator is implemented as a serverless Modal application in `factory/orchestrator.py`, exposing programmatic methods to launch and monitor ephemeral sandboxes via `modal.Sandbox.create()`.
-- **CLI Dispatcher**: The command-line client in `factory/dispatch.py` parses `.scratch/` ticket states, identifies unblocked tasks (`Status: ready-for-agent`), dispatches jobs to the Factory Orchestrator, streams live sandbox logs to stdout, and records final results back to the ticket file.
-- **In-Sandbox Assembly Line Harness**: Implemented in TypeScript under `sandbox/factory/` using `@earendil-works/pi-agent-core` and `@earendil-works/pi-ai`, executed on the pre-baked Node.js 24 runtime inside the sandbox.
+- **Control Plane Architecture**: The Factory Runner is implemented as a direct Python script in `factory/run.py`, validating `secrets/<project-name>/fetch.env` locally and launching an ephemeral sandbox via `modal.Sandbox.create()` with mounted `sandbox/factory/` code and the standard 16-hour timeout from `sandbox/main.py`.
+- **In-Sandbox Assembly Line & Batch Runner**: Implemented in TypeScript under `sandbox/factory/` using `@earendil-works/pi-agent-core` and `@earendil-works/pi-ai`, executed on the pre-baked Node.js 24 runtime inside the sandbox. It clones the target repository, checks out `factory/<feature>`, runs pre-flight checks, executes tickets sequentially on the frontier, pushes each resolved ticket to `origin factory/<feature>`, and halts immediately if retries fail.
 - **Provider & Model Configuration**: Configured in `sandbox/factory/provider.ts` to connect to OpenCode Go using `OPENCODE_GO_API_KEY` (ephemerally decrypted at boot from `secrets/opencode.env`). Exclusively supports `DeepSeek V4.1 Flash` (default) and `MiMo-V2.6-Flash`.
 - **Pre-flight Guard**: Implemented in `sandbox/factory/preflight.ts`. Validates that the target repository contains `.scratch/<feature>/spec.md`, root or domain `CONTEXT.md`, and issue tracking configuration before pipeline execution starts.
 - **Role Permissions & Specialization**:
@@ -57,7 +56,7 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 
 ## Testing Decisions
 
-- **Testing Seam**: The primary test seam is the In-Sandbox Pipeline Runner interface (`pipeline.ts`) and the Dispatcher interface (`dispatch.py`). The assembly line is treated as a deep module: callers provide a target repository path, feature slug, and ticket metadata, and the pipeline executes the entire lifecycle behind this compact interface.
+- **Testing Seam**: The primary test seam is the In-Sandbox Pipeline Runner interface (`pipeline.ts` / `batch.ts`) and the Host Runner interface (`run.py`). The assembly line is treated as a deep module: callers provide a target project secret, feature slug, and optional ticket, and the pipeline executes the entire lifecycle behind this compact interface.
 - **Good Test Criteria**: Tests must verify observable behavior:
   - Pre-flight guard aborts cleanly when given a repository missing `.scratch/` or `CONTEXT.md`.
   - Deterministic verifier accurately flags passing vs. failing test commands based on exit codes.
