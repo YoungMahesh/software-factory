@@ -91,3 +91,79 @@ _Avoid_: Browser MCP, headless browser setup, chrome layer
 **Cloudflare Tunnel**:
 A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel, modal web tunnel, web url tunnel
+
+**Software Factory**:
+An automated software delivery system that ingests work items from a Local Markdown Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
+_Avoid_: Agent swarm, AI dev platform, autonomous loop
+
+**Factory Orchestrator**:
+A serverless Modal application that manages factory job lifecycles, dispatches ephemeral worker sandboxes, monitors stage transitions, and updates ticket states.
+_Avoid_: Master runner, factory daemon, background coordinator
+
+**Assembly Line Pipeline**:
+A sequential workflow where specialized single-responsibility agents execute distinct stages with strict transition artifacts between them.
+_Avoid_: Autonomous loop, dynamic swarm, generalist runner
+
+**Local Markdown Issue Tracker**:
+A filesystem-based task tracking convention that stores specifications and work items as markdown documents under `.scratch/<feature>/`.
+_Avoid_: Flat notes, scratchpad, local tickets
+
+**Quality Gate**:
+A multi-tier verification barrier requiring passing deterministic test suites, verified reproduction/acceptance tests, and independent automated review before a work item is marked resolved.
+_Avoid_: CI check, validation pass
+
+**Factory Hub**:
+The central repository (`software-factory`) containing the serverless Factory Orchestrator and CLI Dispatcher. Its own `.scratch/` directory is strictly reserved for modifications to the software factory codebase itself, while all target projects maintain their own independent `.scratch/` directories.
+_Avoid_: Master repo, factory workspace, coordinator root
+
+**Target Project Workspace**:
+The cloned repository within an ephemeral Modal Sandbox that contains its own pre-configured `.scratch/` local-markdown issue tracker initialized via `/setup-matt-pocock-skills`.
+_Avoid_: Remote repo, target directory, child workspace
+
+**OpenCode Go Provider**:
+The LLM inference provider authenticated via `OPENCODE_GO_API_KEY` from OpenCode Credentials, serving `MiMo-V2.6-Flash` and `DeepSeek V4.1 Flash` to the Pi Agent Harness inside the sandbox.
+_Avoid_: OpenCode LLM, custom AI endpoint
+
+**Autonomous Feature Batch**:
+A continuous dispatch mode (`--all`) that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature in the target project's `.scratch/`.
+_Avoid_: Batch mode, multi-run, auto sweep
+
+**Ticket Lifecycle**:
+The end-to-end execution path of a work item through claiming, sandbox execution, quality gate verification, and resolution status updating.
+_Avoid_: Issue flow, job run
+
+**Self-Correction Loop**:
+An automated feedback cycle where test execution logs or reviewer rejections are returned to the coding agent for up to two retry attempts before human escalation.
+_Avoid_: Auto-heal loop, infinite retry
+
+**CLI Dispatcher**:
+The local command-line interface used to inspect `.scratch/` tickets, dispatch jobs to the Factory Orchestrator, and stream progress logs.
+_Avoid_: Job submitter, factory CLI
+
+**Pi Agent Harness**:
+The TypeScript execution framework based on `@earendil-works/pi-agent-core` that drives in-sandbox assembly line stages with pre-built file editing, search, and shell tools.
+_Avoid_: Custom agent runner, python agent runner, generic LLM client
+
+**Planner Agent**:
+A read-only reasoning agent that analyzes the ticket, explores the codebase, and outputs a structured implementation plan.
+_Avoid_: Architect, spec agent, design agent
+
+**Coder Agent**:
+The execution agent that consumes the plan and ticket, writes implementation and reproduction tests, and makes git commits on the feature branch.
+_Avoid_: Developer agent, worker agent, programmer
+
+**Deterministic Verifier**:
+A non-agentic test execution stage that runs the target repository's automated test suites and captures exact exit codes and output logs.
+_Avoid_: Test agent, verification bot, QA agent
+
+**Reviewer Agent**:
+A read-only audit agent that compares the git diff and plan against repo standards and outputs a structured review verdict.
+_Avoid_: Audit agent, QA bot, gatekeeper
+
+**Feature Branch**:
+A shared Git branch named `factory/<feature>` on the target repository where sequential ticket commits within a feature are accumulated and pushed for final review.
+_Avoid_: Issue branch, task branch, temporary branch
+
+**Pre-flight Guard**:
+A validation check executed upon repository checkout in the sandbox verifying that `/setup-matt-pocock-skills` prerequisites (`.scratch/`, `CONTEXT.md`, and agent issue tracking configuration) are present before assembly line stages proceed.
+_Avoid_: Healthcheck, bootstrap check, repo validator
