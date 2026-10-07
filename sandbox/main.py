@@ -23,6 +23,7 @@ from shared.image import (
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
+DEFAULT_WEB_PORT = 3000
 DEFAULT_OPENCODE_PORT = 4096
 DEFAULT_METRO_PORT = 8081
 
@@ -31,8 +32,6 @@ def print_access_info(
     sandbox: modal.Sandbox,
     app_name: str,
     ssh_info: tuple[str, int] | None = None,
-    web_url: str | None = None,
-    web_port: int | None = None,
     opencode_url: str | None = None,
     opencode_port: int | None = None,
     opencode_password: str | None = None,
@@ -47,11 +46,9 @@ def print_access_info(
     print(f"  • App:      {app_name}")
     print(f"  • Shell:    modal shell {sandbox.object_id}")
     if cloudflare_enabled:
-        print("  • Cloudflare: https://3000.mahesh0.dev (port 3000)")
+        print(f"  • Cloudflare: https://{DEFAULT_WEB_PORT}.mahesh0.dev (port {DEFAULT_WEB_PORT})")
     if memory_gb:
         print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
-    if web_url:
-        print(f"  • Web URL:  {web_url} (port {web_port})")
     if metro_url:
         print(f"  • Metro:    {metro_url} (port {metro_port})")
     if opencode_url:
@@ -82,7 +79,7 @@ def print_access_info(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Web URL"
+        description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress"
     )
     parser.add_argument(
         "--github-ref",
@@ -97,12 +94,6 @@ def main():
         help="Repository secret name under secrets/<secret-name>/fetch.env",
     )
 
-    parser.add_argument(
-        "--web-port",
-        type=int,
-        default=3000,
-        help="Web application port to expose over public HTTPS URL (default: 3000)",
-    )
     parser.add_argument(
         "--opencode",
         action="store_true",
@@ -172,23 +163,20 @@ def main():
         if args.memory < 1:
             parser.error("--memory must be a positive integer number of GB.")
 
-    active_ports = {"--web-port": args.web_port}
-    if args.opencode:
-        if args.opencode_port in active_ports.values():
-            parser.error(
-                "--opencode-port and --web-port must differ: a port can only be exposed once."
-            )
-        active_ports["--opencode-port"] = args.opencode_port
+    if args.opencode and args.opencode_port == DEFAULT_WEB_PORT:
+        parser.error(
+            f"--opencode-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
+        )
 
     if args.react_native:
-        if args.metro_port in active_ports.values():
-            conflicting_flag = [
-                flag for flag, port in active_ports.items() if port == args.metro_port
-            ][0]
+        if args.metro_port == DEFAULT_WEB_PORT:
             parser.error(
-                f"--metro-port and {conflicting_flag} must differ: a port can only be exposed once."
+                f"--metro-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
             )
-        active_ports["--metro-port"] = args.metro_port
+        if args.opencode and args.metro_port == args.opencode_port:
+            parser.error(
+                "--metro-port and --opencode-port must differ: a port can only be exposed once."
+            )
 
     pubkey_content = load_ssh_pub_key()
 
@@ -215,11 +203,11 @@ def main():
 
     cloudflare_active = not args.no_cloudflare
 
-    encrypted_ports = [args.web_port]
+    encrypted_ports: list[int] = []
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
     env: dict[str, str | None] = {
         "SSH_AUTHORIZED_KEY": pubkey_content,
-        "PORT": str(args.web_port),
+        "PORT": str(DEFAULT_WEB_PORT),
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
     }
@@ -279,7 +267,7 @@ def main():
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
     print(
-        f"🏝️  Launching Modal {runtime_desc} with SSH & Web Port {args.web_port}"
+        f"🏝️  Launching Modal {runtime_desc} with SSH"
         f"{features_suffix} (App: {app_name})..."
     )
 
@@ -328,15 +316,12 @@ def main():
 
     # Retrieve forwarded tunnels
     ssh_info = None
-    web_url = None
     opencode_url = None
     metro_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
             ssh_info = tunnels[22].tcp_socket
-        if args.web_port in tunnels:
-            web_url = tunnels[args.web_port].url
         if args.opencode and args.opencode_port in tunnels:
             opencode_url = tunnels[args.opencode_port].url
         if args.react_native and args.metro_port in tunnels:
@@ -348,8 +333,6 @@ def main():
         sandbox,
         app_name,
         ssh_info=ssh_info,
-        web_url=web_url,
-        web_port=args.web_port,
         opencode_url=opencode_url,
         opencode_port=args.opencode_port if args.opencode else None,
         opencode_password=opencode_password,

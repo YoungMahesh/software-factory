@@ -1,6 +1,6 @@
-# Modal Sandbox with SSH & Web Port Forwarding
+# Modal Sandbox with SSH & Cloudflare Ingress
 
-Launch a Modal sandbox environment with SSH access, a public HTTPS URL for web servers (e.g. Next.js on port 3000), and a default Cloudflare Tunnel (`https://3000.mahesh0.dev`).
+Launch a Modal sandbox environment with SSH access and a default Cloudflare Tunnel (`https://3000.mahesh0.dev`) routing to local port 3000.
 
 The unified runner supports two execution models:
 - **Standard Sandbox (Default)**: Lightweight container sandbox on Modal running directly on the container runtime with dynamic burstable memory (128 MiB request up to 16 GiB limit) and fast startup.
@@ -83,7 +83,6 @@ python sandbox/main.py \
     --agy \
     --modal \
     --react-native \
-    --web-port 3000 \
     --opencode-port 4096 \
     --metro-port 8081
 ```
@@ -93,7 +92,6 @@ SSH access automatically uses `shared/ssh-key.pub` for container authorization a
 Once running, the script prints:
 - Standard `modal shell <sandbox-id>` access command
 - **Cloudflare Tunnel**: `https://3000.mahesh0.dev` (port 3000, managed via port-watcher daemon)
-- **Web URL**: Public HTTPS URL forwarding directly to port 3000 inside the sandbox (e.g. `https://<id>-3000.modal.host`)
 - **OpenCode Web & Attach Command** (when `--opencode` is passed): Public HTTPS URL and one-time launch password:
   ```bash
   OPENCODE_SERVER_PASSWORD=<password> opencode --server <opencode-url>
@@ -124,7 +122,7 @@ PORT=3000
 ```
 
 Simply start Next.js: `pnpm run dev`
-And open the printed **Web URL** or **Cloudflare Tunnel** in your browser!
+And open the **Cloudflare Tunnel** (`https://3000.mahesh0.dev`) in your browser!
 
 ---
 

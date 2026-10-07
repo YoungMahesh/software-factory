@@ -90,4 +90,4 @@ _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
 A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
-_Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
+_Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel, modal web tunnel, web url tunnel
