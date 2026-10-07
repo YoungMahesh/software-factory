@@ -8,3 +8,6 @@ __pycache__/
 
 launch.sh
 llm-response.md
+
+node_modules/
+.pytest_cache/
