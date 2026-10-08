@@ -72,6 +72,43 @@ test("validatePreflight: accepts CONTEXT.md in domain path", () => {
   }
 });
 
+test("validatePreflight: accepts GLOSSARY.md at repository root", () => {
+  const repo = createTempRepo();
+  try {
+    const featDir = path.join(repo, ".scratch", "test-feature");
+    fs.mkdirSync(featDir, { recursive: true });
+    fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
+    fs.writeFileSync(path.join(repo, "GLOSSARY.md"), "# Domain Glossary");
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+
+    const result = validatePreflight(repo, "test-feature");
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.errors.length, 0);
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("validatePreflight: accepts GLOSSARY.md in docs path", () => {
+  const repo = createTempRepo();
+  try {
+    const featDir = path.join(repo, ".scratch", "test-feature");
+    fs.mkdirSync(featDir, { recursive: true });
+    fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
+    const docsDir = path.join(repo, "docs");
+    fs.mkdirSync(docsDir, { recursive: true });
+    fs.writeFileSync(path.join(docsDir, "GLOSSARY.md"), "# Domain Glossary");
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+
+    const result = validatePreflight(repo, "test-feature");
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.errors.length, 0);
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+
 test("validatePreflight: reports error when issue tracking config is missing", () => {
   const repo = createTempRepo();
   try {
@@ -279,8 +316,12 @@ test("parseTicket: handles backticks and annotated status strings", () => {
   }
 });
 
-test("smoke test: validates software-factory repo itself", () => {
+test("smoke test: validates software-factory repo itself", (t) => {
   const repoRoot = path.resolve(import.meta.dirname, "../..");
+  if (!fs.existsSync(path.join(repoRoot, ".scratch", "software-factory", "spec.md"))) {
+    t.skip("Skipping smoke test: software-factory workspace root not present at " + repoRoot);
+    return;
+  }
   const result = validatePreflight(repoRoot, "software-factory");
   assert.strictEqual(result.valid, true, `Expected valid preflight, got errors: ${result.errors.join("; ")}`);
   assert.strictEqual(result.errors.length, 0);

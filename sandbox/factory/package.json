@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test --experimental-strip-types preflight.test.ts",
+    "test:integration": "node --test --experimental-strip-types preflight-integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

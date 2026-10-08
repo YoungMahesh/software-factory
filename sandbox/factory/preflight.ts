@@ -37,17 +37,21 @@ export interface Ticket {
 }
 
 /**
- * Searches for CONTEXT.md at repository root or canonical domain paths (docs/CONTEXT.md, src/{domain}/CONTEXT.md).
+ * Searches for CONTEXT.md or GLOSSARY.md at repository root or canonical domain paths (docs/, src/{domain}/).
  */
 function findContextFile(repoRoot: string): string | null {
-  const rootContext = path.join(repoRoot, "CONTEXT.md");
-  if (fs.existsSync(rootContext)) {
-    return rootContext;
-  }
+  const contextFilenames = ["CONTEXT.md", "GLOSSARY.md"];
 
-  const docsContext = path.join(repoRoot, "docs", "CONTEXT.md");
-  if (fs.existsSync(docsContext)) {
-    return docsContext;
+  for (const filename of contextFilenames) {
+    const rootCandidate = path.join(repoRoot, filename);
+    if (fs.existsSync(rootCandidate)) {
+      return rootCandidate;
+    }
+
+    const docsCandidate = path.join(repoRoot, "docs", filename);
+    if (fs.existsSync(docsCandidate)) {
+      return docsCandidate;
+    }
   }
 
   const srcDir = path.join(repoRoot, "src");
@@ -56,8 +60,10 @@ function findContextFile(repoRoot: string): string | null {
       const entries = fs.readdirSync(srcDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          const subCandidate = path.join(srcDir, entry.name, "CONTEXT.md");
-          if (fs.existsSync(subCandidate)) return subCandidate;
+          for (const filename of contextFilenames) {
+            const subCandidate = path.join(srcDir, entry.name, filename);
+            if (fs.existsSync(subCandidate)) return subCandidate;
+          }
         }
       }
     } catch {
@@ -112,11 +118,11 @@ export function validatePreflight(repoRoot: string, featureSlug: string): Prefli
     );
   }
 
-  // 2. Validate CONTEXT.md presence
+  // 2. Validate CONTEXT.md / GLOSSARY.md presence
   const contextPath = findContextFile(repoRoot);
   if (!contextPath) {
     errors.push(
-      "Missing domain context documentation: 'CONTEXT.md' not found at repository root or in domain paths. Please define the domain glossary in CONTEXT.md."
+      "Missing domain context documentation: 'CONTEXT.md' or 'GLOSSARY.md' not found at repository root or in domain paths. Please define the domain glossary in CONTEXT.md or GLOSSARY.md."
     );
   }
 
@@ -172,16 +178,16 @@ function normalizeStatus(rawStatus: string): string {
  * Parses blockers from the 'Blocked by:' line.
  */
 function parseBlockedBy(rawBlockedBy: string): string[] {
-  const cleaned = cleanMarkdownValue(rawBlockedBy);
-  if (!cleaned || /^none(?:\s*\(.*\))?$/i.test(cleaned)) {
+  const cleaned = cleanMarkdownValue(rawBlockedBy).replace(/[\.;]+$/, "").trim();
+  if (!cleaned || /^none(?:\s*\(.*?\))?[\.\s]*$/i.test(cleaned)) {
     return [];
   }
 
-  const items = cleaned.split(",").map((s) => cleanMarkdownValue(s)).filter(Boolean);
+  const items = cleaned.split(",").map((s) => cleanMarkdownValue(s).replace(/[\.;]+$/, "").trim()).filter(Boolean);
   const blockerIds: string[] = [];
 
   for (const item of items) {
-    if (/^none(?:\s*\(.*\))?$/i.test(item)) continue;
+    if (/^none(?:\s*\(.*?\))?[\.\s]*$/i.test(item)) continue;
     // Match leading numbers (e.g. "01: Title" -> "01", "02" -> "02")
     const match = item.match(/^(\d+)/);
     if (match) {
@@ -244,7 +250,7 @@ export function parseTickets(repoRoot: string, featureSlug: string): Ticket[] {
     return [];
   }
 
-  const files = fs.readdirSync(issuesDir).filter((f) => /^\d+(-.*)?\.md$/.test(f));
+  const files = fs.readdirSync(issuesDir).filter((f: string) => /^\d+(-.*)?\.md$/.test(f));
   const tickets: Ticket[] = [];
 
   for (const file of files) {

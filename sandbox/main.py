@@ -95,6 +95,13 @@ def main():
     )
 
     parser.add_argument(
+        "--testing",
+        "--test",
+        dest="testing",
+        action="store_true",
+        help="Resolve repository secrets from secrets_testing/<secret-name>/fetch.env instead of secrets/<secret-name>/fetch.env.",
+    )
+    parser.add_argument(
         "--opencode",
         action="store_true",
         help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
@@ -151,10 +158,12 @@ def main():
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
-    secret_file = repo_root / "secrets" / args.secret / "fetch.env"
+    secrets_base = repo_root / ("secrets_testing" if args.testing else "secrets")
+    secret_file = secrets_base / args.secret / "fetch.env"
     if not secret_file.is_file():
+        expected_dir = "secrets_testing" if args.testing else "secrets"
         parser.error(
-            f"Repository secret file not found: {secret_file} (expected secrets/{args.secret}/fetch.env)."
+            f"Repository secret file not found: {secret_file} (expected {expected_dir}/{args.secret}/fetch.env)."
         )
 
     if args.memory is not None:
@@ -181,7 +190,8 @@ def main():
     pubkey_content = load_ssh_pub_key()
 
     random_id = uuid.uuid4().hex[:8]
-    app_name = f"{args.secret}-{random_id}"
+    app_prefix = "test-" if args.testing else ""
+    app_name = f"{app_prefix}{args.secret}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
 

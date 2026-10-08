@@ -49,8 +49,13 @@ SOPS-encrypted environment files stored alongside `fetch.env` under `secrets/<se
 _Avoid_: Dotenv secrets, repo envs, app secrets, env mappings
 
 **Repository Env Mapping**:
-The configuration file (`secrets/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
+The configuration file (`secrets/<secret-name>/env.map` or `secrets_testing/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
 _Avoid_: Location file, env config, secret locations
+
+**Test Repository Secrets**:
+SOPS-encrypted repository credentials stored in version control under `secrets_testing/<project-name>/` used strictly for integration testing and automated verification of factory pipelines, kept isolated from production repository secrets.
+_Avoid_: Dummy secrets, mock secrets, test credentials, test envs
+
 
 **SOPS Decryption**:
 A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`) and Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute the Tooling Setup Script (`/root/scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.
@@ -165,5 +170,5 @@ A shared Git branch named `factory/<feature>` on the target repository where seq
 _Avoid_: Issue branch, task branch, temporary branch
 
 **Pre-flight Guard**:
-A validation check executed upon repository checkout in the sandbox verifying that `/setup-matt-pocock-skills` prerequisites (`.scratch/`, `CONTEXT.md`, and agent issue tracking configuration) are present before assembly line stages proceed.
+A validation check executed upon repository checkout in the sandbox verifying that `/setup-matt-pocock-skills` prerequisites (`.scratch/`, `CONTEXT.md` or `GLOSSARY.md`, and agent issue tracking configuration) are present before assembly line stages proceed.
 _Avoid_: Healthcheck, bootstrap check, repo validator
