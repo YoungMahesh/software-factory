@@ -1,0 +1,80 @@
+"""Software Factory Orchestrator.
+
+Manages factory job lifecycles, dispatches ephemeral worker sandboxes,
+and monitors execution stages.
+"""
+
+from typing import TextIO
+import sys
+
+from factory.spawner import (
+    FACTORY_CPU,
+    FACTORY_IDLE_TIMEOUT_SECS,
+    FACTORY_STANDARD_MEMORY,
+    FACTORY_TIMEOUT_SECS,
+    FACTORY_VM_DEFAULT_MEMORY_GB,
+    FactorySpawnConfig,
+    build_factory_image,
+    create_factory_sandbox,
+    get_factory_app_name,
+    resolve_secrets_dir,
+    run_factory_sandbox,
+    spawn_factory_sandbox,
+    stream_sandbox_logs,
+)
+
+__all__ = [
+    "FACTORY_CPU",
+    "FACTORY_IDLE_TIMEOUT_SECS",
+    "FACTORY_STANDARD_MEMORY",
+    "FACTORY_TIMEOUT_SECS",
+    "FACTORY_VM_DEFAULT_MEMORY_GB",
+    "FactorySpawnConfig",
+    "build_factory_image",
+    "create_factory_sandbox",
+    "get_factory_app_name",
+    "resolve_secrets_dir",
+    "run_factory_sandbox",
+    "spawn_factory_sandbox",
+    "stream_sandbox_logs",
+    "dispatch_job",
+]
+
+
+def dispatch_job(
+    project: str,
+    feature: str,
+    issue: str | None = None,
+    vm: bool = False,
+    testing: bool = False,
+    model: str | None = None,
+    memory_gb: int | None = None,
+    stdout: TextIO = sys.stdout,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Dispatches a software factory job into an ephemeral Modal Sandbox.
+
+    Args:
+        project: Target project secret name (under secrets/ or secrets_testing/).
+        feature: Target feature slug (e.g. 'queues-page').
+        issue: Optional specific ticket ID. When None, runs full autonomous batch.
+        vm: Whether to run in a full VM Sandbox with Docker support.
+        testing: Whether to run against test repository secrets in secrets_testing/.
+        model: Optional model override ('deepseek-v4.1-flash' or 'mimo-v2.6-flash').
+        memory_gb: Memory allocation in GB (for VM sandboxes).
+        stdout: Standard output stream for live execution logs.
+        stderr: Standard error stream for live execution logs.
+
+    Returns:
+        The exit code of the in-container pipeline (0 on success).
+    """
+    config = FactorySpawnConfig(
+        project=project,
+        feature=feature,
+        issue=issue,
+        vm=vm,
+        testing=testing,
+        model=model,
+        memory_gb=memory_gb,
+    )
+    return run_factory_sandbox(config, stdout=stdout, stderr=stderr)
