@@ -38,6 +38,7 @@ Implemented the host CLI entry point (`factory/run.py`) and dispatcher engine fo
    - Re-exports `main`, `run_cli`, and secret validation at top-level `factory` package.
 
 4. **Test Verification & Quality**:
-   - 40 passing Python unit tests (`pytest`).
+   - 41 passing Python unit tests (`pytest`).
    - 82 passing TypeScript unit tests (`pnpm test` in `sandbox/factory`).
    - Clean static typecheck with zero errors across all modules (`mypy factory/ tests/`).
+   - Verified live in Modal Cloud Sandbox via `./factory/run.py --project test3 --feature slug-generator --testing` with end-to-end log streaming, successful ticket resolution, remote GitHub push (`factory/slug-generator`), and clean exit code 0.
