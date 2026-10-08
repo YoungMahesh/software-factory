@@ -105,7 +105,7 @@ export function ensureFeatureBranch(options: GitBranchOptions): string {
 
     if (remoteExists) {
       try {
-        execSync(`git fetch ${remote} "${branchName}"`, {
+        execSync(`git fetch ${remote} "+refs/heads/${branchName}:refs/remotes/${remote}/${branchName}"`, {
           cwd: workspaceDir,
           stdio: ["ignore", "pipe", "ignore"],
         });

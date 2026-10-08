@@ -71,54 +71,67 @@ export function parseImplementationPlan(
 ): ImplementationPlan {
   const trimmed = content.trim();
 
-  // Try extracting from JSON block first
-  const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (jsonMatch && jsonMatch[1]) {
+  // Try extracting from all JSON blocks first
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+  let codeMatch: RegExpExecArray | null;
+  while ((codeMatch = codeBlockRegex.exec(trimmed)) !== null) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]);
+      const parsed = JSON.parse(codeMatch[1]);
       if (typeof parsed === "object" && parsed !== null) {
         const ticketId = String(parsed.ticketId || fallbackTicketId);
         const summary = String(parsed.summary || "");
-        const affectedFiles = Array.isArray(parsed.affectedFiles)
-          ? parsed.affectedFiles.map(String).map((f: string) => f.trim()).filter(Boolean)
+        const rawFiles = parsed.affectedFiles ?? parsed.affected_files ?? parsed.files ?? parsed.targetFiles;
+        const affectedFiles = Array.isArray(rawFiles)
+          ? rawFiles.map(String).map((f: string) => f.trim()).filter(Boolean)
           : [];
-        const testCommands = Array.isArray(parsed.testCommands)
-          ? parsed.testCommands.map(String).map((c: string) => c.trim()).filter(Boolean)
+        const rawCmds = parsed.testCommands ?? parsed.test_commands ?? parsed.tests ?? parsed.commands;
+        const testCommands = Array.isArray(rawCmds)
+          ? rawCmds.map(String).map((c: string) => c.trim()).filter(Boolean)
           : [];
-        const steps = Array.isArray(parsed.steps)
-          ? parsed.steps.map(String).map((s: string) => s.trim()).filter(Boolean)
+        const rawSteps = parsed.steps ?? parsed.tasks ?? parsed.plan;
+        const steps = Array.isArray(rawSteps)
+          ? rawSteps.map(String).map((s: string) => s.trim()).filter(Boolean)
           : [];
         const rationale = parsed.rationale ? String(parsed.rationale) : undefined;
 
-        if (affectedFiles.length === 0) {
-          throw new PlanParseError("Implementation plan must specify at least one affected file in affectedFiles.");
-        }
-        if (testCommands.length === 0) {
-          throw new PlanParseError("Implementation plan must specify at least one test command in testCommands.");
-        }
+        const hasPlanFields =
+          parsed.affectedFiles !== undefined ||
+          parsed.affected_files !== undefined ||
+          parsed.files !== undefined ||
+          parsed.testCommands !== undefined ||
+          parsed.test_commands !== undefined;
 
-        return {
-          ticketId,
-          summary,
-          affectedFiles,
-          testCommands,
-          steps,
-          rationale,
-          rawContent: trimmed,
-        };
+        if (hasPlanFields) {
+          if (affectedFiles.length === 0) {
+            throw new PlanParseError("Implementation plan must specify at least one affected file in affectedFiles.");
+          }
+          if (testCommands.length === 0) {
+            throw new PlanParseError("Implementation plan must specify at least one test command in testCommands.");
+          }
+          return {
+            ticketId,
+            summary,
+            affectedFiles,
+            testCommands,
+            steps,
+            rationale,
+            rawContent: trimmed,
+          };
+        }
       }
     } catch (e: any) {
       if (e instanceof PlanParseError) throw e;
-      // If JSON parse failed, fall through to markdown parser
     }
   }
 
   // Parse structured Markdown
-  const summaryMatch = trimmed.match(/##\s*Summary\s*([\s\S]*?)(?=##|$)/i);
+  const summaryMatch = trimmed.match(/(?:^|\n)#+\s*Summary\s*([\s\S]*?)(?=(?:^|\n)#+|$)/i);
   const summary = summaryMatch ? summaryMatch[1].trim() : "";
 
-  // Extract Affected Files from markdown
-  const filesMatch = trimmed.match(/##\s*Affected Files\s*([\s\S]*?)(?=##|$)/i);
+  // Extract Affected Files from markdown (handles ##, ###, or **bold** headings)
+  const filesMatch = trimmed.match(
+    /(?:^|\n)(?:#+\s*|\*\*\s*)(?:affected\s+files|files\s+to\s+(?:modify|change)|target\s+files|files)\s*(?:\*\*)?:?\s*([\s\S]*?)(?=(?:^|\n)#+|$)/i
+  );
   const affectedFiles: string[] = [];
   if (filesMatch) {
     const lines = filesMatch[1].split("\n");
@@ -126,14 +139,38 @@ export function parseImplementationPlan(
       const cleaned = line.replace(/^[-*+]\s*/, "").trim();
       const codeMatch = cleaned.match(/`([^`]+)`/);
       const filePath = codeMatch ? codeMatch[1].trim() : cleaned;
-      if (filePath && !filePath.startsWith("#")) {
-        affectedFiles.push(filePath);
+      if (filePath && !filePath.startsWith("#") && !filePath.endsWith(":")) {
+        const cleanPath = filePath.split(/\s+/)[0];
+        if (cleanPath && !affectedFiles.includes(cleanPath)) {
+          affectedFiles.push(cleanPath);
+        }
+      }
+    }
+  }
+
+  // Fallback: extract backticked code file paths if Affected Files section was absent/empty
+  if (affectedFiles.length === 0) {
+    const fileMatches = trimmed.matchAll(/`([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)`/g);
+    for (const match of fileMatches) {
+      const candidate = match[1].trim();
+      if (
+        (candidate.startsWith("src/") ||
+          candidate.startsWith("test/") ||
+          candidate.startsWith("lib/") ||
+          candidate.endsWith(".ts") ||
+          candidate.endsWith(".js") ||
+          candidate.endsWith(".json")) &&
+        !affectedFiles.includes(candidate)
+      ) {
+        affectedFiles.push(candidate);
       }
     }
   }
 
   // Extract Test Commands from markdown
-  const testsMatch = trimmed.match(/##\s*Test Commands\s*([\s\S]*?)(?=##|$)/i);
+  const testsMatch = trimmed.match(
+    /(?:^|\n)(?:#+\s*|\*\*\s*)(?:test\s+commands|tests|verification\s+commands)\s*(?:\*\*)?:?\s*([\s\S]*?)(?=(?:^|\n)#+|$)/i
+  );
   const testCommands: string[] = [];
   if (testsMatch) {
     const blockMatch = testsMatch[1].match(/```(?:bash|sh)?\s*([\s\S]*?)\s*```/);
@@ -156,13 +193,26 @@ export function parseImplementationPlan(
     }
   }
 
+  // Fallback: search for common test invocations if section was absent
+  if (testCommands.length === 0) {
+    const cmdMatches = trimmed.matchAll(/`(npm\s+test|pnpm\s+test|node\s+--[^`]+|pytest[^`]*)`/g);
+    for (const match of cmdMatches) {
+      const cmd = match[1].trim();
+      if (!testCommands.includes(cmd)) {
+        testCommands.push(cmd);
+      }
+    }
+  }
+
   // Extract Steps from markdown
-  const stepsMatch = trimmed.match(/##\s*Steps\s*([\s\S]*?)(?=##|$)/i);
+  const stepsMatch = trimmed.match(
+    /(?:^|\n)(?:#+\s*|\*\*\s*)(?:steps|implementation\s+steps|tasks)\s*(?:\*\*)?:?\s*([\s\S]*?)(?=(?:^|\n)#+|$)/i
+  );
   const steps: string[] = [];
   if (stepsMatch) {
     const lines = stepsMatch[1].split("\n");
     for (const line of lines) {
-      const cleaned = line.replace(/^\d+\.\s*/, "").trim();
+      const cleaned = line.replace(/^\d+\.\s*/, "").replace(/^[-*+]\s*/, "").trim();
       if (cleaned) {
         steps.push(cleaned);
       }
@@ -192,11 +242,12 @@ export function parseImplementationPlan(
 export function parseReviewVerdict(content: string): ReviewVerdict {
   const trimmed = content.trim();
 
-  // Try JSON block first
-  const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (jsonMatch && jsonMatch[1]) {
+  // Try all JSON blocks first
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+  let codeMatch: RegExpExecArray | null;
+  while ((codeMatch = codeBlockRegex.exec(trimmed)) !== null) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]);
+      const parsed = JSON.parse(codeMatch[1]);
       if (typeof parsed === "object" && parsed !== null && parsed.verdict) {
         const rawVerdict = String(parsed.verdict).toLowerCase().trim();
         const verdict = rawVerdict === "approved" ? "approved" : rawVerdict === "rejected" ? "rejected" : null;
@@ -237,8 +288,13 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
     }
   }
 
-  // Parse markdown format
-  const verdictMatch = trimmed.match(/(?:\*\*Verdict:\*\*|Verdict:)\s*(APPROVED|REJECTED)/i);
+  // Parse markdown format - accommodate all common markdown styles:
+  // **Verdict:** APPROVED, **Verdict**: APPROVED, **Verdict**: **APPROVED**,
+  // # Verdict: APPROVED, Verdict: `APPROVED`, etc.
+  const verdictMatch =
+    trimmed.match(/(?:[*#_`\s]*(?:review\s+)?verdict[*#_`\s]*:?)\s*[*_`\s]*(APPROVED|REJECTED)[*_`\s]*/i) ||
+    trimmed.match(/(?:^|\n)\s*(?:#+\s*)?(?:[*_`\s]*(?:review\s+)?verdict[*_`\s]*:?)?\s*[*_`\s]*(APPROVED|REJECTED)\b/i);
+
   if (!verdictMatch) {
     throw new ReviewParseError('Could not determine review verdict. Must clearly state "APPROVED" or "REJECTED".');
   }

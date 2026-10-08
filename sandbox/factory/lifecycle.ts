@@ -99,14 +99,40 @@ export async function runTicketLifecycle(
     : undefined;
 
   // 3. Stage 1: Planner Agent
-  const { plan } = await plannerRunner({
-    workspaceDir,
-    ticket,
-    specContent,
-    contextContent,
-    provider: options.provider,
-    model: options.model,
-  });
+  let plan: ImplementationPlan;
+  try {
+    const planResult = await plannerRunner({
+      workspaceDir,
+      ticket,
+      specContent,
+      contextContent,
+      provider: options.provider,
+      model: options.model,
+    });
+    plan = planResult.plan;
+  } catch (planErr: any) {
+    const errorMsg = planErr?.message ?? String(planErr);
+    updateTicketFile({
+      filePath: ticket.filePath,
+      status: "ready-for-human",
+      branch,
+      failureDiagnostics: `### Planner Stage Failure\n\n${errorMsg}`,
+    });
+    commitFailureDiagnostics({
+      workspaceDir,
+      featureSlug,
+      ticketId: ticket.id,
+      ticketFilePath: ticket.filePath,
+      push,
+    });
+    return {
+      ticketId: ticket.id,
+      status: "ready-for-human",
+      retriesUsed: 0,
+      branch,
+      error: errorMsg,
+    };
+  }
 
   // Save plan.md in target feature folder
   const scratchDir = path.join(workspaceDir, ".scratch", featureSlug);
@@ -179,14 +205,21 @@ export async function runTicketLifecycle(
       }
     }
 
-    const { verdict } = await reviewerRunner({
-      workspaceDir,
-      ticket,
-      plan,
-      diff: gitDiff,
-      provider: options.provider,
-      model: options.model,
-    });
+    let verdict: ReviewVerdict;
+    try {
+      const reviewResult = await reviewerRunner({
+        workspaceDir,
+        ticket,
+        plan,
+        diff: gitDiff,
+        provider: options.provider,
+        model: options.model,
+      });
+      verdict = reviewResult.verdict;
+    } catch (reviewErr: any) {
+      lastDiagnostics = `### Reviewer Stage Failure\n\nFailed to complete review: ${reviewErr?.message ?? String(reviewErr)}`;
+      continue;
+    }
     lastReview = verdict;
 
     if (verdict.verdict === "rejected") {

@@ -244,6 +244,21 @@ Remove write tool from reviewer.
   assert.equal(verdict.remediation, "Remove write tool from reviewer.");
 });
 
+test("parseReviewVerdict: parses diverse markdown formatting styles", () => {
+  const variations = [
+    "**Verdict**: APPROVED\n\n## Summary\nLooks great.",
+    "**Verdict**: **APPROVED**\n\n## Summary\nLooks great.",
+    "**Review Verdict**: APPROVED\n\n## Summary\nLooks great.",
+    "### Verdict: APPROVED\n\n## Summary\nLooks great.",
+    "Verdict: `APPROVED`\n\n## Summary\nLooks great.",
+  ];
+
+  for (const text of variations) {
+    const verdict = parseReviewVerdict(text);
+    assert.equal(verdict.verdict, "approved");
+  }
+});
+
 test("parseReviewVerdict: throws ReviewParseError when verdict cannot be determined", () => {
   const badContent = `
 I reviewed the code, but I am not sure what verdict to give. It looks okay maybe.
@@ -254,3 +269,4 @@ I reviewed the code, but I am not sure what verdict to give. It looks okay maybe
     (err) => err instanceof ReviewParseError && /verdict/i.test(err.message)
   );
 });
+

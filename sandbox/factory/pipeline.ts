@@ -242,8 +242,8 @@ function parseCliArgs(): {
 const isDirectRun =
   process.argv[1] &&
   (import.meta.url === pathToFileURL(process.argv[1]).href ||
-    process.argv[1].endsWith("pipeline.ts") ||
-    process.argv[1].endsWith("pipeline.js"));
+    path.basename(process.argv[1]) === "pipeline.ts" ||
+    path.basename(process.argv[1]) === "pipeline.js");
 
 if (isDirectRun) {
   const { workspace, feature, issue, model, push } = parseCliArgs();
