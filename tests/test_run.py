@@ -1,6 +1,7 @@
 import argparse
 import io
 from pathlib import Path
+import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ from factory.run import (
     parse_args,
     validate_project_secrets,
 )
+
 
 
 class TestCliDispatcherArgs(unittest.TestCase):
@@ -227,7 +229,6 @@ class TestCliExecution(unittest.TestCase):
         mock_cm.__exit__.assert_called_once()
 
     def test_cli_subprocess_help(self):
-        import subprocess
         proc = subprocess.run(
             ["python3", "factory/run.py", "--help"],
             cwd=str(self.repo_root),
@@ -237,8 +238,17 @@ class TestCliExecution(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("Launch an autonomous software factory assembly line", proc.stdout)
 
+    def test_cli_direct_execution_help(self):
+        proc = subprocess.run(
+            ["./factory/run.py", "--help"],
+            cwd=str(self.repo_root),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("Launch an autonomous software factory assembly line", proc.stdout)
+
     def test_cli_subprocess_missing_secret(self):
-        import subprocess
         proc = subprocess.run(
             ["python3", "factory/run.py", "--project", "nonexistent-repo", "--feature", "feat1"],
             cwd=str(self.repo_root),
@@ -247,6 +257,7 @@ class TestCliExecution(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 1)
         self.assertIn("Target project secrets directory not found", proc.stderr)
+
 
 
 if __name__ == "__main__":

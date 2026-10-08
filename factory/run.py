@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """CLI Dispatcher and Host Runner for Software Factory Jobs.
 
 Local command-line interface used by developers to launch autonomous software
@@ -24,9 +25,19 @@ from factory.orchestrator import (
     resolve_secrets_dir,
 )
 
-
 DEFAULT_MODEL: str = "deepseek-v4.1-flash"
 SUPPORTED_MODELS: tuple[str, ...] = ("deepseek-v4.1-flash", "mimo-v2.6-flash")
+
+MODEL_MAP: dict[str, str] = {
+    "deepseek": "deepseek-v4.1-flash",
+    "deepseek-flash": "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash": "deepseek-v4.1-flash",
+    "deepseek v4.1 flash": "deepseek-v4.1-flash",
+    "mimo": "mimo-v2.6-flash",
+    "mimo-flash": "mimo-v2.6-flash",
+    "mimo-v2.6-flash": "mimo-v2.6-flash",
+    "mimo v2.6 flash": "mimo-v2.6-flash",
+}
 
 
 def normalize_model_name(model: str | None) -> str:
@@ -38,20 +49,8 @@ def normalize_model_name(model: str | None) -> str:
         return DEFAULT_MODEL
 
     cleaned = model.strip().lower()
-    if cleaned in (
-        "deepseek",
-        "deepseek-flash",
-        "deepseek-v4.1-flash",
-        "deepseek v4.1 flash",
-    ):
-        return "deepseek-v4.1-flash"
-    if cleaned in (
-        "mimo",
-        "mimo-flash",
-        "mimo-v2.6-flash",
-        "mimo v2.6 flash",
-    ):
-        return "mimo-v2.6-flash"
+    if cleaned in MODEL_MAP:
+        return MODEL_MAP[cleaned]
 
     raise ValueError(
         f"Unsupported model: '{model}'. Supported models are: "
@@ -60,11 +59,12 @@ def normalize_model_name(model: str | None) -> str:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Constructs the argument parser for the Software Factory CLI."""
+    """Constructs the argument parser for the CLI Dispatcher."""
     parser = argparse.ArgumentParser(
         prog="factory/run.py",
         description="Launch an autonomous software factory assembly line against a target project.",
     )
+
     parser.add_argument(
         "-p",
         "--project",

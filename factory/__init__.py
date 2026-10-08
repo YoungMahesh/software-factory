@@ -20,7 +20,8 @@ from factory.run import (
     DEFAULT_MODEL,
     SUPPORTED_MODELS,
     main,
-    main as run_cli,
+    main as dispatch_cli,
+    main as run_dispatcher,
     normalize_model_name,
     parse_args,
     validate_project_secrets,
@@ -44,9 +45,11 @@ __all__ = [
     "DEFAULT_MODEL",
     "SUPPORTED_MODELS",
     "main",
-    "run_cli",
+    "dispatch_cli",
+    "run_dispatcher",
     "normalize_model_name",
     "parse_args",
     "validate_project_secrets",
 ]
+
 
