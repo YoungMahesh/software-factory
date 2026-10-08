@@ -169,7 +169,9 @@ def build_factory_image(
     image = image.add_local_dir(project_secrets_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
 
     # Mount local factory harness into /root/factory
-    image = image.add_local_dir(factory_dir, "/root/factory", copy=True)
+    image = image.add_local_dir(
+        factory_dir, "/root/factory", copy=True, ignore=["node_modules"]
+    )
 
     # Optionally pre-install dependencies into the image layer
     if install_deps:
@@ -299,8 +301,8 @@ def stream_sandbox_logs(
     except Exception:
         pass
 
-    t_stdout.join()
-    t_stderr.join()
+    t_stdout.join(timeout=15.0)
+    t_stderr.join(timeout=15.0)
 
     return sandbox.returncode if sandbox.returncode is not None else 0
 

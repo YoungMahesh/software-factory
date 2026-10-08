@@ -49,6 +49,7 @@ Implemented the Modal factory sandbox spawner and dedicated in-sandbox container
    - Tested in `tests/test_orchestrator.py`.
 
 5. **Test Coverage & Quality**:
-   - 18 passing Python unit tests (`pytest tests/` / `python -m unittest discover tests`).
+   - 20 passing Python unit tests (`pytest tests/` / `python -m unittest discover tests`).
    - 100% clean typecheck (`mypy --explicit-package-bases factory/ shared/image.py tests/`).
    - All 81 TypeScript unit/integration tests passing (`pnpm --prefix sandbox/factory test`).
+   - Verified live in Modal Cloud Sandbox via `scripts/test_live_factory_spawner.py` with passing quality gate on `test3` (`factory/slug-generator`).

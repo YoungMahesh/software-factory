@@ -95,13 +95,15 @@ fi
 mkdir -p ~/.config/sops/age
 echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
 chmod 600 ~/.config/sops/age/keys.txt
+export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
+export SOPS_AGE_KEY_FILE="${HOME:-/root}/.config/sops/age/keys.txt"
 
 # 2. Ephemerally decrypt OpenCode credentials into ~/.config/opencode/opencode.env
 OPENCODE_SECRET_FILE="/root/secrets/opencode.env"
 if [ -f "$OPENCODE_SECRET_FILE" ]; then
     echo "🔑 Decrypting OpenCode credentials via Tooling Setup Script..."
     if [ -f "/root/scripts/setup.sh" ]; then
-        bash /root/scripts/setup.sh --opencode
+        SOPS_AGE_KEY="$AGE_PRIVATE_KEY" bash /root/scripts/setup.sh --opencode
     else
         mkdir -p /root/.config/opencode
         SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$OPENCODE_SECRET_FILE" > /root/.config/opencode/opencode.env
@@ -250,6 +252,8 @@ if [ -d /root/secrets/repo ]; then
 fi
 
 rm -rf ~/.config/sops
+unset SOPS_AGE_KEY
+unset SOPS_AGE_KEY_FILE
 unset AGE_PRIVATE_KEY
 echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
 
@@ -257,10 +261,20 @@ echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
 export GH_TOKEN="$GH_TOKEN"
 export GITHUB_TOKEN="$GH_TOKEN"
 
-# 8. Ensure dependencies are installed in factory harness
+# 8. Ensure dependencies are installed in factory harness and target repository
 if [ ! -d "/root/factory/node_modules" ]; then
     echo "📦 Installing factory harness dependencies..."
     (cd /root/factory && pnpm install --shamefully-hoist)
+fi
+
+if [ -f "$TARGET_DIR/package.json" ] && [ ! -d "$TARGET_DIR/node_modules" ]; then
+    if [ -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
+        echo "📦 Installing target repository dependencies (pnpm)..."
+        (cd "$TARGET_DIR" && pnpm install) || true
+    elif [ -f "$TARGET_DIR/package-lock.json" ]; then
+        echo "📦 Installing target repository dependencies (npm)..."
+        (cd "$TARGET_DIR" && npm install) || true
+    fi
 fi
 
 # 9. Execute in-sandbox pipeline

@@ -49,6 +49,7 @@ def dispatch_job(
     testing: bool = False,
     model: str | None = None,
     memory_gb: int | None = None,
+    timeout_secs: int = FACTORY_TIMEOUT_SECS,
     stdout: TextIO = sys.stdout,
     stderr: TextIO = sys.stderr,
 ) -> int:
@@ -62,6 +63,7 @@ def dispatch_job(
         testing: Whether to run against test repository secrets in secrets_testing/.
         model: Optional model override ('deepseek-v4.1-flash' or 'mimo-v2.6-flash').
         memory_gb: Memory allocation in GB (for VM sandboxes).
+        timeout_secs: Maximum sandbox runtime in seconds (default 16 hours).
         stdout: Standard output stream for live execution logs.
         stderr: Standard error stream for live execution logs.
 
@@ -76,5 +78,6 @@ def dispatch_job(
         testing=testing,
         model=model,
         memory_gb=memory_gb,
+        timeout_secs=timeout_secs,
     )
     return run_factory_sandbox(config, stdout=stdout, stderr=stderr)
