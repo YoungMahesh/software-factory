@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 import { type Provider, type Model } from "@earendil-works/pi-ai";
 import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
 
@@ -96,10 +97,22 @@ export function createOpenCodeGoProvider(options?: {
     .getModels()
     .filter((m) => (SUPPORTED_MODELS as readonly string[]).includes(m.id));
 
+  const injectDefaults = (opts?: any) => {
+    return {
+      ...opts,
+      apiKey: opts?.apiKey ?? apiKey,
+      sessionId: opts?.sessionId ?? crypto.randomUUID(),
+    };
+  };
+
   return {
     ...baseProvider,
     getModels: () => supportedModelsList,
     getAllModels: () => supportedModelsList,
+    stream: (model, context, streamOptions) =>
+      baseProvider.stream(model, context, injectDefaults(streamOptions)),
+    streamSimple: (model, context, streamOptions) =>
+      baseProvider.streamSimple(model, context, injectDefaults(streamOptions)),
   };
 }
 
