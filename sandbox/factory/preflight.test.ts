@@ -332,6 +332,6 @@ test("smoke test: validates software-factory repo itself", (t) => {
   assert.ok(tickets[0].status === "ready-for-agent" || tickets[0].status === "resolved");
 
   const frontier = getFrontierTickets(tickets);
-  // Since 01 and 02 are resolved, 03 is on the frontier
-  assert.ok(frontier.some((t) => t.id === "03"));
+  // Since 01 and 02 are resolved (and now 03), 03 or 04 is on the frontier
+  assert.ok(frontier.some((t) => t.id === "03" || t.id === "04"));
 });
