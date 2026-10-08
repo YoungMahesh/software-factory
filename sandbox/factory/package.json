@@ -7,7 +7,7 @@
   "scripts": {
     "test": "node --test --experimental-strip-types preflight.test.ts verifier.test.ts",
     "test:verifier": "node --test --experimental-strip-types verifier.test.ts",
-    "test:integration": "node --test --experimental-strip-types preflight-integration.test.ts",
+    "test:integration": "node --test --experimental-strip-types preflight-integration.test.ts verifier-integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
