@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-strip-types preflight.test.ts",
+    "test": "node --test --experimental-strip-types preflight.test.ts verifier.test.ts",
+    "test:verifier": "node --test --experimental-strip-types verifier.test.ts",
     "test:integration": "node --test --experimental-strip-types preflight-integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
