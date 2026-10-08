@@ -129,6 +129,13 @@ test("getFactoryModel: retrieves MiMo-V2.6-Flash when requested", () => {
   assert.equal(model.provider, "opencode-go");
 });
 
+test("getFactoryModel: resolves CLI alias 'mimo' to MiMo-V2.6-Flash per ADR 0027", () => {
+  const provider = createOpenCodeGoProvider({ apiKey: "test-api-key" });
+  const model = getFactoryModel("mimo", provider);
+  assert.equal(model.id, "mimo-v2.6-flash");
+  assert.equal(model.name, "MiMo-V2.6-Flash");
+});
+
 test("getFactoryModel: rejects unsupported models", () => {
   const provider = createOpenCodeGoProvider({ apiKey: "test-api-key" });
   assert.throws(

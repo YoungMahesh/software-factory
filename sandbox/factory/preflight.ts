@@ -39,7 +39,7 @@ export interface Ticket {
 /**
  * Searches for CONTEXT.md or GLOSSARY.md at repository root or canonical domain paths (docs/, src/{domain}/).
  */
-function findContextFile(repoRoot: string): string | null {
+export function findContextFile(repoRoot: string): string | null {
   const contextFilenames = ["CONTEXT.md", "GLOSSARY.md"];
 
   for (const filename of contextFilenames) {

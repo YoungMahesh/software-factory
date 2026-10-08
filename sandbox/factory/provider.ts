@@ -110,10 +110,26 @@ export function createOpenCodeGoProvider(options?: {
     getModels: () => supportedModelsList,
     getAllModels: () => supportedModelsList,
     stream: (model, context, streamOptions) =>
-      baseProvider.stream(model, context, injectDefaults(streamOptions)),
+      baseProvider.stream(model as any, context, injectDefaults(streamOptions)),
     streamSimple: (model, context, streamOptions) =>
-      baseProvider.streamSimple(model, context, injectDefaults(streamOptions)),
+      baseProvider.streamSimple(model as any, context, injectDefaults(streamOptions)),
   };
+}
+
+/**
+ * Normalizes CLI model aliases (e.g. "mimo" -> "mimo-v2.6-flash", "deepseek" -> "deepseek-v4.1-flash")
+ * per ADR 0027.
+ */
+export function normalizeModelAlias(modelId?: string): string {
+  if (!modelId) return DEFAULT_MODEL_ID;
+  const lower = modelId.toLowerCase().trim();
+  if (lower === "mimo" || lower === "mimo-flash") {
+    return "mimo-v2.6-flash";
+  }
+  if (lower === "deepseek" || lower === "deepseek-flash") {
+    return "deepseek-v4.1-flash";
+  }
+  return modelId.trim();
 }
 
 /**
@@ -125,7 +141,7 @@ export function getFactoryModel(
   provider?: Provider
 ): Model<string> {
   const effectiveProvider = provider ?? createOpenCodeGoProvider();
-  const effectiveModelId = modelId ?? DEFAULT_MODEL_ID;
+  const effectiveModelId = normalizeModelAlias(modelId);
 
   if (effectiveProvider.id === OPENCODE_GO_PROVIDER_ID) {
     if (!(SUPPORTED_MODELS as readonly string[]).includes(effectiveModelId)) {

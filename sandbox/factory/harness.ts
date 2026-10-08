@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { type Model, type Provider } from "@earendil-works/pi-ai";
 import { getFactoryModel, createOpenCodeGoProvider } from "./provider.ts";
@@ -367,7 +368,27 @@ function extractAssistantText(messages: any[]): string {
 export interface TicketInput {
   id: string;
   title?: string;
-  content: string;
+  content?: string;
+  filePath?: string;
+}
+
+function resolveTicketContent(ticket: TicketInput | string): { id: string; title?: string; content: string } {
+  if (typeof ticket === "string") {
+    return { id: "ticket", content: ticket };
+  }
+  let content = ticket.content;
+  if (!content && ticket.filePath && fs.existsSync(ticket.filePath)) {
+    try {
+      content = fs.readFileSync(ticket.filePath, "utf-8");
+    } catch {
+      // ignore
+    }
+  }
+  return {
+    id: ticket.id,
+    title: ticket.title,
+    content: content || "",
+  };
 }
 
 export interface StageAgentCommonOptions {
@@ -435,10 +456,7 @@ export async function runPlannerAgent(options: PlannerOptions): Promise<{
 
   const { model, streamFn } = resolveAgentContext(options);
 
-  const ticketObj: TicketInput =
-    typeof options.ticket === "string"
-      ? { id: "ticket", content: options.ticket }
-      : options.ticket;
+  const ticketObj = resolveTicketContent(options.ticket);
 
   const agent = new Agent({
     initialState: {
@@ -490,10 +508,7 @@ export async function runCoderAgent(options: CoderOptions): Promise<{
 
   const { model, streamFn } = resolveAgentContext(options);
 
-  const ticketObj: TicketInput =
-    typeof options.ticket === "string"
-      ? { id: "ticket", content: options.ticket }
-      : options.ticket;
+  const ticketObj = resolveTicketContent(options.ticket);
 
   const planText =
     typeof options.plan === "string" ? options.plan : JSON.stringify(options.plan, null, 2);
@@ -547,10 +562,7 @@ export async function runReviewerAgent(options: ReviewerOptions): Promise<{
 
   const { model, streamFn } = resolveAgentContext(options);
 
-  const ticketObj: TicketInput =
-    typeof options.ticket === "string"
-      ? { id: "ticket", content: options.ticket }
-      : options.ticket;
+  const ticketObj = resolveTicketContent(options.ticket);
 
   const planText =
     typeof options.plan === "string" ? options.plan : JSON.stringify(options.plan, null, 2);
