@@ -10,7 +10,7 @@ Software engineers wanting to automate feature development, bug fixing, and code
 
 A cloud-native Software Factory operating as a Factory Hub that provisions ephemeral Modal Sandboxes to execute engineering tasks from target repositories' Local Markdown Issue Trackers.
 
-A local Python launcher (`factory/run.py`) takes a target project name (`secrets/<project-name>`), feature slug, and optional issue ID, and provisions an isolated ephemeral Modal Sandbox with mounted factory harness code. Inside the sandbox, the target repository is cloned, smart branch detection checks out `factory/<feature>`, the repository is verified against the in-sandbox Pre-flight Guard (ensuring `/setup-matt-pocock-skills` configuration), and an Assembly Line Pipeline powered by the Pi Agent Harness (`@earendil-works/pi-agent-core`) executes specialized least-privilege stages:
+A local Python launcher (`factory/run.py`) takes a target project name (`secrets/<project-name>` or `secrets_testing/<project-name>` via `--testing`), feature slug, and optional issue ID, and provisions an isolated ephemeral Modal Sandbox with mounted factory harness code. Inside the sandbox, the target repository is cloned, smart branch detection checks out `factory/<feature>`, the repository is verified against the in-sandbox Pre-flight Guard (ensuring `/setup-matt-pocock-skills` configuration), and an Assembly Line Pipeline powered by the Pi Agent Harness (`@earendil-works/pi-agent-core`) executes specialized least-privilege stages:
 1. **Planner Agent** (read-only): inspects the codebase, drafts `plan.md`, and discovers test commands.
 2. **Coder Agent** (read/write/bash): writes implementation and reproduction tests on a shared Feature Branch (`factory/<feature>`).
 3. **Deterministic Verifier**: executes test suites as a non-agentic test runner (exit codes cannot be hallucinated).
@@ -21,7 +21,7 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 ## User Stories
 
 1. As a software engineer, I want to define features and tickets in a Local Markdown Issue Tracker (`.scratch/<feature>/`) in the target repository's version control, so that my task specifications are co-located, offline-first, and tracked in Git.
-2. As a software engineer, I want to run `python factory/run.py --project <project-name> --feature <slug> [--issue <id>]` from my terminal, so that the factory launches a sandbox to execute unblocked tickets on that project's frontier.
+2. As a software engineer, I want to run `python factory/run.py --project <project-name> --feature <slug> [--issue <id>] [--testing]` from my terminal, so that the factory launches a sandbox to execute unblocked tickets on that project's frontier, utilizing isolated test secrets (`secrets_testing/`) when requested.
 3. As a software engineer, I want autonomous feature batch execution inside a single warm sandbox, so that all unblocked tickets across a feature tree are sequentially executed, committed, and pushed with zero repeated container startup overhead.
 4. As a factory operator, I want the factory runner to use Modal's direct Python client SDK (`modal.Sandbox.create`) with mounted factory code and the standard 16-hour execution timeout, so that jobs run reliably without deploying intermediate serverless worker applications.
 5. As a security-conscious engineer, I want every ticket execution to run inside an ephemeral Modal Sandbox, so that untrusted code, external dependency installs, and agent tool commands are completely isolated.
@@ -42,10 +42,10 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 
 ## Implementation Decisions
 
-- **Control Plane Architecture**: The Factory Runner is implemented as a direct Python script in `factory/run.py`, validating `secrets/<project-name>/fetch.env` locally and launching an ephemeral sandbox via `modal.Sandbox.create()` with mounted `sandbox/factory/` code and the standard 16-hour timeout from `sandbox/main.py`.
+- **Control Plane Architecture**: The Factory Runner is implemented as a direct Python script in `factory/run.py`, validating `secrets/<project-name>/fetch.env` (or `secrets_testing/<project-name>/fetch.env` when `--testing` is specified) locally and launching an ephemeral sandbox via `modal.Sandbox.create()` with mounted `sandbox/factory/` code and the standard 16-hour timeout from `sandbox/main.py`. Ephemeral test Modal apps use the `test-` prefix per ADR 0029.
 - **In-Sandbox Assembly Line & Batch Runner**: Implemented in TypeScript under `sandbox/factory/` using `@earendil-works/pi-agent-core` and `@earendil-works/pi-ai`, executed on the pre-baked Node.js 24 runtime inside the sandbox. It clones the target repository, checks out `factory/<feature>`, runs pre-flight checks, executes tickets sequentially on the frontier, pushes each resolved ticket to `origin factory/<feature>`, and halts immediately if retries fail.
 - **Provider & Model Configuration**: Configured in `sandbox/factory/provider.ts` to connect to OpenCode Go using `OPENCODE_GO_API_KEY` (ephemerally decrypted at boot from `secrets/opencode.env`). Exclusively supports `DeepSeek V4.1 Flash` (default) and `MiMo-V2.6-Flash`.
-- **Pre-flight Guard**: Implemented in `sandbox/factory/preflight.ts`. Validates that the target repository contains `.scratch/<feature>/spec.md`, root or domain `CONTEXT.md`, and issue tracking configuration before pipeline execution starts.
+- **Pre-flight Guard**: Implemented in `sandbox/factory/preflight.ts`. Validates that the target repository contains `.scratch/<feature>/spec.md`, root or domain `CONTEXT.md` (or `GLOSSARY.md`), and issue tracking configuration before pipeline execution starts.
 - **Role Permissions & Specialization**:
   - Planner: Given read-only file viewing, search, and directory navigation tools. Produces `plan.md` specifying files to touch, approach, and test commands.
   - Coder: Given file read, write, edit, and bash execution tools. Implements changes and commits to the feature branch.
@@ -58,11 +58,11 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 
 - **Testing Seam**: The primary test seam is the In-Sandbox Pipeline Runner interface (`pipeline.ts` / `batch.ts`) and the Host Runner interface (`run.py`). The assembly line is treated as a deep module: callers provide a target project secret, feature slug, and optional ticket, and the pipeline executes the entire lifecycle behind this compact interface.
 - **Good Test Criteria**: Tests must verify observable behavior:
-  - Pre-flight guard aborts cleanly when given a repository missing `.scratch/` or `CONTEXT.md`.
+  - Pre-flight guard aborts cleanly when given a repository missing `.scratch/` or `CONTEXT.md` / `GLOSSARY.md`.
   - Deterministic verifier accurately flags passing vs. failing test commands based on exit codes.
   - Self-correction loop retries up to 2 times on failing tests and terminates with `ready-for-human` on persistent failures.
   - Successful runs produce the expected git commit on the feature branch and update the ticket status to `resolved`.
-- **Prior Art & Test Beds**: Existing tests in `projects/test1` and sandbox runner tests serve as prior art for executing commands within the environment. Local integration tests can run the pipeline directly against a test project fixture without requiring external GitHub credentials.
+- **Prior Art & Test Beds**: Existing test fixtures under `secrets_testing/` (`test1`, `test2`) and sandbox runner tests serve as prior art for executing commands within the environment. Local and cloud integration tests can run the pipeline directly against isolated test fixtures with the `--testing` flag without touching production secrets.
 
 ## Out of Scope
 
@@ -73,5 +73,5 @@ If verification or review fails, a Self-Correction Loop feeds errors back to the
 
 ## Further Notes
 
-- Architecture is governed by ADRs 0023, 0024, 0025, 0026, and 0027 in `docs/adr/`.
+- Architecture is governed by ADRs 0023, 0024, 0025, 0026, 0027, 0028, and 0029 in `docs/adr/`.
 - Domain terminology is maintained in `CONTEXT.md`.
