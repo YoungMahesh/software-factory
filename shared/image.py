@@ -12,6 +12,8 @@ LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
 REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
 LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
 REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
+LOCAL_ANTIGRAVITY_ONBOARDING = SHARED_DIR / "antigravity-onboarding.json"
+REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
 LOCAL_SETUP_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "setup.sh"
 REMOTE_SETUP_SCRIPT = "/root/scripts/setup.sh"
@@ -149,7 +151,7 @@ def build_sandbox_image(
     if agy:
         image = image.run_commands(
             "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-            "mkdir -p /root/.gemini/antigravity-cli",
+            "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
         )
         path_prefixes.append("/root/.local/bin")
         if LOCAL_ANTIGRAVITY_SETTINGS.exists():
@@ -159,6 +161,10 @@ def build_sandbox_image(
         if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
             image = image.add_local_file(
                 LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
+            )
+        if LOCAL_ANTIGRAVITY_ONBOARDING.exists():
+            image = image.add_local_file(
+                LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING, copy=True
             )
         if LOCAL_ANTIGRAVITY_SECRET.exists():
             image = image.add_local_file(

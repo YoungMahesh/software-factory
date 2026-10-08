@@ -333,6 +333,7 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
 echo "=== Antigravity CLI ===" && agy --version 2>/dev/null || true
 echo "=== Antigravity Remote Control Status ===" && agy remote-control status 2>/dev/null || true
 echo "=== Antigravity Settings ===" && cat ~/.gemini/antigravity-cli/settings.json 2>/dev/null || true
+echo "=== Antigravity Onboarding ===" && cat ~/.gemini/antigravity-cli/cache/onboarding.json 2>/dev/null || true
 echo "=== OAuth Token ===" && ls -la ~/.gemini/antigravity-cli/antigravity-oauth-token 2>/dev/null || true
 EOF
     chmod +x /usr/local/bin/check-antigravity 2>/dev/null || true

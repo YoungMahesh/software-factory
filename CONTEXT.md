@@ -69,7 +69,7 @@ The authenticated session credential for the Antigravity CLI, encrypted with SOP
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
-Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`) and mounted into sandboxes at runtime.
+Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`, `shared/antigravity-onboarding.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
 **Modal Client Credentials**:

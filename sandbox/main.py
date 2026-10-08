@@ -107,7 +107,7 @@ def main():
     parser.add_argument(
         "--agy",
         action="store_true",
-        help="Also set up antigravity-cli and launch the background Antigravity Remote Control daemon (mounts shared settings & keybindings and automatically enables SOPS secret decryption).",
+        help="Also set up antigravity-cli and launch the background Antigravity Remote Control daemon (mounts shared settings, keybindings & onboarding and automatically enables SOPS secret decryption).",
     )
     parser.add_argument(
         "--opencode-port",
