@@ -4,13 +4,40 @@
 
 **Blocked by:** 05: Modal Factory Sandbox Spawner and Container Entrypoint
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Implements the host CLI entry point (`factory/run.py`) accepting `--project <name>` and `--feature <slug>`
-- [ ] Validates locally that `fetch.env` exists in `secrets/<project-name>/` (or `secrets_testing/<project-name>/` when testing) before attempting cloud launch
-- [ ] Supports `--testing` / `--test` flag to target isolated test repositories under `secrets_testing/`
-- [ ] Supports `--issue <id>` to target a specific ticket, defaulting to the full unblocked feature frontier
-- [ ] Supports `--vm` to dynamically launch a VM Sandbox instead of the default Standard Sandbox
-- [ ] Supports `--model` to toggle between `DeepSeek V4.1 Flash` (default) and `MiMo-V2.6-Flash`
-- [ ] Streams live sandbox logs to the terminal via `modal.enable_output()`
-- [ ] Returns the sandbox process exit code cleanly upon completion
+- [x] Implements the host CLI entry point (`factory/run.py`) accepting `--project <name>` and `--feature <slug>`
+- [x] Validates locally that `fetch.env` exists in `secrets/<project-name>/` (or `secrets_testing/<project-name>/` when testing) before attempting cloud launch
+- [x] Supports `--testing` / `--test` flag to target isolated test repositories under `secrets_testing/`
+- [x] Supports `--issue <id>` to target a specific ticket, defaulting to the full unblocked feature frontier
+- [x] Supports `--vm` to dynamically launch a VM Sandbox instead of the default Standard Sandbox
+- [x] Supports `--model` to toggle between `DeepSeek V4.1 Flash` (default) and `MiMo-V2.6-Flash`
+- [x] Streams live sandbox logs to the terminal via `modal.enable_output()`
+- [x] Returns the sandbox process exit code cleanly upon completion
+
+## Comments
+
+Implemented the host CLI entry point (`factory/run.py`) and dispatcher engine following TDD across three modular seams:
+
+1. **CLI Argument Parser & Model Normalization (`factory/run.py`)**:
+   - Accepts `--project` (`-p`) and `--feature` (`-f`) as required flags.
+   - Accepts `--issue` (`-i`), defaulting to `None` for Autonomous Feature Batch execution.
+   - Supports `--vm` (with optional `--memory <GB>`) for full VM sandboxes.
+   - Supports `--testing` / `--test` to target test fixtures under `secrets_testing/`.
+   - Supports `--model` (`-m`), defaulting to `DeepSeek V4.1 Flash` (`deepseek-v4.1-flash`) and allowing toggling to `MiMo-V2.6-Flash` (`mimo-v2.6-flash`). Normalizes case, aliases, and hyphenation while rejecting unsupported models with clean CLI errors.
+   - Enhanced `sandbox/factory/provider.ts` to normalize model display names with spaces identically.
+
+2. **Local Pre-Flight Secret Validation (`validate_project_secrets`)**:
+   - Validates that `fetch.env` exists in `secrets/<project>/` or `secrets_testing/<project>/` prior to cloud launch.
+   - Rejects missing secret bundles cleanly on stderr with exit code 1 without calling Modal APIs.
+
+3. **Execution Dispatch & Log Streaming (`main`)**:
+   - Wraps sandbox execution in `modal.enable_output()` context.
+   - Dispatches via `factory.orchestrator.dispatch_job` with live streaming to stdout/stderr.
+   - Propagates the sandbox process return code cleanly to the terminal (0 on success, non-zero on failure).
+   - Re-exports `main`, `run_cli`, and secret validation at top-level `factory` package.
+
+4. **Test Verification & Quality**:
+   - 40 passing Python unit tests (`pytest`).
+   - 82 passing TypeScript unit tests (`pnpm test` in `sandbox/factory`).
+   - Clean static typecheck with zero errors across all modules (`mypy factory/ tests/`).

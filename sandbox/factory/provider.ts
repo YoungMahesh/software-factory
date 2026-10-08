@@ -123,10 +123,20 @@ export function createOpenCodeGoProvider(options?: {
 export function normalizeModelAlias(modelId?: string): string {
   if (!modelId) return DEFAULT_MODEL_ID;
   const lower = modelId.toLowerCase().trim();
-  if (lower === "mimo" || lower === "mimo-flash") {
+  if (
+    lower === "mimo" ||
+    lower === "mimo-flash" ||
+    lower === "mimo-v2.6-flash" ||
+    lower === "mimo v2.6 flash"
+  ) {
     return "mimo-v2.6-flash";
   }
-  if (lower === "deepseek" || lower === "deepseek-flash") {
+  if (
+    lower === "deepseek" ||
+    lower === "deepseek-flash" ||
+    lower === "deepseek-v4.1-flash" ||
+    lower === "deepseek v4.1 flash"
+  ) {
     return "deepseek-v4.1-flash";
   }
   return modelId.trim();

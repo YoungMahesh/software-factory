@@ -136,6 +136,17 @@ test("getFactoryModel: resolves CLI alias 'mimo' to MiMo-V2.6-Flash per ADR 0027
   assert.equal(model.name, "MiMo-V2.6-Flash");
 });
 
+test("getFactoryModel: resolves display names with spaces (DeepSeek V4.1 Flash & MiMo V2.6 Flash)", () => {
+  const provider = createOpenCodeGoProvider({ apiKey: "test-api-key" });
+  const deepseek = getFactoryModel("DeepSeek V4.1 Flash", provider);
+  assert.equal(deepseek.id, "deepseek-v4.1-flash");
+  assert.equal(deepseek.name, "DeepSeek V4.1 Flash");
+
+  const mimo = getFactoryModel("MiMo V2.6 Flash", provider);
+  assert.equal(mimo.id, "mimo-v2.6-flash");
+  assert.equal(mimo.name, "MiMo-V2.6-Flash");
+});
+
 test("getFactoryModel: rejects unsupported models", () => {
   const provider = createOpenCodeGoProvider({ apiKey: "test-api-key" });
   assert.throws(
@@ -143,3 +154,4 @@ test("getFactoryModel: rejects unsupported models", () => {
     (err) => err instanceof ProviderConfigError && /unsupported/i.test(err.message)
   );
 });
+

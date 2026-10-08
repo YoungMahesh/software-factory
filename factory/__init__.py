@@ -16,6 +16,15 @@ from factory.orchestrator import (
     spawn_factory_sandbox,
     stream_sandbox_logs,
 )
+from factory.run import (
+    DEFAULT_MODEL,
+    SUPPORTED_MODELS,
+    main,
+    main as run_cli,
+    normalize_model_name,
+    parse_args,
+    validate_project_secrets,
+)
 
 __all__ = [
     "FACTORY_CPU",
@@ -32,4 +41,12 @@ __all__ = [
     "run_factory_sandbox",
     "spawn_factory_sandbox",
     "stream_sandbox_logs",
+    "DEFAULT_MODEL",
+    "SUPPORTED_MODELS",
+    "main",
+    "run_cli",
+    "normalize_model_name",
+    "parse_args",
+    "validate_project_secrets",
 ]
+

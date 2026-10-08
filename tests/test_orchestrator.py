@@ -18,6 +18,10 @@ class TestFactoryOrchestrator(unittest.TestCase):
         self.assertTrue(hasattr(factory, "build_factory_image"))
         self.assertTrue(hasattr(factory, "FactorySpawnConfig"))
         self.assertTrue(hasattr(factory, "dispatch_job"))
+        self.assertTrue(hasattr(factory, "run_cli"))
+        self.assertTrue(hasattr(factory, "main"))
+        self.assertTrue(hasattr(factory, "validate_project_secrets"))
+
 
     @patch("factory.orchestrator.run_factory_sandbox")
     def test_dispatch_job(self, mock_run):
