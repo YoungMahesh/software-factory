@@ -2,8 +2,6 @@ This repository is about creating scripts for modal.com sandboxes
 
 Documentation: https://modal.com/docs/sdk/py/latest/Sandbox
 
-Do not launch sandboxes unless explicitly asked by the user.
-
 ## Domain docs
 
 - Single-context layout: [`CONTEXT.md`](CONTEXT.md) and [`docs/adr/`](docs/adr/) at root.
