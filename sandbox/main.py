@@ -40,6 +40,7 @@ def print_access_info(
     memory_gb: int | None = None,
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
+    sops_enabled: bool = False,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
@@ -51,6 +52,8 @@ def print_access_info(
         print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
     if metro_url:
         print(f"  • Metro:    {metro_url} (port {metro_port})")
+    if sops_enabled:
+        print("  • SOPS:     Configured (~/.config/sops/age/keys.txt)")
     if opencode_url:
         print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
         if opencode_password:
@@ -155,6 +158,11 @@ def main():
         action="store_true",
         help="Disable the default Cloudflare Tunnel (3000.mahesh0.dev) for this sandbox.",
     )
+    parser.add_argument(
+        "--sops",
+        action="store_true",
+        help="Retain SOPS age private key and credentials in ~/.config/sops for interactive debugging.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -251,6 +259,9 @@ def main():
     if args.modal:
         env["ENABLE_MODAL"] = "1"
 
+    if args.sops:
+        env["ENABLE_SOPS"] = "1"
+
     if browser_active:
         env["ENABLE_BROWSER"] = "1"
 
@@ -272,6 +283,8 @@ def main():
         features.append("OpenCode")
     if args.modal:
         features.append("Modal")
+    if args.sops:
+        features.append("SOPS")
     if browser_active:
         features.append("Browser")
 
@@ -351,6 +364,7 @@ def main():
         memory_gb=memory_gb,
         agy_enabled=args.agy,
         cloudflare_enabled=not args.no_cloudflare,
+        sops_enabled=args.sops,
     )
 
 

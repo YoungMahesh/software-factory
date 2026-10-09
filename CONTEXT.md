@@ -58,7 +58,7 @@ _Avoid_: Dummy secrets, mock secrets, test credentials, test envs
 
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt the Repository Fetch Secret (`secrets/<secret-name>/fetch.env`) and Cloudflare Tunnel token (`secrets/cloudflare.env`) in `startup.sh`, temporarily configures an Age key file at `~/.config/sops/age/keys.txt` (mode 0600) to execute the Tooling Setup Script (`/root/scripts/setup.sh` with `--agy`, `--modal`, and/or `--opencode`), and unconditionally purges `~/.config/sops` and unsets `AGE_PRIVATE_KEY` from memory to prevent credential persistence in active sandboxes.
+A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt repository credentials and tooling configuration, purging encryption keys by default before user session handoff unless explicitly retained via `--sops`.
 _Avoid_: Sops setup, age injection, secret script
 
 **Tooling Setup Script**:

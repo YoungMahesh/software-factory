@@ -360,9 +360,9 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ]; then
     if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: Credentials decryption requested (--agy, --modal, or --opencode), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
+        echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, or --sops), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
         exit 1
     fi
 
@@ -382,7 +382,7 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
     fi
 
     setup_status=0
-    if [ -f "/root/scripts/setup.sh" ]; then
+    if [ ${#setup_args[@]} -gt 0 ] && [ -f "/root/scripts/setup.sh" ]; then
         echo "🔐 Decrypting tooling credentials with SOPS..."
         bash /root/scripts/setup.sh "${setup_args[@]}" || setup_status=$?
     fi
@@ -391,12 +391,50 @@ fi
 # Scrub staged encrypted tooling secrets immediately after decryption
 rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token.json /root/secrets/modal.toml
 
-# Unconditionally scrub AGE_PRIVATE_KEY and temporary SOPS state across all sandboxes
-if [ -n "${AGE_PRIVATE_KEY:-}" ] || [ -d ~/.config/sops ]; then
-    rm -rf ~/.config/sops
-    echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
-    grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
-    unset AGE_PRIVATE_KEY
+if [ "${ENABLE_SOPS:-}" = "1" ]; then
+    echo "🔐 SOPS credentials retained in sandbox (~/.config/sops/age/keys.txt)."
+    export SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"
+    export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
+
+    grep -qxF 'export SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"' ~/.bashrc 2>/dev/null || echo 'export SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"' >> ~/.bashrc
+    grep -qxF "export SOPS_AGE_KEY=\"$AGE_PRIVATE_KEY\"" ~/.bashrc 2>/dev/null || echo "export SOPS_AGE_KEY=\"$AGE_PRIVATE_KEY\"" >> ~/.bashrc
+    grep -qxF "export AGE_PRIVATE_KEY=\"$AGE_PRIVATE_KEY\"" ~/.bashrc 2>/dev/null || echo "export AGE_PRIVATE_KEY=\"$AGE_PRIVATE_KEY\"" >> ~/.bashrc
+
+    # Also persist to /etc/environment for non-interactive / login session consistency
+    grep -qxF 'SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"' /etc/environment 2>/dev/null || echo 'SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"' >> /etc/environment
+    grep -qxF "SOPS_AGE_KEY=\"$AGE_PRIVATE_KEY\"" /etc/environment 2>/dev/null || echo "SOPS_AGE_KEY=\"$AGE_PRIVATE_KEY\"" >> /etc/environment
+    grep -qxF "AGE_PRIVATE_KEY=\"$AGE_PRIVATE_KEY\"" /etc/environment 2>/dev/null || echo "AGE_PRIVATE_KEY=\"$AGE_PRIVATE_KEY\"" >> /etc/environment
+
+    # Also persist to /etc/profile.d for system-wide login shell activation
+    cat << EOF > /etc/profile.d/sops.sh
+export SOPS_AGE_KEY_FILE="/root/.config/sops/age/keys.txt"
+export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
+export AGE_PRIVATE_KEY="$AGE_PRIVATE_KEY"
+EOF
+    chmod +x /etc/profile.d/sops.sh 2>/dev/null || true
+
+    # Install on-demand inspection utility
+    cat << 'EOF' > /usr/local/bin/check-sops
+#!/usr/bin/env bash
+echo "=== SOPS Version ===" && sops --version
+echo "=== Age Key File ===" && ls -la ~/.config/sops/age/keys.txt 2>/dev/null || echo "Missing"
+echo "=== Environment Variables ==="
+echo "SOPS_AGE_KEY_FILE: ${SOPS_AGE_KEY_FILE:-}"
+echo "SOPS_AGE_KEY: ${SOPS_AGE_KEY:+[SET]}"
+echo "AGE_PRIVATE_KEY: ${AGE_PRIVATE_KEY:+[SET]}"
+if [ -f ~/.config/sops/age/keys.txt ]; then
+    echo "Key file exists and contains $(wc -l < ~/.config/sops/age/keys.txt) lines."
+fi
+EOF
+    chmod +x /usr/local/bin/check-sops 2>/dev/null || true
+else
+    # Unconditionally scrub AGE_PRIVATE_KEY and temporary SOPS state across all sandboxes
+    if [ -n "${AGE_PRIVATE_KEY:-}" ] || [ -d ~/.config/sops ]; then
+        rm -rf ~/.config/sops
+        echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
+        grep -qxF "unset AGE_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset AGE_PRIVATE_KEY" >> ~/.bashrc
+        unset AGE_PRIVATE_KEY
+    fi
 fi
 
 # Unconditionally scrub GH_TOKEN and ephemeral repository credentials from memory
