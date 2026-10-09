@@ -4,11 +4,20 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A typed GitHub REST client operates inside the sandbox environment using Node.js native fetch and authenticates via repository environment credentials without external npm dependencies.
-- [ ] An issue tracker provider abstraction interface defines contracts for pre-flight validation, milestone/spec retrieval, frontier issue discovery, claiming, and resolving tickets.
-- [ ] A GitHub issue tracker provider queries remote milestones and issues, parses `Blocked by: #<id>` dependencies from issue descriptions, and sorts unblocked open candidate tickets into a valid frontier.
-- [ ] A local issue tracker provider wraps existing local markdown `.scratch/` parsing to guarantee backward compatibility with existing test suites.
-- [ ] Pre-flight validation checks environment token credentials and remote milestone availability when in GitHub mode, and confirms the presence of domain documentation (`CONTEXT.md` or `GLOSSARY.md`), succeeding without `.scratch/` trees present.
-- [ ] Comprehensive unit tests verify mock GitHub milestone and issue parsing, frontier sorting with dependencies, and pre-flight validation success/failure paths.
+- [x] A typed GitHub REST client operates inside the sandbox environment using Node.js native fetch and authenticates via repository environment credentials without external npm dependencies.
+- [x] An issue tracker provider abstraction interface defines contracts for pre-flight validation, milestone/spec retrieval, frontier issue discovery, claiming, and resolving tickets.
+- [x] A GitHub issue tracker provider queries remote milestones and issues, parses `Blocked by: #<id>` dependencies from issue descriptions, and sorts unblocked open candidate tickets into a valid frontier.
+- [x] A local issue tracker provider wraps existing local markdown `.scratch/` parsing to guarantee backward compatibility with existing test suites.
+- [x] Pre-flight validation checks environment token credentials and remote milestone availability when in GitHub mode, and confirms the presence of domain documentation (`CONTEXT.md` or `GLOSSARY.md`), succeeding without `.scratch/` trees present.
+- [x] Comprehensive unit tests verify mock GitHub milestone and issue parsing, frontier sorting with dependencies, and pre-flight validation success/failure paths.
+
+## Comments
+
+### Quality Gate Audit
+
+- All 102 TypeScript tests in `sandbox/factory` pass (including 20+ new tests for `GitHubClient`, `GitHubIssueTracker`, `LocalScratchTracker`, tracker auto-detection, and GitHub preflight validation).
+- Full Python test suite (65 tests) passes.
+- TypeScript typecheck (`tsc --noEmit`) passes with zero errors.
+

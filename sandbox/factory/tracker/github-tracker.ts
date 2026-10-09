@@ -1,0 +1,324 @@
+import {
+  type Ticket,
+  type TicketStatus,
+  type PreflightCheckResult,
+  findContextFile,
+} from "../preflight.ts";
+import {
+  GitHubClient,
+  type GitHubIssue,
+  type GitHubMilestone,
+} from "../github.ts";
+import type {
+  IssueTracker,
+  ClaimTicketOptions,
+  ResolveTicketOptions,
+  EscalateTicketOptions,
+} from "./types.ts";
+
+export interface GitHubIssueTrackerOptions {
+  client?: GitHubClient;
+  token?: string;
+  owner?: string;
+  repo?: string;
+}
+
+export const FACTORY_LABELS = {
+  READY: "factory:ready",
+  CLAIMED: "factory:claimed",
+  RESOLVED: "factory:resolved",
+  READY_FOR_HUMAN: "factory:ready-for-human",
+} as const;
+
+/**
+ * Parses blocker issue numbers from issue markdown body ('Blocked by: #<id>' or 'Blocked by: None').
+ */
+export function parseGitHubBlockedBy(body?: string | null): string[] {
+  if (!body) return [];
+  const match = body.match(/(?:^|\n)\s*\*{0,2}Blocked\s+by\*{0,2}\s*:\s*\*{0,2}\s*([^\n\r]+)/i);
+  if (!match) return [];
+
+  const raw = match[1].trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/[\.;]+$/, "").trim();
+  if (!raw || /^none(?:\s*\(.*?\))?[\.\s]*$/i.test(raw)) {
+    return [];
+  }
+
+  const tokens = raw.split(",").map((t) => t.trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/[\.;]+$/, "").trim());
+  const blockerIds: string[] = [];
+
+  for (const token of tokens) {
+    if (/^none(?:\s*\(.*?\))?[\.\s]*$/i.test(token)) continue;
+    const numMatch = token.match(/#?(\d+)/);
+    if (numMatch) {
+      blockerIds.push(numMatch[1]);
+    } else if (token) {
+      blockerIds.push(token);
+    }
+  }
+
+  return blockerIds;
+}
+
+/**
+ * Maps GitHub issue state and labels to assembly line TicketStatus.
+ */
+export function mapGitHubIssueStatus(issue: GitHubIssue): TicketStatus {
+  if (issue.state === "closed") {
+    return "resolved";
+  }
+
+  const labelNames = (issue.labels || []).map((l) =>
+    typeof l === "string" ? l.toLowerCase() : l.name.toLowerCase()
+  );
+
+  if (labelNames.includes(FACTORY_LABELS.RESOLVED)) {
+    return "resolved";
+  }
+  if (labelNames.includes(FACTORY_LABELS.READY_FOR_HUMAN)) {
+    return "ready-for-human";
+  }
+  if (labelNames.includes(FACTORY_LABELS.CLAIMED)) {
+    return "claimed";
+  }
+  if (labelNames.includes(FACTORY_LABELS.READY)) {
+    return "ready-for-agent";
+  }
+
+  return "ready-for-agent";
+}
+
+/**
+ * Converts a GitHub issue to an assembly line Ticket object.
+ */
+export function gitHubIssueToTicket(issue: GitHubIssue): Ticket {
+  const id = String(issue.number);
+  const number = issue.number;
+  const title = issue.title.trim();
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const status = mapGitHubIssueStatus(issue);
+  const blockedBy = parseGitHubBlockedBy(issue.body);
+
+  return {
+    id,
+    number,
+    slug,
+    title,
+    status,
+    blockedBy,
+    filePath: issue.html_url ?? `https://github.com/issue/${issue.number}`,
+  };
+}
+
+export class GitHubIssueTracker implements IssueTracker {
+  public readonly id = "github" as const;
+  public readonly client: GitHubClient;
+  private cachedMilestones: Map<string, GitHubMilestone | null> = new Map();
+
+  constructor(options: GitHubIssueTrackerOptions = {}) {
+    this.client = options.client ?? new GitHubClient(options);
+  }
+
+  private async resolveMilestone(featureSlug: string): Promise<GitHubMilestone | null> {
+    if (this.cachedMilestones.has(featureSlug)) {
+      return this.cachedMilestones.get(featureSlug)!;
+    }
+    const milestone = await this.client.getMilestone(featureSlug);
+    this.cachedMilestones.set(featureSlug, milestone);
+    return milestone;
+  }
+
+  public async validatePreflight(
+    workspaceDir: string,
+    featureSlug: string
+  ): Promise<PreflightCheckResult> {
+    const errors: string[] = [];
+
+    // 1. Validate domain documentation (CONTEXT.md or GLOSSARY.md)
+    const contextFile = findContextFile(workspaceDir);
+    if (!contextFile) {
+      errors.push(
+        "Missing domain context documentation: 'CONTEXT.md' or 'GLOSSARY.md' not found at repository root or in domain paths. Please define the domain glossary in CONTEXT.md or GLOSSARY.md."
+      );
+    }
+
+    // 2. Validate token presence
+    if (!this.client.token) {
+      errors.push("Missing GitHub token: GH_TOKEN or GITHUB_TOKEN environment variable is required.");
+    }
+
+    // 3. Validate remote milestone availability and candidate issues
+    try {
+      const milestone = await this.resolveMilestone(featureSlug);
+      if (!milestone) {
+        errors.push(
+          `Milestone "${featureSlug}" not found in repository ${this.client.owner}/${this.client.repo}. Please ensure the GitHub Milestone exists and is open.`
+        );
+      } else {
+        const issues = await this.client.listIssuesForMilestone(milestone.number);
+        if (issues.length === 0) {
+          errors.push(
+            `Milestone "${featureSlug}" has no issues assigned. Please create at least one GitHub Issue in milestone "${featureSlug}".`
+          );
+        }
+      }
+    } catch (err: any) {
+      errors.push(
+        `Failed to query GitHub repository ${this.client.owner}/${this.client.repo}: ${err?.message ?? String(err)}`
+      );
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+
+  public async getFeatureSpec(
+    _workspaceDir: string,
+    featureSlug: string
+  ): Promise<string | undefined> {
+    const milestone = await this.resolveMilestone(featureSlug);
+    if (!milestone) {
+      return undefined;
+    }
+    return milestone.description || undefined;
+  }
+
+  public async getTickets(
+    _workspaceDir: string,
+    featureSlug: string
+  ): Promise<Ticket[]> {
+    const milestone = await this.resolveMilestone(featureSlug);
+    if (!milestone) {
+      return [];
+    }
+
+    const issues = await this.client.listIssuesForMilestone(milestone.number, "all");
+    const tickets = issues.map(gitHubIssueToTicket);
+    tickets.sort((a, b) => a.number - b.number);
+    return tickets;
+  }
+
+  public async getFrontierTickets(
+    workspaceDir: string,
+    featureSlug: string
+  ): Promise<Ticket[]> {
+    const tickets = await this.getTickets(workspaceDir, featureSlug);
+    const ticketMap = new Map<string, Ticket>();
+    for (const t of tickets) {
+      ticketMap.set(t.id, t);
+      ticketMap.set(String(t.number), t);
+    }
+
+    const frontier: Ticket[] = [];
+
+    for (const ticket of tickets) {
+      const isOpen = ticket.status === "ready-for-agent" || ticket.status === "open";
+      if (!isOpen) {
+        continue;
+      }
+
+      let isUnblocked = true;
+      for (const blockerId of ticket.blockedBy) {
+        const blocker = ticketMap.get(blockerId) ?? ticketMap.get(String(parseInt(blockerId, 10)));
+        if (!blocker || blocker.status !== "resolved") {
+          isUnblocked = false;
+          break;
+        }
+      }
+
+      if (isUnblocked) {
+        frontier.push(ticket);
+      }
+    }
+
+    // Sort frontier in topological / numerical order
+    frontier.sort((a, b) => a.number - b.number);
+    return frontier;
+  }
+
+  private async updateTicketLabels(
+    ticketNumber: number,
+    labelsToAdd: string[],
+    labelsToRemove: string[]
+  ): Promise<string[]> {
+    const current = await this.client.getIssue(ticketNumber);
+    const existingLabels = (current.labels || []).map((l) =>
+      typeof l === "string" ? l : l.name
+    );
+
+    const updated = existingLabels
+      .filter((l) => !labelsToRemove.includes(l))
+      .concat(labelsToAdd.filter((l) => !existingLabels.includes(l)));
+
+    await this.client.updateIssue(ticketNumber, { labels: updated });
+    return updated;
+  }
+
+  public async claimTicket(
+    ticket: Ticket,
+    _options?: ClaimTicketOptions
+  ): Promise<void> {
+    await this.updateTicketLabels(
+      ticket.number,
+      [FACTORY_LABELS.CLAIMED],
+      [FACTORY_LABELS.READY, FACTORY_LABELS.READY_FOR_HUMAN]
+    );
+    ticket.status = "claimed";
+  }
+
+  public async resolveTicket(
+    ticket: Ticket,
+    options?: ResolveTicketOptions
+  ): Promise<void> {
+    await this.updateTicketLabels(
+      ticket.number,
+      [FACTORY_LABELS.RESOLVED],
+      [FACTORY_LABELS.CLAIMED, FACTORY_LABELS.READY]
+    );
+    ticket.status = "resolved";
+
+    const branch = options?.branch ? `**Branch:** \`${options.branch}\`\n\n` : "";
+    const commit = options?.commitSha ? `**Commit:** \`${options.commitSha}\`\n\n` : "";
+    const audit = options?.auditSummary ? `### Quality Gate Audit\n\n${options.auditSummary}\n` : "";
+
+    const commentBody = [
+      `## 🏭 Software Factory: Ticket Resolved`,
+      branch + commit + audit,
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      await this.client.addComment(ticket.number, commentBody);
+    } catch {
+      // Non-fatal if comment fails
+    }
+  }
+
+  public async escalateTicket(
+    ticket: Ticket,
+    options?: EscalateTicketOptions
+  ): Promise<void> {
+    await this.updateTicketLabels(
+      ticket.number,
+      [FACTORY_LABELS.READY_FOR_HUMAN],
+      [FACTORY_LABELS.CLAIMED, FACTORY_LABELS.RESOLVED]
+    );
+    ticket.status = "ready-for-human";
+
+    const branch = options?.branch ? `**Branch:** \`${options.branch}\`\n\n` : "";
+    const diagnostics = options?.failureDiagnostics
+      ? `### Failure Diagnostics\n\n${options.failureDiagnostics}\n`
+      : "";
+
+    const commentBody = [
+      `## ⚠️ Software Factory: Ticket Needs Human Intervention`,
+      branch + diagnostics,
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      await this.client.addComment(ticket.number, commentBody);
+    } catch {
+      // Non-fatal if comment fails
+    }
+  }
+}

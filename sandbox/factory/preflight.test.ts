@@ -6,13 +6,18 @@ import * as os from "node:os";
 
 import {
   validatePreflight,
+  validatePreflightAsync,
   assertPreflight,
+  assertPreflightAsync,
   parseTicket,
   parseTickets,
   getFrontierTickets,
   getNextFrontierTicket,
   PreflightError,
 } from "./preflight.ts";
+import { GitHubClient } from "./github.ts";
+import { GitHubIssueTracker } from "./tracker/github-tracker.ts";
+
 
 function createTempRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sf-test-repo-"));
@@ -335,3 +340,171 @@ test("smoke test: validates software-factory repo itself", (t) => {
   // As tickets are resolved, frontier advances to completion
   assert.ok(frontier.length === 0 || frontier.some((t) => t.id === "06"));
 });
+
+test("GitHub Pre-flight: fails when CONTEXT.md / GLOSSARY.md is missing", async () => {
+  const repo = createTempRepo();
+  try {
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "org",
+      repo: "repo",
+      fetch: async () => new Response("[]", { status: 200 }),
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-auth");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("Missing domain context documentation")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("GitHub Pre-flight: fails when remote milestone does not exist", async () => {
+  const repo = createTempRepo();
+  try {
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "org",
+      repo: "repo",
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/milestones")) {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-auth");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('Milestone "feat-auth" not found')));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("GitHub Pre-flight: fails when remote milestone has no assigned issues", async () => {
+  const repo = createTempRepo();
+  try {
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "org",
+      repo: "repo",
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/milestones")) {
+          return new Response(
+            JSON.stringify([{ id: 1, number: 10, title: "feat-auth", state: "open" }]),
+            { status: 200 }
+          );
+        }
+        if (url.includes("/issues?milestone=10")) {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-auth");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("has no issues assigned")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("GitHub Pre-flight: succeeds with CONTEXT.md and valid milestone issues without .scratch/ directory", async () => {
+  const repo = createTempRepo();
+  try {
+    // Only CONTEXT.md, NO .scratch/ directory
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+    assert.strictEqual(fs.existsSync(path.join(repo, ".scratch")), false);
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "software-factory-09-test",
+      repo: "target-repo",
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/milestones")) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 1,
+                number: 10,
+                title: "feat-auth",
+                description: "Overarching spec",
+                state: "open",
+              },
+            ]),
+            { status: 200 }
+          );
+        }
+        if (url.includes("/issues?milestone=10")) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 101,
+                number: 1,
+                title: "Ticket 1",
+                body: "Blocked by: None",
+                state: "open",
+                labels: [{ name: "factory:ready" }],
+              },
+            ]),
+            { status: 200 }
+          );
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-auth");
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.errors.length, 0);
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("validatePreflightAsync & assertPreflightAsync: delegates to tracker and throws PreflightError on failure", async () => {
+  const repo = createTempRepo();
+  try {
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "org",
+      repo: "repo",
+      fetch: async () => new Response("[]", { status: 200 }), // empty milestones
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await validatePreflightAsync(repo, "missing-feature", { tracker });
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.length > 0);
+
+    await assert.rejects(
+      async () => {
+        await assertPreflightAsync(repo, "missing-feature", { tracker });
+      },
+      (err: any) => {
+        assert.ok(err instanceof PreflightError);
+        assert.ok(err.errors.length > 0);
+        return true;
+      }
+    );
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+

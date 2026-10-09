@@ -139,6 +139,53 @@ export function validatePreflight(repoRoot: string, featureSlug: string): Prefli
   };
 }
 
+export interface PreflightOptions {
+  tracker?: import("./tracker/types.ts").IssueTracker;
+  trackerType?: import("./tracker/types.ts").TrackerType;
+  token?: string;
+  owner?: string;
+  repo?: string;
+}
+
+/**
+ * Validates prerequisites asynchronously using the resolved IssueTracker (GitHub or Local).
+ */
+export async function validatePreflightAsync(
+  repoRoot: string,
+  featureSlug: string,
+  options?: PreflightOptions
+): Promise<PreflightCheckResult> {
+  if (options?.tracker) {
+    return options.tracker.validatePreflight(repoRoot, featureSlug);
+  }
+
+  const { resolveIssueTracker } = await import("./tracker/factory.ts");
+  const tracker = resolveIssueTracker({
+    workspaceDir: repoRoot,
+    featureSlug,
+    trackerType: options?.trackerType,
+    token: options?.token,
+    owner: options?.owner,
+    repo: options?.repo,
+  });
+
+  return tracker.validatePreflight(repoRoot, featureSlug);
+}
+
+/**
+ * Validates prerequisites asynchronously and throws an actionable PreflightError if any are missing.
+ */
+export async function assertPreflightAsync(
+  repoRoot: string,
+  featureSlug: string,
+  options?: PreflightOptions
+): Promise<void> {
+  const result = await validatePreflightAsync(repoRoot, featureSlug, options);
+  if (!result.valid) {
+    throw new PreflightError(result.errors);
+  }
+}
+
 /**
  * Validates prerequisites and throws an actionable PreflightError if any are missing.
  */
@@ -148,6 +195,7 @@ export function assertPreflight(repoRoot: string, featureSlug: string): void {
     throw new PreflightError(result.errors);
   }
 }
+
 
 /**
  * Parses ticket identifier and numeric value from filename or header.
