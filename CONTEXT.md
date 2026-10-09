@@ -102,7 +102,7 @@ A background ingress service (`cloudflared`) pre-baked into the Shared Base Imag
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel, modal web tunnel, web url tunnel
 
 **Software Factory**:
-An automated software delivery system that ingests work items from a Local Markdown Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
+An automated software delivery system that ingests work items from an Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
 _Avoid_: Agent swarm, AI dev platform, autonomous loop
 
 **Factory Orchestrator**:
@@ -113,20 +113,32 @@ _Avoid_: Master runner, factory daemon, background coordinator
 A sequential workflow where specialized single-responsibility agents execute distinct stages with strict transition artifacts between them.
 _Avoid_: Autonomous loop, dynamic swarm, generalist runner
 
+**Issue Tracker Provider**:
+An abstraction interface within the assembly line harness that decouples ticket discovery, claiming, and resolution from underlying storage engines (GitHub Issue Tracker or Local Markdown Issue Tracker).
+_Avoid_: Ticket provider, tracker backend, issue driver
+
+**GitHub Issue Tracker**:
+A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests.
+_Avoid_: GitHub project, issue board, repo issues
+
 **Local Markdown Issue Tracker**:
 A filesystem-based task tracking convention that stores specifications and work items as markdown documents under `.scratch/<feature>/`.
 _Avoid_: Flat notes, scratchpad, local tickets
+
+**Feature Pull Request**:
+A GitHub Pull Request opened from a Feature Branch targeting `main` in Draft mode that aggregates sequential ticket commits and serves as the final human review and merge gate.
+_Avoid_: PR review, factory PR, merge request
 
 **Quality Gate**:
 A multi-tier verification barrier requiring passing deterministic test suites, verified reproduction/acceptance tests, and independent automated review before a work item is marked resolved.
 _Avoid_: CI check, validation pass
 
 **Factory Hub**:
-The central repository (`software-factory`) containing the serverless Factory Orchestrator and CLI Dispatcher. Its own `.scratch/` directory is strictly reserved for modifications to the software factory codebase itself, while all target projects maintain their own independent `.scratch/` directories.
+The central repository (`software-factory`) containing the serverless Factory Orchestrator and CLI Dispatcher. Its own `.scratch/` directory is strictly reserved for modifications to the software factory codebase itself, while all target projects maintain their own independent `.scratch/` directories or GitHub Issue Trackers.
 _Avoid_: Master repo, factory workspace, coordinator root
 
 **Target Project Workspace**:
-The cloned repository within an ephemeral Modal Sandbox that contains its own pre-configured `.scratch/` local-markdown issue tracker initialized via `/setup-matt-pocock-skills`.
+The cloned repository within an ephemeral Modal Sandbox that contains its domain context documentation and is operated on by the assembly line harness.
 _Avoid_: Remote repo, target directory, child workspace
 
 **OpenCode Go Provider**:
@@ -134,7 +146,7 @@ The LLM inference provider authenticated via `OPENCODE_GO_API_KEY` from OpenCode
 _Avoid_: OpenCode LLM, custom AI endpoint
 
 **Autonomous Feature Batch**:
-A continuous execution mode that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature in the target project's cloned `.scratch/` inside a single warm sandbox.
+A continuous execution mode that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature inside a single warm sandbox.
 _Avoid_: Batch mode, multi-run, auto sweep
 
 **Ticket Lifecycle**:
@@ -174,7 +186,7 @@ A shared Git branch named `factory/<feature>` on the target repository where seq
 _Avoid_: Issue branch, task branch, temporary branch
 
 **Pre-flight Guard**:
-A validation check executed upon repository checkout in the sandbox verifying that `/setup-matt-pocock-skills` prerequisites (`.scratch/`, `CONTEXT.md` or `GLOSSARY.md`, and agent issue tracking configuration) are present before assembly line stages proceed.
+A validation check executed upon repository checkout in the sandbox verifying that domain prerequisites (`CONTEXT.md` or `GLOSSARY.md`, and active issue tracker configuration) are present before assembly line stages proceed.
 _Avoid_: Healthcheck, bootstrap check, repo validator
 
 **Factory Testing Console**:
