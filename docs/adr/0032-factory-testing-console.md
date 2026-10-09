@@ -15,7 +15,12 @@ To streamline verification and interactive observation of autonomous assembly li
 
 - The canonical term **Factory Testing Console** is incorporated into `CONTEXT.md`.
 - A dedicated Python package `factory/ui/` provides the FastAPI application, in-memory job registry, GitHub discovery client, and SSE streaming endpoints.
-- Developers can launch the console via `python -m factory.ui`, `python factory/ui/server.py`, or `python factory/run.py --ui` (defaulting to `http://127.0.0.1:8080`).
+- Developers can launch the console via `python -m factory.ui`, `python factory/ui/server.py`, or `python factory/run.py --ui` (defaulting to `http://127.0.0.1:3000`).
 - The console dynamically queries GitHub API for member repositories under `software-factory-09-test` and inspects remote `.scratch/` trees for features and tickets, with full manual override capabilities.
 - Live job execution is tracked in an in-memory registry, streaming logs over SSE, parsing stage transitions (`PREFLIGHT`, `PLANNER`, `CODER`, `VERIFIER`, `REVIEWER`, `COMPLETED`), and offering an immediate Cancel button that calls `modal.Sandbox.terminate()`.
 - Production repository dispatch remains governed by the CLI Dispatcher; the console is specifically tailored for `software-factory-09-test` validation.
+
+## Amendments
+
+- **Port 3000 Default Alignment**: The default port was amended from `8080` to `3000` (with fallback to `PORT` environment variable) to align with standard sandbox web ingress per ADR 0021 (`https://3000.mahesh0.dev`), enabling zero-config access through Cloudflare Tunnel.
+

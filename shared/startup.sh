@@ -56,7 +56,8 @@ TARGET_PORT="${1:-3000}"
 CHECK_INTERVAL=2
 
 while true; do
-    if (echo > /dev/tcp/127.0.0.1/"$TARGET_PORT") 2>/dev/null; then
+    TARGET_HEX=$(printf "%04X" "$TARGET_PORT")
+    if grep -q -E ":${TARGET_HEX} [0-9A-F:]+ 0A" /proc/net/tcp /proc/net/tcp6 2>/dev/null; then
         # Port is OPEN: ensure cloudflared is running
         if ! /etc/init.d/cloudflared status >/dev/null 2>&1; then
             echo "[$(date +%T)] 🚇 Port $TARGET_PORT is active. Starting Cloudflare Tunnel..."

@@ -8,6 +8,7 @@ modal.enable_output(), and propagates sandbox exit codes cleanly.
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 from typing import Sequence, TextIO
@@ -118,11 +119,19 @@ def create_parser() -> argparse.ArgumentParser:
         default=False,
         help="Launch the interactive Factory Testing Console web interface.",
     )
+    default_port = 3000
+    env_port = os.getenv("PORT")
+    if env_port is not None:
+        try:
+            default_port = int(env_port)
+        except ValueError:
+            default_port = 3000
+
     parser.add_argument(
         "--port",
         type=int,
-        default=8080,
-        help="Port for the Factory Testing Console (default: 8080).",
+        default=default_port,
+        help="Port for the Factory Testing Console (default: 3000).",
     )
     parser.add_argument(
         "--host",

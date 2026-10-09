@@ -1,6 +1,7 @@
 """Server runner for Factory Testing Console."""
 
 import argparse
+import os
 import sys
 import threading
 import time
@@ -10,16 +11,31 @@ import uvicorn
 from factory.ui.app import create_app
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8080
+
+
+def get_default_port() -> int:
+    """Returns the default port, respecting the PORT environment variable if valid."""
+    env_port = os.getenv("PORT")
+    if env_port is not None:
+        try:
+            return int(env_port)
+        except ValueError:
+            pass
+    return 3000
+
+
+DEFAULT_PORT = 3000
 
 
 def start_server(
     host: str = DEFAULT_HOST,
-    port: int = DEFAULT_PORT,
+    port: int | None = None,
     open_browser: bool = False,
     reload: bool = False,
 ) -> None:
     """Starts the Uvicorn server for the Factory Testing Console."""
+    if port is None:
+        port = get_default_port()
     app = create_app()
 
     if open_browser:
@@ -42,7 +58,7 @@ def start_server(
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for running the Factory Testing Console."""
     parser = argparse.ArgumentParser(
         prog="factory.ui",
@@ -53,12 +69,13 @@ def main() -> None:
         default=DEFAULT_HOST,
         help=f"Bind host address (default: {DEFAULT_HOST})",
     )
+    default_port = get_default_port()
     parser.add_argument(
         "-p",
         "--port",
         type=int,
-        default=DEFAULT_PORT,
-        help=f"Bind port number (default: {DEFAULT_PORT})",
+        default=default_port,
+        help=f"Bind port number (default: {default_port})",
     )
     parser.add_argument(
         "--open",
@@ -66,7 +83,7 @@ def main() -> None:
         default=False,
         help="Open web browser automatically on startup",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     start_server(host=args.host, port=args.port, open_browser=args.open)
 

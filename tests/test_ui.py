@@ -212,7 +212,7 @@ class TestCliDispatcherUiFlag(unittest.TestCase):
     def test_parse_args_ui_flags(self):
         args1 = parse_args(["--ui"])
         self.assertTrue(args1.ui)
-        self.assertEqual(args1.port, 8080)
+        self.assertEqual(args1.port, 3000)
         self.assertEqual(args1.host, "127.0.0.1")
 
         args2 = parse_args(["--console", "--port", "9090", "--host", "0.0.0.0"])
@@ -220,8 +220,49 @@ class TestCliDispatcherUiFlag(unittest.TestCase):
         self.assertEqual(args2.port, 9090)
         self.assertEqual(args2.host, "0.0.0.0")
 
+    def test_parse_args_ui_port_env_var(self):
+        with patch.dict("os.environ", {"PORT": "4567"}):
+            args = parse_args(["--ui"])
+            self.assertEqual(args.port, 4567)
+
+    def test_parse_args_ui_port_cli_precedence(self):
+        with patch.dict("os.environ", {"PORT": "4567"}):
+            args = parse_args(["--ui", "--port", "8989"])
+            self.assertEqual(args.port, 8989)
+
     @patch("factory.ui.server.start_server")
     def test_main_with_ui_flag(self, mock_start_server):
         code = main(["--ui", "--port", "8888"])
         self.assertEqual(code, 0)
         mock_start_server.assert_called_once_with(host="127.0.0.1", port=8888, open_browser=True)
+
+
+class TestServerRunner(unittest.TestCase):
+    def test_get_default_port_fallback(self):
+        with patch.dict("os.environ", {}, clear=True):
+            from factory.ui.server import get_default_port
+            self.assertEqual(get_default_port(), 3000)
+
+    def test_get_default_port_env(self):
+        with patch.dict("os.environ", {"PORT": "4000"}):
+            from factory.ui.server import get_default_port
+            self.assertEqual(get_default_port(), 4000)
+
+    def test_get_default_port_invalid_env(self):
+        with patch.dict("os.environ", {"PORT": "invalid"}):
+            from factory.ui.server import get_default_port
+            self.assertEqual(get_default_port(), 3000)
+
+    @patch("factory.ui.server.start_server")
+    def test_server_main_defaults(self, mock_start_server):
+        from factory.ui.server import main as server_main
+        with patch.dict("os.environ", {}, clear=True):
+            server_main([])
+            mock_start_server.assert_called_once_with(host="127.0.0.1", port=3000, open_browser=False)
+
+    @patch("factory.ui.server.start_server")
+    def test_server_main_custom_args(self, mock_start_server):
+        from factory.ui.server import main as server_main
+        server_main(["--host", "0.0.0.0", "-p", "5000", "--open"])
+        mock_start_server.assert_called_once_with(host="0.0.0.0", port=5000, open_browser=True)
+

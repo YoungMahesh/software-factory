@@ -17,3 +17,8 @@ Previously, sandboxes relied solely on ephemeral Modal tunnels (`sandbox.tunnels
 - An inspection utility `check-cloudflare` (aliased to `check-cf`) is created in `/usr/local/bin/` inside the sandbox to inspect version, service status, running processes, port watcher status, and token configuration.
 - `standard_sandbox/main.py` and `vm_sandbox/main.py` provide `--no-cloudflare` to disable tunnel startup and connector registration.
 - `print_access_info` announces `• Cloudflare: https://3000.mahesh0.dev (port 3000)` upon sandbox readiness.
+
+## Amendments
+
+- **Non-Intrusive Socket Monitoring**: The port watcher daemon in `shared/startup.sh` was amended from raw TCP socket writing (`echo > /dev/tcp/127.0.0.1/$PORT`) to inspecting `/proc/net/tcp` for listening sockets (`0A`). This eliminates spurious `Invalid HTTP request received` warnings in HTTP servers like Uvicorn caused by raw newline probes while preserving dynamic tunnel startup and shutdown.
+
