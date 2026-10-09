@@ -68,13 +68,13 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-p",
         "--project",
-        required=True,
+        default=None,
         help="Target project name (under secrets/<project> or software-factory-09-test/<project> when testing).",
     )
     parser.add_argument(
         "-f",
         "--feature",
-        required=True,
+        default=None,
         help="Feature slug matching target repository .scratch/<feature>/ (e.g. 'queues-page').",
     )
     parser.add_argument(
@@ -110,6 +110,25 @@ def create_parser() -> argparse.ArgumentParser:
         default=False,
         help="Target isolated test repositories under canonical test organization software-factory-09-test/.",
     )
+    parser.add_argument(
+        "--ui",
+        "--console",
+        dest="ui",
+        action="store_true",
+        default=False,
+        help="Launch the interactive Factory Testing Console web interface.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port for the Factory Testing Console (default: 8080).",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address for the Factory Testing Console (default: 127.0.0.1).",
+    )
     return parser
 
 
@@ -117,6 +136,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parses and validates command line arguments."""
     parser = create_parser()
     args = parser.parse_args(argv)
+
+    if getattr(args, "ui", False):
+        return args
+
+    if not args.project:
+        parser.error("the following arguments are required: -p/--project")
+    if not args.feature:
+        parser.error("the following arguments are required: -f/--feature")
+
     try:
         args.model = normalize_model_name(args.model)
     except ValueError as e:
@@ -158,6 +186,11 @@ def main(
     modal.enable_output(), and propagates the sandbox exit code cleanly.
     """
     args = parse_args(argv)
+
+    if getattr(args, "ui", False):
+        from factory.ui.server import start_server
+        start_server(host=args.host, port=args.port, open_browser=True)
+        return 0
 
     # Validate locally that target project fetch.env exists before cloud launch
     try:

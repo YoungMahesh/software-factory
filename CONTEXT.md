@@ -176,3 +176,8 @@ _Avoid_: Issue branch, task branch, temporary branch
 **Pre-flight Guard**:
 A validation check executed upon repository checkout in the sandbox verifying that `/setup-matt-pocock-skills` prerequisites (`.scratch/`, `CONTEXT.md` or `GLOSSARY.md`, and agent issue tracking configuration) are present before assembly line stages proceed.
 _Avoid_: Healthcheck, bootstrap check, repo validator
+
+**Factory Testing Console**:
+An interactive local web interface running on the developer workstation used to discover repositories under the Test Organization (`software-factory-09-test`), configure and dispatch ephemeral software factory sandboxes with test parameters, and monitor real-time assembly line stage transitions and execution logs.
+_Avoid_: Factory UI, test dashboard, web runner, factory web app
+

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Software Factory • Testing Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    pre, code, .font-mono { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="h-full flex flex-col antialiased">
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur px-6 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
+        🏭
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white flex items-center gap-2">
+          Software Factory
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            Testing Console
+          </span>
+        </h1>
+        <p class="text-xs text-slate-400 flex items-center gap-1.5">
+          <span>Target Organization:</span>
+          <a href="https://github.com/software-factory-09-test" target="_blank" class="font-mono text-indigo-400 hover:underline flex items-center gap-1">
+            {{ org }}
+            <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
+        </p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        Ephemeral Modal Runner Ready
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Split-Pane Workspace -->
+  <main class="flex-1 flex overflow-hidden">
+    <!-- Left Panel: Launch Parameters & Controls -->
+    <aside class="w-96 border-r border-slate-800 bg-slate-950/40 p-5 flex flex-col gap-5 overflow-y-auto shrink-0">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span>⚙️</span> Launch Configuration
+        </h2>
+        <button id="btn-refresh-repos" title="Refresh repositories from GitHub" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
+
+      <form id="launch-form" class="flex flex-col gap-4">
+        <!-- Target Repository -->
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Target Repository</label>
+          <div class="flex gap-2">
+            <select id="select-repo" class="flex-1 bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+              {% for r in repos %}
+              <option value="{{ r }}">{{ r }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Cloned into ephemeral sandbox with org token</p>
+        </div>
+
+        <!-- Target Feature Slug -->
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Feature Slug</label>
+          <div class="flex flex-col gap-1.5">
+            <select id="select-feature" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+              <option value="">Loading features...</option>
+            </select>
+            <input type="text" id="input-feature-custom" placeholder="Or enter custom feature slug" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Directory under <code class="text-indigo-400">.scratch/&lt;feature&gt;/</code></p>
+        </div>
+
+        <!-- Target Ticket / Issue -->
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Issue Ticket (Optional)</label>
+          <div class="flex flex-col gap-1.5">
+            <select id="select-issue" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+              <option value="">Full Autonomous Batch (All Unblocked)</option>
+            </select>
+            <input type="text" id="input-issue-custom" placeholder="Or specify ticket ID (e.g. 01)" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Leave empty to resolve all frontier tickets</p>
+        </div>
+
+        <!-- Model Selection -->
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Flagship LLM Model</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
+              <div class="flex items-center gap-1.5">
+                <input type="radio" name="model" value="deepseek-v4.1-flash" checked class="text-indigo-600 focus:ring-0">
+                <span class="text-xs font-semibold text-slate-200">DeepSeek</span>
+              </div>
+              <span class="text-[10px] text-slate-400 pl-4">V4.1 Flash (Default)</span>
+            </label>
+            <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
+              <div class="flex items-center gap-1.5">
+                <input type="radio" name="model" value="mimo-v2.6-flash" class="text-indigo-600 focus:ring-0">
+                <span class="text-xs font-semibold text-slate-200">MiMo</span>
+              </div>
+              <span class="text-[10px] text-slate-400 pl-4">V2.6 Flash</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- VM Sandbox Toggle -->
+        <div class="border border-slate-800 rounded-lg p-3 bg-slate-900/40">
+          <label class="flex items-center justify-between cursor-pointer">
+            <div>
+              <span class="text-xs font-medium text-slate-200 block">VM Virtualization</span>
+              <span class="text-[10px] text-slate-400 block">Docker daemon & swap memory</span>
+            </div>
+            <input type="checkbox" id="check-vm" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4 cursor-pointer">
+          </label>
+        </div>
+
+        <!-- Launch CTA -->
+        <button type="submit" id="btn-launch" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+          <span>🚀</span>
+          <span>Launch Factory Sandbox</span>
+        </button>
+      </form>
+
+      <!-- Quick Tips -->
+      <div class="mt-auto border-t border-slate-800 pt-4 text-[11px] text-slate-400 space-y-1.5">
+        <div class="font-medium text-slate-300">Assembly Line Protocol:</div>
+        <div>1. Pre-flight Guard verifies target repo</div>
+        <div>2. Feature branch <code class="text-indigo-400">factory/&lt;feature&gt;</code> created</div>
+        <div>3. Stages: Planner ➔ Coder ➔ Verifier ➔ Reviewer</div>
+        <div>4. Passing commits pushed to remote origin</div>
+      </div>
+    </aside>
+
+    <!-- Center Panel: Live Execution Dashboard -->
+    <section class="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+      <!-- Active Job Control Banner -->
+      <div class="border-b border-slate-800 bg-slate-900/60 px-6 py-3.5 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">Active Job:</span>
+            <span id="active-job-id" class="font-mono text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">None</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">Target:</span>
+            <span id="active-job-target" class="font-mono text-xs text-indigo-400">-</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">Status:</span>
+            <span id="active-job-status" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <span id="active-job-timer" class="font-mono text-xs text-slate-400">00:00</span>
+          <button id="btn-cancel" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition">
+            <span>🛑</span>
+            <span>Cancel Run</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Assembly Line Stage Stepper -->
+      <div class="border-b border-slate-800 bg-slate-950/80 px-6 py-3 shrink-0">
+        <div class="flex items-center justify-between max-w-4xl mx-auto" id="stage-stepper">
+          <!-- Step: Provisioning -->
+          <div class="step-item flex items-center gap-2" data-stage="PROVISIONING">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">0</div>
+            <span class="text-xs font-medium text-slate-400">Sandbox</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Preflight -->
+          <div class="step-item flex items-center gap-2" data-stage="PREFLIGHT">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">1</div>
+            <span class="text-xs font-medium text-slate-400">Pre-flight</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Planner -->
+          <div class="step-item flex items-center gap-2" data-stage="PLANNER">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">2</div>
+            <span class="text-xs font-medium text-slate-400">Planner</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Coder -->
+          <div class="step-item flex items-center gap-2" data-stage="CODER">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">3</div>
+            <span class="text-xs font-medium text-slate-400">Coder</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Verifier -->
+          <div class="step-item flex items-center gap-2" data-stage="VERIFIER">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">4</div>
+            <span class="text-xs font-medium text-slate-400">Verifier</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Reviewer -->
+          <div class="step-item flex items-center gap-2" data-stage="REVIEWER">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">5</div>
+            <span class="text-xs font-medium text-slate-400">Reviewer</span>
+          </div>
+          <div class="h-0.5 w-8 bg-slate-800"></div>
+
+          <!-- Step: Quality Gate -->
+          <div class="step-item flex items-center gap-2" data-stage="COMPLETED">
+            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">✓</div>
+            <span class="text-xs font-medium text-slate-400">Gate</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Terminal Output -->
+      <div class="flex-1 flex flex-col bg-black/90 overflow-hidden relative">
+        <!-- Terminal Header Toolbar -->
+        <div class="px-4 py-2 border-b border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400 shrink-0">
+          <div class="flex items-center gap-3">
+            <span class="font-medium text-slate-300 flex items-center gap-1.5">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              Live Execution Stream
+            </span>
+            <span id="log-line-count" class="font-mono text-[11px] bg-slate-800/60 px-2 py-0.5 rounded text-slate-400">0 lines</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+              <input type="checkbox" id="check-autoscroll" checked class="rounded bg-slate-800 text-indigo-600 w-3.5 h-3.5">
+              <span>Auto-scroll</span>
+            </label>
+            <button id="btn-copy-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
+              Copy Logs
+            </button>
+            <button id="btn-clear-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal Output View -->
+        <div id="terminal-body" class="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-200 space-y-0.5 selection:bg-indigo-500 selection:text-white whitespace-pre-wrap break-all">
+          <div class="text-slate-500 italic">Select launch parameters and click "Launch Factory Sandbox" to start a test run.</div>
+        </div>
+      </div>
+
+      <!-- Session Run History Drawer -->
+      <div class="border-t border-slate-800 bg-slate-950/90 h-44 shrink-0 flex flex-col">
+        <div class="px-6 py-2 border-b border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+          <span>RECENT TEST RUNS</span>
+          <span id="history-count" class="text-[11px] text-slate-500">0 jobs</span>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="text-[11px] text-slate-500 bg-slate-900/40 sticky top-0 border-b border-slate-800/50">
+              <tr>
+                <th class="px-6 py-1.5 font-medium">Job ID</th>
+                <th class="px-4 py-1.5 font-medium">Target Repo</th>
+                <th class="px-4 py-1.5 font-medium">Feature</th>
+                <th class="px-4 py-1.5 font-medium">Issue</th>
+                <th class="px-4 py-1.5 font-medium">Model</th>
+                <th class="px-4 py-1.5 font-medium">Status</th>
+                <th class="px-4 py-1.5 font-medium">Duration</th>
+                <th class="px-6 py-1.5 font-medium text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-slate-800/40 text-slate-300">
+              {% for job in jobs %}
+              <tr class="hover:bg-slate-900/40 transition">
+                <td class="px-6 py-2 font-bold text-slate-200">{{ job.id }}</td>
+                <td class="px-4 py-2">{{ job.repo }}</td>
+                <td class="px-4 py-2 text-indigo-400">{{ job.feature }}</td>
+                <td class="px-4 py-2">{{ job.issue or 'BATCH' }}</td>
+                <td class="px-4 py-2">{{ job.model.split('-')[0] }}</td>
+                <td class="px-4 py-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if job.status == 'SUCCESS' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% elif job.status == 'RUNNING' %}bg-blue-500/10 text-blue-400 border border-blue-500/20{% elif job.status == 'FAILED' %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else %}bg-slate-800 text-slate-400{% endif %}">
+                    {{ job.status }}
+                  </span>
+                </td>
+                <td class="px-4 py-2">{{ job.duration or '-' }}s</td>
+                <td class="px-6 py-2 text-right">
+                  <button onclick="viewJob('{{ job.id }}')" class="text-indigo-400 hover:text-indigo-300 hover:underline">View</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // State management
+    let activeJobId = null;
+    let eventSource = null;
+    let timerInterval = null;
+    let jobStartTime = null;
+    let repoMetadataCache = {};
+
+    const STAGES = ["PROVISIONING", "PREFLIGHT", "PLANNER", "CODER", "VERIFIER", "REVIEWER", "COMPLETED"];
+
+    // DOM Elements
+    const selectRepo = document.getElementById("select-repo");
+    const selectFeature = document.getElementById("select-feature");
+    const inputFeatureCustom = document.getElementById("input-feature-custom");
+    const selectIssue = document.getElementById("select-issue");
+    const inputIssueCustom = document.getElementById("input-issue-custom");
+    const btnLaunch = document.getElementById("btn-launch");
+    const btnCancel = document.getElementById("btn-cancel");
+    const btnRefreshRepos = document.getElementById("btn-refresh-repos");
+    const activeJobIdEl = document.getElementById("active-job-id");
+    const activeJobTargetEl = document.getElementById("active-job-target");
+    const activeJobStatusEl = document.getElementById("active-job-status");
+    const activeJobTimerEl = document.getElementById("active-job-timer");
+    const terminalBody = document.getElementById("terminal-body");
+    const logLineCount = document.getElementById("log-line-count");
+    const checkAutoscroll = document.getElementById("check-autoscroll");
+    const historyTableBody = document.getElementById("history-table-body");
+
+    // Load repo metadata (.scratch/ features and tickets)
+    async function loadRepoMetadata(repoName) {
+      if (!repoName) return;
+      selectFeature.innerHTML = '<option value="">Loading features from GitHub...</option>';
+      selectIssue.innerHTML = '<option value="">Full Autonomous Batch (All Unblocked)</option>';
+
+      try {
+        const resp = await fetch(`/api/repos/${repoName}/scratch`);
+        const data = await resp.json();
+        repoMetadataCache[repoName] = data;
+
+        selectFeature.innerHTML = '';
+        if (data.features && data.features.length > 0) {
+          data.features.forEach(f => {
+            const opt = document.createElement("option");
+            opt.value = f.slug;
+            opt.textContent = `${f.slug} (${f.issues.length} tickets)`;
+            selectFeature.appendChild(opt);
+          });
+          updateIssuesDropdown();
+        } else {
+          selectFeature.innerHTML = '<option value="">No .scratch/ features detected</option>';
+        }
+      } catch (err) {
+        selectFeature.innerHTML = '<option value="">Failed to query GitHub tree</option>';
+      }
+    }
+
+    function updateIssuesDropdown() {
+      const repoName = selectRepo.value;
+      const meta = repoMetadataCache[repoName];
+      const selectedFeatureSlug = selectFeature.value;
+
+      selectIssue.innerHTML = '<option value="">Full Autonomous Batch (All Unblocked)</option>';
+      if (!meta || !meta.features) return;
+
+      const featureObj = meta.features.find(f => f.slug === selectedFeatureSlug);
+      if (featureObj && featureObj.issues) {
+        featureObj.issues.forEach(iss => {
+          const opt = document.createElement("option");
+          opt.value = iss.id;
+          opt.textContent = `Ticket ${iss.id} (${iss.slug})`;
+          selectIssue.appendChild(opt);
+        });
+      }
+    }
+
+    selectRepo.addEventListener("change", () => loadRepoMetadata(selectRepo.value));
+    selectFeature.addEventListener("change", updateIssuesDropdown);
+
+    btnRefreshRepos.addEventListener("click", async () => {
+      btnRefreshRepos.classList.add("animate-spin");
+      try {
+        const resp = await fetch("/api/repos");
+        const data = await resp.json();
+        const current = selectRepo.value;
+        selectRepo.innerHTML = "";
+        data.repos.forEach(r => {
+          const opt = document.createElement("option");
+          opt.value = r;
+          opt.textContent = r;
+          if (r === current) opt.selected = true;
+          selectRepo.appendChild(opt);
+        });
+        await loadRepoMetadata(selectRepo.value);
+      } finally {
+        btnRefreshRepos.classList.remove("animate-spin");
+      }
+    });
+
+    // Update Stepper UI
+    function updateStepper(currentStage) {
+      const stageIdx = STAGES.indexOf(currentStage);
+      document.querySelectorAll(".step-item").forEach(el => {
+        const stageName = el.getAttribute("data-stage");
+        const idx = STAGES.indexOf(stageName);
+        const icon = el.querySelector(".step-icon");
+        const text = el.querySelector("span");
+
+        if (idx < stageIdx) {
+          icon.className = "step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
+          text.className = "text-xs font-medium text-emerald-400";
+        } else if (idx === stageIdx) {
+          icon.className = "step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-indigo-600 text-white animate-pulse shadow-md shadow-indigo-500/30 border border-indigo-400";
+          text.className = "text-xs font-bold text-indigo-400";
+        } else {
+          icon.className = "step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700";
+          text.className = "text-xs font-medium text-slate-400";
+        }
+      });
+    }
+
+    // Append logs to terminal
+    let lineCount = 0;
+    function appendTerminalText(text) {
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      const span = document.createElement("span");
+      span.textContent = text;
+      terminalBody.appendChild(span);
+      lineCount += (text.match(/\n/g) || []).length;
+      logLineCount.textContent = `${lineCount} lines`;
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+    }
+
+    // Connect SSE Stream
+    function connectJobStream(jobId) {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      activeJobId = jobId;
+      activeJobIdEl.textContent = jobId;
+      btnCancel.disabled = false;
+      terminalBody.innerHTML = "";
+      lineCount = 0;
+
+      eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
+
+      eventSource.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === "init") {
+            const job = msg.job;
+            activeJobTargetEl.textContent = `${job.repo} (${job.feature}${job.issue ? ` #${job.issue}` : ''})`;
+            setJobStatus(job.status);
+            updateStepper(job.stage);
+            if (msg.backlog && msg.backlog.length > 0) {
+              msg.backlog.forEach(l => appendTerminalText(l));
+            }
+          } else if (msg.event === "log") {
+            appendTerminalText(msg.data);
+          } else if (msg.event === "stage") {
+            updateStepper(msg.stage);
+          } else if (msg.event === "status") {
+            setJobStatus(msg.status);
+            refreshHistory();
+            if (["SUCCESS", "FAILED", "CANCELLED"].includes(msg.status)) {
+              btnCancel.disabled = true;
+              stopTimer();
+            }
+          }
+        } catch (err) {
+          console.error("Error parsing event:", err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        // stream closed or error
+      };
+    }
+
+    function setJobStatus(status) {
+      activeJobStatusEl.textContent = status;
+      activeJobStatusEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full border ";
+      if (status === "RUNNING") {
+        activeJobStatusEl.className += "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse";
+        startTimer();
+      } else if (status === "SUCCESS") {
+        activeJobStatusEl.className += "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+        stopTimer();
+      } else if (status === "FAILED") {
+        activeJobStatusEl.className += "bg-rose-500/10 text-rose-400 border-rose-500/20";
+        stopTimer();
+      } else if (status === "CANCELLED") {
+        activeJobStatusEl.className += "bg-amber-500/10 text-amber-400 border-amber-500/20";
+        stopTimer();
+      } else {
+        activeJobStatusEl.className += "bg-slate-800 text-slate-400 border-slate-700";
+      }
+    }
+
+    function startTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      jobStartTime = Date.now();
+      timerInterval = setInterval(() => {
+        const secs = Math.floor((Date.now() - jobStartTime) / 1000);
+        const m = String(Math.floor(secs / 60)).padStart(2, "0");
+        const s = String(secs % 60).padStart(2, "0");
+        activeJobTimerEl.textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    // Launch Job Form Submission
+    document.getElementById("launch-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const repo = selectRepo.value;
+      const feature = inputFeatureCustom.value.trim() || selectFeature.value;
+      const issue = inputIssueCustom.value.trim() || selectIssue.value || null;
+      const model = document.querySelector('input[name="model"]:checked').value;
+      const vm = document.getElementById("check-vm").checked;
+
+      if (!feature) {
+        alert("Please provide or select a feature slug.");
+        return;
+      }
+
+      btnLaunch.disabled = true;
+      btnLaunch.classList.add("opacity-60");
+
+      try {
+        const resp = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, feature, issue, model, vm }),
+        });
+        const job = await resp.json();
+        connectJobStream(job.id);
+        refreshHistory();
+      } catch (err) {
+        alert("Failed to launch job: " + err.message);
+      } finally {
+        btnLaunch.disabled = false;
+        btnLaunch.classList.remove("opacity-60");
+      }
+    });
+
+    // Cancel Job
+    btnCancel.addEventListener("click", async () => {
+      if (!activeJobId) return;
+      if (!confirm("Are you sure you want to terminate this sandbox run?")) return;
+      try {
+        await fetch(`/api/jobs/${activeJobId}/cancel`, { method: "POST" });
+        btnCancel.disabled = true;
+      } catch (err) {
+        alert("Failed to cancel job: " + err.message);
+      }
+    });
+
+    // Refresh History Table
+    async function refreshHistory() {
+      try {
+        const resp = await fetch("/api/jobs");
+        const data = await resp.json();
+        historyTableBody.innerHTML = "";
+        data.jobs.forEach(job => {
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-900/40 transition";
+          tr.innerHTML = `
+            <td class="px-6 py-2 font-bold text-slate-200">${job.id}</td>
+            <td class="px-4 py-2">${job.repo}</td>
+            <td class="px-4 py-2 text-indigo-400">${job.feature}</td>
+            <td class="px-4 py-2">${job.issue || 'BATCH'}</td>
+            <td class="px-4 py-2">${job.model.split('-')[0]}</td>
+            <td class="px-4 py-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${
+                job.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                job.status === 'RUNNING' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                job.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                'bg-slate-800 text-slate-400'
+              }">${job.status}</span>
+            </td>
+            <td class="px-4 py-2">${job.duration || '-'}s</td>
+            <td class="px-6 py-2 text-right">
+              <button onclick="viewJob('${job.id}')" class="text-indigo-400 hover:text-indigo-300 hover:underline">View</button>
+            </td>
+          `;
+          historyTableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error("Failed to refresh history:", err);
+      }
+    }
+
+    window.viewJob = function(jobId) {
+      connectJobStream(jobId);
+    };
+
+    // Copy Log Button
+    document.getElementById("btn-copy-log").addEventListener("click", () => {
+      navigator.clipboard.writeText(terminalBody.innerText).then(() => {
+        alert("Logs copied to clipboard!");
+      });
+    });
+
+    // Clear Log Button
+    document.getElementById("btn-clear-log").addEventListener("click", () => {
+      terminalBody.innerHTML = "";
+      lineCount = 0;
+      logLineCount.textContent = "0 lines";
+    });
+
+    // Initial load
+    if (selectRepo.value) {
+      loadRepoMetadata(selectRepo.value);
+    }
+  </script>
+</body>
+</html>
