@@ -211,4 +211,117 @@ test("GitHubClient: throws GitHubApiError on non-ok HTTP responses", async () =>
   );
 });
 
+test("GitHubClient: createPullRequest and updatePullRequest send correct payload", async () => {
+  let capturedUrl = "";
+  let capturedMethod = "";
+  let capturedBody = "";
+
+  const mockFetch: typeof globalThis.fetch = async (input, init) => {
+    capturedUrl = String(input);
+    capturedMethod = init?.method ?? "GET";
+    capturedBody = String(init?.body ?? "");
+    return new Response(
+      JSON.stringify({
+        id: 501,
+        number: 10,
+        title: "feat: new feature",
+        body: "PR body",
+        state: "open",
+        draft: true,
+        html_url: "https://github.com/org/repo/pull/10",
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const client = new GitHubClient({
+    token: "tok",
+    owner: "org",
+    repo: "repo",
+    fetch: mockFetch,
+  });
+
+  const pr = await client.createPullRequest({
+    title: "feat: new feature",
+    body: "PR body",
+    head: "factory/feature",
+    base: "main",
+    draft: true,
+  });
+
+  assert.ok(capturedUrl.endsWith("/repos/org/repo/pulls"));
+  assert.equal(capturedMethod, "POST");
+  assert.deepEqual(JSON.parse(capturedBody), {
+    title: "feat: new feature",
+    body: "PR body",
+    head: "factory/feature",
+    base: "main",
+    draft: true,
+  });
+  assert.equal(pr.number, 10);
+  assert.equal(pr.draft, true);
+
+  // Update PR
+  await client.updatePullRequest(10, { draft: false, body: "Updated body" });
+  assert.ok(capturedUrl.endsWith("/repos/org/repo/pulls/10"));
+  assert.equal(capturedMethod, "PATCH");
+  assert.deepEqual(JSON.parse(capturedBody), {
+    draft: false,
+    body: "Updated body",
+  });
+});
+
+test("GitHubClient: listPullRequests and getPullRequest send correct requests", async () => {
+  let capturedUrl = "";
+
+  const mockFetch: typeof globalThis.fetch = async (input) => {
+    capturedUrl = String(input);
+    if (capturedUrl.endsWith("/pulls/10")) {
+      return new Response(
+        JSON.stringify({
+          id: 501,
+          number: 10,
+          title: "feat: test",
+          body: "body",
+          state: "open",
+          draft: true,
+          html_url: "https://github.com/org/repo/pull/10",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(
+      JSON.stringify([
+        {
+          id: 501,
+          number: 10,
+          title: "feat: test",
+          body: "body",
+          state: "open",
+          draft: true,
+          html_url: "https://github.com/org/repo/pull/10",
+        },
+      ]),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const client = new GitHubClient({
+    token: "tok",
+    owner: "org",
+    repo: "repo",
+    fetch: mockFetch,
+  });
+
+  const prs = await client.listPullRequests({ state: "open", head: "org:factory/feature" });
+  assert.ok(capturedUrl.includes("/repos/org/repo/pulls?state=open&head=org%3Afactory%2Ffeature"));
+  assert.equal(prs.length, 1);
+  assert.equal(prs[0].number, 10);
+
+  const singlePr = await client.getPullRequest(10);
+  assert.ok(capturedUrl.endsWith("/repos/org/repo/pulls/10"));
+  assert.equal(singlePr.number, 10);
+});
+
+
 

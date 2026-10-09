@@ -237,6 +237,23 @@ export class GitHubClient {
       body: JSON.stringify(update),
     });
   }
+
+  public async listPullRequests(options?: {
+    state?: "open" | "closed" | "all";
+    head?: string;
+    base?: string;
+  }): Promise<GitHubPullRequest[]> {
+    const params = new URLSearchParams();
+    if (options?.state) params.set("state", options.state);
+    if (options?.head) params.set("head", options.head);
+    if (options?.base) params.set("base", options.base);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return this.request<GitHubPullRequest[]>(`/repos/${this.owner}/${this.repo}/pulls${qs}`);
+  }
+
+  public async getPullRequest(pullNumber: number): Promise<GitHubPullRequest> {
+    return this.request<GitHubPullRequest>(`/repos/${this.owner}/${this.repo}/pulls/${pullNumber}`);
+  }
 }
 
 

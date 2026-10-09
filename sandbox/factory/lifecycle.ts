@@ -13,11 +13,15 @@ import { type VerificationResult, verifyWorkspace } from "./verifier.ts";
 import { type Ticket, findContextFile } from "./preflight.ts";
 import { updateTicketFile } from "./ticket.ts";
 import { commitAndPushFeatureBranch, commitFailureDiagnostics } from "./git.ts";
+import { resolveIssueTracker } from "./tracker/factory.ts";
+import type { IssueTracker } from "./tracker/types.ts";
 
 export interface TicketLifecycleOptions {
   workspaceDir: string;
-  featureSlug: string;
+  featureSlug?: string;
+  branch?: string;
   ticket: Ticket;
+  tracker?: IssueTracker;
   maxRetries?: number;
   push?: boolean;
   provider?: Provider;
@@ -30,6 +34,7 @@ export interface TicketLifecycleOptions {
 
 export interface TicketLifecycleResult {
   ticketId: string;
+  ticketTitle?: string;
   status: "resolved" | "ready-for-human";
   retriesUsed: number;
   commitSha?: string;
@@ -72,26 +77,32 @@ export function formatReviewDiagnostics(verdict: ReviewVerdict): string {
 export async function runTicketLifecycle(
   options: TicketLifecycleOptions
 ): Promise<TicketLifecycleResult> {
-  const { workspaceDir, featureSlug, ticket } = options;
+  const { workspaceDir, ticket } = options;
+  const featureSlug = options.featureSlug ?? (ticket ? `issue-${ticket.number ?? ticket.id}` : "");
   const maxRetries = options.maxRetries ?? 2;
   const push = options.push ?? true;
-  const branch = `factory/${featureSlug}`;
+  const branch =
+    options.branch ??
+    (featureSlug ? `factory/${featureSlug}` : `factory/issue-${ticket.number ?? ticket.id}`);
+
+  const tracker =
+    options.tracker ??
+    resolveIssueTracker({
+      workspaceDir,
+      featureSlug,
+    });
 
   const plannerRunner = options.plannerRunner ?? runPlannerAgent;
   const coderRunner = options.coderRunner ?? runCoderAgent;
   const verifierRunner = options.verifierRunner ?? verifyWorkspace;
   const reviewerRunner = options.reviewerRunner ?? runReviewerAgent;
 
-  // 1. Claim ticket per Ticket Lifecycle specification
-  updateTicketFile({
-    filePath: ticket.filePath,
-    status: "claimed",
-    branch,
-  });
+  // 1. Claim ticket via active issue tracker
+  await tracker.claimTicket(ticket, { branch });
 
   // 2. Read spec and context documentation
-  const specPath = path.join(workspaceDir, ".scratch", featureSlug, "spec.md");
-  const specContent = fs.existsSync(specPath) ? fs.readFileSync(specPath, "utf-8") : undefined;
+  const specContent =
+    (await tracker.getFeatureSpec(workspaceDir, featureSlug, ticket.id)) ?? undefined;
 
   const contextFilePath = findContextFile(workspaceDir);
   const contextContent = contextFilePath && fs.existsSync(contextFilePath)
@@ -112,21 +123,23 @@ export async function runTicketLifecycle(
     plan = planResult.plan;
   } catch (planErr: any) {
     const errorMsg = planErr?.message ?? String(planErr);
-    updateTicketFile({
-      filePath: ticket.filePath,
-      status: "ready-for-human",
+    await tracker.escalateTicket(ticket, {
       branch,
       failureDiagnostics: `### Planner Stage Failure\n\n${errorMsg}`,
     });
-    commitFailureDiagnostics({
-      workspaceDir,
-      featureSlug,
-      ticketId: ticket.id,
-      ticketFilePath: ticket.filePath,
-      push,
-    });
+    if (tracker.id === "local") {
+      commitFailureDiagnostics({
+        workspaceDir,
+        featureSlug,
+        branch,
+        ticketId: ticket.id,
+        ticketFilePath: ticket.filePath,
+        push,
+      });
+    }
     return {
       ticketId: ticket.id,
+      ticketTitle: ticket.title,
       status: "ready-for-human",
       retriesUsed: 0,
       branch,
@@ -134,20 +147,22 @@ export async function runTicketLifecycle(
     };
   }
 
-  // Save plan.md in target feature folder
+  // Save plan.md if local tracker
   const scratchDir = path.join(workspaceDir, ".scratch", featureSlug);
-  if (!fs.existsSync(scratchDir)) {
-    fs.mkdirSync(scratchDir, { recursive: true });
-  }
-  const planPath = path.join(scratchDir, "plan.md");
-  fs.writeFileSync(planPath, plan.rawContent, "utf-8");
+  if (tracker.id === "local") {
+    if (!fs.existsSync(scratchDir)) {
+      fs.mkdirSync(scratchDir, { recursive: true });
+    }
+    const planPath = path.join(scratchDir, "plan.md");
+    fs.writeFileSync(planPath, plan.rawContent, "utf-8");
 
-  // Also archive ticket-specific plan
-  const plansDir = path.join(scratchDir, "plans");
-  if (!fs.existsSync(plansDir)) {
-    fs.mkdirSync(plansDir, { recursive: true });
+    // Also archive ticket-specific plan
+    const plansDir = path.join(scratchDir, "plans");
+    if (!fs.existsSync(plansDir)) {
+      fs.mkdirSync(plansDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(plansDir, `${ticket.id}-plan.md`), plan.rawContent, "utf-8");
   }
-  fs.writeFileSync(path.join(plansDir, `${ticket.id}-plan.md`), plan.rawContent, "utf-8");
 
   // 4. Self-Correction Loop: Coder -> Verifier -> Reviewer (up to maxRetries)
   let lastDiagnostics: string | undefined = undefined;
@@ -235,42 +250,46 @@ export async function runTicketLifecycle(
   // 4. Handle resolution or escalation
   if (passed) {
     const auditSummary = [
-      lastVerification ? lastVerification.summary : "Deterministic verification: PASSED",
+      plan?.rawContent ? `### Implementation Plan\n\n${plan.rawContent}` : "",
+      lastVerification ? `### Deterministic Verification\n\n${lastVerification.summary}` : "### Deterministic Verification\n\nPASSED",
       lastReview
         ? `### Reviewer Verdict: ${lastReview.verdict.toUpperCase()}\n\n${lastReview.summary}`
-        : "Review: APPROVED",
-    ].join("\n\n");
+        : "### Reviewer Verdict\n\nAPPROVED",
+    ].filter(Boolean).join("\n\n");
 
     // Commit code changes first to obtain the commit SHA
     const initialCommit = commitAndPushFeatureBranch({
       workspaceDir,
       featureSlug,
+      branch,
       ticketId: ticket.id,
       ticketTitle: ticket.title,
-      push: false,
+      push: tracker.id === "local" ? false : push,
     });
 
-    // Update ticket inline with resolution metadata, branch, and commit SHA
-    updateTicketFile({
-      filePath: ticket.filePath,
-      status: "resolved",
+    // Update ticket via active issue tracker
+    await tracker.resolveTicket(ticket, {
       branch,
       commitSha: initialCommit.commitSha,
       auditSummary,
     });
 
-    // Commit ticket resolution update and push if requested
-    const finalCommit = commitAndPushFeatureBranch({
-      workspaceDir,
-      featureSlug,
-      ticketId: ticket.id,
-      ticketTitle: ticket.title,
-      commitMessage: `docs(${featureSlug}): resolve ticket ${ticket.id} (${initialCommit.commitSha.slice(0, 7)})`,
-      push,
-    });
+    // For local tracker, commit the updated ticket markdown file
+    if (tracker.id === "local") {
+      commitAndPushFeatureBranch({
+        workspaceDir,
+        featureSlug,
+        branch,
+        ticketId: ticket.id,
+        ticketTitle: ticket.title,
+        commitMessage: `docs(${featureSlug}): resolve ticket ${ticket.id} (${initialCommit.commitSha.slice(0, 7)})`,
+        push,
+      });
+    }
 
     return {
       ticketId: ticket.id,
+      ticketTitle: ticket.title,
       status: "resolved",
       retriesUsed,
       commitSha: initialCommit.commitSha,
@@ -280,24 +299,26 @@ export async function runTicketLifecycle(
       review: lastReview,
     };
   } else {
-    // Retries exhausted: mark ticket ready-for-human and commit diagnostics
-    updateTicketFile({
-      filePath: ticket.filePath,
-      status: "ready-for-human",
+    // Retries exhausted: escalate ticket via active issue tracker
+    await tracker.escalateTicket(ticket, {
       branch,
       failureDiagnostics: lastDiagnostics || "Quality gate failed after maximum retries.",
     });
 
-    commitFailureDiagnostics({
-      workspaceDir,
-      featureSlug,
-      ticketId: ticket.id,
-      ticketFilePath: ticket.filePath,
-      push,
-    });
+    if (tracker.id === "local") {
+      commitFailureDiagnostics({
+        workspaceDir,
+        featureSlug,
+        branch,
+        ticketId: ticket.id,
+        ticketFilePath: ticket.filePath,
+        push,
+      });
+    }
 
     return {
       ticketId: ticket.id,
+      ticketTitle: ticket.title,
       status: "ready-for-human",
       retriesUsed,
       branch,

@@ -39,8 +39,12 @@ done
 
 FEATURE_SLUG="${FEATURE_SLUG:-${FEATURE_SLUG_ENV:-${FEATURE:-}}}"
 
+if [ -z "$FEATURE_SLUG" ] && [ -n "$ISSUE_ID" ]; then
+    FEATURE_SLUG="issue-${ISSUE_ID}"
+fi
+
 if [ -z "$FEATURE_SLUG" ]; then
-    echo "ERROR: Feature slug is required (--feature <slug> or positional argument)." >&2
+    echo "ERROR: Feature slug is required (--feature <slug> or positional argument, or --issue <id>)." >&2
     exit 1
 fi
 

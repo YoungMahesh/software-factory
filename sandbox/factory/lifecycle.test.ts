@@ -9,6 +9,8 @@ import { type Ticket } from "./preflight.ts";
 import { type ImplementationPlan, type ReviewVerdict } from "./harness.ts";
 import { type VerificationResult } from "./verifier.ts";
 import { ensureFeatureBranch } from "./git.ts";
+import { GitHubClient } from "./github.ts";
+import { GitHubIssueTracker } from "./tracker/github-tracker.ts";
 
 function setupMockWorkspace(featureSlug: string, ticketNum: string = "01"): {
   repoDir: string;
@@ -291,3 +293,119 @@ test("runTicketLifecycle: marks ready-for-human and commits diagnostics when max
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+test("runTicketLifecycle: integrates with GitHubIssueTracker (claims ticket, commits Fixes #<id>, resolves with audit comment)", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-lifecycle-gh-"));
+  execSync("git init -b main", { cwd: tmpDir, stdio: "ignore" });
+  execSync('git config user.name "Test Runner"', { cwd: tmpDir, stdio: "ignore" });
+  execSync('git config user.email "runner@example.com"', { cwd: tmpDir, stdio: "ignore" });
+  fs.writeFileSync(path.join(tmpDir, "CONTEXT.md"), "# Domain Context\n", "utf-8");
+  execSync("git add CONTEXT.md && git commit -m 'initial commit'", {
+    cwd: tmpDir,
+    stdio: "ignore",
+  });
+
+  const currentLabels = new Set<string>(["factory:ready"]);
+  const commentsPosted: string[] = [];
+
+  const client = new GitHubClient({
+    token: "tok",
+    owner: "org",
+    repo: "repo",
+    fetch: async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.includes("/issues/50/comments") && method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        commentsPosted.push(body.body);
+        return new Response(JSON.stringify({ id: 1, body: body.body }), { status: 201 });
+      }
+      if (url.includes("/issues/50") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            id: 150,
+            number: 50,
+            title: "Build notification sender",
+            body: "Blocked by: None\n\nNotification spec.",
+            state: "open",
+            labels: Array.from(currentLabels).map((name) => ({ name })),
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.includes("/issues/50") && method === "PATCH") {
+        const body = JSON.parse(String(init?.body));
+        if (body.labels) {
+          currentLabels.clear();
+          for (const l of body.labels) currentLabels.add(l);
+        }
+        return new Response(
+          JSON.stringify({ id: 150, number: 50, labels: Array.from(currentLabels) }),
+          { status: 200 }
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    },
+  });
+
+  const tracker = new GitHubIssueTracker({ client });
+  const ticket: Ticket = {
+    id: "50",
+    number: 50,
+    slug: "build-notification-sender",
+    title: "Build notification sender",
+    filePath: "https://github.com/org/repo/issues/50",
+    status: "ready-for-agent",
+    blockedBy: [],
+  };
+
+  try {
+    ensureFeatureBranch({ workspaceDir: tmpDir, branch: "factory/notifications" });
+
+    const result = await runTicketLifecycle({
+      workspaceDir: tmpDir,
+      featureSlug: "notifications",
+      ticket,
+      tracker,
+      push: false,
+      plannerRunner: async () => ({ plan: mockPlan, messages: [] }),
+      coderRunner: async () => {
+        fs.writeFileSync(path.join(tmpDir, "notifier.ts"), "export const send = () => {};\n");
+        return { summary: "Implemented notifier", messages: [] };
+      },
+      verifierRunner: async () => ({
+        passed: true,
+        totalCommands: 1,
+        passedCommands: 1,
+        failedCommands: 0,
+        results: [],
+        summary: "All tests passed",
+        durationMs: 5,
+      }),
+      reviewerRunner: async () => ({ verdict: mockPassingReview, messages: [] }),
+    });
+
+    assert.equal(result.status, "resolved");
+    assert.ok(currentLabels.has("factory:resolved"));
+    assert.ok(!currentLabels.has("factory:claimed"));
+
+    // Check git commit message has Fixes #50
+    const log = execSync("git log -n 1 --pretty=%B", {
+      cwd: tmpDir,
+      encoding: "utf-8",
+    }).trim();
+    assert.ok(log.includes("Fixes #50"));
+
+    // Audit comment posted to GitHub issue
+    assert.equal(commentsPosted.length, 1);
+    assert.ok(commentsPosted[0].includes("Quality Gate Audit"));
+    assert.ok(commentsPosted[0].includes("Implementation Plan"));
+    assert.ok(commentsPosted[0].includes("Deterministic Verification"));
+    assert.ok(commentsPosted[0].includes("Reviewer Verdict"));
+    assert.ok(commentsPosted[0].includes(result.commitSha!));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+

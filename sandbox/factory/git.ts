@@ -2,13 +2,15 @@ import { execSync } from "node:child_process";
 
 export interface GitBranchOptions {
   workspaceDir: string;
-  featureSlug: string;
+  featureSlug?: string;
+  branch?: string;
   remote?: string;
 }
 
 export interface CommitAndPushOptions {
   workspaceDir: string;
-  featureSlug: string;
+  featureSlug?: string;
+  branch?: string;
   ticketId: string;
   ticketTitle?: string;
   commitMessage?: string;
@@ -18,7 +20,8 @@ export interface CommitAndPushOptions {
 
 export interface CommitFailureOptions {
   workspaceDir: string;
-  featureSlug: string;
+  featureSlug?: string;
+  branch?: string;
   ticketId: string;
   ticketFilePath?: string;
   push?: boolean;
@@ -56,7 +59,10 @@ export function hasStagedChanges(workspaceDir: string): boolean {
 export function ensureFeatureBranch(options: GitBranchOptions): string {
   const { workspaceDir, featureSlug } = options;
   const remote = options.remote ?? "origin";
-  const branchName = `factory/${featureSlug}`;
+  const branchName = options.branch ?? (featureSlug ? `factory/${featureSlug}` : undefined);
+  if (!branchName) {
+    throw new Error("ensureFeatureBranch requires either branch or featureSlug option");
+  }
 
   try {
     const currentBranch = execSync("git branch --show-current", {
@@ -142,7 +148,9 @@ export function commitAndPushFeatureBranch(options: CommitAndPushOptions): {
 } {
   const { workspaceDir, featureSlug, ticketId } = options;
   const remote = options.remote ?? "origin";
-  const branch = `factory/${featureSlug}`;
+  const branch =
+    options.branch ??
+    (featureSlug ? `factory/${featureSlug}` : `factory/issue-${ticketId}`);
   const shouldPush = options.push ?? true;
 
   try {
@@ -154,9 +162,11 @@ export function commitAndPushFeatureBranch(options: CommitAndPushOptions): {
 
     let commitSha: string;
     if (hasStagedChanges(workspaceDir)) {
+      const idRef = ticketId.startsWith("#") ? ticketId : `#${ticketId}`;
       const titleSuffix = options.ticketTitle ? ` - ${options.ticketTitle}` : "";
+      const prefix = featureSlug ? `feat(${featureSlug})` : "feat";
       const commitMsg =
-        options.commitMessage || `feat(${featureSlug}): resolve ${ticketId}${titleSuffix}`;
+        options.commitMessage || `${prefix}: resolve ${idRef}${titleSuffix}\n\nFixes ${idRef}`;
 
       execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, {
         cwd: workspaceDir,
@@ -203,7 +213,9 @@ export function commitFailureDiagnostics(options: CommitFailureOptions): {
 } {
   const { workspaceDir, featureSlug, ticketId, ticketFilePath } = options;
   const remote = options.remote ?? "origin";
-  const branch = `factory/${featureSlug}`;
+  const branch =
+    options.branch ??
+    (featureSlug ? `factory/${featureSlug}` : `factory/issue-${ticketId}`);
   const shouldPush = options.push ?? false;
 
   try {

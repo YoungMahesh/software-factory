@@ -20,14 +20,16 @@ export class LocalScratchTracker implements IssueTracker {
 
   public async validatePreflight(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    _issueId?: string
   ): Promise<PreflightCheckResult> {
     return validateLocalPreflight(workspaceDir, featureSlug);
   }
 
   public async getFeatureSpec(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    _issueId?: string
   ): Promise<string | undefined> {
     const specPath = path.join(workspaceDir, ".scratch", featureSlug, "spec.md");
     if (fs.existsSync(specPath)) {
@@ -38,16 +40,25 @@ export class LocalScratchTracker implements IssueTracker {
 
   public async getTickets(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<Ticket[]> {
-    return parseTickets(workspaceDir, featureSlug);
+    const tickets = parseTickets(workspaceDir, featureSlug);
+    if (issueId) {
+      const target = issueId.trim();
+      return tickets.filter(
+        (t) => t.id === target || String(t.number) === target || t.slug === target
+      );
+    }
+    return tickets;
   }
 
   public async getFrontierTickets(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<Ticket[]> {
-    const tickets = await this.getTickets(workspaceDir, featureSlug);
+    const tickets = await this.getTickets(workspaceDir, featureSlug, issueId);
     return computeLocalFrontierTickets(tickets);
   }
 

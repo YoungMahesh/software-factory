@@ -152,3 +152,34 @@ test("commitAndPushFeatureBranch: pushes to remote repository when remote exists
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+test("commitAndPushFeatureBranch: formats commit message with Fixes #<id> on custom branch", () => {
+  const repoDir = initTestRepo();
+  try {
+    const branch = ensureFeatureBranch({
+      workspaceDir: repoDir,
+      branch: "factory/issue-42",
+    });
+    assert.equal(branch, "factory/issue-42");
+
+    fs.writeFileSync(path.join(repoDir, "fix.ts"), "fix content\n", "utf-8");
+
+    const result = commitAndPushFeatureBranch({
+      workspaceDir: repoDir,
+      branch: "factory/issue-42",
+      ticketId: "42",
+      ticketTitle: "Fix race condition",
+      push: false,
+    });
+
+    assert.equal(result.branch, "factory/issue-42");
+    const log = execSync("git log -n 1 --pretty=%B", {
+      cwd: repoDir,
+      encoding: "utf-8",
+    }).trim();
+    assert.ok(log.includes("Fixes #42"));
+    assert.ok(log.includes("resolve #42 - Fix race condition"));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

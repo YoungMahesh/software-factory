@@ -142,6 +142,7 @@ export function validatePreflight(repoRoot: string, featureSlug: string): Prefli
 export interface PreflightOptions {
   tracker?: import("./tracker/types.ts").IssueTracker;
   trackerType?: import("./tracker/types.ts").TrackerType;
+  issueId?: string;
   token?: string;
   owner?: string;
   repo?: string;
@@ -156,7 +157,7 @@ export async function validatePreflightAsync(
   options?: PreflightOptions
 ): Promise<PreflightCheckResult> {
   if (options?.tracker) {
-    return options.tracker.validatePreflight(repoRoot, featureSlug);
+    return options.tracker.validatePreflight(repoRoot, featureSlug, options?.issueId);
   }
 
   try {
@@ -170,7 +171,7 @@ export async function validatePreflightAsync(
       repo: options?.repo,
     });
 
-    return await tracker.validatePreflight(repoRoot, featureSlug);
+    return await tracker.validatePreflight(repoRoot, featureSlug, options?.issueId);
   } catch (err: any) {
     if (err?.name === "GitHubAuthError" || (err && typeof err.message === "string" && err.message.includes("GitHub token"))) {
       return {

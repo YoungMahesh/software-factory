@@ -9,12 +9,18 @@ import {
   GitHubClient,
   type GitHubIssue,
   type GitHubMilestone,
+  type GitHubPullRequest,
 } from "../github.ts";
 import type {
   IssueTracker,
   ClaimTicketOptions,
   ResolveTicketOptions,
   EscalateTicketOptions,
+  DeliveryGateInitOptions,
+  DeliveryGateInitResult,
+  DeliveryGateUpdateOptions,
+  DeliveryGateFinalizeOptions,
+  DeliveryGateFinalizeResult,
 } from "./types.ts";
 
 export interface GitHubIssueTrackerOptions {
@@ -22,6 +28,19 @@ export interface GitHubIssueTrackerOptions {
   token?: string;
   owner?: string;
   repo?: string;
+}
+
+export function extractIssueNumber(issueId?: string, featureSlug?: string): number | null {
+  if (issueId && /^\d+$/.test(issueId.trim())) {
+    return parseInt(issueId.trim(), 10);
+  }
+  if (featureSlug) {
+    const match = featureSlug.trim().match(/^issue-(\d+)$/i);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+  }
+  return null;
 }
 
 export const FACTORY_LABELS = {
@@ -113,6 +132,7 @@ export function gitHubIssueToTicket(issue: GitHubIssue): Ticket {
 export class GitHubIssueTracker implements IssueTracker {
   public readonly id = "github" as const;
   public readonly client: GitHubClient;
+  public activePullRequest: GitHubPullRequest | null = null;
   private cachedMilestones: Map<string, GitHubMilestone | null> = new Map();
 
   constructor(options: GitHubIssueTrackerOptions = {}) {
@@ -130,7 +150,8 @@ export class GitHubIssueTracker implements IssueTracker {
 
   public async validatePreflight(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<PreflightCheckResult> {
     const errors: string[] = [];
 
@@ -147,38 +168,54 @@ export class GitHubIssueTracker implements IssueTracker {
       errors.push("Missing GitHub token: GH_TOKEN or GITHUB_TOKEN environment variable is required.");
     }
 
-    // 3. Validate remote milestone availability and candidate issues
-    try {
-      const milestone = await this.resolveMilestone(featureSlug);
-      if (!milestone) {
-        errors.push(
-          `Milestone "${featureSlug}" not found in repository ${this.client.owner}/${this.client.repo}. Please ensure the GitHub Milestone exists and is open.`
-        );
-      } else if (milestone.state !== "open") {
-        errors.push(
-          `Milestone "${featureSlug}" is closed. Please reopen milestone "${featureSlug}" or target an open milestone.`
-        );
-      } else {
-        const issues = await this.client.listIssuesForMilestone(milestone.number);
-        if (issues.length === 0) {
+    // 3. Validate remote issue (single-issue mode) or remote milestone (Autonomous Feature Batch)
+    const issueNum = extractIssueNumber(issueId, featureSlug);
+    if (issueNum !== null) {
+      try {
+        const issue = await this.client.getIssue(issueNum);
+        if (issue.state === "closed") {
           errors.push(
-            `Milestone "${featureSlug}" has no issues assigned. Please create at least one GitHub Issue in milestone "${featureSlug}".`
+            `Issue #${issueNum} is closed. Please reopen issue #${issueNum} or target an open issue.`
+          );
+        }
+      } catch (err: any) {
+        errors.push(
+          `Failed to query GitHub issue #${issueNum} in ${this.client.owner}/${this.client.repo}: ${err?.message ?? String(err)}`
+        );
+      }
+    } else {
+      try {
+        const milestone = await this.resolveMilestone(featureSlug);
+        if (!milestone) {
+          errors.push(
+            `Milestone "${featureSlug}" not found in repository ${this.client.owner}/${this.client.repo}. Please ensure the GitHub Milestone exists and is open.`
+          );
+        } else if (milestone.state !== "open") {
+          errors.push(
+            `Milestone "${featureSlug}" is closed. Please reopen milestone "${featureSlug}" or target an open milestone.`
           );
         } else {
-          const openCandidateIssues = issues.filter(
-            (i) => i.state === "open" && mapGitHubIssueStatus(i) !== "resolved"
-          );
-          if (openCandidateIssues.length === 0) {
+          const issues = await this.client.listIssuesForMilestone(milestone.number);
+          if (issues.length === 0) {
             errors.push(
-              `Milestone "${featureSlug}" has no open candidate issues. Please assign at least one open GitHub Issue to milestone "${featureSlug}".`
+              `Milestone "${featureSlug}" has no issues assigned. Please create at least one GitHub Issue in milestone "${featureSlug}".`
             );
+          } else {
+            const openCandidateIssues = issues.filter(
+              (i) => i.state === "open" && mapGitHubIssueStatus(i) !== "resolved"
+            );
+            if (openCandidateIssues.length === 0) {
+              errors.push(
+                `Milestone "${featureSlug}" has no open candidate issues. Please assign at least one open GitHub Issue to milestone "${featureSlug}".`
+              );
+            }
           }
         }
+      } catch (err: any) {
+        errors.push(
+          `Failed to query GitHub repository ${this.client.owner}/${this.client.repo}: ${err?.message ?? String(err)}`
+        );
       }
-    } catch (err: any) {
-      errors.push(
-        `Failed to query GitHub repository ${this.client.owner}/${this.client.repo}: ${err?.message ?? String(err)}`
-      );
     }
 
     return {
@@ -189,8 +226,19 @@ export class GitHubIssueTracker implements IssueTracker {
 
   public async getFeatureSpec(
     _workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<string | undefined> {
+    const issueNum = extractIssueNumber(issueId, featureSlug);
+    if (issueNum !== null) {
+      try {
+        const issue = await this.client.getIssue(issueNum);
+        return issue.body || undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
     const milestone = await this.resolveMilestone(featureSlug);
     if (!milestone) {
       return undefined;
@@ -200,8 +248,15 @@ export class GitHubIssueTracker implements IssueTracker {
 
   public async getTickets(
     _workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<Ticket[]> {
+    const issueNum = extractIssueNumber(issueId, featureSlug);
+    if (issueNum !== null) {
+      const issue = await this.client.getIssue(issueNum);
+      return [gitHubIssueToTicket(issue)];
+    }
+
     const milestone = await this.resolveMilestone(featureSlug);
     if (!milestone) {
       return [];
@@ -215,9 +270,10 @@ export class GitHubIssueTracker implements IssueTracker {
 
   public async getFrontierTickets(
     workspaceDir: string,
-    featureSlug: string
+    featureSlug: string,
+    issueId?: string
   ): Promise<Ticket[]> {
-    const tickets = await this.getTickets(workspaceDir, featureSlug);
+    const tickets = await this.getTickets(workspaceDir, featureSlug, issueId);
     return getFrontierTickets(tickets);
   }
 
@@ -305,5 +361,175 @@ export class GitHubIssueTracker implements IssueTracker {
     } catch {
       // Non-fatal if comment fails
     }
+  }
+
+  private async findActivePullRequest(branch: string): Promise<GitHubPullRequest | null> {
+    if (this.activePullRequest) {
+      return this.activePullRequest;
+    }
+    try {
+      const prs = await this.client.listPullRequests({ state: "open" });
+      this.activePullRequest =
+        prs.find(
+          (p: any) =>
+            p.head === branch ||
+            p.head?.ref === branch ||
+            p.head === `${this.client.owner}:${branch}`
+        ) ?? null;
+      return this.activePullRequest;
+    } catch {
+      return null;
+    }
+  }
+
+  private appendResolvedWorkItem(body: string, ticket: Ticket): string {
+    const itemRef = `Fixes #${ticket.number ?? ticket.id}`;
+    if (body.includes(itemRef)) {
+      return body;
+    }
+    if (body.includes("## Resolved Work Items")) {
+      return body.replace(
+        /## Resolved Work Items/,
+        `## Resolved Work Items\n- ${itemRef}: ${ticket.title}`
+      );
+    }
+    return (body.trim() ? body.trim() + "\n\n" : "") + `## Resolved Work Items\n- ${itemRef}: ${ticket.title}\n`;
+  }
+
+  public async initializeDeliveryGate(
+    options: DeliveryGateInitOptions
+  ): Promise<DeliveryGateInitResult | null> {
+    const { branch, ticket } = options;
+    const featureSlug = options.featureSlug ?? (ticket ? `issue-${ticket.number ?? ticket.id}` : "");
+
+    let pr = await this.findActivePullRequest(branch);
+
+    if (!pr) {
+      let title = `feat: resolve #${ticket?.number ?? ticket?.id ?? "issue"} - ${ticket?.title ?? featureSlug}`;
+      const issueNum = extractIssueNumber(undefined, featureSlug);
+      if (issueNum === null && featureSlug) {
+        try {
+          const ms = await this.resolveMilestone(featureSlug);
+          title = `feat(${featureSlug}): implement ${ms?.title ?? featureSlug}`;
+        } catch {
+          title = `feat(${featureSlug}): implement ${featureSlug}`;
+        }
+      } else if (ticket) {
+        title = `feat: resolve #${ticket.number ?? ticket.id} - ${ticket.title}`;
+      }
+
+      const workItemLine = ticket
+        ? `- Fixes #${ticket.number ?? ticket.id}: ${ticket.title}`
+        : "";
+
+      const body = [
+        `## Summary`,
+        `Autonomous feature implementation for ${featureSlug}.`,
+        ``,
+        `## Resolved Work Items`,
+        workItemLine,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      pr = await this.client.createPullRequest({
+        title,
+        body,
+        head: branch,
+        base: "main",
+        draft: true,
+      });
+    } else if (ticket) {
+      const updatedBody = this.appendResolvedWorkItem(pr.body || "", ticket);
+      if (updatedBody !== (pr.body || "")) {
+        pr = await this.client.updatePullRequest(pr.number, { body: updatedBody });
+      }
+    }
+
+    this.activePullRequest = pr;
+    return {
+      pullRequestNumber: pr.number,
+      pullRequestUrl: pr.html_url,
+      branch,
+    };
+  }
+
+  public async updateDeliveryGate(
+    options: DeliveryGateUpdateOptions
+  ): Promise<void> {
+    const { branch, ticket, status, diagnostics } = options;
+
+    const pr = await this.findActivePullRequest(branch);
+    if (!pr) {
+      return;
+    }
+
+    if (status === "resolved") {
+      const updatedBody = this.appendResolvedWorkItem(pr.body || "", ticket);
+      if (updatedBody !== (pr.body || "")) {
+        this.activePullRequest = await this.client.updatePullRequest(pr.number, {
+          body: updatedBody,
+        });
+      }
+    } else if (status === "ready-for-human") {
+      const alertBlock = [
+        ``,
+        `> [!WARNING]`,
+        `> ⚠️ **Software Factory Alert: Execution Halted**`,
+        `> Ticket #${ticket.number ?? ticket.id} (${ticket.title}) failed after exhausting retries and requires human intervention.`,
+      ].join("\n");
+
+      const updatedBody = (pr.body || "") + "\n" + alertBlock;
+      this.activePullRequest = await this.client.updatePullRequest(pr.number, {
+        body: updatedBody,
+      });
+
+      const alertComment = [
+        `## ⚠️ Software Factory Alert: Ticket #${ticket.number ?? ticket.id} Needs Human Intervention`,
+        ``,
+        `- **Ticket**: #${ticket.number ?? ticket.id} - ${ticket.title}`,
+        `- **Status**: \`factory:ready-for-human\``,
+        `- **Branch**: \`${branch}\``,
+        ``,
+        `### Failure Diagnostics`,
+        diagnostics || "Ticket failed after maximum retries.",
+      ].join("\n");
+
+      try {
+        await this.client.addComment(pr.number, alertComment);
+      } catch {
+        // Non-fatal if comment fails
+      }
+    }
+  }
+
+  public async finalizeDeliveryGate(
+    options: DeliveryGateFinalizeOptions
+  ): Promise<DeliveryGateFinalizeResult | null> {
+    const { branch, summary } = options;
+
+    const pr = await this.findActivePullRequest(branch);
+
+    if (pr) {
+      this.activePullRequest = await this.client.updatePullRequest(pr.number, {
+        draft: false,
+      });
+
+      if (summary) {
+        try {
+          await this.client.addComment(pr.number, summary);
+        } catch {
+          // Non-fatal if comment fails
+        }
+      }
+
+      return {
+        pullRequestNumber: this.activePullRequest.number,
+        pullRequestUrl: this.activePullRequest.html_url,
+        readyForReview: true,
+      };
+    }
+
+    return null;
   }
 }

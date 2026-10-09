@@ -2,9 +2,8 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Provider, type Model } from "@earendil-works/pi-ai";
 import {
-  assertPreflight,
-  parseTickets,
-  getNextFrontierTicket,
+  assertPreflightAsync,
+  type Ticket,
 } from "./preflight.ts";
 import { ensureFeatureBranch } from "./git.ts";
 import {
@@ -18,11 +17,16 @@ import {
   runReviewerAgent,
 } from "./harness.ts";
 import { verifyWorkspace } from "./verifier.ts";
+import { resolveIssueTracker } from "./tracker/factory.ts";
+import type { IssueTracker, TrackerType } from "./tracker/types.ts";
 
 export interface PipelineOptions {
   workspaceDir: string;
-  featureSlug: string;
+  featureSlug?: string;
   issueId?: string;
+  branch?: string;
+  tracker?: IssueTracker;
+  trackerType?: TrackerType;
   maxRetries?: number;
   modelId?: string;
   push?: boolean;
@@ -79,16 +83,38 @@ export function formatPipelineSummary(
 export async function runAssemblyLinePipeline(
   options: PipelineOptions
 ): Promise<PipelineResult> {
-  const { workspaceDir, featureSlug } = options;
+  const { workspaceDir } = options;
+  const featureSlug =
+    options.featureSlug ?? (options.issueId ? `issue-${options.issueId.trim()}` : "");
 
-  // 1. Ensure Feature Branch (factory/<feature>) upon checkout per ADR 0028 & CONTEXT.md
-  const branch = ensureFeatureBranch({
-    workspaceDir,
-    featureSlug,
+  const branch =
+    options.branch ??
+    (options.featureSlug
+      ? `factory/${options.featureSlug}`
+      : `factory/issue-${options.issueId?.trim()}`);
+
+  // Resolve issue tracker abstraction
+  const tracker =
+    options.tracker ??
+    resolveIssueTracker({
+      workspaceDir,
+      featureSlug,
+      trackerType: options.trackerType,
+    });
+
+  // 1. Stage 0: Pre-flight Guard Check on checked out branch
+  await assertPreflightAsync(workspaceDir, featureSlug, {
+    tracker,
+    trackerType: options.trackerType,
+    issueId: options.issueId,
   });
 
-  // 2. Stage 0: Pre-flight Guard Check on checked out branch
-  assertPreflight(workspaceDir, featureSlug);
+  // 2. Ensure Feature Branch upon checkout per ADR 0028, ADR 0033 & CONTEXT.md
+  ensureFeatureBranch({
+    workspaceDir,
+    featureSlug,
+    branch,
+  });
 
   // 3. Resolve Provider & Model
   let provider = options.provider;
@@ -108,10 +134,11 @@ export async function runAssemblyLinePipeline(
 
   const executedTickets: TicketLifecycleResult[] = [];
   let haltedOnError = false;
+  let deliveryGateInitialized = false;
 
   if (options.issueId) {
     // Mode A: Targeted single-ticket mode
-    const tickets = parseTickets(workspaceDir, featureSlug);
+    const tickets = await tracker.getTickets(workspaceDir, featureSlug, options.issueId);
     const targetId = options.issueId.trim();
     const targetTicket = tickets.find(
       (t) =>
@@ -122,14 +149,16 @@ export async function runAssemblyLinePipeline(
 
     if (!targetTicket) {
       throw new Error(
-        `Ticket "${options.issueId}" not found in .scratch/${featureSlug}/issues/`
+        `Ticket "${options.issueId}" not found in issue tracker`
       );
     }
 
     const lifecycleResult = await runTicketLifecycle({
       workspaceDir,
       featureSlug,
+      branch,
       ticket: targetTicket,
+      tracker,
       maxRetries: options.maxRetries,
       push: options.push,
       provider,
@@ -141,14 +170,35 @@ export async function runAssemblyLinePipeline(
     });
 
     executedTickets.push(lifecycleResult);
-    if (lifecycleResult.status !== "resolved") {
+
+    if (lifecycleResult.status === "resolved") {
+      if (tracker.initializeDeliveryGate) {
+        await tracker.initializeDeliveryGate({
+          workspaceDir,
+          featureSlug,
+          branch,
+          ticket: targetTicket,
+        });
+        deliveryGateInitialized = true;
+      }
+    } else {
       haltedOnError = true;
+      if (tracker.updateDeliveryGate) {
+        await tracker.updateDeliveryGate({
+          workspaceDir,
+          featureSlug,
+          branch,
+          ticket: targetTicket,
+          status: "ready-for-human",
+          diagnostics: lifecycleResult.error,
+        });
+      }
     }
   } else {
     // Mode B: Autonomous Feature Batch across unblocked frontier tickets
     while (true) {
-      const tickets = parseTickets(workspaceDir, featureSlug);
-      const nextTicket = getNextFrontierTicket(tickets);
+      const frontierTickets = await tracker.getFrontierTickets(workspaceDir, featureSlug);
+      const nextTicket = frontierTickets.length > 0 ? frontierTickets[0] : null;
       if (!nextTicket) {
         // Frontier is empty (all unblocked tickets processed)
         break;
@@ -157,7 +207,9 @@ export async function runAssemblyLinePipeline(
       const lifecycleResult = await runTicketLifecycle({
         workspaceDir,
         featureSlug,
+        branch,
         ticket: nextTicket,
+        tracker,
         maxRetries: options.maxRetries,
         push: options.push,
         provider,
@@ -170,18 +222,54 @@ export async function runAssemblyLinePipeline(
 
       executedTickets.push(lifecycleResult);
 
-      if (lifecycleResult.status !== "resolved") {
-        // Persistent failure after 2 retries: halt batch immediately (fail-fast)
+      if (lifecycleResult.status === "resolved") {
+        if (!deliveryGateInitialized) {
+          if (tracker.initializeDeliveryGate) {
+            await tracker.initializeDeliveryGate({
+              workspaceDir,
+              featureSlug,
+              branch,
+              ticket: nextTicket,
+            });
+          }
+          deliveryGateInitialized = true;
+        } else {
+          if (tracker.updateDeliveryGate) {
+            await tracker.updateDeliveryGate({
+              workspaceDir,
+              featureSlug,
+              branch,
+              ticket: nextTicket,
+              status: "resolved",
+            });
+          }
+        }
+      } else {
+        // Persistent failure after retries exhausted: halt batch immediately (fail-fast)
         haltedOnError = true;
+        if (tracker.updateDeliveryGate) {
+          await tracker.updateDeliveryGate({
+            workspaceDir,
+            featureSlug,
+            branch,
+            ticket: nextTicket,
+            status: "ready-for-human",
+            diagnostics: lifecycleResult.error,
+          });
+        }
         break;
       }
     }
   }
 
+  const allMilestoneOrIssueTickets = options.featureSlug
+    ? await tracker.getTickets(workspaceDir, featureSlug)
+    : await tracker.getTickets(workspaceDir, featureSlug, options.issueId);
+
   const allResolved =
     !haltedOnError &&
-    executedTickets.length > 0 &&
-    executedTickets.every((t) => t.status === "resolved");
+    allMilestoneOrIssueTickets.length > 0 &&
+    allMilestoneOrIssueTickets.every((t) => t.status === "resolved");
 
   const summary = formatPipelineSummary(
     featureSlug,
@@ -189,6 +277,27 @@ export async function runAssemblyLinePipeline(
     executedTickets,
     haltedOnError
   );
+
+  // When all frontier tickets in milestone are resolved, finalize PR
+  if (allResolved && tracker.finalizeDeliveryGate) {
+    const executedTicketObjects: Ticket[] = executedTickets.map((t) => ({
+      id: t.ticketId,
+      number: parseInt(t.ticketId, 10) || 0,
+      slug: t.ticketId,
+      title: t.ticketTitle ?? t.ticketId,
+      filePath: "",
+      status: t.status,
+      blockedBy: [],
+    }));
+
+    await tracker.finalizeDeliveryGate({
+      workspaceDir,
+      featureSlug,
+      branch,
+      tickets: executedTicketObjects,
+      summary,
+    });
+  }
 
   return {
     featureSlug,
@@ -229,6 +338,10 @@ function parseCliArgs(): {
     } else if (arg === "--no-push") {
       push = false;
     }
+  }
+
+  if (!feature && issue) {
+    feature = `issue-${issue}`;
   }
 
   if (!feature) {
