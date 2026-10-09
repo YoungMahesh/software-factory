@@ -1,0 +1,10 @@
+token_type: fine-grained-pat
+
+repository_access:
+  mode: all
+
+permissions:
+  contents: read
+  pull_requests: read-write
+  issues: read-write
+  repository_creation: read-write
