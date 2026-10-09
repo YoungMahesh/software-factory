@@ -124,49 +124,66 @@ if [ -f /root/.config/opencode/opencode.env ]; then
     fi
 fi
 
-# 3. Decrypt repository fetch secret
-FETCH_SECRET_FILE=""
-if [ -f "/root/secrets/repo/fetch.env" ]; then
-    FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
-elif [ -f "/root/secrets/fetch.env" ]; then
-    FETCH_SECRET_FILE="/root/secrets/fetch.env"
-fi
-
-if [ -z "$FETCH_SECRET_FILE" ]; then
-    echo "ERROR: Repository fetch secret not found at /root/secrets/repo/fetch.env." >&2
-    exit 1
-fi
-
-echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
-DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
-if [ -z "$DECRYPTED_FETCH" ]; then
-    echo "ERROR: Failed to decrypt repository fetch secret using AGE_PRIVATE_KEY." >&2
-    exit 1
-fi
-
-while IFS= read -r line || [ -n "$line" ]; do
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${line// }" ]] && continue
-    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-        var_name="${BASH_REMATCH[1]}"
-        var_val="${BASH_REMATCH[2]}"
-        if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
-            var_val="${BASH_REMATCH[1]}"
-        fi
-        export "$var_name"="$var_val"
+# 3. Decrypt repository credentials (organization token or fetch secret)
+if [ -f "/root/secrets/org/token" ]; then
+    if [ -z "${GH_REPO:-}" ]; then
+        echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
+        exit 1
     fi
-done <<< "$DECRYPTED_FETCH"
+    echo "🔐 Decrypting organization token from /root/secrets/org/token..."
+    GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n')
+    if [ -z "$GH_TOKEN" ]; then
+        echo "ERROR: Failed to decrypt organization token using AGE_PRIVATE_KEY." >&2
+        rm -rf /root/secrets/org
+        exit 1
+    fi
+    rm -f /root/secrets/org/token
+    echo "🧹 Purged encrypted organization token from disk."
+else
+    FETCH_SECRET_FILE=""
+    if [ -f "/root/secrets/repo/fetch.env" ]; then
+        FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
+    elif [ -f "/root/secrets/fetch.env" ]; then
+        FETCH_SECRET_FILE="/root/secrets/fetch.env"
+    fi
 
-rm -f "$FETCH_SECRET_FILE"
-unset DECRYPTED_FETCH
+    if [ -z "$FETCH_SECRET_FILE" ]; then
+        echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
+        exit 1
+    fi
+
+    echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
+    DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
+    if [ -z "$DECRYPTED_FETCH" ]; then
+        echo "ERROR: Failed to decrypt repository fetch secret using AGE_PRIVATE_KEY." >&2
+        rm -rf /root/secrets/repo
+        exit 1
+    fi
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            var_name="${BASH_REMATCH[1]}"
+            var_val="${BASH_REMATCH[2]}"
+            if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
+                var_val="${BASH_REMATCH[1]}"
+            fi
+            export "$var_name"="$var_val"
+        fi
+    done <<< "$DECRYPTED_FETCH"
+
+    rm -f "$FETCH_SECRET_FILE"
+    unset DECRYPTED_FETCH
+fi
 
 if [ -z "${GH_REPO:-}" ]; then
-    echo "ERROR: GH_REPO is not set in the decrypted fetch secret." >&2
+    echo "ERROR: GH_REPO is not set." >&2
     exit 1
 fi
 
 if [ -z "${GH_TOKEN:-}" ]; then
-    echo "ERROR: GH_TOKEN is not set in the decrypted fetch secret." >&2
+    echo "ERROR: GH_TOKEN is not set." >&2
     exit 1
 fi
 
@@ -249,6 +266,10 @@ fi
 if [ -d /root/secrets/repo ]; then
     rm -rf /root/secrets/repo
     echo "🧹 Purged repository secrets staging directory."
+fi
+if [ -d /root/secrets/org ]; then
+    rm -rf /root/secrets/org
+    echo "🧹 Purged organization secrets staging directory."
 fi
 
 rm -rf ~/.config/sops

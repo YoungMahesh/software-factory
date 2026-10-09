@@ -20,20 +20,20 @@ def main():
 
     secret_name = "test2"
     feature_slug = "queues-page"
-    secret_dir = root_dir / "secrets_testing" / secret_name
-    secret_file = secret_dir / "fetch.env"
+    secret_dir = root_dir / "secrets_org" / "software-factory-09-test"
+    token_file = secret_dir / "token"
 
-    if not secret_file.is_file():
-        raise FileNotFoundError(f"Missing {secret_file}")
+    if not token_file.is_file():
+        raise FileNotFoundError(f"Missing {token_file}")
 
     app_name = "test-preflight-verifier"
     app = modal.App.lookup(app_name, create_if_missing=True)
 
     pubkey = load_ssh_pub_key()
 
-    # Build image with secrets_testing/test2 and sandbox/factory staged
+    # Build image with secrets_org/software-factory-09-test and sandbox/factory staged
     image = build_sandbox_image()
-    image = image.add_local_dir(secret_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
+    image = image.add_local_dir(secret_dir, "/root/secrets/org", copy=True)
     image = image.add_local_dir(root_dir / "sandbox" / "factory", "/root/factory", copy=True)
 
     env = {
@@ -42,6 +42,7 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
         "ENABLE_CLOUDFLARE": "0",
+        "GH_REPO": f"software-factory-09-test/{secret_name}",
     }
 
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]

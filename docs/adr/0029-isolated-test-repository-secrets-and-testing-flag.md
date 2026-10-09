@@ -1,6 +1,6 @@
 # Isolated Test Repository Secrets and Testing Flag
 
-**Status**: Accepted
+**Status**: superseded by ADR-0031
 
 To prevent accidental modifications, data leaks, or confusing state overlap between active production projects and test targets, we decided to store all test repository credentials in an isolated top-level directory (`secrets_testing/<project-name>/`), add a dedicated `--testing` CLI flag across sandbox and factory launchers, and prefix ephemeral test Modal applications with `test-`.
 

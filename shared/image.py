@@ -29,6 +29,8 @@ LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "
 REMOTE_CLOUDFLARE_SECRET = "/root/secrets/cloudflare.env"
 REMOTE_FETCH_SECRET = "/root/secrets/fetch.env"
 REMOTE_REPO_SECRETS_DIR = "/root/secrets/repo"
+REMOTE_ORG_SECRETS_DIR = "/root/secrets/org"
+REMOTE_ORG_TOKEN = "/root/secrets/org/token"
 SHARED_SECRET_NAME = "share0"
 
 LOCAL_FACTORY_ENTRYPOINT = SHARED_DIR / "factory_entrypoint.sh"

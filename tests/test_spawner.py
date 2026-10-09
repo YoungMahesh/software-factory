@@ -39,11 +39,11 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertIn("secrets/software-factory", str(secrets_dir))
 
     def test_resolve_secrets_dir_testing(self):
-        # test3 exists in secrets_testing/
+        # test3 targets software-factory-09-test in secrets_org/
         secrets_dir = resolve_secrets_dir("test3", testing=True, repo_root=self.repo_root)
         self.assertTrue(secrets_dir.is_dir())
-        self.assertTrue((secrets_dir / "fetch.env").is_file())
-        self.assertIn("secrets_testing/test3", str(secrets_dir))
+        self.assertTrue((secrets_dir / "token").is_file())
+        self.assertIn("secrets_org/software-factory-09-test", str(secrets_dir))
 
     def test_resolve_secrets_dir_prefixed_inputs(self):
         # 'secrets/software-factory' should resolve without duplication
@@ -51,10 +51,10 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertTrue((dir1 / "fetch.env").is_file())
         self.assertIn("secrets/software-factory", str(dir1))
 
-        # 'secrets_testing/test3' should automatically resolve under secrets_testing
-        dir2 = resolve_secrets_dir("secrets_testing/test3", repo_root=self.repo_root)
-        self.assertTrue((dir2 / "fetch.env").is_file())
-        self.assertIn("secrets_testing/test3", str(dir2))
+        # 'software-factory-09-test/test3' should automatically resolve under secrets_org
+        dir2 = resolve_secrets_dir("software-factory-09-test/test3", repo_root=self.repo_root)
+        self.assertTrue((dir2 / "token").is_file())
+        self.assertIn("secrets_org/software-factory-09-test", str(dir2))
 
     def test_get_factory_app_name_prefixed(self):
         app1 = get_factory_app_name("secrets/software-factory")
@@ -62,7 +62,7 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertIn("software-factory", app1)
         self.assertFalse(app1.startswith("test-"))
 
-        app2 = get_factory_app_name("secrets_testing/test3")
+        app2 = get_factory_app_name("software-factory-09-test/test3")
         self.assertNotIn("/", app2)
         self.assertIn("test3", app2)
         self.assertTrue(app2.startswith("test-"))
@@ -82,7 +82,7 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertIn("my-project", test_name)
 
     def test_build_factory_image(self):
-        proj_secrets_dir = self.repo_root / "secrets_testing" / "test3"
+        proj_secrets_dir = self.repo_root / "secrets_org" / "software-factory-09-test"
         factory_dir = self.repo_root / "sandbox" / "factory"
         image = build_factory_image(
             project_secrets_dir=proj_secrets_dir,

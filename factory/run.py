@@ -69,7 +69,7 @@ def create_parser() -> argparse.ArgumentParser:
         "-p",
         "--project",
         required=True,
-        help="Target project name (under secrets/<project> or secrets_testing/<project> when testing).",
+        help="Target project name (under secrets/<project> or software-factory-09-test/<project> when testing).",
     )
     parser.add_argument(
         "-f",
@@ -108,7 +108,7 @@ def create_parser() -> argparse.ArgumentParser:
         dest="testing",
         action="store_true",
         default=False,
-        help="Target isolated test repositories under secrets_testing/.",
+        help="Target isolated test repositories under canonical test organization software-factory-09-test/.",
     )
     return parser
 
@@ -129,18 +129,18 @@ def validate_project_secrets(
     testing: bool = False,
     repo_root: Path | None = None,
 ) -> Path:
-    """Validates locally that the target project directory and fetch.env exist.
+    """Validates locally that the target project or organization secret directory exists.
 
     Args:
-        project: Target project name (e.g. 'repo-horizon' or 'test3').
-        testing: Whether to resolve from 'secrets_testing/' per ADR 0029.
+        project: Target project name (e.g. 'repo-horizon', 'test3', or 'software-factory-09-test/test3').
+        testing: Whether to resolve from canonical Test Organization under 'secrets_org/' per ADR 0031.
         repo_root: Optional software factory repository root.
 
     Returns:
-        Path to the project secrets directory.
+        Path to the project or organization secrets directory.
 
     Raises:
-        FileNotFoundError: If the directory or fetch.env is missing.
+        FileNotFoundError: If the directory, fetch.env, or token is missing.
     """
     return resolve_secrets_dir(project=project, testing=testing, repo_root=repo_root)
 

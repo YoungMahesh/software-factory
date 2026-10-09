@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
     REMOTE_FETCH_SECRET,
+    REMOTE_ORG_SECRETS_DIR,
     REMOTE_REPO_SECRETS_DIR,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
@@ -19,6 +20,8 @@ from shared.image import (
     get_gradle_volumes,
     load_ssh_pub_key,
 )
+
+DEFAULT_TEST_ORG = "software-factory-09-test"
 
 # Modal's default timeout for Sandbox.create is 300s (5 minutes) if omitted; max allowed is 24 hours.
 TIMEOUT_SECS = 16 * 60 * 60  # 16 hours
@@ -102,7 +105,7 @@ def main():
         "--test",
         dest="testing",
         action="store_true",
-        help="Resolve repository secrets from secrets_testing/<secret-name>/fetch.env instead of secrets/<secret-name>/fetch.env.",
+        help="Resolve repository secrets from canonical Test Organization (secrets_org/software-factory-09-test/token) instead of secrets/<secret-name>/fetch.env.",
     )
     parser.add_argument(
         "--opencode",
@@ -166,13 +169,49 @@ def main():
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
-    secrets_base = repo_root / ("secrets_testing" if args.testing else "secrets")
-    secret_file = secrets_base / args.secret / "fetch.env"
-    if not secret_file.is_file():
-        expected_dir = "secrets_testing" if args.testing else "secrets"
-        parser.error(
-            f"Repository secret file not found: {secret_file} (expected {expected_dir}/{args.secret}/fetch.env)."
-        )
+
+    # Normalize secret name and detect testing mode
+    clean_secret = args.secret.strip().rstrip("/")
+    is_testing = args.testing
+    if clean_secret.startswith("secrets_testing/"):
+        clean_secret = clean_secret[len("secrets_testing/"):]
+        is_testing = True
+    elif clean_secret.startswith("secrets_org/"):
+        clean_secret = clean_secret[len("secrets_org/"):]
+        is_testing = True
+    elif clean_secret.startswith("secrets/"):
+        clean_secret = clean_secret[len("secrets/"):]
+    elif clean_secret.startswith(f"{DEFAULT_TEST_ORG}/") or clean_secret == DEFAULT_TEST_ORG:
+        is_testing = True
+
+    target_repo = None
+    is_org = False
+
+    if is_testing:
+        if "/" in clean_secret:
+            org_name = clean_secret.split("/", 1)[0]
+            target_repo = clean_secret
+        else:
+            if (repo_root / "secrets_org" / clean_secret).is_dir():
+                org_name = clean_secret
+            else:
+                org_name = DEFAULT_TEST_ORG
+                target_repo = f"{DEFAULT_TEST_ORG}/{clean_secret}"
+
+        secrets_dir = repo_root / "secrets_org" / org_name
+        token_file = secrets_dir / "token"
+        if not token_file.is_file():
+            parser.error(
+                f"Organization token secret not found: {token_file} (expected secrets_org/{org_name}/token)."
+            )
+        is_org = True
+    else:
+        secrets_dir = repo_root / "secrets" / clean_secret
+        secret_file = secrets_dir / "fetch.env"
+        if not secret_file.is_file():
+            parser.error(
+                f"Repository secret file not found: {secret_file} (expected secrets/{clean_secret}/fetch.env)."
+            )
 
     if args.memory is not None:
         if not args.vm:
@@ -197,9 +236,10 @@ def main():
 
     pubkey_content = load_ssh_pub_key()
 
+    bare_repo = clean_secret.split("/")[-1]
     random_id = uuid.uuid4().hex[:8]
-    app_prefix = "test-" if args.testing else ""
-    app_name = f"{app_prefix}{args.secret}-{random_id}"
+    app_prefix = "test-" if is_testing else ""
+    app_name = f"{app_prefix}{bare_repo}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
 
@@ -217,7 +257,10 @@ def main():
         modal_tooling=args.modal,
         react_native=args.react_native,
     )
-    image = image.add_local_dir(secret_file.parent, REMOTE_REPO_SECRETS_DIR, copy=True)
+    if is_org:
+        image = image.add_local_dir(secrets_dir, REMOTE_ORG_SECRETS_DIR, copy=True)
+    else:
+        image = image.add_local_dir(secrets_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
 
     cloudflare_active = not args.no_cloudflare
 
@@ -229,6 +272,8 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
     }
+    if target_repo:
+        env["GH_REPO"] = target_repo
     if not cloudflare_active:
         env["ENABLE_CLOUDFLARE"] = "0"
 

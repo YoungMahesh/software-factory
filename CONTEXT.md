@@ -49,12 +49,16 @@ SOPS-encrypted environment files stored alongside `fetch.env` under `secrets/<se
 _Avoid_: Dotenv secrets, repo envs, app secrets, env mappings
 
 **Repository Env Mapping**:
-The configuration file (`secrets/<secret-name>/env.map` or `secrets_testing/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
+The configuration file (`secrets/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
 _Avoid_: Location file, env config, secret locations
 
-**Test Repository Secrets**:
-SOPS-encrypted repository credentials stored in version control under `secrets_testing/<project-name>/` used strictly for integration testing and automated verification of factory pipelines, kept isolated from production repository secrets.
-_Avoid_: Dummy secrets, mock secrets, test credentials, test envs
+**Organization Credentials**:
+A directory containing a SOPS-encrypted GitHub fine-grained personal access token (`token`) and a declared permission manifest (`permissions.yml`) stored under `secrets_org/<org-name>/` providing scoped organizational access across member repositories.
+_Avoid_: Org token, org secret, organization token
+
+**Test Organization**:
+A dedicated GitHub organization (`software-factory-09-test`) configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
+_Avoid_: Test org, mock org, testing workspace
 
 
 **SOPS Decryption**:

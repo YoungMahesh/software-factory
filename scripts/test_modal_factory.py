@@ -21,11 +21,11 @@ def main():
     print("================================================================\n")
 
     secret_name = "test3"
-    secret_dir = root_dir / "secrets_testing" / secret_name
-    secret_file = secret_dir / "fetch.env"
+    secret_dir = root_dir / "secrets_org" / "software-factory-09-test"
+    token_file = secret_dir / "token"
 
-    if not secret_file.is_file():
-        raise FileNotFoundError(f"Missing {secret_file}")
+    if not token_file.is_file():
+        raise FileNotFoundError(f"Missing {token_file}")
 
     app_name = "test-factory-assembly-line"
     app = modal.App.lookup(app_name, create_if_missing=True)
@@ -34,7 +34,7 @@ def main():
 
     print("📦 Building sandbox image with OpenCode support, test3 secrets, and factory harness...")
     image = build_sandbox_image(opencode=True)
-    image = image.add_local_dir(secret_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
+    image = image.add_local_dir(secret_dir, "/root/secrets/org", copy=True)
     image = (
         image.add_local_dir(root_dir / "sandbox" / "factory", "/root/factory", copy=True)
         .run_commands("cd /root/factory && pnpm install --force --shamefully-hoist")
@@ -47,6 +47,7 @@ def main():
         "APP_NAME": app_name,
         "ENABLE_CLOUDFLARE": "0",
         "ENABLE_OPENCODE": "1",
+        "GH_REPO": f"software-factory-09-test/{secret_name}",
     }
 
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]

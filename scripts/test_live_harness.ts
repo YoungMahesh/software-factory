@@ -36,26 +36,25 @@ async function main() {
   console.log("================================================================\n");
 
   const rootDir = path.resolve(import.meta.dirname, "..");
-  const test3FetchPath = path.join(rootDir, "secrets_testing", "test3", "fetch.env");
+  const test3TokenPath = path.join(rootDir, "secrets_org", "software-factory-09-test", "token");
   const opencodeEnvPath = path.join(rootDir, "secrets", "opencode.env");
 
-  if (!fs.existsSync(test3FetchPath)) {
-    throw new Error(`Missing test3 fetch credentials at ${test3FetchPath}`);
+  if (!fs.existsSync(test3TokenPath)) {
+    throw new Error(`Missing organization token at ${test3TokenPath}`);
   }
   if (!fs.existsSync(opencodeEnvPath)) {
     throw new Error(`Missing OpenCode credentials at ${opencodeEnvPath}`);
   }
 
   console.log("🔑 Decrypting credentials with SOPS...");
-  const test3Env = decryptEnv(test3FetchPath);
+  const ghToken = execSync(`sops -d "${test3TokenPath}"`, { encoding: "utf-8" }).trim();
   const opencodeEnv = decryptEnv(opencodeEnvPath);
 
-  const ghRepo = test3Env.GH_REPO;
-  const ghToken = test3Env.GH_TOKEN;
+  const ghRepo = "software-factory-09-test/test3";
   const opencodeApiKey = opencodeEnv.OPENCODE_GO_API_KEY;
 
   if (!ghRepo || !ghToken) {
-    throw new Error("Failed to extract GH_REPO or GH_TOKEN from test3 fetch.env");
+    throw new Error("Failed to extract GH_REPO or GH_TOKEN from test3 credentials");
   }
   if (!opencodeApiKey) {
     throw new Error("Failed to extract OPENCODE_GO_API_KEY from opencode.env");

@@ -18,10 +18,13 @@ from shared.image import (
     LOCAL_OPENCODE_SECRET,
     REMOTE_FACTORY_ENTRYPOINT,
     REMOTE_OPENCODE_SECRET,
+    REMOTE_ORG_SECRETS_DIR,
     REMOTE_REPO_SECRETS_DIR,
     SHARED_SECRET_NAME,
     base_image,
 )
+
+DEFAULT_TEST_ORG: str = "software-factory-09-test"
 
 # Reused timeout constants matching sandbox/main.py
 FACTORY_TIMEOUT_SECS: int = 16 * 60 * 60  # 16 hours
@@ -59,18 +62,37 @@ def resolve_repo_root(repo_root: Path | None = None) -> Path:
 
 
 def normalize_project_name(project: str) -> tuple[str, bool]:
-    """Normalizes project input, extracting bare project name and detecting testing mode.
+    """Normalizes project input, extracting bare or qualified project name and detecting testing mode.
 
-    Handles 'secrets/<project-name>', 'secrets_testing/<project-name>', or bare '<project-name>'.
+    Handles 'secrets/<project-name>', 'secrets_org/<org>/<repo>', 'secrets_org/<org>',
+    '<org>/<repo>', 'secrets_testing/<project-name>', or bare '<project-name>'.
     """
     clean = project.strip().rstrip("/")
     is_testing = False
     if clean.startswith("secrets_testing/"):
         clean = clean[len("secrets_testing/"):]
         is_testing = True
+    elif clean.startswith("secrets_org/"):
+        clean = clean[len("secrets_org/"):]
+        is_testing = True
     elif clean.startswith("secrets/"):
         clean = clean[len("secrets/"):]
+    elif clean.startswith(f"{DEFAULT_TEST_ORG}/") or clean == DEFAULT_TEST_ORG:
+        is_testing = True
     return clean, is_testing
+
+
+def resolve_target_repo(project: str, testing: bool = False) -> str | None:
+    """Resolves the GitHub target repository string (e.g. 'software-factory-09-test/test3') if applicable."""
+    clean_project, detected_testing = normalize_project_name(project)
+    effective_testing = testing or detected_testing
+    if effective_testing:
+        if "/" in clean_project:
+            return clean_project
+        if clean_project == DEFAULT_TEST_ORG:
+            return None
+        return f"{DEFAULT_TEST_ORG}/{clean_project}"
+    return None
 
 
 def resolve_secrets_dir(
@@ -78,51 +100,78 @@ def resolve_secrets_dir(
     testing: bool = False,
     repo_root: Path | None = None,
 ) -> Path:
-    """Resolves and validates the target project's secret directory.
+    """Resolves and validates the target project or organization secret directory.
 
     Args:
-        project: Project secret name (e.g. 'repo-horizon', 'test3', or 'secrets/repo-horizon').
-        testing: Whether to resolve from 'secrets_testing/' per ADR 0029.
+        project: Project secret name (e.g. 'repo-horizon', 'test3',
+                 'software-factory-09-test/test3', or 'secrets/repo-horizon').
+        testing: Whether to resolve from canonical Test Organization under
+                 'secrets_org/' per ADR 0031.
         repo_root: Software factory repository root directory.
 
     Returns:
-        Path to the project secrets directory.
+        Path to the project or organization secrets directory.
 
     Raises:
-        FileNotFoundError: If the directory or fetch.env is not found.
+        FileNotFoundError: If the directory, fetch.env, or token is not found.
     """
     root = resolve_repo_root(repo_root)
     clean_project, detected_testing = normalize_project_name(project)
     effective_testing = testing or detected_testing
-    base_dir_name = "secrets_testing" if effective_testing else "secrets"
-    project_dir = root / base_dir_name / clean_project
 
+    if effective_testing:
+        if "/" in clean_project:
+            org_name = clean_project.split("/", 1)[0]
+        else:
+            if (root / "secrets_org" / clean_project).is_dir():
+                org_name = clean_project
+            else:
+                org_name = DEFAULT_TEST_ORG
+
+        org_dir = root / "secrets_org" / org_name
+        if not org_dir.is_dir():
+            raise FileNotFoundError(
+                f"Target organization secrets directory not found: {org_dir} "
+                f"(expected under secrets_org/{org_name})."
+            )
+
+        token_file = org_dir / "token"
+        if not token_file.is_file():
+            raise FileNotFoundError(
+                f"Organization token secret not found: {token_file} "
+                f"(expected secrets_org/{org_name}/token)."
+            )
+
+        return org_dir
+
+    project_dir = root / "secrets" / clean_project
     if not project_dir.is_dir():
         raise FileNotFoundError(
             f"Target project secrets directory not found: {project_dir} "
-            f"(expected under {base_dir_name}/{clean_project})."
+            f"(expected under secrets/{clean_project})."
         )
 
     fetch_file = project_dir / "fetch.env"
     if not fetch_file.is_file():
         raise FileNotFoundError(
             f"Repository fetch secret not found: {fetch_file} "
-            f"(expected {base_dir_name}/{clean_project}/fetch.env)."
+            f"(expected secrets/{clean_project}/fetch.env)."
         )
 
     return project_dir
 
 
 def get_factory_app_name(project: str, testing: bool = False) -> str:
-    """Generates an ephemeral Modal app name conforming to ADR 0029.
+    """Generates an ephemeral Modal app name conforming to ADR 0031.
 
-    Test sandboxes are prefixed with 'test-' per ADR 0029.
+    Test sandboxes are prefixed with 'test-' per ADR 0031.
     """
     clean_project, detected_testing = normalize_project_name(project)
     effective_testing = testing or detected_testing
+    bare_name = clean_project.split("/")[-1]
     random_id = uuid.uuid4().hex[:8]
     prefix = "test-" if effective_testing else ""
-    return f"{prefix}{clean_project}-{random_id}"
+    return f"{prefix}{bare_name}-{random_id}"
 
 
 def build_factory_image(
@@ -165,8 +214,15 @@ def build_factory_image(
             entrypoint_script, REMOTE_FACTORY_ENTRYPOINT, copy=True
         )
 
-    # Stage target project secrets into /root/secrets/repo
-    image = image.add_local_dir(project_secrets_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
+    # Stage target project or organization secrets
+    if (project_secrets_dir / "token").is_file():
+        image = image.add_local_dir(
+            project_secrets_dir, REMOTE_ORG_SECRETS_DIR, copy=True
+        )
+    else:
+        image = image.add_local_dir(
+            project_secrets_dir, REMOTE_REPO_SECRETS_DIR, copy=True
+        )
 
     # Mount local factory harness into /root/factory
     image = image.add_local_dir(
@@ -212,12 +268,16 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
         install_deps=config.install_deps,
     )
 
+    target_repo = resolve_target_repo(config.project, testing=config.testing)
+
     env: dict[str, str | None] = {
         "APP_NAME": app_name,
         "FEATURE_SLUG": config.feature,
         "ENABLE_CLOUDFLARE": "0",
         "ENABLE_DOCKER": "1" if config.vm else "0",
     }
+    if target_repo:
+        env["GH_REPO"] = target_repo
 
     sandbox_kwargs: dict[str, Any] = {
         "timeout": config.timeout_secs,

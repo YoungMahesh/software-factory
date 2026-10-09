@@ -7,22 +7,9 @@ import { execSync } from "node:child_process";
 
 import { verifyWorkspace, runCommand } from "./verifier.ts";
 
-function decryptFetchEnv(secretPath: string): { ghRepo: string; ghToken: string } {
-  const output = execSync(`sops -d "${secretPath}"`, { encoding: "utf-8" });
-  let ghRepo = "";
-  let ghToken = "";
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("GH_REPO=")) {
-      ghRepo = trimmed.slice("GH_REPO=".length).trim();
-    } else if (trimmed.startsWith("GH_TOKEN=")) {
-      ghToken = trimmed.slice("GH_TOKEN=".length).trim();
-    }
-  }
-  if (!ghRepo || !ghToken) {
-    throw new Error(`Failed to extract GH_REPO or GH_TOKEN from ${secretPath}`);
-  }
-  return { ghRepo, ghToken };
+function getOrgToken(): string {
+  const tokenPath = path.resolve(import.meta.dirname, "../../secrets_org/software-factory-09-test/token");
+  return execSync(`sops -d "${tokenPath}"`, { encoding: "utf-8" }).trim();
 }
 
 function cloneRepo(ghRepo: string, ghToken: string, destDir: string): void {
@@ -32,14 +19,15 @@ function cloneRepo(ghRepo: string, ghToken: string, destDir: string): void {
   });
 }
 
-test("Integration: verifyWorkspace against real repo test2 (secrets_testing/test2)", async (t) => {
-  const secretPath = path.resolve(import.meta.dirname, "../../secrets_testing/test2/fetch.env");
-  if (!fs.existsSync(secretPath)) {
-    t.skip("secrets_testing/test2/fetch.env not found");
+test("Integration: verifyWorkspace against real repo test2 (software-factory-09-test/test2)", async (t) => {
+  const tokenPath = path.resolve(import.meta.dirname, "../../secrets_org/software-factory-09-test/token");
+  if (!fs.existsSync(tokenPath)) {
+    t.skip("secrets_org/software-factory-09-test/token not found");
     return;
   }
 
-  const { ghRepo, ghToken } = decryptFetchEnv(secretPath);
+  const ghToken = getOrgToken();
+  const ghRepo = "software-factory-09-test/test2";
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-int-verifier-test2-"));
 
   try {

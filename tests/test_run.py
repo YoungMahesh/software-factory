@@ -117,7 +117,7 @@ class TestLocalSecretValidation(unittest.TestCase):
     def test_validate_project_secrets_testing(self):
         path = validate_project_secrets("test3", testing=True, repo_root=self.repo_root)
         self.assertTrue(path.is_dir())
-        self.assertTrue((path / "fetch.env").is_file())
+        self.assertTrue((path / "token").is_file())
 
     def test_validate_project_secrets_missing(self):
         with self.assertRaises(FileNotFoundError) as ctx:

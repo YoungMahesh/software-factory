@@ -97,52 +97,69 @@ if [ "${ENABLE_DOCKER:-}" = "1" ]; then
     done
 fi
 
-# 1. Decrypt repository fetch secret and clone repository
-if [ -f "/root/secrets/repo/fetch.env" ]; then
-    FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
-elif [ -f "/root/secrets/fetch.env" ]; then
-    FETCH_SECRET_FILE="/root/secrets/fetch.env"
-else
-    echo "ERROR: Repository fetch secret file not found at /root/secrets/repo/fetch.env or /root/secrets/fetch.env." >&2
-    exit 1
-fi
-
+# 1. Decrypt repository fetch secret or organization token and clone repository
 if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
     echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
     exit 1
 fi
 
-echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
-DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
-if [ -z "$DECRYPTED_FETCH" ]; then
-    echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-    rm -rf /root/secrets/repo
+if [ -f "/root/secrets/org/token" ]; then
+    if [ -z "${GH_REPO:-}" ]; then
+        echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
+        exit 1
+    fi
+    echo "🔐 Decrypting organization token from /root/secrets/org/token..."
+    GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n')
+    if [ -z "$GH_TOKEN" ]; then
+        echo "ERROR: Failed to decrypt organization token using AGE_PRIVATE_KEY." >&2
+        rm -rf /root/secrets/org
+        exit 1
+    fi
+    rm -f /root/secrets/org/token
+    echo "🧹 Purged encrypted organization token from disk."
+elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
+    FETCH_SECRET_FILE=""
+    if [ -f "/root/secrets/repo/fetch.env" ]; then
+        FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
+    else
+        FETCH_SECRET_FILE="/root/secrets/fetch.env"
+    fi
+
+    echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
+    DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
+    if [ -z "$DECRYPTED_FETCH" ]; then
+        echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+        rm -rf /root/secrets/repo
+        exit 1
+    fi
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            var_name="${BASH_REMATCH[1]}"
+            var_val="${BASH_REMATCH[2]}"
+            if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
+                var_val="${BASH_REMATCH[1]}"
+            fi
+            export "$var_name"="$var_val"
+        fi
+    done <<< "$DECRYPTED_FETCH"
+
+    rm -f "$FETCH_SECRET_FILE"
+    echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
+else
+    echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
     exit 1
 fi
 
-while IFS= read -r line || [ -n "$line" ]; do
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${line// }" ]] && continue
-    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-        var_name="${BASH_REMATCH[1]}"
-        var_val="${BASH_REMATCH[2]}"
-        if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
-            var_val="${BASH_REMATCH[1]}"
-        fi
-        export "$var_name"="$var_val"
-    fi
-done <<< "$DECRYPTED_FETCH"
-
-rm -f "$FETCH_SECRET_FILE"
-echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
-
 if [ -z "${GH_REPO:-}" ]; then
-    echo "ERROR: GH_REPO is not set in the decrypted fetch secret." >&2
+    echo "ERROR: GH_REPO is not set." >&2
     exit 1
 fi
 
 if [ -z "${GH_TOKEN:-}" ]; then
-    echo "ERROR: GH_TOKEN is not set in the decrypted fetch secret." >&2
+    echo "ERROR: GH_TOKEN is not set." >&2
     exit 1
 fi
 
@@ -202,6 +219,11 @@ fi
 if [ -d /root/secrets/repo ]; then
     rm -rf /root/secrets/repo
     echo "🧹 Purged repository secrets staging directory (/root/secrets/repo)."
+fi
+
+if [ -d /root/secrets/org ]; then
+    rm -rf /root/secrets/org
+    echo "🧹 Purged organization secrets staging directory (/root/secrets/org)."
 fi
 
 if [ -f /root/.git.bash ]; then

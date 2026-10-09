@@ -56,11 +56,11 @@ def dispatch_job(
     """Dispatches a software factory job into an ephemeral Modal Sandbox.
 
     Args:
-        project: Target project secret name (under secrets/ or secrets_testing/).
+        project: Target project secret name (under secrets/ or software-factory-09-test/ when testing).
         feature: Target feature slug (e.g. 'queues-page').
         issue: Optional specific ticket ID. When None, runs full autonomous batch.
         vm: Whether to run in a full VM Sandbox with Docker support.
-        testing: Whether to run against test repository secrets in secrets_testing/.
+        testing: Whether to run against canonical Test Organization under secrets_org/ per ADR 0031.
         model: Optional model override ('deepseek-v4.1-flash' or 'mimo-v2.6-flash').
         memory_gb: Memory allocation in GB (for VM sandboxes).
         timeout_secs: Maximum sandbox runtime in seconds (default 16 hours).

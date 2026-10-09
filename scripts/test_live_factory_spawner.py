@@ -3,11 +3,11 @@
 
 Tests the full orchestration path:
 1. Provisions an ephemeral Modal Sandbox via `dispatch_job` with `--testing` targeting `test3`.
-2. Stages `secrets_testing/test3/`, mounts `/root/factory_entrypoint.sh` and `/root/factory`.
+2. Stages `secrets_org/software-factory-09-test/`, mounts `/root/factory_entrypoint.sh` and `/root/factory`.
 3. Inside the container:
    - SOPS Age key bootstrap from `share0`
    - Decrypts OpenCode credentials to `/root/.config/opencode/opencode.env`
-   - Decrypts fetch.env and clones `anveshak71/test3` to `/root/test3`
+   - Decrypts token and clones `software-factory-09-test/test3` to `/root/test3`
    - Checks out `factory/slug-generator`
    - Maps repository environment secrets (`web.env` -> `.env`)
    - Preserves `GH_TOKEN` for pushing
@@ -27,28 +27,23 @@ from factory.orchestrator import dispatch_job
 
 
 def decrypt_token_and_repo() -> tuple[str, str]:
-    fetch_path = root_dir / "secrets_testing" / "test3" / "fetch.env"
-    cmd = f"SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d '{fetch_path}'"
-    out = subprocess.check_output(cmd, shell=True, text=True)
-    repo, token = "", ""
-    for line in out.splitlines():
-        if line.startswith("GH_REPO="):
-            repo = line.split("=", 1)[1].strip().strip("\"'")
-        elif line.startswith("GH_TOKEN="):
-            token = line.split("=", 1)[1].strip().strip("\"'")
+    token_path = root_dir / "secrets_org" / "software-factory-09-test" / "token"
+    cmd = f"SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d '{token_path}'"
+    token = subprocess.check_output(cmd, shell=True, text=True).strip()
+    repo = "software-factory-09-test/test3"
     return repo, token
 
 
 def main() -> None:
     print("================================================================")
     print("🚀 Live Modal Cloud Sandbox Factory Spawner Verification")
-    print("   Target: secrets_testing/test3 (anveshak71/test3)")
+    print("   Target: software-factory-09-test/test3")
     print("   Feature: slug-generator")
     print("================================================================\n")
 
-    test3_fetch = root_dir / "secrets_testing" / "test3" / "fetch.env"
-    if not test3_fetch.is_file():
-        raise FileNotFoundError(f"Missing {test3_fetch}")
+    test3_token = root_dir / "secrets_org" / "software-factory-09-test" / "token"
+    if not test3_token.is_file():
+        raise FileNotFoundError(f"Missing {test3_token}")
 
     print("🛰️  Dispatching software factory job to Modal cloud sandbox...")
     start_time = subprocess.check_output(["date", "+%s"], text=True).strip()
