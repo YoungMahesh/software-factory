@@ -3,6 +3,7 @@ import {
   type TicketStatus,
   type PreflightCheckResult,
   findContextFile,
+  getFrontierTickets,
 } from "../preflight.ts";
 import {
   GitHubClient,
@@ -153,12 +154,25 @@ export class GitHubIssueTracker implements IssueTracker {
         errors.push(
           `Milestone "${featureSlug}" not found in repository ${this.client.owner}/${this.client.repo}. Please ensure the GitHub Milestone exists and is open.`
         );
+      } else if (milestone.state !== "open") {
+        errors.push(
+          `Milestone "${featureSlug}" is closed. Please reopen milestone "${featureSlug}" or target an open milestone.`
+        );
       } else {
         const issues = await this.client.listIssuesForMilestone(milestone.number);
         if (issues.length === 0) {
           errors.push(
             `Milestone "${featureSlug}" has no issues assigned. Please create at least one GitHub Issue in milestone "${featureSlug}".`
           );
+        } else {
+          const openCandidateIssues = issues.filter(
+            (i) => i.state === "open" && mapGitHubIssueStatus(i) !== "resolved"
+          );
+          if (openCandidateIssues.length === 0) {
+            errors.push(
+              `Milestone "${featureSlug}" has no open candidate issues. Please assign at least one open GitHub Issue to milestone "${featureSlug}".`
+            );
+          }
         }
       }
     } catch (err: any) {
@@ -204,38 +218,9 @@ export class GitHubIssueTracker implements IssueTracker {
     featureSlug: string
   ): Promise<Ticket[]> {
     const tickets = await this.getTickets(workspaceDir, featureSlug);
-    const ticketMap = new Map<string, Ticket>();
-    for (const t of tickets) {
-      ticketMap.set(t.id, t);
-      ticketMap.set(String(t.number), t);
-    }
-
-    const frontier: Ticket[] = [];
-
-    for (const ticket of tickets) {
-      const isOpen = ticket.status === "ready-for-agent" || ticket.status === "open";
-      if (!isOpen) {
-        continue;
-      }
-
-      let isUnblocked = true;
-      for (const blockerId of ticket.blockedBy) {
-        const blocker = ticketMap.get(blockerId) ?? ticketMap.get(String(parseInt(blockerId, 10)));
-        if (!blocker || blocker.status !== "resolved") {
-          isUnblocked = false;
-          break;
-        }
-      }
-
-      if (isUnblocked) {
-        frontier.push(ticket);
-      }
-    }
-
-    // Sort frontier in topological / numerical order
-    frontier.sort((a, b) => a.number - b.number);
-    return frontier;
+    return getFrontierTickets(tickets);
   }
+
 
   private async updateTicketLabels(
     ticketNumber: number,

@@ -507,4 +507,59 @@ test("validatePreflightAsync & assertPreflightAsync: delegates to tracker and th
   }
 });
 
+test("GitHub Pre-flight: fails when milestone is closed", async () => {
+  const repo = createTempRepo();
+  try {
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "org",
+      repo: "repo",
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/milestones")) {
+          return new Response(
+            JSON.stringify([{ id: 1, number: 10, title: "feat-closed", state: "closed" }]),
+            { status: 200 }
+          );
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-closed");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("is closed")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("GitHub Pre-flight: validatePreflightAsync reports error when token is missing", async () => {
+  const repo = createTempRepo();
+  const origToken = process.env.GH_TOKEN;
+  const origGithubToken = process.env.GITHUB_TOKEN;
+  try {
+    delete process.env.GH_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const result = await validatePreflightAsync(repo, "feat-test", {
+      trackerType: "github",
+      owner: "org",
+      repo: "repo",
+    });
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("Missing GitHub token")));
+  } finally {
+    if (origToken) process.env.GH_TOKEN = origToken;
+    if (origGithubToken) process.env.GITHUB_TOKEN = origGithubToken;
+    cleanupTempRepo(repo);
+  }
+});
+
+
 

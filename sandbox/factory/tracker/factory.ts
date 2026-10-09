@@ -15,26 +15,15 @@ export interface IssueTrackerFactoryOptions {
   client?: GitHubClient;
 }
 
-/**
- * Creates an IssueTracker instance based on explicit options or automated resolution.
- */
-export function createIssueTracker(options: IssueTrackerFactoryOptions = {}): IssueTracker {
-  if (options.trackerType === "github") {
-    const client =
-      options.client ??
-      new GitHubClient({
-        token: options.token,
-        owner: options.owner,
-        repo: options.repo,
-      });
-    return new GitHubIssueTracker({ client });
-  }
-
-  if (options.trackerType === "local") {
-    return new LocalScratchTracker();
-  }
-
-  return resolveIssueTracker(options);
+function getGitHubClient(options: IssueTrackerFactoryOptions): GitHubClient {
+  return (
+    options.client ??
+    new GitHubClient({
+      token: options.token,
+      owner: options.owner,
+      repo: options.repo,
+    })
+  );
 }
 
 /**
@@ -45,14 +34,7 @@ export function createIssueTracker(options: IssueTrackerFactoryOptions = {}): Is
  */
 export function resolveIssueTracker(options: IssueTrackerFactoryOptions = {}): IssueTracker {
   if (options.trackerType === "github" || process.env.TRACKER === "github") {
-    const client =
-      options.client ??
-      new GitHubClient({
-        token: options.token,
-        owner: options.owner,
-        repo: options.repo,
-      });
-    return new GitHubIssueTracker({ client });
+    return new GitHubIssueTracker({ client: getGitHubClient(options) });
   }
 
   if (options.trackerType === "local" || process.env.TRACKER === "local") {
@@ -67,14 +49,7 @@ export function resolveIssueTracker(options: IssueTrackerFactoryOptions = {}): I
 
   if (hasToken && !hasScratch) {
     try {
-      const client =
-        options.client ??
-        new GitHubClient({
-          token: options.token,
-          owner: options.owner,
-          repo: options.repo,
-        });
-      return new GitHubIssueTracker({ client });
+      return new GitHubIssueTracker({ client: getGitHubClient(options) });
     } catch {
       // Fall through to LocalScratchTracker if client cannot be created
     }
@@ -82,3 +57,9 @@ export function resolveIssueTracker(options: IssueTrackerFactoryOptions = {}): I
 
   return new LocalScratchTracker();
 }
+
+/**
+ * Creates or resolves an IssueTracker instance (alias for resolveIssueTracker).
+ */
+export const createIssueTracker = resolveIssueTracker;
+

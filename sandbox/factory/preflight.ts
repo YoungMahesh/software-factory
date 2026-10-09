@@ -159,17 +159,27 @@ export async function validatePreflightAsync(
     return options.tracker.validatePreflight(repoRoot, featureSlug);
   }
 
-  const { resolveIssueTracker } = await import("./tracker/factory.ts");
-  const tracker = resolveIssueTracker({
-    workspaceDir: repoRoot,
-    featureSlug,
-    trackerType: options?.trackerType,
-    token: options?.token,
-    owner: options?.owner,
-    repo: options?.repo,
-  });
+  try {
+    const { resolveIssueTracker } = await import("./tracker/factory.ts");
+    const tracker = resolveIssueTracker({
+      workspaceDir: repoRoot,
+      featureSlug,
+      trackerType: options?.trackerType,
+      token: options?.token,
+      owner: options?.owner,
+      repo: options?.repo,
+    });
 
-  return tracker.validatePreflight(repoRoot, featureSlug);
+    return await tracker.validatePreflight(repoRoot, featureSlug);
+  } catch (err: any) {
+    if (err?.name === "GitHubAuthError" || (err && typeof err.message === "string" && err.message.includes("GitHub token"))) {
+      return {
+        valid: false,
+        errors: [`Missing GitHub token: ${err.message}`],
+      };
+    }
+    throw err;
+  }
 }
 
 /**
