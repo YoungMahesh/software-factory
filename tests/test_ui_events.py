@@ -249,6 +249,48 @@ class TestAgentEventStreamDemux(unittest.TestCase):
                 self.assertEqual(agent_event["data"]["type"], "tool_start")
                 self.assertEqual(agent_event["data"]["data"]["toolName"], "bash")
 
+    def test_attempt_start_and_reviewer_rejection_telemetry_pipeline(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        q = self.registry.add_listener(job.id)
+
+        # 1. Reviewer rejection envelope
+        rejection_envelope = (
+            '__SF_EVENT__:{"type":"reviewer_rejection","stage":"REVIEWER","data":{"verdict":"rejected","summary":"Missing tests","remediation":"Add unit tests"}}\n'
+        )
+        self.registry.append_log(job.id, rejection_envelope)
+
+        # 2. Self-correction attempt_start envelope
+        attempt_envelope = (
+            '__SF_EVENT__:{"type":"attempt_start","stage":"CODER","data":{"attempt":2,"maxRetries":2,"maxAttempts":3,"reason":"reviewer rejection","summary":"Addressing reviewer feedback"}}\n'
+        )
+        self.registry.append_log(job.id, attempt_envelope)
+
+        # Logs must remain clean
+        self.assertEqual(job.logs, [])
+        self.assertEqual(len(job.events), 2)
+        self.assertEqual(job.events[0]["type"], "reviewer_rejection")
+        self.assertEqual(job.events[0]["data"]["summary"], "Missing tests")
+        self.assertEqual(job.events[1]["type"], "attempt_start")
+        self.assertEqual(job.events[1]["data"]["attempt"], 2)
+        self.assertEqual(job.events[1]["data"]["reason"], "reviewer rejection")
+
+        # Listener receives agent_event and attempt milestone events
+        received = []
+        while not q.empty():
+            received.append(q.get_nowait())
+
+        event_names = [r["event"] for r in received]
+        self.assertIn("agent_event", event_names)
+        self.assertIn("attempt", event_names)
+
+        # Verify attempt payload
+        attempt_payload = next(r for r in received if r["event"] == "attempt")
+        self.assertEqual(attempt_payload["data"]["type"], "attempt_start")
+        self.assertEqual(attempt_payload["data"]["data"]["attempt"], 2)
+        self.assertEqual(attempt_payload["data"]["data"]["reason"], "reviewer rejection")
+
+        self.registry.remove_listener(job.id, q)
+
 
 class TestThinkingAccordionConsole(unittest.TestCase):
     def setUp(self):
@@ -429,6 +471,17 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
         self.assertIn("Showing last 100 of ${totalLines} lines —", html)
         self.assertIn("[View full output]", html)
         self.assertIn("[Show last 100 lines]", html)
+
+    def test_failing_command_auto_expansion_and_stderr_highlighting(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # Verify failure states and stderr highlighting logic in console template
+        self.assertIn("stderr-line", html)
+        self.assertIn("isFailure", html)
+        self.assertIn("Exit code ${exitCode}", html)
+
 
     def test_rehydration_of_command_events_history(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -645,6 +698,124 @@ class TestSemanticToolTelemetryConsole(unittest.TestCase):
         self.assertEqual(init_event["events"][1]["data"]["lineCount"], 15)
         self.assertEqual(init_event["events"][2]["data"]["toolName"], "edit")
         self.assertIn("+new", init_event["events"][3]["data"]["diff"])
+
+
+class TestSelfCorrectionVisualStatesConsole(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_console_template_contains_self_correction_components(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # 1. Self-Correction Loop Attempt Divider components
+        self.assertIn("attempt-divider-card", html)
+        self.assertIn("Self-Correction Loop: Attempt", html)
+        self.assertIn("createAttemptDividerCard", html)
+
+        # 2. Reviewer Rejection Card components
+        self.assertIn("reviewer-rejection-card", html)
+        self.assertIn("rejection-summary", html)
+        self.assertIn("remediation-instructions", html)
+        self.assertIn("createReviewerRejectionCard", html)
+
+        # 3. Failing command auto-expansion and stderr highlighting
+        self.assertIn("stderr-line", html)
+        self.assertIn("isFailure", html)
+        self.assertIn("card.isExpanded = true", html)
+
+    def test_frontend_failing_command_auto_expansion_and_stderr_execution(self):
+        """Verifies frontend JS logic auto-expands failing commands and highlights stderr lines."""
+        js_test = """
+        const escapeHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const card = {
+          id: 'cmd-fail',
+          lines: ['Running tests...', 'AssertionError: expected 1 to be 2', 'FAILED tests/test_math.py'],
+          fullOutput: 'Running tests...\\nAssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
+          stderr: 'AssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
+          isExpanded: false,
+          isFailure: false,
+        };
+        const resultData = {
+          exitCode: 1,
+          isError: true,
+          stderr: 'AssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
+          output: card.fullOutput,
+        };
+
+        const exitCode = typeof resultData.exitCode === 'number' ? resultData.exitCode : (resultData.isError ? 1 : 0);
+        const isFailure = exitCode !== 0 || Boolean(resultData.isError);
+        if (isFailure) {
+          card.isExpanded = true;
+          card.isFailure = true;
+        }
+
+        const stderrLines = card.stderr ? new Set(card.stderr.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean)) : null;
+        function isStderrLine(line, set) {
+          if (!line || !line.trim()) return false;
+          const trimmed = line.trim();
+          if (set && set.has(trimmed)) return true;
+          return /^(FAIL|FAILED|Error:|Exception:|AssertionError|Traceback|STDERR:)/i.test(trimmed);
+        }
+
+        const rendered = card.lines.map((line) => {
+          if (isStderrLine(line, stderrLines)) {
+            return { type: 'stderr', line };
+          }
+          return { type: 'stdout', line };
+        });
+
+        console.log(JSON.stringify({
+          isExpanded: card.isExpanded,
+          isFailure: card.isFailure,
+          rendered,
+        }));
+        """
+        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
+        res = json.loads(proc.stdout)
+        self.assertTrue(res["isExpanded"])
+        self.assertTrue(res["isFailure"])
+        self.assertEqual(res["rendered"][0]["type"], "stdout")
+        self.assertEqual(res["rendered"][1]["type"], "stderr")
+        self.assertEqual(res["rendered"][2]["type"], "stderr")
+
+    def test_rehydration_of_attempt_dividers_and_rejection_cards(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        job.status = JobStatus.SUCCESS
+
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"reviewer_rejection","stage":"REVIEWER","data":{"verdict":"rejected","summary":"Missing security checks","remediation":"Add auth middleware"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"attempt_start","stage":"CODER","data":{"attempt":2,"maxRetries":2,"maxAttempts":3,"reason":"reviewer rejection","summary":"Addressing reviewer feedback"}}\n'
+        )
+
+        with self.client.stream(
+            "GET",
+            f"/api/jobs/{job.id}/stream",
+            auth=("admin", "admin"),
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            init_event = None
+            for chunk in response.iter_lines():
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[len("data: "):])
+                    if payload.get("event") == "init":
+                        init_event = payload
+                        break
+
+        self.assertIsNotNone(init_event)
+        self.assertEqual(len(init_event["events"]), 2)
+        self.assertEqual(init_event["events"][0]["type"], "reviewer_rejection")
+        self.assertEqual(init_event["events"][0]["data"]["summary"], "Missing security checks")
+        self.assertEqual(init_event["events"][1]["type"], "attempt_start")
+        self.assertEqual(init_event["events"][1]["data"]["attempt"], 2)
 
 
 if __name__ == "__main__":

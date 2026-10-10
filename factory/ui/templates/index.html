@@ -1409,6 +1409,18 @@
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
         }
+      } else if (type === "attempt" || type === "attempt_start") {
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock);
+        }
+        if (data.attempt > 1 || (data.reason && data.reason !== "initial")) {
+          createAttemptDividerCard(stage, data);
+        }
+      } else if (type === "reviewer_rejection") {
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock);
+        }
+        createReviewerRejectionCard(stage, data);
       }
     }
 
@@ -1424,9 +1436,46 @@
       commandCardsMap.clear();
     }
 
+    function isStderrLine(line, stderrSet) {
+      if (!line || !line.trim()) return false;
+      const trimmed = line.trim();
+      if (stderrSet && stderrSet.has(trimmed)) return true;
+      return /^(FAIL|FAILED|Error:|Exception:|AssertionError|Traceback|STDERR:|npm ERR!|yarn error|fatal:)/i.test(trimmed) || /exit code \d+/i.test(trimmed);
+    }
+
     function renderCommandOutput(card) {
       if (!card || !card.outputEl) return;
       const totalLines = card.lines.length;
+
+      // Handle failing command auto-expansion and stderr highlighting
+      if (card.isFailure) {
+        card.outputEl.classList.remove("max-h-80");
+        card.outputEl.classList.add("max-h-none");
+
+        const stderrSet = card.stderr ? new Set(card.stderr.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) : null;
+        const linesToRender = card.isExpanded ? card.lines : card.lines.slice(-100);
+
+        if (totalLines > 100 && card.toggleEl) {
+          card.toggleEl.classList.remove("hidden");
+          if (card.isExpanded) {
+            card.toggleEl.innerHTML = `Showing all ${totalLines} lines (Auto-expanded on error) — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
+          } else {
+            card.toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
+          }
+        } else if (card.toggleEl) {
+          card.toggleEl.classList.add("hidden");
+        }
+
+        const renderedHtml = linesToRender.map((line) => {
+          if (isStderrLine(line, stderrSet)) {
+            return `<div class="command-line stderr-line text-rose-400 bg-rose-950/40 px-1 py-0.5 rounded font-mono border-l-2 border-rose-500 font-medium">${escapeHtml(line)}</div>`;
+          }
+          return `<div class="command-line stdout-line text-slate-300 font-mono px-1 py-0.5">${escapeHtml(line)}</div>`;
+        }).join("");
+
+        card.outputEl.innerHTML = renderedHtml || '<span class="command-placeholder text-slate-500 italic text-[11px]">(No output)</span>';
+        return;
+      }
 
       if (totalLines <= 100) {
         if (card.toggleEl) {
@@ -1538,6 +1587,7 @@
         timerInterval,
         isCompleted: false,
         isExpanded: false,
+        isFailure: false,
         fullOutput: "",
         lines: [],
       };
@@ -1572,14 +1622,27 @@
       }
 
       const exitCode = typeof resultData.exitCode === "number" ? resultData.exitCode : (resultData.isError ? 1 : 0);
+      const isFailure = exitCode !== 0 || Boolean(resultData.isError);
+      card.isFailure = isFailure;
+      card.exitCode = exitCode;
+      card.stderr = typeof resultData.stderr === "string" ? resultData.stderr : "";
+
+      if (isFailure) {
+        card.isExpanded = true;
+        if (card.element) {
+          card.element.classList.remove("border-slate-800");
+          card.element.classList.add("border-rose-700/80", "shadow-rose-950/30");
+        }
+      }
+
       if (card.badgeEl) {
         card.badgeEl.classList.remove("hidden");
-        if (exitCode === 0 && !resultData.isError) {
+        if (!isFailure) {
           card.badgeEl.textContent = "Exit code 0";
           card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
         } else {
           card.badgeEl.textContent = `Exit code ${exitCode}`;
-          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
+          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30";
         }
       }
 
@@ -1958,6 +2021,105 @@
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
       }
+    }
+
+    // -------------------------------------------------------------
+    // Agent Event Stream: Self-Correction Loop Attempt Dividers & Rejection Cards
+    // -------------------------------------------------------------
+    function createAttemptDividerCard(stage, data) {
+      const attempt = data.attempt || 1;
+      const maxRetries = data.maxRetries || 2;
+      const maxAttempts = data.maxAttempts || (maxRetries + 1);
+      const reason = data.reason || "self-correction";
+      const summary = data.summary || (reason === "test failure" ? "Fixing failing test suites" : (reason === "reviewer rejection" ? "Addressing reviewer feedback" : "Retrying implementation"));
+
+      const dividerId = "attempt-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+      const container = document.createElement("div");
+      container.id = dividerId;
+      container.className = "attempt-divider-card my-4 py-2.5 px-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs flex items-center justify-between shadow-md";
+
+      container.innerHTML = `
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <span class="text-base shrink-0">🔄</span>
+          <div class="truncate">
+            <span class="font-bold text-amber-200">Self-Correction Loop: Attempt ${attempt}/${maxAttempts}</span>
+            <span class="text-amber-300/80 text-[11px] ml-1.5 font-normal">(${escapeHtml(summary)})</span>
+          </div>
+        </div>
+        <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+          ${attempt > 1 ? `RETRY ${attempt - 1}/${maxRetries}` : 'INITIAL'}
+        </span>
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      return container;
+    }
+
+    function createReviewerRejectionCard(stage, data) {
+      const summary = data.summary || data.verdict?.summary || "Reviewer rejected diff";
+      const remediation = data.remediation || data.verdict?.remediation || "";
+      const issues = data.issues || data.verdict?.issues || [];
+
+      const cardId = "review-reject-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+      const container = document.createElement("div");
+      container.id = cardId;
+      container.className = "reviewer-rejection-card my-3.5 rounded-lg border border-rose-500/40 bg-rose-950/30 p-3.5 shadow-lg overflow-hidden";
+
+      let issuesHtml = "";
+      if (Array.isArray(issues) && issues.length > 0) {
+        const items = issues.map((iss) => {
+          const sev = (iss.severity || "error").toUpperCase();
+          const desc = escapeHtml(iss.description || "");
+          const file = iss.file ? ` (${escapeHtml(iss.file)})` : "";
+          return `<li class="text-[11px] text-rose-300/90 font-mono"><span class="font-bold text-rose-400">[${sev}]</span> ${desc}${file}</li>`;
+        }).join("");
+        issuesHtml = `
+          <div class="rejection-issues mt-2 mb-2 bg-black/40 p-2.5 rounded border border-rose-500/20">
+            <div class="text-[11px] font-bold text-rose-300 mb-1">Identified Issues:</div>
+            <ul class="list-disc list-inside space-y-1">${items}</ul>
+          </div>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="flex items-center justify-between border-b border-rose-500/30 pb-2 mb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">❌</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-rose-300">Reviewer Rejection</span>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">REJECTED</span>
+          </div>
+          <span class="text-[10px] font-mono text-rose-400">Quality Gate Failed</span>
+        </div>
+        <div class="rejection-summary text-xs text-rose-200 mb-2 leading-relaxed">
+          <strong class="text-rose-300">Summary:</strong> ${escapeHtml(summary)}
+        </div>
+        ${issuesHtml}
+        ${remediation ? `
+        <div class="remediation-instructions text-xs text-amber-200/90 bg-black/50 p-2.5 rounded border border-amber-500/30 font-mono leading-relaxed mt-2">
+          <div class="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
+            <span>🛠</span>
+            <span>Remediation Instructions:</span>
+          </div>
+          <div class="whitespace-pre-wrap text-[11px] text-amber-200/90">${escapeHtml(remediation)}</div>
+        </div>` : ''}
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      return container;
     }
 
     function rehydrateEventsHistory(events, jobStatus) {

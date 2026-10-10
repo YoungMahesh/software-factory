@@ -15,7 +15,11 @@ import { updateTicketFile } from "./ticket.ts";
 import { commitAndPushFeatureBranch, commitFailureDiagnostics } from "./git.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
 import type { IssueTracker } from "./tracker/types.ts";
-import { emitStageEvent } from "./events.ts";
+import {
+  emitStageEvent,
+  emitAttemptStartEvent,
+  emitReviewerRejectionEvent,
+} from "./events.ts";
 
 export interface TicketLifecycleOptions {
   workspaceDir: string;
@@ -25,6 +29,7 @@ export interface TicketLifecycleOptions {
   tracker?: IssueTracker;
   maxRetries?: number;
   push?: boolean;
+  stream?: { write: (chunk: string) => any };
   provider?: Provider;
   model?: Model<any>;
   plannerRunner?: typeof runPlannerAgent;
@@ -111,7 +116,7 @@ export async function runTicketLifecycle(
     : undefined;
 
   // 3. Stage 1: Planner Agent
-  emitStageEvent("PLANNER", { ticketId: ticket.id, title: ticket.title });
+  emitStageEvent("PLANNER", { ticketId: ticket.id, title: ticket.title }, { stream: options.stream });
   console.log(`\n🧠 Stage 1: Planner Agent: Planning implementation for ticket #${ticket.number ?? ticket.id}...`);
   let plan: ImplementationPlan;
   try {
@@ -171,18 +176,39 @@ export async function runTicketLifecycle(
   let lastDiagnostics: string | undefined = undefined;
   let lastVerification: VerificationResult | undefined = undefined;
   let lastReview: ReviewVerdict | undefined = undefined;
+  let failureReason: string | undefined = undefined;
+  let failureSummary: string | undefined = undefined;
   let retriesUsed = 0;
   let passed = false;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     retriesUsed = attempt;
 
+    // Emit attempt_start milestone telemetry event
+    emitAttemptStartEvent(
+      attempt + 1,
+      maxRetries,
+      attempt === 0 ? "initial" : failureReason,
+      {
+        ticketId: ticket.id,
+        summary: attempt === 0 ? "Initial implementation" : failureSummary,
+        diagnostics: lastDiagnostics,
+        reviewVerdict: lastReview,
+      },
+      "CODER",
+      { stream: options.stream }
+    );
+
     // Stage 2: Coder Agent
-    emitStageEvent("CODER", {
-      ticketId: ticket.id,
-      attempt: attempt + 1,
-      maxAttempts: maxRetries + 1,
-    });
+    emitStageEvent(
+      "CODER",
+      {
+        ticketId: ticket.id,
+        attempt: attempt + 1,
+        maxAttempts: maxRetries + 1,
+      },
+      { stream: options.stream }
+    );
     console.log(`\n💻 Stage 2: Coder Agent: Coding implementation (attempt ${attempt + 1}/${maxRetries + 1})...`);
     await coderRunner({
       workspaceDir,
@@ -194,7 +220,7 @@ export async function runTicketLifecycle(
     });
 
     // Stage 3: Deterministic Verifier
-    emitStageEvent("VERIFIER", { ticketId: ticket.id });
+    emitStageEvent("VERIFIER", { ticketId: ticket.id }, { stream: options.stream });
     console.log(`\n🧪 Stage 3: Deterministic Verifier: Running verification suites...`);
     const verifierLogPath = path.join(scratchDir, "verification.md");
     const verification = await verifierRunner({
@@ -205,12 +231,14 @@ export async function runTicketLifecycle(
     lastVerification = verification;
 
     if (!verification.passed) {
+      failureReason = "test failure";
+      failureSummary = "Fixing failing test suites";
       lastDiagnostics = `Deterministic Verification Failed:\n\n${verification.summary}`;
       continue;
     }
 
     // Stage 4: Reviewer Agent (only after verifier passes)
-    emitStageEvent("REVIEWER", { ticketId: ticket.id });
+    emitStageEvent("REVIEWER", { ticketId: ticket.id }, { stream: options.stream });
     console.log(`\n🔍 Stage 4: Reviewer Agent: Reviewing diff against repo standards...`);
     let gitDiff = "";
     try {
@@ -245,12 +273,17 @@ export async function runTicketLifecycle(
       });
       verdict = reviewResult.verdict;
     } catch (reviewErr: any) {
+      failureReason = "reviewer rejection";
+      failureSummary = "Reviewer stage failure";
       lastDiagnostics = `### Reviewer Stage Failure\n\nFailed to complete review: ${reviewErr?.message ?? String(reviewErr)}`;
       continue;
     }
     lastReview = verdict;
 
     if (verdict.verdict === "rejected") {
+      emitReviewerRejectionEvent(verdict, "REVIEWER", { stream: options.stream });
+      failureReason = "reviewer rejection";
+      failureSummary = "Addressing reviewer feedback";
       lastDiagnostics = formatReviewDiagnostics(verdict);
       continue;
     }

@@ -10,6 +10,8 @@ import {
   emitToolResultEvent,
   emitStageEvent,
   emitAttemptEvent,
+  emitAttemptStartEvent,
+  emitReviewerRejectionEvent,
   AgentEventStream,
   ThinkingBatchBuffer,
   ThinkingExtractor,
@@ -189,6 +191,48 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       assert.equal(parsed?.data.attempt, 2);
       assert.equal(parsed?.data.maxAttempts, 3);
       assert.equal(parsed?.data.reason, "test failure");
+    });
+
+    it("helper emitAttemptStartEvent formats attempt_start with attempt number and diagnostics reason", () => {
+      const chunks: string[] = [];
+      emitAttemptStartEvent(2, 2, "test failure", {
+        summary: "Fixing failing test suites",
+        diagnostics: "AssertionError: 404 != 200",
+      }, "CODER", {
+        stream: { write: (c) => chunks.push(c) },
+      });
+
+      assert.equal(chunks.length, 1);
+      const parsed = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(parsed?.type, "attempt_start");
+      assert.equal(parsed?.stage, "CODER");
+      assert.equal(parsed?.data.attempt, 2);
+      assert.equal(parsed?.data.maxRetries, 2);
+      assert.equal(parsed?.data.maxAttempts, 3);
+      assert.equal(parsed?.data.reason, "test failure");
+      assert.equal(parsed?.data.summary, "Fixing failing test suites");
+      assert.equal(parsed?.data.diagnostics, "AssertionError: 404 != 200");
+    });
+
+    it("helper emitReviewerRejectionEvent formats reviewer rejection diagnostics", () => {
+      const chunks: string[] = [];
+      emitReviewerRejectionEvent({
+        verdict: "rejected",
+        summary: "Missing input validation in auth route",
+        remediation: "Add zod schema validation before processing credentials",
+        issues: [{ severity: "error", description: "No validation", file: "src/auth.ts" }],
+      }, "REVIEWER", {
+        stream: { write: (c) => chunks.push(c) },
+      });
+
+      assert.equal(chunks.length, 1);
+      const parsed = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(parsed?.type, "reviewer_rejection");
+      assert.equal(parsed?.stage, "REVIEWER");
+      assert.equal(parsed?.data.verdict, "rejected");
+      assert.equal(parsed?.data.summary, "Missing input validation in auth route");
+      assert.equal(parsed?.data.remediation, "Add zod schema validation before processing credentials");
+      assert.equal(parsed?.data.issues.length, 1);
     });
   });
 

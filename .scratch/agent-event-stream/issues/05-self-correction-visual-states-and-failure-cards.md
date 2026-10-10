@@ -4,11 +4,11 @@
 
 **Blocked by:** 03: Command Execution Timeline & Windowed Output
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] In-sandbox `sandbox/factory/lifecycle.ts` emits an `attempt_start` telemetry event at each iteration of the self-correction loop, reporting the attempt number (e.g. `attempt: 2, maxRetries: 2`) and diagnostics reason (test failure or reviewer rejection).
-- [ ] Host `JobRegistry` detects and forwards attempt milestone events over the SSE stream to connected clients.
-- [ ] In the Factory Testing Console UI (`factory/ui/templates/index.html`), any command exiting with a non-zero status code automatically expands its output container and displays a red status badge (`Exit code 1`) with stderr lines highlighted.
-- [ ] Attempt transitions render a prominent visual divider card on the timeline (e.g., `🔄 Self-Correction Loop: Attempt 2/3 (Fixing failing test suites)`).
-- [ ] If the Reviewer Agent rejects a diff, a Reviewer Rejection Card displays the rejection summary and remediation instructions immediately preceding the next Coder attempt.
-- [ ] Tests verify that self-correction loop transitions emit attempt events and that failing commands trigger automatic container expansion in the UI.
+- [x] In-sandbox `sandbox/factory/lifecycle.ts` emits an `attempt_start` telemetry event at each iteration of the self-correction loop, reporting the attempt number (e.g. `attempt: 2, maxRetries: 2`) and diagnostics reason (test failure or reviewer rejection).
+- [x] Host `JobRegistry` detects and forwards attempt milestone events over the SSE stream to connected clients.
+- [x] In the Factory Testing Console UI (`factory/ui/templates/index.html`), any command exiting with a non-zero status code automatically expands its output container and displays a red status badge (`Exit code 1`) with stderr lines highlighted.
+- [x] Attempt transitions render a prominent visual divider card on the timeline (e.g., `🔄 Self-Correction Loop: Attempt 2/3 (Fixing failing test suites)`).
+- [x] If the Reviewer Agent rejects a diff, a Reviewer Rejection Card displays the rejection summary and remediation instructions immediately preceding the next Coder attempt.
+- [x] Tests verify that self-correction loop transitions emit attempt events and that failing commands trigger automatic container expansion in the UI.

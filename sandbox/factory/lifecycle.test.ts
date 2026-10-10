@@ -11,6 +11,7 @@ import { type VerificationResult } from "./verifier.ts";
 import { ensureFeatureBranch } from "./git.ts";
 import { GitHubClient } from "./github.ts";
 import { GitHubIssueTracker } from "./tracker/github-tracker.ts";
+import { parseTelemetryEnvelope } from "./events.ts";
 
 function setupMockWorkspace(featureSlug: string, ticketNum: string = "01"): {
   repoDir: string;
@@ -406,6 +407,146 @@ test("runTicketLifecycle: integrates with GitHubIssueTracker (claims ticket, com
     assert.ok(commentsPosted[0].includes(result.commitSha!));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runTicketLifecycle: emits attempt_start telemetry event for test failure and reviewer rejection during self-correction loops", async () => {
+  const { repoDir, ticket } = setupMockWorkspace("telemetry-retry-feature");
+
+  try {
+    ensureFeatureBranch({ workspaceDir: repoDir, featureSlug: "telemetry-retry-feature" });
+
+    const emittedEnvelopes: any[] = [];
+    const mockStream = {
+      write: (chunk: string) => {
+        const env = parseTelemetryEnvelope(chunk);
+        if (env) emittedEnvelopes.push(env);
+        return true;
+      },
+    };
+
+    let coderAttempts = 0;
+    const result = await runTicketLifecycle({
+      workspaceDir: repoDir,
+      featureSlug: "telemetry-retry-feature",
+      ticket,
+      push: false,
+      stream: mockStream,
+      plannerRunner: async () => ({ plan: mockPlan, messages: [] }),
+      coderRunner: async () => {
+        coderAttempts++;
+        fs.writeFileSync(path.join(repoDir, "file.txt"), `attempt ${coderAttempts}`, "utf-8");
+        return { summary: "Implemented", messages: [] };
+      },
+      verifierRunner: async () => {
+        if (coderAttempts === 1) {
+          return {
+            passed: false,
+            totalCommands: 1,
+            passedCommands: 0,
+            failedCommands: 1,
+            results: [],
+            summary: "Assertion failed: expected true to be false",
+            durationMs: 15,
+          };
+        }
+        return {
+          passed: true,
+          totalCommands: 1,
+          passedCommands: 1,
+          failedCommands: 0,
+          results: [],
+          summary: "All tests passed",
+          durationMs: 10,
+        };
+      },
+      reviewerRunner: async () => ({ verdict: mockPassingReview, messages: [] }),
+    });
+
+    assert.equal(result.status, "resolved");
+    assert.equal(coderAttempts, 2);
+
+    const attemptEvents = emittedEnvelopes.filter((e) => e.type === "attempt_start");
+    assert.equal(attemptEvents.length, 2, "Must emit attempt_start on each loop iteration");
+
+    // Attempt 1: initial
+    assert.equal(attemptEvents[0].data.attempt, 1);
+    assert.equal(attemptEvents[0].data.maxRetries, 2);
+
+    // Attempt 2: test failure retry
+    assert.equal(attemptEvents[1].data.attempt, 2);
+    assert.equal(attemptEvents[1].data.maxRetries, 2);
+    assert.equal(attemptEvents[1].data.reason, "test failure");
+    assert.ok(attemptEvents[1].data.diagnostics?.includes("Assertion failed: expected true to be false"));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test("runTicketLifecycle: emits reviewer_rejection telemetry event when reviewer rejects diff", async () => {
+  const { repoDir, ticket } = setupMockWorkspace("telemetry-review-reject");
+
+  try {
+    ensureFeatureBranch({ workspaceDir: repoDir, featureSlug: "telemetry-review-reject" });
+
+    const emittedEnvelopes: any[] = [];
+    const mockStream = {
+      write: (chunk: string) => {
+        const env = parseTelemetryEnvelope(chunk);
+        if (env) emittedEnvelopes.push(env);
+        return true;
+      },
+    };
+
+    let coderAttempts = 0;
+    const result = await runTicketLifecycle({
+      workspaceDir: repoDir,
+      featureSlug: "telemetry-review-reject",
+      ticket,
+      push: false,
+      stream: mockStream,
+      plannerRunner: async () => ({ plan: mockPlan, messages: [] }),
+      coderRunner: async () => {
+        coderAttempts++;
+        fs.writeFileSync(path.join(repoDir, "file.txt"), `attempt ${coderAttempts}`, "utf-8");
+        return { summary: "Implemented", messages: [] };
+      },
+      verifierRunner: async () => ({
+        passed: true,
+        totalCommands: 1,
+        passedCommands: 1,
+        failedCommands: 0,
+        results: [],
+        summary: "All tests passed",
+        durationMs: 10,
+      }),
+      reviewerRunner: async () => {
+        if (coderAttempts === 1) {
+          return { verdict: mockRejectingReview, messages: [] };
+        }
+        return { verdict: mockPassingReview, messages: [] };
+      },
+    });
+
+    assert.equal(result.status, "resolved");
+    assert.equal(coderAttempts, 2);
+
+    // Verify reviewer_rejection event
+    const rejectionEvents = emittedEnvelopes.filter((e) => e.type === "reviewer_rejection");
+    assert.equal(rejectionEvents.length, 1, "Must emit reviewer_rejection event");
+    assert.equal(rejectionEvents[0].stage, "REVIEWER");
+    assert.equal(rejectionEvents[0].data.verdict, "rejected");
+    assert.equal(rejectionEvents[0].data.summary, "Missing edge case tests");
+    assert.equal(rejectionEvents[0].data.remediation, "Add test for empty input");
+
+    // Verify second attempt_start has reviewer rejection reason
+    const attemptEvents = emittedEnvelopes.filter((e) => e.type === "attempt_start");
+    assert.equal(attemptEvents.length, 2);
+    assert.equal(attemptEvents[1].data.attempt, 2);
+    assert.equal(attemptEvents[1].data.reason, "reviewer rejection");
+    assert.ok(attemptEvents[1].data.diagnostics?.includes("Reviewer Rejection: REJECTED"));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
 

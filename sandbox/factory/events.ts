@@ -29,6 +29,8 @@ export type TelemetryEventType =
   | "tool_result"
   | "stage"
   | "attempt"
+  | "attempt_start"
+  | "reviewer_rejection"
   | (string & {});
 
 export type TelemetryStage =
@@ -489,6 +491,58 @@ export function emitAttemptEvent(
 }
 
 /**
+ * Emits a self-correction loop attempt_start telemetry event.
+ */
+export function emitAttemptStartEvent(
+  attempt: number,
+  maxRetries: number,
+  reason?: string,
+  data: Record<string, any> = {},
+  stage: TelemetryStage = "CODER",
+  options?: EmitOptions
+): string {
+  return emitTelemetryEvent(
+    {
+      type: "attempt_start",
+      stage,
+      data: {
+        attempt,
+        maxRetries,
+        maxAttempts: maxRetries + 1,
+        ...(reason !== undefined ? { reason } : {}),
+        ...data,
+      },
+    },
+    options
+  );
+}
+
+/**
+ * Emits a reviewer rejection telemetry event with audit diagnostics.
+ */
+export function emitReviewerRejectionEvent(
+  verdict: any,
+  stage: TelemetryStage = "REVIEWER",
+  options?: EmitOptions
+): string {
+  return emitTelemetryEvent(
+    {
+      type: "reviewer_rejection",
+      stage,
+      data: {
+        verdict: typeof verdict === "object" ? verdict?.verdict : verdict,
+        summary: verdict?.summary,
+        remediation: verdict?.remediation,
+        issues: verdict?.issues,
+        specCompliance: verdict?.specCompliance,
+        standardsCompliance: verdict?.standardsCompliance,
+      },
+    },
+    options
+  );
+}
+
+/**
  * Micro-batch buffer that aggregates high-frequency streaming thinking deltas
  * into 100ms chunks to prevent stdout stream saturation.
  */
@@ -677,6 +731,30 @@ export class AgentEventStream {
       data,
       { stream: this.stream }
     );
+  }
+
+  emitAttemptStart(
+    attempt: number,
+    maxRetries: number,
+    reason?: string,
+    data: Record<string, any> = {}
+  ): string {
+    return emitAttemptStartEvent(
+      attempt,
+      maxRetries,
+      reason,
+      data,
+      this.currentStage ?? "CODER",
+      { stream: this.stream }
+    );
+  }
+
+  emitReviewerRejection(
+    verdict: any
+  ): string {
+    return emitReviewerRejectionEvent(verdict, this.currentStage ?? "REVIEWER", {
+      stream: this.stream,
+    });
   }
 }
 
