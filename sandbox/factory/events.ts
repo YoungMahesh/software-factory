@@ -8,6 +8,7 @@
 
 import * as fs from "node:fs";
 import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
+import { type ReviewVerdict } from "./harness.ts";
 
 // Ensure Node.js container stdout and stderr handle writes synchronously without block buffering
 try {
@@ -521,7 +522,7 @@ export function emitAttemptStartEvent(
  * Emits a reviewer rejection telemetry event with audit diagnostics.
  */
 export function emitReviewerRejectionEvent(
-  verdict: any,
+  verdict: Partial<ReviewVerdict> | Record<string, any>,
   stage: TelemetryStage = "REVIEWER",
   options?: EmitOptions
 ): string {
@@ -750,7 +751,7 @@ export class AgentEventStream {
   }
 
   emitReviewerRejection(
-    verdict: any
+    verdict: Partial<ReviewVerdict> | Record<string, any>
   ): string {
     return emitReviewerRejectionEvent(verdict, this.currentStage ?? "REVIEWER", {
       stream: this.stream,

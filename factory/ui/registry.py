@@ -254,10 +254,6 @@ class JobRegistry:
                     event_type = event_obj.get("type")
                     if event_type in ("attempt", "attempt_start"):
                         self._broadcast(job, {"event": "attempt", "data": event_obj})
-                        if event_type == "attempt_start":
-                            self._broadcast(job, {"event": "attempt_start", "data": event_obj})
-                    elif event_type == "reviewer_rejection":
-                        self._broadcast(job, {"event": "reviewer_rejection", "data": event_obj})
 
                     self._broadcast(job, {"event": "agent_event", "data": event_obj})
                 else:

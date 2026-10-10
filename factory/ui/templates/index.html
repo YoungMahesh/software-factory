@@ -1447,65 +1447,48 @@
       if (!card || !card.outputEl) return;
       const totalLines = card.lines.length;
 
-      // Handle failing command auto-expansion and stderr highlighting
-      if (card.isFailure) {
+      // Container height clamping based on expansion state
+      if (card.isExpanded) {
         card.outputEl.classList.remove("max-h-80");
         card.outputEl.classList.add("max-h-none");
+      } else {
+        card.outputEl.classList.remove("max-h-none");
+        card.outputEl.classList.add("max-h-80");
+      }
 
-        const stderrSet = card.stderr ? new Set(card.stderr.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) : null;
-        const linesToRender = card.isExpanded ? card.lines : card.lines.slice(-100);
-
-        if (totalLines > 100 && card.toggleEl) {
+      // Output line slicing and toggle button state
+      let linesToRender = card.lines;
+      if (totalLines <= 100) {
+        if (card.toggleEl) {
+          card.toggleEl.classList.add("hidden");
+        }
+      } else {
+        if (card.toggleEl) {
           card.toggleEl.classList.remove("hidden");
           if (card.isExpanded) {
-            card.toggleEl.innerHTML = `Showing all ${totalLines} lines (Auto-expanded on error) — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
+            const autoLabel = card.isFailure ? " (Auto-expanded on error)" : "";
+            card.toggleEl.innerHTML = `Showing all ${totalLines} lines${autoLabel} — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
           } else {
             card.toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
           }
-        } else if (card.toggleEl) {
-          card.toggleEl.classList.add("hidden");
         }
+        if (!card.isExpanded) {
+          linesToRender = card.lines.slice(-100);
+        }
+      }
 
+      // Render content
+      if (card.isFailure) {
+        const stderrSet = card.stderr ? new Set(card.stderr.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) : null;
         const renderedHtml = linesToRender.map((line) => {
           if (isStderrLine(line, stderrSet)) {
             return `<div class="command-line stderr-line text-rose-400 bg-rose-950/40 px-1 py-0.5 rounded font-mono border-l-2 border-rose-500 font-medium">${escapeHtml(line)}</div>`;
           }
           return `<div class="command-line stdout-line text-slate-300 font-mono px-1 py-0.5">${escapeHtml(line)}</div>`;
         }).join("");
-
         card.outputEl.innerHTML = renderedHtml || '<span class="command-placeholder text-slate-500 italic text-[11px]">(No output)</span>';
-        return;
-      }
-
-      if (totalLines <= 100) {
-        if (card.toggleEl) {
-          card.toggleEl.classList.add("hidden");
-        }
-        card.outputEl.classList.remove("max-h-none");
-        card.outputEl.classList.add("max-h-80");
-        card.outputEl.textContent = card.fullOutput || "(No output)";
-        return;
-      }
-
-      if (card.isExpanded) {
-        // Expanded: show full output without truncation and unclamp container height
-        if (card.toggleEl) {
-          card.toggleEl.classList.remove("hidden");
-          card.toggleEl.innerHTML = `Showing all ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
-        }
-        card.outputEl.classList.remove("max-h-80");
-        card.outputEl.classList.add("max-h-none");
-        card.outputEl.textContent = card.fullOutput;
       } else {
-        // Windowed: show last 100 lines and clamp container height
-        const windowedLines = card.lines.slice(-100);
-        if (card.toggleEl) {
-          card.toggleEl.classList.remove("hidden");
-          card.toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
-        }
-        card.outputEl.classList.remove("max-h-none");
-        card.outputEl.classList.add("max-h-80");
-        card.outputEl.textContent = windowedLines.join("\n");
+        card.outputEl.textContent = linesToRender.join("\n") || "(No output)";
       }
     }
 
@@ -1641,7 +1624,7 @@
           card.badgeEl.textContent = "Exit code 0";
           card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
         } else {
-          card.badgeEl.textContent = `Exit code ${exitCode}`;
+          card.badgeEl.textContent = exitCode !== 0 ? `Exit code ${exitCode}` : "Command Failed";
           card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30";
         }
       }
@@ -2026,12 +2009,24 @@
     // -------------------------------------------------------------
     // Agent Event Stream: Self-Correction Loop Attempt Dividers & Rejection Cards
     // -------------------------------------------------------------
+    const renderedAttemptDividers = new Set();
+
+    function clearAttemptDividers() {
+      renderedAttemptDividers.clear();
+    }
+
     function createAttemptDividerCard(stage, data) {
       const attempt = data.attempt || 1;
       const maxRetries = data.maxRetries || 2;
       const maxAttempts = data.maxAttempts || (maxRetries + 1);
       const reason = data.reason || "self-correction";
       const summary = data.summary || (reason === "test failure" ? "Fixing failing test suites" : (reason === "reviewer rejection" ? "Addressing reviewer feedback" : "Retrying implementation"));
+
+      const attemptKey = `attempt-${attempt}-${reason}`;
+      if (renderedAttemptDividers.has(attemptKey)) {
+        return null;
+      }
+      renderedAttemptDividers.add(attemptKey);
 
       const dividerId = "attempt-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
       const container = document.createElement("div");
@@ -2221,6 +2216,7 @@
       clearCommandCards();
       clearDiffCards();
       clearToolChips();
+      clearAttemptDividers();
 
       eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
@@ -2257,6 +2253,8 @@
             cleanLogsText += msg.data;
             appendTerminalText(msg.data);
           } else if (msg.event === "agent_event") {
+            handleAgentTelemetryEvent(msg.data);
+          } else if (msg.event === "attempt") {
             handleAgentTelemetryEvent(msg.data);
           } else if (msg.event === "stage") {
             activeJobStage = msg.stage;
@@ -2430,6 +2428,9 @@
       activeThinkingBlock = null;
       thinkingBlocksMap.clear();
       clearCommandCards();
+      clearDiffCards();
+      clearToolChips();
+      clearAttemptDividers();
       logLineCount.textContent = "0 lines";
     });
 

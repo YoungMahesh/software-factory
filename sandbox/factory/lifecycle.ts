@@ -173,11 +173,14 @@ export async function runTicketLifecycle(
   }
 
   // 4. Self-Correction Loop: Coder -> Verifier -> Reviewer (up to maxRetries)
+  interface FailureContext {
+    reason: string;
+    summary: string;
+  }
   let lastDiagnostics: string | undefined = undefined;
   let lastVerification: VerificationResult | undefined = undefined;
   let lastReview: ReviewVerdict | undefined = undefined;
-  let failureReason: string | undefined = undefined;
-  let failureSummary: string | undefined = undefined;
+  let failureContext: FailureContext | undefined = undefined;
   let retriesUsed = 0;
   let passed = false;
 
@@ -188,10 +191,10 @@ export async function runTicketLifecycle(
     emitAttemptStartEvent(
       attempt + 1,
       maxRetries,
-      attempt === 0 ? "initial" : failureReason,
+      attempt === 0 ? "initial" : failureContext?.reason,
       {
         ticketId: ticket.id,
-        summary: attempt === 0 ? "Initial implementation" : failureSummary,
+        summary: attempt === 0 ? "Initial implementation" : failureContext?.summary,
         diagnostics: lastDiagnostics,
         reviewVerdict: lastReview,
       },
@@ -231,8 +234,10 @@ export async function runTicketLifecycle(
     lastVerification = verification;
 
     if (!verification.passed) {
-      failureReason = "test failure";
-      failureSummary = "Fixing failing test suites";
+      failureContext = {
+        reason: "test failure",
+        summary: "Fixing failing test suites",
+      };
       lastDiagnostics = `Deterministic Verification Failed:\n\n${verification.summary}`;
       continue;
     }
@@ -273,8 +278,10 @@ export async function runTicketLifecycle(
       });
       verdict = reviewResult.verdict;
     } catch (reviewErr: any) {
-      failureReason = "reviewer rejection";
-      failureSummary = "Reviewer stage failure";
+      failureContext = {
+        reason: "reviewer rejection",
+        summary: "Reviewer stage failure",
+      };
       lastDiagnostics = `### Reviewer Stage Failure\n\nFailed to complete review: ${reviewErr?.message ?? String(reviewErr)}`;
       continue;
     }
@@ -282,8 +289,10 @@ export async function runTicketLifecycle(
 
     if (verdict.verdict === "rejected") {
       emitReviewerRejectionEvent(verdict, "REVIEWER", { stream: options.stream });
-      failureReason = "reviewer rejection";
-      failureSummary = "Addressing reviewer feedback";
+      failureContext = {
+        reason: "reviewer rejection",
+        summary: "Addressing reviewer feedback",
+      };
       lastDiagnostics = formatReviewDiagnostics(verdict);
       continue;
     }
