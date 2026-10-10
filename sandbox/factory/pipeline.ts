@@ -19,6 +19,7 @@ import {
 import { verifyWorkspace } from "./verifier.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
 import type { IssueTracker, TrackerType } from "./tracker/types.ts";
+import { emitStageEvent } from "./events.ts";
 
 export interface PipelineOptions {
   workspaceDir: string;
@@ -103,6 +104,7 @@ export async function runAssemblyLinePipeline(
     });
 
   // 1. Stage 0: Pre-flight Guard Check on checked out branch
+  emitStageEvent("PREFLIGHT", { workspace: workspaceDir });
   console.log(`\n🛡️  Stage 0: Pre-flight Guard Check on workspace...`);
   await assertPreflightAsync(workspaceDir, featureSlug, {
     tracker,
@@ -382,6 +384,7 @@ if (isDirectRun) {
         console.error("❌ Assembly line pipeline halted on error.");
         process.exit(1);
       } else {
+        emitStageEvent("COMPLETED", { feature });
         console.log("🎉 Assembly line pipeline completed successfully!");
         process.exit(0);
       }

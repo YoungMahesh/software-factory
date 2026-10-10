@@ -8,6 +8,18 @@
 
 import * as fs from "node:fs";
 
+// Ensure Node.js container stdout and stderr handle writes synchronously without block buffering
+try {
+  if ((process.stdout as any)?._handle?.setBlocking) {
+    (process.stdout as any)._handle.setBlocking(true);
+  }
+  if ((process.stderr as any)?._handle?.setBlocking) {
+    (process.stderr as any)._handle.setBlocking(true);
+  }
+} catch {
+  // Ignore in environments where _handle is not accessible
+}
+
 export const EVENT_PREFIX = "__SF_EVENT__:";
 
 export type TelemetryEventType =
@@ -211,21 +223,77 @@ export function emitAttemptEvent(
 }
 
 /**
+ * Micro-batch buffer that aggregates high-frequency streaming thinking deltas
+ * into 100ms chunks to prevent stdout stream saturation.
+ */
+export class ThinkingBatchBuffer {
+  private buffer: string = "";
+  private timer: NodeJS.Timeout | null = null;
+  private intervalMs: number;
+  private onFlush: (delta: string) => void;
+
+  constructor(options: {
+    intervalMs?: number;
+    onFlush: (delta: string) => void;
+  }) {
+    this.intervalMs = options.intervalMs ?? 100;
+    this.onFlush = options.onFlush;
+  }
+
+  append(delta: string): void {
+    this.buffer += delta;
+    if (!this.timer) {
+      this.timer = setTimeout(() => {
+        this.flush();
+      }, this.intervalMs);
+    }
+  }
+
+  flush(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.buffer.length > 0) {
+      const content = this.buffer;
+      this.buffer = "";
+      this.onFlush(content);
+    }
+  }
+
+  hasPending(): boolean {
+    return this.buffer.length > 0;
+  }
+}
+
+/**
  * Stateful telemetry stream that manages current stage context and emits typed envelopes.
  */
 export class AgentEventStream {
   private currentStage?: TelemetryStage;
   private stream?: { write: (chunk: string) => any };
+  private thinkingBuffer?: ThinkingBatchBuffer;
 
   constructor(options?: {
     stage?: TelemetryStage;
     stream?: { write: (chunk: string) => any };
+    batchThinkingMs?: number;
   }) {
     this.currentStage = options?.stage;
     this.stream = options?.stream;
+    const intervalMs = options?.batchThinkingMs ?? 100;
+    this.thinkingBuffer = new ThinkingBatchBuffer({
+      intervalMs,
+      onFlush: (delta) => {
+        emitThinkingEvent(delta, this.currentStage, undefined, {
+          stream: this.stream,
+        });
+      },
+    });
   }
 
   setStage(stage: TelemetryStage): void {
+    this.thinkingBuffer?.flush();
     this.currentStage = stage;
   }
 
@@ -249,6 +317,7 @@ export class AgentEventStream {
   }
 
   emitStage(stage: TelemetryStage, data: Record<string, any> = {}): string {
+    this.thinkingBuffer?.flush();
     this.currentStage = stage;
     return emitStageEvent(stage, data, { stream: this.stream });
   }
@@ -259,7 +328,16 @@ export class AgentEventStream {
     });
   }
 
+  bufferThinking(delta: string): void {
+    this.thinkingBuffer?.append(delta);
+  }
+
+  flushThinking(): void {
+    this.thinkingBuffer?.flush();
+  }
+
   emitToolStart(toolName: string, args: any, toolCallId?: string): string {
+    this.thinkingBuffer?.flush();
     return emitToolStartEvent(toolName, args, toolCallId, this.currentStage, {
       stream: this.stream,
     });

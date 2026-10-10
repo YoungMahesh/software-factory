@@ -119,6 +119,33 @@ class TestAgentEventStreamDemux(unittest.TestCase):
 
         self.registry.remove_listener(job.id, q)
 
+    def test_chunk_fragmentation_reassembly(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+
+        # Chunk 1 splits midway through an __SF_EVENT__ envelope
+        chunk1 = (
+            "Building components...\n"
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"ba'
+        )
+        # Chunk 2 supplies the remainder of the envelope and the next terminal log
+        chunk2 = 'sh","args":{"cmd":"ls"}}}\nBuild successful.\n'
+
+        self.registry.append_log(job.id, chunk1)
+        # First log line processed, partial envelope buffered
+        self.assertEqual(job.logs, ["Building components...\n"])
+        self.assertEqual(len(job.events), 0)
+
+        self.registry.append_log(job.id, chunk2)
+        # Reassembled: parsed into job.events, clean plain logs
+        self.assertEqual(len(job.events), 1)
+        self.assertEqual(job.events[0]["type"], "tool_start")
+        self.assertEqual(job.events[0]["data"]["toolName"], "bash")
+        self.assertEqual(job.events[0]["data"]["args"]["cmd"], "ls")
+        self.assertEqual(
+            job.logs,
+            ["Building components...\n", "Build successful.\n"],
+        )
+
     def test_stage_event_envelope_updates_stage(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
         q = self.registry.add_listener(job.id)

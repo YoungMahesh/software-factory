@@ -15,6 +15,7 @@ import { updateTicketFile } from "./ticket.ts";
 import { commitAndPushFeatureBranch, commitFailureDiagnostics } from "./git.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
 import type { IssueTracker } from "./tracker/types.ts";
+import { emitStageEvent } from "./events.ts";
 
 export interface TicketLifecycleOptions {
   workspaceDir: string;
@@ -110,6 +111,7 @@ export async function runTicketLifecycle(
     : undefined;
 
   // 3. Stage 1: Planner Agent
+  emitStageEvent("PLANNER", { ticketId: ticket.id, title: ticket.title });
   console.log(`\n🧠 Stage 1: Planner Agent: Planning implementation for ticket #${ticket.number ?? ticket.id}...`);
   let plan: ImplementationPlan;
   try {
@@ -176,6 +178,11 @@ export async function runTicketLifecycle(
     retriesUsed = attempt;
 
     // Stage 2: Coder Agent
+    emitStageEvent("CODER", {
+      ticketId: ticket.id,
+      attempt: attempt + 1,
+      maxAttempts: maxRetries + 1,
+    });
     console.log(`\n💻 Stage 2: Coder Agent: Coding implementation (attempt ${attempt + 1}/${maxRetries + 1})...`);
     await coderRunner({
       workspaceDir,
@@ -187,6 +194,7 @@ export async function runTicketLifecycle(
     });
 
     // Stage 3: Deterministic Verifier
+    emitStageEvent("VERIFIER", { ticketId: ticket.id });
     console.log(`\n🧪 Stage 3: Deterministic Verifier: Running verification suites...`);
     const verifierLogPath = path.join(scratchDir, "verification.md");
     const verification = await verifierRunner({
@@ -202,6 +210,7 @@ export async function runTicketLifecycle(
     }
 
     // Stage 4: Reviewer Agent (only after verifier passes)
+    emitStageEvent("REVIEWER", { ticketId: ticket.id });
     console.log(`\n🔍 Stage 4: Reviewer Agent: Reviewing diff against repo standards...`);
     let gitDiff = "";
     try {

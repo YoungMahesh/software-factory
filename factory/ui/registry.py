@@ -80,6 +80,19 @@ class FactoryJob:
     listeners: list[queue.Queue] = field(default_factory=list)
     sandbox: modal.Sandbox | None = None
     _cancelled: bool = False
+    _line_buffer: str = ""
+
+    def add_log(self, line: str, max_lines: int) -> None:
+        """Appends a log line to the logs ring buffer."""
+        if len(self.logs) >= max_lines:
+            self.logs.pop(0)
+        self.logs.append(line)
+
+    def add_event(self, event: dict[str, Any], max_events: int) -> None:
+        """Appends a structured event to the events ring buffer."""
+        if len(self.events) >= max_events:
+            self.events.pop(0)
+        self.events.append(event)
 
     def to_dict(self) -> dict[str, Any]:
         duration = None
@@ -172,11 +185,17 @@ class JobRegistry:
             if job and q in job.listeners:
                 job.listeners.remove(q)
 
-    def append_log(self, job_id: str, line: str) -> None:
+    def _set_stage(self, job: FactoryJob, stage: JobStage) -> None:
+        """Updates job stage if changed and broadcasts stage transition event."""
+        if job.stage != stage:
+            job.stage = stage
+            self._broadcast(job, {"event": "stage", "stage": stage.value})
+
+    def append_log(self, job_id: str, line: str, flush: bool = False) -> None:
         """Appends log text or structured telemetry, detects stages, and notifies listeners.
 
-        Detects single-line JSON telemetry envelopes prefixed with '__SF_EVENT__:', parses
-        and records them in job.events, and broadcasts typed 'agent_event' payloads.
+        Reassembles fragmented chunks, detects single-line JSON telemetry envelopes prefixed
+        with '__SF_EVENT__:', records them in job.events, and broadcasts typed 'agent_event' payloads.
         Raw __SF_EVENT__: lines are stripped from job.logs. Plain-text lines are preserved
         in job.logs, checked for stage transitions, and broadcast as 'log' payloads.
         """
@@ -185,8 +204,30 @@ class JobRegistry:
             if not job:
                 return
 
-            lines = line.splitlines(keepends=True)
-            for raw_line in lines:
+            incoming = job._line_buffer + line
+            job._line_buffer = ""
+
+            if not flush:
+                if "\n" in incoming:
+                    parts = incoming.split("\n")
+                    complete_lines = [p + "\n" for p in parts[:-1]]
+                    job._line_buffer = parts[-1]
+                else:
+                    stripped = incoming.strip()
+                    if stripped.startswith("__SF_EVENT__:"):
+                        try:
+                            json.loads(stripped[len("__SF_EVENT__:"):].strip())
+                            complete_lines = [incoming]
+                        except Exception:
+                            job._line_buffer = incoming
+                            complete_lines = []
+                    else:
+                        job._line_buffer = incoming
+                        complete_lines = []
+            else:
+                complete_lines = [incoming] if incoming else []
+
+            for raw_line in complete_lines:
                 stripped = raw_line.strip()
                 if stripped.startswith("__SF_EVENT__:"):
                     payload_str = stripped[len("__SF_EVENT__:"):].strip()
@@ -198,9 +239,7 @@ class JobRegistry:
                     if not isinstance(event_obj, dict):
                         continue
 
-                    if len(job.events) >= self.max_events:
-                        job.events.pop(0)
-                    job.events.append(event_obj)
+                    job.add_event(event_obj, self.max_events)
 
                     # Stage transition detection from structured telemetry
                     if event_obj.get("type") == "stage":
@@ -208,9 +247,7 @@ class JobRegistry:
                         if stage_name:
                             try:
                                 detected_stage = JobStage(stage_name)
-                                if job.stage != detected_stage:
-                                    job.stage = detected_stage
-                                    self._broadcast(job, {"event": "stage", "stage": detected_stage.value})
+                                self._set_stage(job, detected_stage)
                             except ValueError:
                                 pass
 
@@ -219,17 +256,22 @@ class JobRegistry:
                     # Detect stage transitions from log line
                     for pattern, detected_stage in STAGE_PATTERNS:
                         if pattern.search(raw_line):
-                            if job.stage != detected_stage:
-                                job.stage = detected_stage
-                                self._broadcast(job, {"event": "stage", "stage": detected_stage.value})
+                            self._set_stage(job, detected_stage)
                             break
 
-                    if len(job.logs) >= self.max_log_lines:
-                        job.logs.pop(0)
-                    job.logs.append(raw_line)
-
+                    job.add_log(raw_line, self.max_log_lines)
                     payload = {"event": "log", "data": raw_line}
                     self._broadcast(job, payload)
+
+    def flush_buffer(self, job_id: str) -> None:
+        """Flushes any buffered incomplete log or telemetry chunk for the job."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or not job._line_buffer:
+                return
+            remaining = job._line_buffer
+            job._line_buffer = ""
+        self.append_log(job_id, remaining, flush=True)
 
     def _broadcast(self, job: FactoryJob, payload: dict[str, Any]) -> None:
         dead_listeners = []
@@ -341,6 +383,7 @@ class JobRegistry:
 
             sandbox.wait(raise_on_termination=False)
             exit_code = sandbox.returncode
+            self.flush_buffer(job_id)
 
             with self._lock:
                 if not job._cancelled:

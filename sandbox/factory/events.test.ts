@@ -11,6 +11,7 @@ import {
   emitStageEvent,
   emitAttemptEvent,
   AgentEventStream,
+  ThinkingBatchBuffer,
   type TelemetryEnvelope,
 } from "./events.ts";
 
@@ -224,6 +225,71 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       const coderThinkEnv = parseTelemetryEnvelope(chunks[4]);
       assert.equal(coderThinkEnv?.type, "thinking");
       assert.equal(coderThinkEnv?.stage, "CODER");
+    });
+
+    it("buffers rapid thinking deltas and flushes on tool start", () => {
+      const chunks: string[] = [];
+      const stream = new AgentEventStream({
+        stage: "CODER",
+        stream: { write: (c: string) => chunks.push(c) },
+        batchThinkingMs: 100,
+      });
+
+      // Stream multiple rapid tokens
+      stream.bufferThinking("Thinking ");
+      stream.bufferThinking("step ");
+      stream.bufferThinking("1...");
+
+      // Nothing emitted immediately
+      assert.equal(chunks.length, 0);
+
+      // Invoking a tool forces an immediate flush of pending thinking
+      stream.emitToolStart("bash", { command: "ls" });
+
+      assert.equal(chunks.length, 2);
+      const thinkEnv = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(thinkEnv?.type, "thinking");
+      assert.equal(thinkEnv?.data.delta, "Thinking step 1...");
+
+      const toolEnv = parseTelemetryEnvelope(chunks[1]);
+      assert.equal(toolEnv?.type, "tool_start");
+      assert.equal(toolEnv?.data.toolName, "bash");
+    });
+  });
+
+  describe("ThinkingBatchBuffer", () => {
+    it("aggregates multiple tokens and flushes explicitly", () => {
+      const flushed: string[] = [];
+      const buffer = new ThinkingBatchBuffer({
+        intervalMs: 100,
+        onFlush: (chunk) => flushed.push(chunk),
+      });
+
+      buffer.append("Hello ");
+      buffer.append("world!");
+      assert.equal(flushed.length, 0);
+      assert.equal(buffer.hasPending(), true);
+
+      buffer.flush();
+      assert.equal(flushed.length, 1);
+      assert.equal(flushed[0], "Hello world!");
+      assert.equal(buffer.hasPending(), false);
+    });
+
+    it("flushes automatically after interval timeout", async () => {
+      const flushed: string[] = [];
+      const buffer = new ThinkingBatchBuffer({
+        intervalMs: 25,
+        onFlush: (chunk) => flushed.push(chunk),
+      });
+
+      buffer.append("Token 1 ");
+      buffer.append("Token 2");
+      assert.equal(flushed.length, 0);
+
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(flushed.length, 1);
+      assert.equal(flushed[0], "Token 1 Token 2");
     });
   });
 });

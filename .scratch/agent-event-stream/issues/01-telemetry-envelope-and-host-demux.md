@@ -14,7 +14,7 @@
 - [x] The `/api/jobs/{job_id}/stream` SSE endpoint transmits an `init` event containing both `backlog` (clean text lines) and `events` (structured event objects) upon connection.
 - [x] Unit and integration tests in `tests/test_ui_events.py` verify that feeding simulated container stdout chunks containing mixed plain text and `__SF_EVENT__:` envelopes correctly populates both storage channels and streams valid SSE events.
 
-## Answer
+## Comments
 
 Implemented the end-to-end telemetry transport pipeline between the in-sandbox environment and the host web application:
 
