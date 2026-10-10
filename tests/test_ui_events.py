@@ -329,7 +329,141 @@ class TestThinkingAccordionConsole(unittest.TestCase):
         self.registry.remove_listener(job.id, q)
 
 
+class TestCommandExecutionTimelineConsole(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_console_template_contains_command_execution_card_components(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # 1. Dedicated Command Execution Card container
+        self.assertIn("command-card", html)
+
+        # 2. Active running spinner and timer counter
+        self.assertIn("animate-spin", html)
+        self.assertIn("command-timer", html)
+
+        # 3. Exit code badge ("Exit code 0" in green, non-zero in red)
+        self.assertIn("Exit code 0", html)
+        self.assertIn("Exit code", html)
+
+        # 4. Windowed output toggle ("Showing last 100 of N lines — [View full output]")
+        self.assertIn("Showing last 100 of", html)
+        self.assertIn("[View full output]", html)
+
+        # 5. Full output expansion toggle function
+        self.assertIn("toggleCommandOutput", html)
+
+    def test_coder_and_verifier_command_telemetry_pipeline(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        q = self.registry.add_listener(job.id)
+
+        # 1. Coder bash command start
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"bash","command":"pnpm test","cwd":"/workspace","args":{"command":"pnpm test","cwd":"/workspace"},"toolCallId":"c-1"}}\n'
+        )
+        # 2. Coder bash command result (success)
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"CODER","data":{"toolName":"bash","command":"pnpm test","cwd":"/workspace","exitCode":0,"durationMs":350,"stdout":"PASS src/app.test.ts","stderr":"","output":"PASS src/app.test.ts","isError":false,"toolCallId":"c-1"}}\n'
+        )
+        # 3. Verifier test suite execution start
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"VERIFIER","data":{"toolName":"bash","command":"pytest","cwd":"/workspace","args":{"command":"pytest","cwd":"/workspace"},"toolCallId":"v-1"}}\n'
+        )
+        # 4. Verifier test suite execution result (failure)
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"VERIFIER","data":{"toolName":"bash","command":"pytest","cwd":"/workspace","exitCode":1,"durationMs":720,"stdout":"","stderr":"FAILED tests/test_api.py","output":"FAILED tests/test_api.py","isError":true,"toolCallId":"v-1"}}\n'
+        )
+
+        self.assertEqual(len(job.events), 4)
+
+        # Verify Coder bash event details
+        self.assertEqual(job.events[0]["stage"], "CODER")
+        self.assertEqual(job.events[0]["data"]["command"], "pnpm test")
+        self.assertEqual(job.events[0]["data"]["cwd"], "/workspace")
+        self.assertEqual(job.events[1]["stage"], "CODER")
+        self.assertEqual(job.events[1]["data"]["exitCode"], 0)
+        self.assertEqual(job.events[1]["data"]["isError"], False)
+        self.assertEqual(job.events[1]["data"]["durationMs"], 350)
+
+        # Verify Verifier event details
+        self.assertEqual(job.events[2]["stage"], "VERIFIER")
+        self.assertEqual(job.events[2]["data"]["command"], "pytest")
+        self.assertEqual(job.events[2]["data"]["cwd"], "/workspace")
+        self.assertEqual(job.events[3]["stage"], "VERIFIER")
+        self.assertEqual(job.events[3]["data"]["exitCode"], 1)
+        self.assertEqual(job.events[3]["data"]["isError"], True)
+        self.assertEqual(job.events[3]["data"]["durationMs"], 720)
+
+        # Logs must remain clean without __SF_EVENT__: envelopes
+        self.assertEqual(job.logs, [])
+
+        received = []
+        while not q.empty():
+            received.append(q.get_nowait())
+
+        self.assertEqual(len(received), 4)
+        for r in received:
+            self.assertEqual(r["event"], "agent_event")
+
+        self.registry.remove_listener(job.id, q)
+
+    def test_windowed_output_rendering_and_expand_toggle_logic(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # Verify threshold is 100 lines
+        self.assertIn("totalLines <= 100", html)
+        self.assertIn("card.lines.slice(-100)", html)
+        self.assertIn("Showing last 100 of ${totalLines} lines —", html)
+        self.assertIn("[View full output]", html)
+        self.assertIn("[Show last 100 lines]", html)
+
+    def test_rehydration_of_command_events_history(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        job.status = JobStatus.SUCCESS
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"bash","command":"npm test","cwd":"/repo","toolCallId":"c-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"CODER","data":{"toolName":"bash","command":"npm test","cwd":"/repo","exitCode":0,"durationMs":100,"output":"ok","toolCallId":"c-1"}}\n'
+        )
+
+        with self.client.stream(
+            "GET",
+            f"/api/jobs/{job.id}/stream",
+            auth=("admin", "admin"),
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            init_event = None
+            for chunk in response.iter_lines():
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[len("data: "):])
+                    if payload.get("event") == "init":
+                        init_event = payload
+                        break
+
+        self.assertIsNotNone(init_event)
+        self.assertEqual(len(init_event["events"]), 2)
+        self.assertEqual(init_event["events"][0]["data"]["command"], "npm test")
+        self.assertEqual(init_event["events"][1]["data"]["exitCode"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
 
 

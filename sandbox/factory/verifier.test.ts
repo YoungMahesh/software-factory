@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 
 import { runCommand, verifyWorkspace, discoverCommands } from "./verifier.ts";
+import { parseTelemetryEnvelope } from "./events.ts";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sf-verifier-test-"));
@@ -324,3 +325,62 @@ test("smoke test: discovers commands in sandbox/factory workspace and verifies c
   assert.strictEqual(result.passed, true);
   assert.strictEqual(result.results[0].exitCode, 0);
 });
+
+test("verifyWorkspace: emits matching tool_start and tool_result events with command, cwd, exitCode, stdout, stderr, and isError", async () => {
+  const dir = createTempDir();
+  const chunks: string[] = [];
+  try {
+    const result = await verifyWorkspace({
+      workspacePath: dir,
+      commands: [
+        "echo 'all 5 tests passed'",
+        "sh -c 'echo \"syntax error\" >&2; exit 2'",
+      ],
+      failFast: false,
+      telemetryStream: { write: (c: string) => chunks.push(c) },
+    });
+
+    assert.strictEqual(result.passed, false);
+    assert.strictEqual(result.totalCommands, 2);
+
+    const parsed = chunks.map((c) => parseTelemetryEnvelope(c)).filter(Boolean);
+    const starts = parsed.filter((e) => e?.type === "tool_start");
+    const results = parsed.filter((e) => e?.type === "tool_result");
+
+    assert.strictEqual(starts.length, 2, "Expected 2 tool_start events");
+    assert.strictEqual(results.length, 2, "Expected 2 tool_result events");
+
+    // Command 1: success
+    assert.strictEqual(starts[0]?.stage, "VERIFIER");
+    assert.strictEqual(starts[0]?.data.toolName, "bash");
+    assert.strictEqual(starts[0]?.data.command, "echo 'all 5 tests passed'");
+    assert.strictEqual(starts[0]?.data.cwd, dir);
+    assert.ok(starts[0]?.data.toolCallId);
+
+    assert.strictEqual(results[0]?.stage, "VERIFIER");
+    assert.strictEqual(results[0]?.data.toolName, "bash");
+    assert.strictEqual(results[0]?.data.command, "echo 'all 5 tests passed'");
+    assert.strictEqual(results[0]?.data.cwd, dir);
+    assert.strictEqual(results[0]?.data.exitCode, 0);
+    assert.strictEqual(results[0]?.data.isError, false);
+    assert.strictEqual(results[0]?.data.toolCallId, starts[0]?.data.toolCallId);
+    assert.ok(results[0]?.data.stdout.includes("all 5 tests passed"));
+    assert.ok(typeof results[0]?.data.durationMs === "number");
+
+    // Command 2: failure
+    assert.strictEqual(starts[1]?.stage, "VERIFIER");
+    assert.strictEqual(starts[1]?.data.command, "sh -c 'echo \"syntax error\" >&2; exit 2'");
+    assert.strictEqual(starts[1]?.data.cwd, dir);
+
+    assert.strictEqual(results[1]?.stage, "VERIFIER");
+    assert.strictEqual(results[1]?.data.command, "sh -c 'echo \"syntax error\" >&2; exit 2'");
+    assert.strictEqual(results[1]?.data.cwd, dir);
+    assert.strictEqual(results[1]?.data.exitCode, 2);
+    assert.strictEqual(results[1]?.data.isError, true);
+    assert.strictEqual(results[1]?.data.toolCallId, starts[1]?.data.toolCallId);
+    assert.ok(results[1]?.data.stderr.includes("syntax error"));
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+

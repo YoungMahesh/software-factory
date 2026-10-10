@@ -397,3 +397,55 @@ test("runReviewerAgent: subscribes to agent events and emits REVIEWER reasoning 
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("runCoderAgent: captures bash tool invocations and emits tool_start and tool_result telemetry envelopes with command, cwd, exitCode, durationMs", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const chunks: string[] = [];
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage([
+      fauxToolCall("bash", { command: "echo 'hello from bash'" }),
+    ]),
+    fauxAssistantMessage("I executed the bash command and tested the code."),
+  ]);
+
+  try {
+    await runCoderAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "03", content: "Run bash command" },
+      plan: {
+        ticketId: "03",
+        summary: "test",
+        affectedFiles: [],
+        testCommands: ["echo 'hello from bash'"],
+        steps: ["run echo"],
+        rawContent: "...",
+      },
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+      telemetryStream: { write: (c: string) => chunks.push(c) },
+    });
+
+    const parsed = chunks.map((c) => parseTelemetryEnvelope(c)).filter(Boolean);
+    const toolStartEnvs = parsed.filter((e) => e?.type === "tool_start" && e?.data?.toolName === "bash");
+    const toolResultEnvs = parsed.filter((e) => e?.type === "tool_result" && e?.data?.toolName === "bash");
+
+    assert.equal(toolStartEnvs.length, 1, "Should emit 1 tool_start envelope for bash");
+    assert.equal(toolStartEnvs[0]?.stage, "CODER");
+    assert.equal(toolStartEnvs[0]?.data.command, "echo 'hello from bash'");
+    assert.equal(toolStartEnvs[0]?.data.cwd, tmpDir);
+
+    assert.equal(toolResultEnvs.length, 1, "Should emit 1 tool_result envelope for bash");
+    assert.equal(toolResultEnvs[0]?.stage, "CODER");
+    assert.equal(toolResultEnvs[0]?.data.command, "echo 'hello from bash'");
+    assert.equal(toolResultEnvs[0]?.data.cwd, tmpDir);
+    assert.equal(toolResultEnvs[0]?.data.exitCode, 0);
+    assert.equal(toolResultEnvs[0]?.data.isError, false);
+    assert.ok(typeof toolResultEnvs[0]?.data.durationMs === "number");
+    assert.ok(toolResultEnvs[0]?.data.output.includes("hello from bash"));
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+

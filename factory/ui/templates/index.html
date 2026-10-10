@@ -1346,11 +1346,230 @@
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock, data.durationMs);
         }
-      } else if (type === "tool_start" || type === "tool_result" || type === "stage") {
-        // Any tool execution or stage transition concludes active reasoning
+      } else if (type === "tool_start") {
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
         }
+        if (data.toolName === "bash" || data.command) {
+          const cmd = data.command || data.args?.command || "bash";
+          const cwd = data.cwd || data.args?.cwd || "";
+          createCommandCard(stage, cmd, cwd, data.toolCallId);
+        }
+      } else if (type === "tool_result") {
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock);
+        }
+        if (data.toolName === "bash" || data.command) {
+          let card = data.toolCallId ? commandCardsMap.get(data.toolCallId) : null;
+          if (!card) {
+            const cmd = data.command || "bash";
+            const cwd = data.cwd || "";
+            card = createCommandCard(stage, cmd, cwd, data.toolCallId);
+          }
+          completeCommandCard(card, data);
+        }
+      } else if (type === "stage") {
+        // Stage transition concludes active reasoning
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Agent Event Stream: Command Execution Cards & Windowed Output
+    // -------------------------------------------------------------
+    const commandCardsMap = new Map();
+
+    function clearCommandCards() {
+      commandCardsMap.forEach((card) => {
+        if (card.timerInterval) clearInterval(card.timerInterval);
+      });
+      commandCardsMap.clear();
+    }
+
+    function renderCommandOutput(card) {
+      if (!card || !card.outputEl) return;
+      const totalLines = card.lines.length;
+
+      if (totalLines <= 100) {
+        if (card.toggleEl) {
+          card.toggleEl.classList.add("hidden");
+        }
+        card.outputEl.classList.remove("max-h-none");
+        card.outputEl.classList.add("max-h-80");
+        card.outputEl.textContent = card.fullOutput || "(No output)";
+        return;
+      }
+
+      if (card.isExpanded) {
+        // Expanded: show full output without truncation and unclamp container height
+        if (card.toggleEl) {
+          card.toggleEl.classList.remove("hidden");
+          card.toggleEl.innerHTML = `Showing all ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
+        }
+        card.outputEl.classList.remove("max-h-80");
+        card.outputEl.classList.add("max-h-none");
+        card.outputEl.textContent = card.fullOutput;
+      } else {
+        // Windowed: show last 100 lines and clamp container height
+        const windowedLines = card.lines.slice(-100);
+        if (card.toggleEl) {
+          card.toggleEl.classList.remove("hidden");
+          card.toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
+        }
+        card.outputEl.classList.remove("max-h-none");
+        card.outputEl.classList.add("max-h-80");
+        card.outputEl.textContent = windowedLines.join("\n");
+      }
+    }
+
+    window.toggleCommandOutput = function(cardId) {
+      const card = commandCardsMap.get(cardId);
+      if (!card) return;
+      card.isExpanded = !card.isExpanded;
+      renderCommandOutput(card);
+    };
+
+    function createCommandCard(stage, command, cwd, toolCallId) {
+      const cardId = toolCallId || ("cmd-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7));
+      if (commandCardsMap.has(cardId)) {
+        return commandCardsMap.get(cardId);
+      }
+
+      const container = document.createElement("div");
+      container.id = cardId;
+      container.className = "command-card my-2.5 rounded-lg border border-slate-800 bg-slate-900/90 overflow-hidden shadow-lg transition-all duration-200";
+
+      container.innerHTML = `
+        <div class="command-header px-3.5 py-2 flex items-center justify-between bg-slate-950/60 border-b border-slate-800/80 gap-3">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="text-sm shrink-0">💻</span>
+            <span class="command-stage text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">${escapeHtml(stage || 'CODER')}</span>
+            <code class="command-text font-mono text-xs font-semibold text-slate-100 truncate flex-1">$ ${escapeHtml(command || 'bash')}</code>
+            ${cwd ? `<span class="command-cwd text-[10px] text-slate-400 font-mono shrink-0 truncate max-w-[200px]" title="${escapeHtml(cwd)}">(${escapeHtml(cwd)})</span>` : ''}
+          </div>
+          <div class="flex items-center gap-2.5 shrink-0">
+            <span class="command-spinner inline-block w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></span>
+            <span class="command-timer font-mono text-[11px] text-indigo-300">0.0s</span>
+            <span class="command-badge hidden text-[10px] font-bold px-2 py-0.5 rounded font-mono"></span>
+          </div>
+        </div>
+        <div class="command-body">
+          <div class="command-window-toggle hidden px-3.5 py-1 text-[11px] text-slate-400 bg-slate-950/40 border-b border-slate-800/60 font-mono flex items-center justify-between"></div>
+          <div class="command-output-box p-3 bg-black/70 font-mono text-xs text-slate-300 overflow-x-auto overflow-y-auto max-h-80 whitespace-pre select-text leading-relaxed">
+            <span class="command-placeholder text-slate-500 italic text-[11px]">Executing command...</span>
+          </div>
+        </div>
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      const headerEl = container.querySelector(".command-header");
+      const stageEl = container.querySelector(".command-stage");
+      const textEl = container.querySelector(".command-text");
+      const spinnerEl = container.querySelector(".command-spinner");
+      const timerEl = container.querySelector(".command-timer");
+      const badgeEl = container.querySelector(".command-badge");
+      const toggleEl = container.querySelector(".command-window-toggle");
+      const outputEl = container.querySelector(".command-output-box");
+
+      const startTime = Date.now();
+      const timerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1) + "s";
+        if (timerEl) timerEl.textContent = elapsed;
+      }, 100);
+
+      const card = {
+        id: cardId,
+        toolCallId: cardId,
+        element: container,
+        headerEl,
+        stageEl,
+        textEl,
+        spinnerEl,
+        timerEl,
+        badgeEl,
+        toggleEl,
+        outputEl,
+        stage: stage || "CODER",
+        command: command || "",
+        cwd: cwd || "",
+        startTime,
+        timerInterval,
+        isCompleted: false,
+        isExpanded: false,
+        fullOutput: "",
+        lines: [],
+      };
+
+      commandCardsMap.set(cardId, card);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+
+      return card;
+    }
+
+    function completeCommandCard(card, resultData) {
+      if (!card) return;
+      if (card.timerInterval) {
+        clearInterval(card.timerInterval);
+        card.timerInterval = null;
+      }
+      card.isCompleted = true;
+
+      if (card.spinnerEl) {
+        card.spinnerEl.classList.add("hidden");
+      }
+
+      const durationMs = resultData.durationMs || (Date.now() - card.startTime);
+      const durationSec = (durationMs / 1000).toFixed(1) + "s";
+      if (card.timerEl) {
+        card.timerEl.textContent = durationSec;
+        card.timerEl.classList.remove("text-indigo-300");
+        card.timerEl.classList.add("text-slate-400");
+      }
+
+      const exitCode = typeof resultData.exitCode === "number" ? resultData.exitCode : (resultData.isError ? 1 : 0);
+      if (card.badgeEl) {
+        card.badgeEl.classList.remove("hidden");
+        if (exitCode === 0 && !resultData.isError) {
+          card.badgeEl.textContent = "Exit code 0";
+          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        } else {
+          card.badgeEl.textContent = `Exit code ${exitCode}`;
+          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
+        }
+      }
+
+      // Extract output text
+      let outputText = "";
+      if (typeof resultData.output === "string") {
+        outputText = resultData.output;
+      } else if (resultData.stdout || resultData.stderr) {
+        outputText = [resultData.stdout, resultData.stderr].filter(Boolean).join("\n");
+      } else if (typeof resultData.result === "string") {
+        outputText = resultData.result;
+      } else if (resultData.result && typeof resultData.result === "object") {
+        outputText = resultData.result.structuredContent?.output || resultData.result.output || resultData.result.content?.[0]?.text || "";
+      }
+
+      card.fullOutput = outputText;
+      let rawLines = outputText ? outputText.split(/\r?\n/) : [];
+      if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
+        rawLines.pop();
+      }
+      card.lines = rawLines;
+
+      renderCommandOutput(card);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
       }
     }
 
@@ -1407,6 +1626,18 @@
         }
       }
       flushPendingThinking(true);
+      if (jobStatus !== "RUNNING") {
+        const fallbackExitCode = (jobStatus === "FAILED" || jobStatus === "CANCELLED") ? 1 : 0;
+        commandCardsMap.forEach((card) => {
+          if (!card.isCompleted) {
+            completeCommandCard(card, {
+              exitCode: fallbackExitCode,
+              isError: fallbackExitCode !== 0,
+              durationMs: 0,
+            });
+          }
+        });
+      }
     }
 
     // Connect SSE Stream (Shared between Studio & Console)
@@ -1423,6 +1654,7 @@
       lineCount = 0;
       activeThinkingBlock = null;
       thinkingBlocksMap.clear();
+      clearCommandCards();
 
       eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
@@ -1631,6 +1863,7 @@
       lineCount = 0;
       activeThinkingBlock = null;
       thinkingBlocksMap.clear();
+      clearCommandCards();
       logLineCount.textContent = "0 lines";
     });
 

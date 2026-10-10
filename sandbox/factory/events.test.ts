@@ -417,7 +417,142 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       assert.equal(toolEnv?.data.toolName, "bash");
     });
   });
+
+  describe("Bash Command Execution Telemetry", () => {
+    it("captures tool_execution_start and tool_execution_end for bash invocations with exact command strings and working directories", () => {
+      const chunks: string[] = [];
+      let listener: any = null;
+      const fakeAgent = {
+        subscribe: (fn: any) => {
+          listener = fn;
+          return () => {
+            listener = null;
+          };
+        },
+      };
+
+      const eventStream = new AgentEventStream({
+        stage: "CODER",
+        stream: { write: (c: string) => chunks.push(c) },
+        workspaceDir: "/root/target-repo",
+      });
+      eventStream.subscribe(fakeAgent);
+
+      assert.ok(listener, "Listener should be registered");
+
+      // 1. Tool execution start
+      listener({
+        type: "tool_execution_start",
+        toolCallId: "call-bash-123",
+        toolName: "bash",
+        args: { command: "npm test -- --coverage" },
+      });
+
+      assert.equal(chunks.length, 1);
+      const startEnv = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(startEnv?.type, "tool_start");
+      assert.equal(startEnv?.stage, "CODER");
+      assert.equal(startEnv?.data.toolName, "bash");
+      assert.equal(startEnv?.data.command, "npm test -- --coverage");
+      assert.equal(startEnv?.data.cwd, "/root/target-repo");
+      assert.equal(startEnv?.data.toolCallId, "call-bash-123");
+
+      // 2. Tool execution end (success)
+      listener({
+        type: "tool_execution_end",
+        toolCallId: "call-bash-123",
+        toolName: "bash",
+        result: {
+          content: [{ type: "text", text: "PASS src/index.test.ts" }],
+          structuredContent: {
+            output: "PASS src/index.test.ts\nAll tests passed\n",
+            exit_code: 0,
+            wall_time_seconds: 1,
+            truncated: false,
+          },
+        },
+        isError: false,
+        durationMs: 450,
+      });
+
+      assert.equal(chunks.length, 2);
+      const resultEnv = parseTelemetryEnvelope(chunks[1]);
+      assert.equal(resultEnv?.type, "tool_result");
+      assert.equal(resultEnv?.stage, "CODER");
+      assert.equal(resultEnv?.data.toolName, "bash");
+      assert.equal(resultEnv?.data.command, "npm test -- --coverage");
+      assert.equal(resultEnv?.data.cwd, "/root/target-repo");
+      assert.equal(resultEnv?.data.exitCode, 0);
+      assert.equal(resultEnv?.data.durationMs, 450);
+      assert.equal(resultEnv?.data.isError, false);
+      assert.ok(resultEnv?.data.stdout.includes("PASS src/index.test.ts"));
+      assert.equal(resultEnv?.data.toolCallId, "call-bash-123");
+    });
+
+    it("captures failing bash tool executions with non-zero exit codes, stderr text, and isError flag", () => {
+      const chunks: string[] = [];
+      let listener: any = null;
+      const fakeAgent = {
+        subscribe: (fn: any) => {
+          listener = fn;
+          return () => {
+            listener = null;
+          };
+        },
+      };
+
+      const eventStream = new AgentEventStream({
+        stage: "CODER",
+        stream: { write: (c: string) => chunks.push(c) },
+        workspaceDir: "/root/target-repo",
+      });
+      eventStream.subscribe(fakeAgent);
+
+      // Start
+      listener({
+        type: "tool_execution_start",
+        toolCallId: "call-bash-fail",
+        toolName: "bash",
+        args: { command: "pytest -v" },
+      });
+
+      // End with non-zero exit code
+      listener({
+        type: "tool_execution_end",
+        toolCallId: "call-bash-fail",
+        toolName: "bash",
+        result: {
+          content: [
+            { type: "text", text: "FAILED tests/test_login.py - AssertionError\nCommand exited with code 1" },
+          ],
+          structuredContent: {
+            output: "FAILED tests/test_login.py - AssertionError\n",
+            exit_code: 1,
+            wall_time_seconds: 2,
+            truncated: false,
+          },
+          isError: true,
+        },
+        isError: true,
+        durationMs: 780,
+      });
+
+      assert.equal(chunks.length, 2);
+      const resultEnv = parseTelemetryEnvelope(chunks[1]);
+      assert.equal(resultEnv?.type, "tool_result");
+      assert.equal(resultEnv?.stage, "CODER");
+      assert.equal(resultEnv?.data.toolName, "bash");
+      assert.equal(resultEnv?.data.command, "pytest -v");
+      assert.equal(resultEnv?.data.cwd, "/root/target-repo");
+      assert.equal(resultEnv?.data.exitCode, 1);
+      assert.equal(resultEnv?.data.durationMs, 780);
+      assert.equal(resultEnv?.data.isError, true);
+      assert.ok(resultEnv?.data.stderr.includes("FAILED tests/test_login.py"));
+      assert.equal(resultEnv?.data.toolCallId, "call-bash-fail");
+    });
+  });
 });
+
 
 
 

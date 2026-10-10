@@ -515,6 +515,7 @@ async function runAgentPromptWithTelemetry(
   const eventStream = new AgentEventStream({
     stage,
     stream: options.telemetryStream,
+    workspaceDir: options.workspaceDir,
   });
   const telemetry = eventStream.subscribe(agent);
 

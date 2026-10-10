@@ -2,6 +2,8 @@ import * as child_process from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { emitToolStartEvent, emitToolResultEvent } from "./events.ts";
+
 export type StreamChunkHandler = (chunk: string, stream: "stdout" | "stderr") => void;
 
 export interface StreamOptions {
@@ -41,6 +43,8 @@ export interface VerifyWorkspaceOptions extends StreamOptions {
   env?: NodeJS.ProcessEnv;
   failFast?: boolean;
   logPath?: string;
+  telemetryStream?: { write: (chunk: string) => any };
+  emitTelemetry?: boolean;
 }
 
 export interface VerificationResult {
@@ -346,8 +350,27 @@ export async function verifyWorkspace(options: VerifyWorkspaceOptions): Promise<
   const results: CommandResult[] = [];
   let passedCommands = 0;
   let failedCommands = 0;
+  const emitTelemetry = options.emitTelemetry !== false;
 
+  let cmdIndex = 0;
   for (const command of commands) {
+    cmdIndex++;
+    const toolCallId = `verifier-${Date.now()}-${cmdIndex}-${Math.random().toString(36).slice(2, 7)}`;
+
+    if (emitTelemetry) {
+      emitToolStartEvent(
+        "bash",
+        { command, cwd: options.workspacePath },
+        toolCallId,
+        "VERIFIER",
+        {
+          stream: options.telemetryStream,
+          command,
+          cwd: options.workspacePath,
+        }
+      );
+    }
+
     const result = await runCommand(command, {
       cwd: options.workspacePath,
       timeoutMs: options.timeoutMs,
@@ -355,6 +378,26 @@ export async function verifyWorkspace(options: VerifyWorkspaceOptions): Promise<
       onStream: options.onStream,
       streamToProcess: options.streamToProcess,
     });
+
+    if (emitTelemetry) {
+      emitToolResultEvent(
+        "bash",
+        result,
+        !result.passed,
+        toolCallId,
+        "VERIFIER",
+        result.durationMs,
+        {
+          stream: options.telemetryStream,
+          command: result.command,
+          cwd: options.workspacePath,
+          exitCode: result.exitCode ?? (result.passed ? 0 : 1),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          output: result.output,
+        }
+      );
+    }
 
     results.push(result);
 

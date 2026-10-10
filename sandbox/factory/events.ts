@@ -142,6 +142,20 @@ export function emitThinkingEvent(
   );
 }
 
+export interface ToolStartOptions extends EmitOptions {
+  cwd?: string;
+  command?: string;
+}
+
+export interface ToolResultOptions extends EmitOptions {
+  command?: string;
+  cwd?: string;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  output?: string;
+}
+
 /**
  * Emits a tool execution initiation telemetry event.
  */
@@ -150,13 +164,29 @@ export function emitToolStartEvent(
   args: any,
   toolCallId?: string,
   stage?: TelemetryStage,
-  options?: EmitOptions
+  options?: ToolStartOptions
 ): string {
+  const data: Record<string, any> = {
+    toolName,
+    args: args !== undefined ? (typeof args === "object" && args !== null ? { ...args } : args) : {},
+    toolCallId,
+  };
+
+  if (toolName === "bash") {
+    const cmd = args?.command ?? args?.cmd ?? options?.command ?? "";
+    const cwd = args?.cwd ?? options?.cwd ?? process.cwd();
+    data.command = cmd;
+    data.cwd = cwd;
+    if (data.args && typeof data.args === "object" && !data.args.cwd && cwd) {
+      data.args.cwd = cwd;
+    }
+  }
+
   return emitTelemetryEvent(
     {
       type: "tool_start",
       stage,
-      data: { toolName, args, toolCallId },
+      data,
     },
     options
   );
@@ -172,13 +202,91 @@ export function emitToolResultEvent(
   toolCallId?: string,
   stage?: TelemetryStage,
   durationMs?: number,
-  options?: EmitOptions
+  options?: ToolResultOptions
 ): string {
+  let exitCode = options?.exitCode;
+  let stdout = options?.stdout;
+  let stderr = options?.stderr;
+  let output = options?.output;
+  let cmd = options?.command;
+  let cwd = options?.cwd;
+  let finalDurationMs = durationMs ?? (typeof result === "object" && result !== null ? result.durationMs : undefined);
+  let finalIsError = Boolean(isError);
+
+  if (result && typeof result === "object") {
+    if (exitCode === undefined) {
+      if (typeof result.exitCode === "number") {
+        exitCode = result.exitCode;
+      } else if (result.structuredContent && typeof result.structuredContent.exit_code === "number") {
+        exitCode = result.structuredContent.exit_code;
+      }
+    }
+    if (cmd === undefined && typeof result.command === "string") {
+      cmd = result.command;
+    }
+    if (cwd === undefined && typeof result.cwd === "string") {
+      cwd = result.cwd;
+    }
+    if (stdout === undefined && typeof result.stdout === "string") {
+      stdout = result.stdout;
+    }
+    if (stderr === undefined && typeof result.stderr === "string") {
+      stderr = result.stderr;
+    }
+    if (output === undefined) {
+      if (typeof result.output === "string") {
+        output = result.output;
+      } else if (result.structuredContent && typeof result.structuredContent.output === "string") {
+        output = result.structuredContent.output;
+      } else if (Array.isArray(result.content) && result.content[0]?.text) {
+        output = result.content[0].text;
+      }
+    }
+    if (result.isError !== undefined) {
+      finalIsError = Boolean(result.isError || isError);
+    }
+  } else if (typeof result === "string" && output === undefined) {
+    output = result;
+  }
+
+  if (exitCode !== undefined && exitCode !== 0) {
+    finalIsError = true;
+  } else if (exitCode === undefined) {
+    exitCode = finalIsError ? 1 : 0;
+  }
+
+  if (output === undefined) {
+    output = stdout || stderr || "";
+  }
+  if (stdout === undefined) {
+    stdout = output || "";
+  }
+  if (stderr === undefined) {
+    stderr = exitCode !== 0 ? output : "";
+  }
+
+  const data: Record<string, any> = {
+    toolName,
+    result,
+    isError: finalIsError,
+    toolCallId,
+    durationMs: finalDurationMs ?? 0,
+  };
+
+  if (toolName === "bash" || cmd !== undefined) {
+    if (cmd !== undefined) data.command = cmd;
+    if (cwd !== undefined) data.cwd = cwd;
+    data.exitCode = exitCode;
+    data.stdout = stdout;
+    data.stderr = stderr;
+    data.output = output;
+  }
+
   return emitTelemetryEvent(
     {
       type: "tool_result",
       stage,
-      data: { toolName, result, isError, toolCallId, durationMs },
+      data,
     },
     options
   );
@@ -284,14 +392,17 @@ export class AgentEventStream {
   private stream?: { write: (chunk: string) => any };
   private thinkingBuffer?: ThinkingBatchBuffer;
   private thinkingExtractor: ThinkingExtractor;
+  private workspaceDir?: string;
 
   constructor(options?: {
     stage?: TelemetryStage;
     stream?: { write: (chunk: string) => any };
     batchThinkingMs?: number;
+    workspaceDir?: string;
   }) {
     this.currentStage = options?.stage;
     this.stream = options?.stream;
+    this.workspaceDir = options?.workspaceDir;
     const intervalMs = options?.batchThinkingMs ?? 100;
     this.thinkingExtractor = new ThinkingExtractor({
       stage: this.currentStage,
@@ -323,6 +434,7 @@ export class AgentEventStream {
     return subscribeAgentTelemetry(agent, this.currentStage ?? "PLANNER", {
       stream: this.stream,
       extractor: this.thinkingExtractor,
+      workspaceDir: this.workspaceDir,
     });
   }
 
@@ -592,12 +704,18 @@ export class ThinkingExtractor {
     return { strippedText };
   }
 
-  handleToolStart(toolName: string, args: any, toolCallId?: string): string {
+  handleToolStart(
+    toolName: string,
+    args: any,
+    toolCallId?: string,
+    extra?: { cwd?: string; command?: string }
+  ): string {
     if (this.isThinkingActive()) {
       this.handleThinkingEnd();
     }
     return emitToolStartEvent(toolName, args, toolCallId, this.currentStage, {
       stream: this.stream,
+      ...extra,
     });
   }
 
@@ -632,6 +750,7 @@ export function subscribeAgentTelemetry(
     stream?: { write: (chunk: string) => any };
     intervalMs?: number;
     extractor?: ThinkingExtractor;
+    workspaceDir?: string;
   }
 ): {
   extractor: ThinkingExtractor;
@@ -645,6 +764,17 @@ export function subscribeAgentTelemetry(
       stream: options?.stream,
       intervalMs: options?.intervalMs,
     });
+
+  const activeToolCalls = new Map<
+    string,
+    {
+      toolName: string;
+      args: any;
+      startTime: number;
+      cwd?: string;
+      command?: string;
+    }
+  >();
 
   const unsubscribe = agent.subscribe((event: any) => {
     if (event.type === "message_update") {
@@ -663,16 +793,48 @@ export function subscribeAgentTelemetry(
         }
       }
     } else if (event.type === "tool_execution_start") {
-      extractor.handleToolStart(event.toolName, event.args, event.toolCallId);
+      const cwd =
+        event.args?.cwd ?? options?.workspaceDir ?? process.cwd();
+      const command = event.args?.command ?? event.args?.cmd;
+      if (event.toolCallId) {
+        activeToolCalls.set(event.toolCallId, {
+          toolName: event.toolName,
+          args: event.args,
+          startTime: Date.now(),
+          cwd,
+          command,
+        });
+      }
+      extractor.handleToolStart(event.toolName, event.args, event.toolCallId, {
+        cwd,
+        command,
+      });
     } else if (event.type === "tool_execution_end") {
+      const saved = event.toolCallId
+        ? activeToolCalls.get(event.toolCallId)
+        : undefined;
+      if (event.toolCallId) {
+        activeToolCalls.delete(event.toolCallId);
+      }
+      const durationMs =
+        typeof event.durationMs === "number"
+          ? event.durationMs
+          : saved
+          ? Date.now() - saved.startTime
+          : undefined;
+
       emitToolResultEvent(
         event.toolName,
         event.result,
         event.isError,
         event.toolCallId,
         stage,
-        event.durationMs,
-        { stream: options?.stream }
+        durationMs,
+        {
+          stream: options?.stream,
+          command: saved?.command,
+          cwd: saved?.cwd,
+        }
       );
     } else if (event.type === "turn_end" || event.type === "agent_end") {
       extractor.handleTurnEnd();
