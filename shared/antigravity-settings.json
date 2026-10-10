@@ -1,6 +1,7 @@
 {
+  "artifactReviewPolicy": "always-proceed",
   "colorScheme": "dark",
   "editorMode": "vim",
-  "vimInsertFirst": true,
-  "toolPermission": "always-proceed"
+  "toolPermission": "always-proceed",
+  "vimInsertFirst": true
 }
