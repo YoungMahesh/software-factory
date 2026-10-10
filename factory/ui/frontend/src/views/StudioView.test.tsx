@@ -146,5 +146,98 @@ describe("StudioView", () => {
     fireEvent.click(stopBtn);
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
+
+  it("dynamically updates preview pane when switching repositories without losing running state", () => {
+    const handleSelect = vi.fn();
+    const { rerender } = render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={handleSelect}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "SERVING",
+          stage: "SERVING",
+          branch: "factory/cool-feat",
+          preview_url: "https://cool-app-3000.modal.host",
+        }}
+      />
+    );
+
+    // Initial repo preview
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/cool-feat");
+    expect(screen.getByText("https://cool-app-3000.modal.host")).toBeInTheDocument();
+
+    // Switch repo via dropdown
+    const select = screen.getByRole("combobox");
+    fireEvent.change(select, { target: { value: "test-app" } });
+    expect(handleSelect).toHaveBeenCalledWith("test-app");
+
+    // Rerender with test-app active preview
+    rerender(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="test-app"
+        onSelectRepo={handleSelect}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "test-app",
+          status: "PROVISIONING",
+          stage: "INSTALLING_DEPS",
+          branch: "factory/test-feat",
+          preview_url: null,
+          logs: ["Installing dependencies..."],
+        }}
+      />
+    );
+
+    // Preview pane updates dynamically to test-app
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/test-feat");
+    expect(screen.getByTestId("preview-progress-stepper")).toBeInTheDocument();
+    expect(screen.getByTestId("preview-step-installing_deps")).toHaveAttribute("data-state", "active");
+  });
+
+  it("triggers onRetryPreview when retry is clicked in failed preview", () => {
+    const handleRetry = vi.fn();
+    render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "FAILED",
+          stage: "INSTALLING_DEPS",
+          branch: "main",
+          error_message: "Compilation error: module not found",
+          logs: ["pnpm install failed"],
+        }}
+        onRetryPreview={handleRetry}
+      />
+    );
+
+    const retryButtons = screen.getAllByTestId("retry-preview-btn");
+    expect(retryButtons.length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(retryButtons[0]);
+    expect(handleRetry).toHaveBeenCalledTimes(1);
+  });
 });
 

@@ -4,12 +4,13 @@
 
 **Blocked by:** 01: Core Dedicated Preview Sandbox & Live Iframe Workspace
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] SSE endpoint (`GET /api/studio/repos/{repo}/preview/stream`) streams real-time stdout/stderr lines and stage transition events.
-- [ ] Right-panel workspace displays a visual 3-stage progress stepper while the preview is provisioning.
-- [ ] Collapsible "Dev Server Logs" terminal drawer displays live streaming output from repository clone, dependency installation, and Vite dev server startup.
-- [ ] Preview toolbar includes a toggle button to show or hide the dev server terminal logs drawer at any time.
-- [ ] If container boot, `pnpm install`, or dev server compilation fails, the logs drawer auto-expands with exact failure output and a "Retry" button.
-- [ ] Switching between repositories in the Factory Studio dropdown dynamically updates the preview pane to reflect that repository's active preview and logs without interrupting other running sandboxes.
-- [ ] Tests verify SSE streaming event contract, progress stepper state transitions, log drawer expanding/collapsing, and retry on failure.
+- [x] SSE endpoint (`GET /api/studio/repos/{repo}/preview/stream`) streams real-time stdout/stderr lines and stage transition events.
+- [x] Right-panel workspace displays a visual 3-stage progress stepper while the preview is provisioning.
+- [x] Collapsible "Dev Server Logs" terminal drawer displays live streaming output from repository clone, dependency installation, and Vite dev server startup.
+- [x] Preview toolbar includes a toggle button to show or hide the dev server terminal logs drawer at any time.
+- [x] If container boot, `pnpm install`, or dev server compilation fails, the logs drawer auto-expands with exact failure output and a "Retry" button.
+- [x] Switching between repositories in the Factory Studio dropdown dynamically updates the preview pane to reflect that repository's active preview and logs without interrupting other running sandboxes.
+- [x] Tests verify SSE streaming event contract, progress stepper state transitions, log drawer expanding/collapsing, and retry on failure.
+

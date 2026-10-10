@@ -182,24 +182,84 @@ export const App: React.FC = () => {
     }
   }, [selectedRepo]);
 
-  // Periodic poll while preview is provisioning
+  // Live SSE stream for preview logs and stage transitions
   useEffect(() => {
-    if (!selectedRepo || previewState?.status !== "PROVISIONING") return;
+    if (!selectedRepo) return;
+    if (
+      !previewState ||
+      (previewState.status !== "PROVISIONING" && previewState.status !== "SERVING")
+    ) {
+      return;
+    }
 
-    const interval = setInterval(async () => {
+    const streamUrl = api.getPreviewStreamUrl(selectedRepo);
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(streamUrl);
+    } catch (err) {
+      return;
+    }
+
+    es.onmessage = (event) => {
       try {
-        const data = await api.fetchPreview(selectedRepo);
-        setPreviewState(data);
-        if (data.status !== "PROVISIONING") {
-          clearInterval(interval);
+        const payload = JSON.parse(event.data);
+        if (payload.event === "init") {
+          setPreviewState((prev) => {
+            if (!prev || prev.repo !== selectedRepo) return prev;
+            return {
+              ...prev,
+              ...payload.preview,
+              status: payload.status || prev.status,
+              stage: payload.stage || prev.stage,
+              preview_url: payload.preview_url !== undefined ? payload.preview_url : prev.preview_url,
+              logs: payload.backlog || prev.logs || [],
+            };
+          });
+        } else if (payload.event === "log") {
+          setPreviewState((prev) => {
+            if (!prev || prev.repo !== selectedRepo) return prev;
+            const currentLogs = prev.logs || [];
+            return {
+              ...prev,
+              logs: [...currentLogs, payload.data],
+              log_count: currentLogs.length + 1,
+            };
+          });
+        } else if (payload.event === "stage") {
+          setPreviewState((prev) => {
+            if (!prev || prev.repo !== selectedRepo) return prev;
+            return {
+              ...prev,
+              stage: payload.stage,
+            };
+          });
+        } else if (payload.event === "status") {
+          setPreviewState((prev) => {
+            if (!prev || prev.repo !== selectedRepo) return prev;
+            return {
+              ...prev,
+              status: payload.status,
+              preview_url: payload.preview_url !== undefined ? payload.preview_url : prev.preview_url,
+              error_message: payload.error || prev.error_message,
+            };
+          });
+          if (payload.status === "STOPPED" || payload.status === "FAILED") {
+            es?.close();
+          }
         }
-      } catch (err) {
-        clearInterval(interval);
+      } catch (e) {
+        // ignore parse error or ping
       }
-    }, 1500);
+    };
 
-    return () => clearInterval(interval);
-  }, [selectedRepo, previewState?.status]);
+    es.onerror = () => {
+      // Reconnects automatically unless closed
+    };
+
+    return () => {
+      es?.close();
+    };
+  }, [selectedRepo, previewState?.status === "PROVISIONING" || previewState?.status === "SERVING"]);
 
   const handleLaunchPreview = async (branch?: string) => {
     if (!selectedRepo || isLaunchingPreview) return;
@@ -417,6 +477,7 @@ export const App: React.FC = () => {
             previewState={previewState}
             onLaunchPreview={handleLaunchPreview}
             onStopPreview={handleStopPreview}
+            onRetryPreview={handleLaunchPreview}
             isLaunchingPreview={isLaunchingPreview}
           />
         ) : (

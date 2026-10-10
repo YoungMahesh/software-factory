@@ -260,6 +260,67 @@ def create_app(
             )
         return {"message": f"Preview for {clean_repo} stopped.", "success": True, "repo": clean_repo}
 
+    @app.get("/api/studio/repos/{repo}/preview/stream")
+    async def stream_preview_endpoint(repo: str, request: Request):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        preview = preview_reg.get_preview(clean_repo)
+        if not preview:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active preview found for repository '{clean_repo}'.",
+            )
+
+        q = preview_reg.add_listener(clean_repo)
+        if q is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unable to subscribe to preview events for repository '{clean_repo}'.",
+            )
+
+        async def event_generator():
+            try:
+                # 1. Send initial sync snapshot
+                init_payload = {
+                    "event": "init",
+                    "preview": preview.to_dict(),
+                    "backlog": list(preview.logs),
+                    "status": preview.status.value,
+                    "stage": preview.stage.value,
+                    "preview_url": preview.preview_url,
+                }
+                yield f"data: {json.dumps(init_payload)}\n\n"
+
+                # 2. Stream real-time events as they arrive
+                import queue as pyqueue
+                while True:
+                    if await request.is_disconnected():
+                        break
+
+                    try:
+                        event_data = q.get_nowait()
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                    except pyqueue.Empty:
+                        if preview.status in ("STOPPED", "FAILED") and q.empty():
+                            break
+                        await asyncio.sleep(0.2)
+                        yield ": ping\n\n"
+
+            finally:
+                preview_reg.remove_listener(clean_repo, q)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
 
 
     @app.get("/api/repos/{repo}/scratch")

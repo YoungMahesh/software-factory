@@ -32,6 +32,7 @@ interface StudioViewProps {
   previewState?: PreviewState | null;
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
+  onRetryPreview?: () => void;
   isLaunchingPreview?: boolean;
 }
 
@@ -50,6 +51,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   previewState = null,
   onLaunchPreview,
   onStopPreview,
+  onRetryPreview,
   isLaunchingPreview = false,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
@@ -386,9 +388,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
           <LivePreview
             previewUrl={previewState?.preview_url || null}
             status={previewState?.status || "IDLE"}
+            stage={previewState?.stage || "IDLE"}
             branch={previewState?.branch || null}
+            logs={previewState?.logs || []}
+            errorMessage={previewState?.error_message || null}
             onLaunchPreview={onLaunchPreview}
             onStopPreview={onStopPreview}
+            onRetryPreview={onRetryPreview || onLaunchPreview}
             isLaunching={isLaunchingPreview}
           />
         </div>

@@ -412,12 +412,14 @@ if [ ! -d "${FACTORY_DIR}/node_modules" ]; then
 fi
 
 if [ -f "$TARGET_DIR/package.json" ] && [ ! -d "$TARGET_DIR/node_modules" ]; then
+    echo "📦 Installing target repository dependencies (pnpm)..."
+    echo "PREVIEW_STAGE:INSTALLING_DEPS"
     if [ -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
-        echo "📦 Installing target repository dependencies (pnpm)..."
-        (cd "$TARGET_DIR" && pnpm install) || true
+        (cd "$TARGET_DIR" && pnpm install)
     elif [ -f "$TARGET_DIR/package-lock.json" ]; then
-        echo "📦 Installing target repository dependencies (npm)..."
-        (cd "$TARGET_DIR" && npm install) || true
+        (cd "$TARGET_DIR" && npm install)
+    else
+        (cd "$TARGET_DIR" && pnpm install)
     fi
 fi
 
@@ -461,6 +463,7 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     echo ""
     echo "================================================================"
     echo "🌟 Launching Dev Preview Keep-Alive Daemon"
+    echo "PREVIEW_STAGE:STARTING_DEV"
     echo "  • Working Directory: ${TARGET_DIR}"
     echo "  • Dev Command: pnpm dev --port 3000 --host 0.0.0.0"
     echo "  • Preview URL: https://3000.mahesh0.dev"

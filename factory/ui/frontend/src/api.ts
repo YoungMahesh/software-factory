@@ -155,3 +155,8 @@ export async function stopPreview(
   }
   return res.json();
 }
+
+export function getPreviewStreamUrl(repo: string): string {
+  return `/api/studio/repos/${encodeURIComponent(repo)}/preview/stream`;
+}
+

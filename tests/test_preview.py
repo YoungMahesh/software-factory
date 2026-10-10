@@ -163,3 +163,55 @@ class TestPreviewRegistry(unittest.TestCase):
         self.assertIn("logs", d)
         self.assertEqual(d["logs"], ["Starting preview server...\n"])
         self.assertEqual(d["log_count"], 1)
+
+    def test_preview_stage_enum_and_state_to_dict(self):
+        from factory.ui.registry import PreviewStage, PreviewState
+        preview = PreviewState(repo="test3", stage=PreviewStage.INSTALLING_DEPS)
+        d = preview.to_dict()
+        self.assertIn("stage", d)
+        self.assertEqual(d["stage"], "INSTALLING_DEPS")
+
+    def test_preview_registry_append_log_detects_stage_transitions(self):
+        import queue
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+        preview = PreviewState(
+            repo="test-stages",
+            branch="main",
+            status=PreviewStatus.PROVISIONING,
+            stage=PreviewStage.PROVISIONING,
+        )
+        self.registry._previews["test-stages"] = preview
+        q = self.registry.add_listener("test-stages")
+        self.assertIsNotNone(q)
+
+        # 1. Initially in PROVISIONING
+        self.assertEqual(preview.stage, PreviewStage.PROVISIONING)
+
+        # 2. Append dependency installation log
+        self.registry.append_log("test-stages", "📦 Installing target repository dependencies (pnpm)...\n")
+        self.assertEqual(preview.stage, PreviewStage.INSTALLING_DEPS)
+
+        # 3. Append dev server start log
+        self.registry.append_log("test-stages", "🌟 Launching Dev Preview Keep-Alive Daemon\n")
+        self.assertEqual(preview.stage, PreviewStage.STARTING_DEV)
+
+        # 4. Append Vite dev server ready log
+        self.registry.append_log("test-stages", "  VITE v5.4.2  ready in 180 ms\n")
+        self.assertEqual(preview.stage, PreviewStage.SERVING)
+        self.assertEqual(preview.status, PreviewStatus.SERVING)
+
+        # Verify broadcast events
+        events = []
+        while not q.empty():
+            events.append(q.get_nowait())
+
+        stage_events = [e for e in events if e.get("event") == "stage"]
+        stages = [e["stage"] for e in stage_events]
+        self.assertIn("INSTALLING_DEPS", stages)
+        self.assertIn("STARTING_DEV", stages)
+        self.assertIn("SERVING", stages)
+
+        status_events = [e for e in events if e.get("event") == "status"]
+        statuses = [e["status"] for e in status_events]
+        self.assertIn("SERVING", statuses)
+

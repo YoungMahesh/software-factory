@@ -602,6 +602,8 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(resp_post.status_code, 401)
         resp_del = unauth_client.delete("/api/studio/repos/test3/preview")
         self.assertEqual(resp_del.status_code, 401)
+        resp_stream = unauth_client.get("/api/studio/repos/test3/preview/stream")
+        self.assertEqual(resp_stream.status_code, 401)
 
     @patch("factory.ui.registry.create_preview_sandbox")
     def test_preview_lifecycle_endpoints(self, mock_create):
@@ -663,6 +665,41 @@ class TestFastApiApp(unittest.TestCase):
         # 5. Subsequent DELETE returns 400 or 404
         resp_del_again = self.client.delete("/api/studio/repos/test3/preview")
         self.assertIn(resp_del_again.status_code, (400, 404))
+
+    def test_preview_stream_sse_endpoint(self):
+        # 1. 404 when preview does not exist
+        resp_404 = self.client.get("/api/studio/repos/unknown-repo/preview/stream")
+        self.assertEqual(resp_404.status_code, 404)
+
+        # 2. When preview exists, streams init event and real-time logs
+        from factory.ui.registry import preview_registry, PreviewState, PreviewStage, PreviewStatus
+        preview = PreviewState(
+            repo="stream-repo",
+            status=PreviewStatus.STOPPED,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://preview.modal.host",
+        )
+        preview.add_log("Booting container...\n")
+        preview_registry._previews["stream-repo"] = preview
+
+        with self.client.stream("GET", "/api/studio/repos/stream-repo/preview/stream") as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("text/event-stream", response.headers["content-type"])
+            events = []
+            for chunk in response.iter_lines():
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[len("data: "):])
+                    events.append(payload)
+
+            self.assertTrue(len(events) > 0)
+            init_event = events[0]
+            self.assertEqual(init_event["event"], "init")
+            self.assertEqual(init_event["status"], "STOPPED")
+            self.assertEqual(init_event["stage"], "SERVING")
+            self.assertEqual(init_event["preview_url"], "https://preview.modal.host")
+            self.assertIn("Booting container...\n", init_event["backlog"])
+
 
 
 

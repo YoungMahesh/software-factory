@@ -430,12 +430,55 @@ class PreviewStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class PreviewStage(str, Enum):
+    IDLE = "IDLE"
+    PROVISIONING = "PROVISIONING"
+    INSTALLING_DEPS = "INSTALLING_DEPS"
+    STARTING_DEV = "STARTING_DEV"
+    SERVING = "SERVING"
+
+
+PREVIEW_STAGE_ORDER: dict[PreviewStage, int] = {
+    PreviewStage.IDLE: 0,
+    PreviewStage.PROVISIONING: 1,
+    PreviewStage.INSTALLING_DEPS: 2,
+    PreviewStage.STARTING_DEV: 3,
+    PreviewStage.SERVING: 4,
+}
+
+
+PREVIEW_STAGE_PATTERNS = [
+    (
+        re.compile(
+            r"PREVIEW_STAGE:SERVING|ready in \d+|Local:\s+http|Network:\s+http|Container entering active serving keep-alive state|Dev server (?:running|started) on port|started on port",
+            re.IGNORECASE,
+        ),
+        PreviewStage.SERVING,
+    ),
+    (
+        re.compile(
+            r"PREVIEW_STAGE:STARTING_DEV|Launching Dev Preview Keep-Alive Daemon|pnpm dev|VITE v|vite v|Dev server running with PID",
+            re.IGNORECASE,
+        ),
+        PreviewStage.STARTING_DEV,
+    ),
+    (
+        re.compile(
+            r"PREVIEW_STAGE:INSTALLING_DEPS|Installing target repository dependencies|Installing dependencies|pnpm install|npm install|Packages: \+|Progress: resolved",
+            re.IGNORECASE,
+        ),
+        PreviewStage.INSTALLING_DEPS,
+    ),
+]
+
+
 @dataclass
 class PreviewState:
     """Represents an active or stopped Dedicated Preview Sandbox."""
 
     repo: str
     status: PreviewStatus = PreviewStatus.IDLE
+    stage: PreviewStage = PreviewStage.IDLE
     branch: str = "main"
     preview_url: str | None = None
     sandbox_id: str | None = None
@@ -448,6 +491,7 @@ class PreviewState:
     listeners: list[queue.Queue] = field(default_factory=list)
     _stopped: bool = False
     _thread: threading.Thread | None = None
+    _line_buffer: str = ""
 
     def add_log(self, line: str, max_lines: int = 5000) -> None:
         if len(self.logs) >= max_lines:
@@ -458,6 +502,7 @@ class PreviewState:
         return {
             "repo": self.repo,
             "status": self.status.value,
+            "stage": self.stage.value,
             "branch": self.branch,
             "preview_url": self.preview_url,
             "sandbox_id": self.sandbox_id,
@@ -531,6 +576,7 @@ class PreviewRegistry:
                 repo=clean_repo,
                 branch=resolved_branch,
                 status=PreviewStatus.PROVISIONING,
+                stage=PreviewStage.PROVISIONING,
                 started_at=time.time(),
             )
             self._previews[clean_repo] = preview
@@ -594,11 +640,71 @@ class PreviewRegistry:
             if dead in preview.listeners:
                 preview.listeners.remove(dead)
 
+    def _set_stage(self, preview: PreviewState, stage: PreviewStage) -> None:
+        """Updates preview stage if changed and broadcasts stage transition event."""
+        current_rank = PREVIEW_STAGE_ORDER.get(preview.stage, 0)
+        target_rank = PREVIEW_STAGE_ORDER.get(stage, 0)
+        if target_rank > current_rank:
+            preview.stage = stage
+            self._broadcast(preview, {"event": "stage", "stage": stage.value})
+            if stage == PreviewStage.SERVING:
+                preview.status = PreviewStatus.SERVING
+                self._broadcast(preview, {
+                    "event": "status",
+                    "status": PreviewStatus.SERVING.value,
+                    "preview_url": preview.preview_url,
+                })
+
+    def append_log(self, repo: str, line: str, flush: bool = False) -> None:
+        """Appends log line to preview ring buffer, checks stage transitions, and broadcasts."""
+        with self._lock:
+            preview = self._previews.get(repo.strip())
+            if not preview:
+                return
+
+            incoming = preview._line_buffer + line
+            preview._line_buffer = ""
+
+            if not flush:
+                if "\n" in incoming:
+                    parts = incoming.split("\n")
+                    complete_lines = [p + "\n" for p in parts[:-1]]
+                    preview._line_buffer = parts[-1]
+                else:
+                    preview._line_buffer = incoming
+                    complete_lines = []
+            else:
+                complete_lines = [incoming] if incoming else []
+
+            for raw_line in complete_lines:
+                for pattern, detected_stage in PREVIEW_STAGE_PATTERNS:
+                    if pattern.search(raw_line):
+                        self._set_stage(preview, detected_stage)
+                        break
+
+                preview.add_log(raw_line, self.max_log_lines)
+                self._broadcast(preview, {"event": "log", "data": raw_line})
+
+    def flush_buffer(self, repo: str) -> None:
+        """Flushes any buffered incomplete log line for the preview."""
+        with self._lock:
+            preview = self._previews.get(repo.strip())
+            if not preview or not preview._line_buffer:
+                return
+            remaining = preview._line_buffer
+            preview._line_buffer = ""
+        self.append_log(repo, remaining, flush=True)
+
     def _run_preview_worker(self, preview: PreviewState) -> None:
         repo = preview.repo
         try:
-            preview.add_log(f"🚀 [PREVIEW] Provisioning dedicated preview sandbox for {repo} ({preview.branch})...\n", self.max_log_lines)
+            self.append_log(
+                repo,
+                f"🚀 [PREVIEW] Provisioning dedicated preview sandbox for {repo} ({preview.branch})...\n",
+                flush=True,
+            )
             self._broadcast(preview, {"event": "status", "status": PreviewStatus.PROVISIONING.value})
+            self._broadcast(preview, {"event": "stage", "stage": PreviewStage.PROVISIONING.value})
 
             config = PreviewSpawnConfig(
                 repo=repo,
@@ -617,14 +723,12 @@ class PreviewRegistry:
                 preview.sandbox = sandbox
                 preview.sandbox_id = getattr(sandbox, "object_id", None)
                 preview.preview_url = preview_url
-                preview.status = PreviewStatus.SERVING
-                self._broadcast(preview, {
-                    "event": "status",
-                    "status": PreviewStatus.SERVING.value,
-                    "preview_url": preview_url,
-                })
 
-            preview.add_log(f"📡 [PREVIEW] Live preview server serving at {preview_url}\n", self.max_log_lines)
+            self.append_log(
+                repo,
+                f"📡 [PREVIEW] Dedicated preview sandbox created ({preview.sandbox_id}). Live preview URL: {preview_url}\n",
+                flush=True,
+            )
 
             # Stream logs from sandbox
             import concurrent.futures
@@ -635,8 +739,7 @@ class PreviewRegistry:
                         if preview._stopped:
                             break
                         text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
-                        preview.add_log(text, self.max_log_lines)
-                        self._broadcast(preview, {"event": "log", "data": text})
+                        self.append_log(repo, text)
                 except Exception:
                     pass
 
@@ -646,6 +749,7 @@ class PreviewRegistry:
                 concurrent.futures.wait([f_out, f_err])
 
             sandbox.wait(raise_on_termination=False)
+            self.flush_buffer(repo)
 
             with self._lock:
                 if not preview._stopped:
@@ -654,7 +758,12 @@ class PreviewRegistry:
                         preview.status = PreviewStatus.STOPPED
                     else:
                         preview.status = PreviewStatus.FAILED
-                    self._broadcast(preview, {"event": "status", "status": preview.status.value})
+                        preview.error_message = f"Process exited with code {sandbox.returncode}"
+                    self._broadcast(preview, {
+                        "event": "status",
+                        "status": preview.status.value,
+                        "error": preview.error_message,
+                    })
 
         except Exception as e:
             with self._lock:
@@ -663,7 +772,7 @@ class PreviewRegistry:
                     preview.error_message = str(e)
                     preview.ended_at = time.time()
                     self._broadcast(preview, {"event": "status", "status": PreviewStatus.FAILED.value, "error": str(e)})
-                    preview.add_log(f"\n❌ [ERROR] Preview failed: {e}\n", self.max_log_lines)
+            self.append_log(repo, f"\n❌ [ERROR] Preview failed: {e}\n", flush=True)
 
 
 # Global singleton instance

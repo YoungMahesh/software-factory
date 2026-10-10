@@ -98,4 +98,68 @@ describe("LivePreview", () => {
 
     expect(screen.queryByTestId("stop-preview-btn")).toBeNull();
   });
+
+  it("renders 3-stage progress stepper when status is PROVISIONING", () => {
+    render(
+      <LivePreview
+        status="PROVISIONING"
+        stage="INSTALLING_DEPS"
+        branch="main"
+      />
+    );
+
+    expect(screen.getByTestId("preview-progress-stepper")).toBeInTheDocument();
+    expect(screen.getByText("Provisioning sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Installing dependencies")).toBeInTheDocument();
+    expect(screen.getByText("Starting dev server")).toBeInTheDocument();
+  });
+
+  it("toggles dev server logs drawer with toolbar button", () => {
+    render(
+      <LivePreview
+        status="PROVISIONING"
+        stage="PROVISIONING"
+        logs={["Cloning repository...", "Decrypting secrets..."]}
+      />
+    );
+
+    const toggleBtn = screen.getByTestId("toggle-dev-logs-btn");
+    expect(toggleBtn).toBeInTheDocument();
+
+    // Initially drawer is closed
+    expect(screen.queryByTestId("dev-server-logs-drawer")).toBeNull();
+
+    // Click to open
+    fireEvent.click(toggleBtn);
+    expect(screen.getByTestId("dev-server-logs-drawer")).toBeInTheDocument();
+    expect(screen.getByText("Cloning repository...")).toBeInTheDocument();
+
+    // Click again to close
+    fireEvent.click(toggleBtn);
+    expect(screen.queryByTestId("dev-server-logs-drawer")).toBeNull();
+  });
+
+  it("auto-expands dev server logs drawer and displays Retry button on failure", () => {
+    const handleRetry = vi.fn();
+    render(
+      <LivePreview
+        status="FAILED"
+        stage="INSTALLING_DEPS"
+        errorMessage="ERR_PNPM_FETCH_404 Package not found"
+        logs={["pnpm install", "ERR_PNPM_FETCH_404 Package not found"]}
+        onRetryPreview={handleRetry}
+      />
+    );
+
+    // Auto-expanded drawer
+    expect(screen.getByTestId("dev-server-logs-drawer")).toBeInTheDocument();
+    expect(screen.getAllByText(/ERR_PNPM_FETCH_404/).length).toBeGreaterThanOrEqual(1);
+
+    // Retry button in drawer or stepper
+    const retryButtons = screen.getAllByTestId("retry-preview-btn");
+    expect(retryButtons.length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(retryButtons[0]);
+    expect(handleRetry).toHaveBeenCalledTimes(1);
+  });
 });

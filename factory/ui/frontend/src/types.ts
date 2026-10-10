@@ -2,9 +2,17 @@ export type JobStatus = "QUEUED" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED
 
 export type PreviewStatus = "IDLE" | "PROVISIONING" | "SERVING" | "STOPPED" | "FAILED";
 
+export type PreviewStage =
+  | "IDLE"
+  | "PROVISIONING"
+  | "INSTALLING_DEPS"
+  | "STARTING_DEV"
+  | "SERVING";
+
 export interface PreviewState {
   repo: string;
   status: PreviewStatus;
+  stage?: PreviewStage;
   branch: string;
   preview_url?: string | null;
   sandbox_id?: string | null;
@@ -12,6 +20,7 @@ export interface PreviewState {
   started_at?: number | null;
   ended_at?: number | null;
   error_message?: string | null;
+  logs?: string[];
   log_count?: number;
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Monitor,
   Tablet,
@@ -10,31 +10,59 @@ import {
   Play,
   Square,
   Loader2,
+  Terminal,
+  ChevronDown,
 } from "lucide-react";
-import { ViewportMode, PreviewStatus } from "../types";
+import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
+import { PreviewProgressStepper } from "./PreviewProgressStepper";
+import { TerminalLogViewer } from "./TerminalLogViewer";
 
 interface LivePreviewProps {
   previewUrl?: string | null;
   status?: PreviewStatus;
+  stage?: PreviewStage;
   branch?: string | null;
+  logs?: string[];
+  errorMessage?: string | null;
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
+  onRetryPreview?: () => void;
   isLaunching?: boolean;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
   previewUrl,
   status = "IDLE",
+  stage = "IDLE",
   branch = null,
+  logs = [],
+  errorMessage = null,
   onLaunchPreview,
   onStopPreview,
+  onRetryPreview,
   isLaunching = false,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
+  const [isLogsDrawerOpen, setIsLogsDrawerOpen] = useState<boolean>(false);
+
+  // Auto-expand logs drawer on failure
+  useEffect(() => {
+    if (status === "FAILED") {
+      setIsLogsDrawerOpen(true);
+    }
+  }, [status]);
 
   const handleReload = () => {
     setReloadKey((prev) => prev + 1);
+  };
+
+  const handleRetry = () => {
+    if (onRetryPreview) {
+      onRetryPreview();
+    } else if (onLaunchPreview) {
+      onLaunchPreview();
+    }
   };
 
   const getViewportWidth = (): string => {
@@ -52,7 +80,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   return (
     <div className="flex flex-col h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
       {/* Top control bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
         {/* Responsive viewport controls */}
         <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
           <button
@@ -116,13 +144,32 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           <div className="flex items-center px-3 py-1 bg-slate-950 rounded-lg border border-slate-800/80 text-xs font-mono text-slate-300 truncate">
             <Globe className="w-3 h-3 text-slate-500 mr-2 shrink-0" />
             <span id="preview-url-display" className="truncate text-[11px] text-slate-300">
-              {previewUrl || (status === "PROVISIONING" ? "Provisioning sandbox tunnel..." : "Waiting for live preview...")}
+              {previewUrl || (status === "PROVISIONING" ? "Provisioning sandbox tunnel..." : status === "FAILED" ? "Startup failed" : "Waiting for live preview...")}
             </span>
           </div>
         </div>
 
-        {/* Actions: Reload, External & Stop */}
+        {/* Actions: Dev Logs Toggle, Reload, External, Retry & Stop */}
         <div className="flex items-center space-x-1.5">
+          {/* Dev Server Logs Drawer Toggle */}
+          <button
+            data-testid="toggle-dev-logs-btn"
+            id="btn-toggle-dev-logs"
+            type="button"
+            onClick={() => setIsLogsDrawerOpen((prev) => !prev)}
+            className={`p-1.5 rounded-md text-xs transition-colors flex items-center space-x-1 ${
+              isLogsDrawerOpen
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            }`}
+            title="Toggle Dev Server Logs Drawer"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            {logs.length > 0 && (
+              <span className="text-[10px] font-mono opacity-80">{logs.length}</span>
+            )}
+          </button>
+
           <button
             data-testid="reload-preview-btn"
             id="btn-preview-reload"
@@ -148,6 +195,20 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
             </a>
           )}
 
+          {status === "FAILED" && (
+            <button
+              data-testid="retry-preview-btn"
+              id="btn-preview-retry"
+              type="button"
+              onClick={handleRetry}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
+              title="Retry preview sandbox"
+            >
+              <RotateCw className="w-3 h-3" />
+              <span>Retry</span>
+            </button>
+          )}
+
           {onStopPreview && (status === "SERVING" || status === "PROVISIONING") && (
             <button
               data-testid="stop-preview-btn"
@@ -167,11 +228,11 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
       {/* Frame Container */}
       <div
         id="preview-frame-wrapper"
-        className="flex-1 flex items-center justify-center bg-slate-950 p-2 overflow-auto"
+        className="flex-1 flex flex-col items-center justify-center bg-slate-950 p-4 overflow-auto min-h-0"
       >
-        {previewUrl ? (
+        {previewUrl && status !== "PROVISIONING" && status !== "FAILED" ? (
           <div
-            className="preview-viewport-wrapper h-full transition-all duration-300 rounded-lg border border-slate-800 shadow-2xl bg-white overflow-hidden flex flex-col"
+            className="preview-viewport-wrapper h-full w-full transition-all duration-300 rounded-lg border border-slate-800 shadow-2xl bg-white overflow-hidden flex flex-col mx-auto"
             style={{ width: getViewportWidth() }}
           >
             <iframe
@@ -184,16 +245,46 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
             />
           </div>
         ) : status === "PROVISIONING" ? (
-          <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
-            <div className="w-12 h-12 rounded-full bg-indigo-950/50 border border-indigo-800 flex items-center justify-center text-indigo-400 mb-4">
-              <Loader2 className="w-6 h-6 animate-spin" />
+          <div className="w-full flex flex-col items-center justify-center p-6 space-y-6">
+            <PreviewProgressStepper
+              currentStage={stage}
+              status={status}
+              errorMessage={errorMessage}
+            />
+            <div className="flex flex-col items-center text-center max-w-sm">
+              <div className="w-10 h-10 rounded-full bg-indigo-950/60 border border-indigo-800/80 flex items-center justify-center text-indigo-400 mb-3 shadow-md">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+              <h3 className="text-xs font-semibold text-slate-200 mb-1">
+                Booting Dedicated Preview Sandbox
+              </h3>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Starting Modal standard container on port 3000, installing dependencies, and compiling Vite dev server.
+              </p>
             </div>
-            <h3 className="text-sm font-semibold text-slate-200 mb-1">
-              Provisioning Preview Sandbox...
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Launching Modal Standard Sandbox with encrypted tunnel on port 3000.
-            </p>
+          </div>
+        ) : status === "FAILED" ? (
+          <div className="w-full flex flex-col items-center justify-center p-6 space-y-6">
+            <PreviewProgressStepper
+              currentStage={stage}
+              status={status}
+              errorMessage={errorMessage}
+            />
+            <div className="flex flex-col items-center text-center max-w-sm">
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Sandbox boot or Vite dev server failed to start. Review the failure diagnostics below or retry.
+              </p>
+              <button
+                data-testid="retry-preview-btn"
+                id="btn-retry-center"
+                type="button"
+                onClick={handleRetry}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Retry Startup</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
@@ -226,6 +317,55 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Collapsible Dev Server Logs Terminal Drawer */}
+      {isLogsDrawerOpen && (
+        <div
+          data-testid="dev-server-logs-drawer"
+          id="dev-server-logs-drawer"
+          className="h-64 border-t border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-hidden"
+        >
+          {/* Drawer Header */}
+          <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800 text-xs shrink-0">
+            <div className="flex items-center space-x-2 text-slate-300">
+              <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="font-semibold text-slate-200 text-xs">Dev Server Logs</span>
+              <span id="dev-logs-line-count" className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
+                {logs.length} lines
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {status === "FAILED" && (
+                <button
+                  data-testid="retry-preview-btn"
+                  id="btn-retry-in-drawer"
+                  type="button"
+                  onClick={handleRetry}
+                  className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  <span>Retry</span>
+                </button>
+              )}
+              <button
+                id="btn-close-logs-drawer"
+                type="button"
+                onClick={() => setIsLogsDrawerOpen(false)}
+                className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                title="Close terminal drawer"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Drawer Body */}
+          <div className="flex-1 overflow-hidden">
+            <TerminalLogViewer logs={logs} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
