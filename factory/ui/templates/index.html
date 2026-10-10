@@ -65,7 +65,7 @@
   <main class="flex-1 flex overflow-hidden relative">
 
     <!-- VIEW 1: STUDIO VIEW (Split-Pane Factory Studio Workspace) -->
-    <div id="studio-view" class="flex-1 flex overflow-hidden">
+    <div id="studio-view" class="flex-1 flex overflow-hidden relative">
       <!-- Left Sidebar: App Selector, Conversation History & Prompt Bar -->
       <aside class="w-96 border-r border-slate-800 bg-slate-950/70 flex flex-col shrink-0 overflow-hidden">
         <!-- Project Selector & New App Header -->
@@ -177,6 +177,46 @@
           </div>
         </div>
       </section>
+
+      <!-- Agent Activity Slide-Over Drawer Component -->
+      <aside id="studio-activity-drawer" class="hidden absolute inset-y-0 right-0 z-40 w-full sm:w-[580px] md:w-[640px] max-w-[85%] bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out translate-x-full">
+        <!-- Drawer Header Toolbar -->
+        <div class="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm">⚡</span>
+            <span class="text-xs font-bold text-slate-100 uppercase tracking-wider">Agent Activity</span>
+            <span id="studio-drawer-stage-badge" class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">PLANNER</span>
+            <span id="studio-drawer-job-id" class="text-[10px] font-mono text-slate-400 truncate max-w-[140px]">-</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- Tabs: Timeline vs Raw Logs -->
+            <div class="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+              <button id="btn-drawer-tab-timeline" type="button" onclick="switchDrawerTab('timeline')" class="px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1">
+                <span>Timeline</span>
+              </button>
+              <button id="btn-drawer-tab-logs" type="button" onclick="switchDrawerTab('logs')" class="px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1">
+                <span>Raw Logs</span>
+              </button>
+            </div>
+            <button id="btn-drawer-copy-logs" type="button" class="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 border border-slate-800 transition" title="Copy clean logs to clipboard">
+              Copy Logs
+            </button>
+            <button id="btn-close-activity-drawer" type="button" onclick="closeStudioActivityDrawer()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition ml-1" title="Close Drawer (Esc)">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- Drawer Body: Timeline Tab -->
+        <div id="studio-drawer-timeline" class="flex-1 p-4 overflow-y-auto space-y-2 font-mono text-xs leading-relaxed text-slate-200">
+          <div class="text-slate-500 italic">No agent activity recorded yet.</div>
+        </div>
+
+        <!-- Drawer Body: Raw Terminal Logs Tab -->
+        <div id="studio-drawer-logs" class="hidden flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-200 space-y-0.5 whitespace-pre-wrap break-all bg-black/60">
+          <div class="text-slate-500 italic">No logs recorded yet.</div>
+        </div>
+      </aside>
     </div>
 
     <!-- VIEW 2: CONSOLE VIEW (Existing Testing Console & Live Terminal Streaming) -->
@@ -448,7 +488,7 @@
 
     <!-- Compact Floating Status Badge (Studio View Active Tracking) -->
     <div id="studio-floating-status-badge" class="hidden fixed bottom-6 right-6 z-40 bg-slate-900/95 border border-indigo-500/40 rounded-xl shadow-2xl shadow-indigo-950/50 p-3 backdrop-blur flex items-center gap-3 transition">
-      <div class="flex items-center gap-2">
+      <div id="studio-badge-status-clickable" onclick="openStudioActivityDrawer()" class="flex items-center gap-2 cursor-pointer hover:opacity-90 transition" title="Open Agent Activity Drawer">
         <span class="relative flex h-2.5 w-2.5">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
@@ -460,7 +500,10 @@
       </div>
       <div class="h-6 w-px bg-slate-800"></div>
       <div class="flex items-center gap-2">
-        <button id="btn-inspect-logs" type="button" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow transition">
+        <button id="btn-studio-activity" type="button" onclick="openStudioActivityDrawer()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow transition" title="Open Agent Activity Drawer">
+          <span>⚡ Activity</span>
+        </button>
+        <button id="btn-inspect-logs" type="button" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition" title="Switch to Full Console">
           <span>📟 Inspect Logs</span>
         </button>
         <button id="btn-studio-cancel" type="button" class="text-xs bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium px-2 py-1.5 rounded-lg transition" title="Cancel active run">
@@ -836,15 +879,25 @@
               <div class="text-slate-400 text-[11px]">Milestone: <span class="text-slate-200 font-medium">${escapeHtml(data.milestone.title)}</span></div>
               <div class="text-slate-400 text-[11px]">Issue: <a href="${data.issue.html_url || '#'}" target="_blank" class="text-indigo-400 hover:underline font-mono">#${data.issue.number} ${escapeHtml(data.issue.title)}</a></div>
             </div>
+            <div class="studio-thinking-container"></div>
+            <div class="studio-step-chips flex flex-wrap gap-1.5 my-1.5"></div>
             <div class="flex items-center justify-between pt-1 text-[11px] border-t border-slate-800/60">
               <span class="text-emerald-400 flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 Cloudflare Tunnel: ${data.preview_url || 'https://3000.mahesh0.dev'}
               </span>
-              <button onclick="switchView('console')" class="text-indigo-400 hover:text-indigo-300 hover:underline font-medium">View Logs ➔</button>
+              <button onclick="openStudioActivityDrawer()" class="text-indigo-400 hover:text-indigo-300 hover:underline font-medium">Activity ➔</button>
             </div>
           `;
-          appendChatMessage("agent", successContent);
+          const msgEl = appendChatMessage("agent", successContent, "studio-assistant-turn");
+          msgEl.setAttribute("data-job-id", data.job.id);
+          currentStudioTurn = {
+            jobId: data.job.id,
+            element: msgEl,
+            thinkingContainer: msgEl.querySelector(".studio-thinking-container"),
+            stepChipsContainer: msgEl.querySelector(".studio-step-chips"),
+            activeDisclosure: null,
+          };
 
           // Update active job metadata & connect SSE stream
           connectJobStream(data.job.id);
@@ -1116,6 +1169,11 @@
         studioBadgeJobDetail.textContent = activeJobId;
       }
 
+      const drawerStageBadge = document.getElementById("studio-drawer-stage-badge");
+      const drawerJobId = document.getElementById("studio-drawer-job-id");
+      if (drawerStageBadge) drawerStageBadge.textContent = stage || status || "RUNNING";
+      if (drawerJobId) drawerJobId.textContent = activeJobId || "-";
+
       if (["RUNNING", "QUEUED"].includes(status)) {
         btnStudioCancel.classList.remove("hidden");
       } else {
@@ -1129,7 +1187,7 @@
       }
     }
 
-    // Append logs to terminal in Console View
+    // Append logs to terminal in Console View & Studio Activity Drawer
     let lineCount = 0;
     let cleanLogsText = "";
     function appendTerminalText(text) {
@@ -1145,6 +1203,356 @@
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
       }
+
+      // Synchronize with Studio Activity Drawer Logs
+      const drawerLogs = document.getElementById("studio-drawer-logs");
+      if (drawerLogs) {
+        if (drawerLogs.children.length === 1 && drawerLogs.children[0].classList.contains("italic")) {
+          drawerLogs.innerHTML = "";
+        }
+        const dSpan = document.createElement("span");
+        dSpan.textContent = text;
+        drawerLogs.appendChild(dSpan);
+        drawerLogs.scrollTop = drawerLogs.scrollHeight;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Factory Studio: Inline Thinking Disclosures & Step Chips
+    // -------------------------------------------------------------
+    let currentStudioTurn = null;
+
+    function getOrCreateStudioAssistantTurn(jobId) {
+      if (currentStudioTurn && currentStudioTurn.jobId === jobId && document.body.contains(currentStudioTurn.element)) {
+        return currentStudioTurn;
+      }
+      const existingEl = document.querySelector(`.studio-assistant-turn[data-job-id="${jobId}"]`);
+      if (existingEl) {
+        currentStudioTurn = {
+          jobId,
+          element: existingEl,
+          thinkingContainer: existingEl.querySelector(".studio-thinking-container"),
+          stepChipsContainer: existingEl.querySelector(".studio-step-chips"),
+          activeDisclosure: null,
+        };
+        return currentStudioTurn;
+      }
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "studio-assistant-turn flex items-start gap-3";
+      wrapper.setAttribute("data-job-id", jobId);
+      wrapper.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs text-white shrink-0 shadow-md shadow-purple-600/30">🤖</div>
+        <div class="max-w-[88%] bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-3.5 text-xs text-slate-200 space-y-2 shadow-sm flex-1">
+          <div class="flex items-center justify-between pb-1.5 border-b border-slate-800">
+            <span class="font-semibold text-indigo-400">⚡ Autonomous Run</span>
+            <span class="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">${jobId}</span>
+          </div>
+          <div class="studio-thinking-container"></div>
+          <div class="studio-step-chips flex flex-wrap gap-1.5 my-1.5"></div>
+          <div class="flex items-center justify-between pt-1 text-[11px] border-t border-slate-800/60">
+            <span class="text-slate-400">Autonomous assembly line executing</span>
+            <button onclick="openStudioActivityDrawer()" class="text-indigo-400 hover:text-indigo-300 hover:underline font-medium">Activity ➔</button>
+          </div>
+        </div>
+      `;
+      studioChatHistory.appendChild(wrapper);
+      studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+
+      currentStudioTurn = {
+        jobId,
+        element: wrapper,
+        thinkingContainer: wrapper.querySelector(".studio-thinking-container"),
+        stepChipsContainer: wrapper.querySelector(".studio-step-chips"),
+        activeDisclosure: null,
+      };
+      return currentStudioTurn;
+    }
+
+    function updateStudioThinkingDisclosure(stage, delta, durationMs, isDone) {
+      const turn = getOrCreateStudioAssistantTurn(activeJobId || "active");
+      if (!turn || !turn.thinkingContainer) return;
+
+      if (!turn.activeDisclosure || turn.activeDisclosure.stage !== stage) {
+        if (turn.activeDisclosure) {
+          collapseStudioThinkingDisclosure(turn.activeDisclosure);
+        }
+        const discId = "studio-disc-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+        const discEl = document.createElement("div");
+        discEl.id = discId;
+        discEl.className = "studio-thinking-disclosure my-2 rounded-lg border border-indigo-500/30 bg-indigo-950/30 overflow-hidden shadow transition-all duration-200";
+        discEl.innerHTML = `
+          <div class="studio-thinking-header px-3 py-1.5 flex items-center justify-between cursor-pointer select-none bg-indigo-950/40 hover:bg-indigo-950/60 border-b border-indigo-500/20 transition">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-indigo-300">
+              <span class="studio-thinking-icon text-sm">🧠</span>
+              <span class="studio-thinking-title font-semibold">Thinking...</span>
+              <span class="studio-thinking-pulse w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <span class="studio-thinking-stage text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${stage || 'PLANNER'}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="studio-thinking-duration font-mono text-[10px] text-indigo-300/80">0.0s</span>
+              <button type="button" class="studio-thinking-toggle text-xs text-indigo-400 hover:text-indigo-200 px-1 py-0.5 rounded transition">
+                <span class="toggle-icon font-mono text-[10px]">▲</span>
+              </button>
+            </div>
+          </div>
+          <div class="studio-thinking-body p-2.5 font-mono text-xs text-slate-300 bg-black/40 overflow-y-auto max-h-48 whitespace-pre-wrap leading-relaxed select-text">
+            <div class="studio-thinking-content prose prose-invert prose-xs max-w-none"></div>
+          </div>
+        `;
+        turn.thinkingContainer.appendChild(discEl);
+
+        const headerEl = discEl.querySelector(".studio-thinking-header");
+        const titleEl = discEl.querySelector(".studio-thinking-title");
+        const pulseEl = discEl.querySelector(".studio-thinking-pulse");
+        const durationEl = discEl.querySelector(".studio-thinking-duration");
+        const toggleEl = discEl.querySelector(".studio-thinking-toggle");
+        const bodyEl = discEl.querySelector(".studio-thinking-body");
+        const contentEl = discEl.querySelector(".studio-thinking-content");
+
+        headerEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleStudioThinkingDisclosure(discId);
+        });
+
+        turn.activeDisclosure = {
+          id: discId,
+          element: discEl,
+          headerEl,
+          titleEl,
+          pulseEl,
+          durationEl,
+          toggleEl,
+          bodyEl,
+          contentEl,
+          stage: stage || "PLANNER",
+          content: delta || "",
+          startTime: Date.now(),
+          durationMs: durationMs || 0,
+          isCollapsed: false,
+        };
+        if (delta) contentEl.textContent = delta;
+      } else {
+        if (delta) {
+          turn.activeDisclosure.content += delta;
+          turn.activeDisclosure.contentEl.style.whiteSpace = "pre-wrap";
+          turn.activeDisclosure.contentEl.textContent = turn.activeDisclosure.content;
+        }
+        if (durationMs) {
+          turn.activeDisclosure.durationMs = durationMs;
+          turn.activeDisclosure.durationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+        }
+      }
+
+      if (isDone && turn.activeDisclosure) {
+        collapseStudioThinkingDisclosure(turn.activeDisclosure, durationMs);
+      }
+
+      studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+    }
+
+    function collapseStudioThinkingDisclosure(disclosure, finalDurationMs) {
+      if (!disclosure || disclosure.isCollapsed) return;
+      disclosure.isCollapsed = true;
+      const durationMs = finalDurationMs || disclosure.durationMs || (Date.now() - disclosure.startTime);
+      const durationSec = (durationMs / 1000).toFixed(1) + "s";
+      if (disclosure.titleEl) disclosure.titleEl.textContent = `Reasoning finished in ${durationSec}`;
+      if (disclosure.durationEl) disclosure.durationEl.textContent = durationSec;
+      if (disclosure.pulseEl) {
+        disclosure.pulseEl.classList.add("hidden");
+        disclosure.pulseEl.classList.remove("animate-pulse");
+      }
+      if (disclosure.bodyEl) disclosure.bodyEl.classList.add("hidden");
+      if (disclosure.toggleEl) {
+        const icon = disclosure.toggleEl.querySelector(".toggle-icon");
+        if (icon) icon.textContent = "▼";
+      }
+      if (currentStudioTurn && currentStudioTurn.activeDisclosure === disclosure) {
+        currentStudioTurn.activeDisclosure = null;
+      }
+    }
+
+    function toggleStudioThinkingDisclosure(disclosureId) {
+      const el = document.getElementById(disclosureId);
+      if (!el) return;
+      const body = el.querySelector(".studio-thinking-body");
+      const icon = el.querySelector(".toggle-icon");
+      if (!body) return;
+      if (body.classList.contains("hidden")) {
+        body.classList.remove("hidden");
+        if (icon) icon.textContent = "▲";
+        const content = el.querySelector(".studio-thinking-content");
+        if (content && window.marked && typeof window.marked.parse === "function") {
+          try {
+            content.style.whiteSpace = "normal";
+            content.innerHTML = window.marked.parse(content.textContent || "");
+          } catch (e) {}
+        }
+      } else {
+        body.classList.add("hidden");
+        if (icon) icon.textContent = "▼";
+      }
+    }
+
+    function appendStudioStepChip(toolName, resultData, stage) {
+      const turn = getOrCreateStudioAssistantTurn(activeJobId || "active");
+      if (!turn || !turn.stepChipsContainer) return;
+
+      if (turn.activeDisclosure) {
+        collapseStudioThinkingDisclosure(turn.activeDisclosure);
+      }
+
+      const isError = Boolean(resultData.isError) || (typeof resultData.exitCode === "number" && resultData.exitCode !== 0);
+      let label = `[Ran ${toolName}]`;
+      let icon = "🔧";
+
+      if (toolName === "bash" || resultData.command) {
+        icon = "💻";
+        const cmd = resultData.command || resultData.args?.command || "bash";
+        const shortCmd = cmd.length > 25 ? cmd.slice(0, 22) + "..." : cmd;
+        label = isError ? `[Failed bash: ${shortCmd}]` : `[Ran bash: ${shortCmd}]`;
+      } else if (toolName === "edit") {
+        icon = "✏️";
+        const path = resultData.path || resultData.args?.path || "file";
+        label = isError ? `[Failed edit: ${path}]` : `[Edited ${path}]`;
+      } else if (toolName === "write") {
+        icon = "📝";
+        const path = resultData.path || resultData.args?.path || "file";
+        label = isError ? `[Failed write: ${path}]` : `[Wrote ${path}]`;
+      } else if (toolName === "read") {
+        icon = "📄";
+        const path = resultData.path || resultData.args?.path || "file";
+        label = `[Read ${path}]`;
+      } else if (toolName === "grep") {
+        icon = "🔍";
+        const pat = resultData.pattern || resultData.args?.pattern || "";
+        label = `[Grepped "${pat}"]`;
+      } else if (toolName === "diff") {
+        icon = "🔍";
+        label = `[Diffed ${resultData.path || "workspace"}]`;
+      }
+
+      const chipBtn = document.createElement("button");
+      chipBtn.type = "button";
+      chipBtn.className = `studio-step-chip inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono border transition shadow-sm cursor-pointer select-none ${
+        isError 
+          ? 'bg-rose-950/40 text-rose-300 border-rose-500/40 hover:bg-rose-900/60' 
+          : 'bg-slate-800/90 text-indigo-300 border-slate-700 hover:bg-slate-700 hover:border-indigo-500/50 hover:text-white'
+      }`;
+      chipBtn.title = "Click to inspect in Agent Activity drawer";
+      chipBtn.innerHTML = `
+        <span class="text-xs shrink-0">${icon}</span>
+        <span class="chip-label font-medium">${escapeHtml(label)}</span>
+      `;
+
+      const toolCallId = resultData.toolCallId || null;
+      chipBtn.addEventListener("click", () => {
+        openStudioActivityDrawer(toolCallId);
+      });
+
+      turn.stepChipsContainer.appendChild(chipBtn);
+      studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+    }
+
+    // -------------------------------------------------------------
+    // Factory Studio: Slide-Over Agent Activity Drawer Management
+    // -------------------------------------------------------------
+    function openStudioActivityDrawer(targetToolCallId = null) {
+      const drawer = document.getElementById("studio-activity-drawer");
+      if (!drawer) return;
+      drawer.classList.remove("hidden");
+      requestAnimationFrame(() => {
+        drawer.classList.remove("translate-x-full");
+        drawer.classList.add("translate-x-0");
+      });
+
+      const drawerStageBadge = document.getElementById("studio-drawer-stage-badge");
+      const drawerJobId = document.getElementById("studio-drawer-job-id");
+      if (drawerStageBadge) drawerStageBadge.textContent = activeJobStage || "PLANNER";
+      if (drawerJobId) drawerJobId.textContent = activeJobId || "-";
+
+      if (targetToolCallId) {
+        switchDrawerTab("timeline");
+        setTimeout(() => {
+          const safeId = (typeof CSS !== "undefined" && typeof CSS.escape === "function") ? CSS.escape(targetToolCallId) : targetToolCallId;
+          const targetEl = (drawerTimeline ? drawerTimeline.querySelector("#drawer-" + safeId + ", #" + safeId) : null)
+            || document.getElementById("drawer-" + targetToolCallId)
+            || document.getElementById(targetToolCallId);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            targetEl.classList.add("ring-2", "ring-indigo-500");
+            setTimeout(() => targetEl.classList.remove("ring-2", "ring-indigo-500"), 2000);
+          }
+        }, 150);
+      }
+    }
+
+    function closeStudioActivityDrawer() {
+      const drawer = document.getElementById("studio-activity-drawer");
+      if (!drawer) return;
+      drawer.classList.remove("translate-x-0");
+      drawer.classList.add("translate-x-full");
+      setTimeout(() => {
+        drawer.classList.add("hidden");
+      }, 300);
+    }
+
+    // Keyboard shortcut: Escape to close drawer
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const drawer = document.getElementById("studio-activity-drawer");
+        if (drawer && !drawer.classList.contains("hidden")) {
+          closeStudioActivityDrawer();
+        }
+      }
+    });
+
+    function switchDrawerTab(tab) {
+      const tabTimeline = document.getElementById("btn-drawer-tab-timeline");
+      const tabLogs = document.getElementById("btn-drawer-tab-logs");
+      const drawerTimeline = document.getElementById("studio-drawer-timeline");
+      const drawerLogs = document.getElementById("studio-drawer-logs");
+
+      if (tab === "timeline") {
+        if (tabTimeline) tabTimeline.className = "px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1";
+        if (tabLogs) tabLogs.className = "px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1";
+        if (drawerTimeline) drawerTimeline.classList.remove("hidden");
+        if (drawerLogs) drawerLogs.classList.add("hidden");
+      } else {
+        if (tabLogs) tabLogs.className = "px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1";
+        if (tabTimeline) tabTimeline.className = "px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1";
+        if (drawerLogs) drawerLogs.classList.remove("hidden");
+        if (drawerTimeline) drawerTimeline.classList.add("hidden");
+      }
+    }
+
+    // Wire Copy Logs button in drawer
+    const btnDrawerCopyLogs = document.getElementById("btn-drawer-copy-logs");
+    if (btnDrawerCopyLogs) {
+      btnDrawerCopyLogs.addEventListener("click", () => {
+        const drawerLogs = document.getElementById("studio-drawer-logs");
+        const textToCopy = cleanLogsText || (drawerLogs ? drawerLogs.innerText : "");
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          alert("Logs copied to clipboard!");
+        });
+      });
+    }
+
+    function syncToDrawerTimeline(container, id) {
+      const drawerTimeline = document.getElementById("studio-drawer-timeline");
+      if (!drawerTimeline) return null;
+      if (drawerTimeline.children.length === 1 && drawerTimeline.children[0].classList.contains("italic")) {
+        drawerTimeline.innerHTML = "";
+      }
+      const drawerContainer = container.cloneNode(true);
+      if (id) {
+        drawerContainer.id = "drawer-" + id;
+      }
+      drawerTimeline.appendChild(drawerContainer);
+      if (checkAutoscroll.checked) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
+      }
+      return drawerContainer;
     }
 
     // -------------------------------------------------------------
@@ -1154,18 +1562,35 @@
     let activeThinkingBlock = null;
 
     function renderThinkingContent(block) {
-      if (!block || !block.contentEl) return;
+      if (!block) return;
+      let parsed = block.content || "";
+      let isMarkdown = false;
       if (window.marked && typeof window.marked.parse === "function") {
         try {
-          block.contentEl.style.whiteSpace = "normal";
-          block.contentEl.innerHTML = window.marked.parse(block.content || "");
-          return;
+          parsed = window.marked.parse(block.content || "");
+          isMarkdown = true;
         } catch (e) {
           console.error("Failed to render markdown:", e);
         }
       }
-      block.contentEl.style.whiteSpace = "pre-wrap";
-      block.contentEl.textContent = block.content || "";
+      if (block.contentEl) {
+        if (isMarkdown) {
+          block.contentEl.style.whiteSpace = "normal";
+          block.contentEl.innerHTML = parsed;
+        } else {
+          block.contentEl.style.whiteSpace = "pre-wrap";
+          block.contentEl.textContent = parsed;
+        }
+      }
+      if (block.drawerContentEl) {
+        if (isMarkdown) {
+          block.drawerContentEl.style.whiteSpace = "normal";
+          block.drawerContentEl.innerHTML = parsed;
+        } else {
+          block.drawerContentEl.style.whiteSpace = "pre-wrap";
+          block.drawerContentEl.textContent = parsed;
+        }
+      }
     }
 
     function toggleThinkingAccordion(blockId) {
@@ -1175,16 +1600,22 @@
       if (block.isCollapsed) {
         // Expand
         block.isCollapsed = false;
-        block.bodyEl.classList.remove("hidden");
-        const icon = block.toggleEl.querySelector(".toggle-icon");
+        if (block.bodyEl) block.bodyEl.classList.remove("hidden");
+        if (block.drawerBodyEl) block.drawerBodyEl.classList.remove("hidden");
+        const icon = block.toggleEl?.querySelector(".toggle-icon");
         if (icon) icon.textContent = "▲";
+        const dIcon = block.drawerToggleEl?.querySelector(".toggle-icon");
+        if (dIcon) dIcon.textContent = "▲";
         renderThinkingContent(block);
       } else {
         // Collapse
         block.isCollapsed = true;
-        block.bodyEl.classList.add("hidden");
-        const icon = block.toggleEl.querySelector(".toggle-icon");
+        if (block.bodyEl) block.bodyEl.classList.add("hidden");
+        if (block.drawerBodyEl) block.drawerBodyEl.classList.add("hidden");
+        const icon = block.toggleEl?.querySelector(".toggle-icon");
         if (icon) icon.textContent = "▼";
+        const dIcon = block.drawerToggleEl?.querySelector(".toggle-icon");
+        if (dIcon) dIcon.textContent = "▼";
       }
     }
 
@@ -1197,6 +1628,10 @@
         block.pulseEl.classList.add("hidden");
         block.pulseEl.classList.remove("animate-pulse");
       }
+      if (block.drawerPulseEl) {
+        block.drawerPulseEl.classList.add("hidden");
+        block.drawerPulseEl.classList.remove("animate-pulse");
+      }
 
       const durationMs = finalDurationMs || block.durationMs || (Date.now() - block.startTime);
       const durationSec = (durationMs / 1000).toFixed(1);
@@ -1205,21 +1640,41 @@
       if (block.titleEl) {
         block.titleEl.textContent = `Reasoning finished in ${durationText}`;
       }
+      if (block.drawerTitleEl) {
+        block.drawerTitleEl.textContent = `Reasoning finished in ${durationText}`;
+      }
       if (block.durationEl) {
         block.durationEl.textContent = durationText;
+      }
+      if (block.drawerDurationEl) {
+        block.drawerDurationEl.textContent = durationText;
       }
 
       // Transition visual style to compact collapsed badge
       block.element.classList.remove("border-indigo-500/40", "bg-slate-900/90", "shadow-lg");
       block.element.classList.add("border-slate-800", "bg-slate-900/50");
+      if (block.drawerElement) {
+        block.drawerElement.classList.remove("border-indigo-500/40", "bg-slate-900/90", "shadow-lg");
+        block.drawerElement.classList.add("border-slate-800", "bg-slate-900/50");
+      }
 
       block.headerEl.classList.remove("bg-indigo-950/40", "border-indigo-500/20");
       block.headerEl.classList.add("bg-slate-900/40", "border-transparent");
+      if (block.drawerElement) {
+        const dH = block.drawerElement.querySelector(".thinking-header");
+        if (dH) {
+          dH.classList.remove("bg-indigo-950/40", "border-indigo-500/20");
+          dH.classList.add("bg-slate-900/40", "border-transparent");
+        }
+      }
 
       // Auto-collapse content body
       block.bodyEl.classList.add("hidden");
-      const icon = block.toggleEl.querySelector(".toggle-icon");
+      if (block.drawerBodyEl) block.drawerBodyEl.classList.add("hidden");
+      const icon = block.toggleEl?.querySelector(".toggle-icon");
       if (icon) icon.textContent = "▼";
+      const dIcon = block.drawerToggleEl?.querySelector(".toggle-icon");
+      if (dIcon) dIcon.textContent = "▼";
 
       if (activeThinkingBlock === block) {
         activeThinkingBlock = null;
@@ -1257,6 +1712,32 @@
       }
       terminalBody.appendChild(container);
 
+      // Clone into Studio Activity Drawer Timeline
+      let drawerContainer = syncToDrawerTimeline(container, blockId);
+      let drawerContentEl = null;
+      let drawerDurationEl = null;
+      let drawerToggleEl = null;
+      let drawerBodyEl = null;
+      let drawerPulseEl = null;
+      let drawerTitleEl = null;
+
+      if (drawerContainer) {
+        const drawerHeader = drawerContainer.querySelector(".thinking-header");
+        drawerTitleEl = drawerContainer.querySelector(".thinking-title");
+        drawerPulseEl = drawerContainer.querySelector(".thinking-pulse");
+        drawerDurationEl = drawerContainer.querySelector(".thinking-duration");
+        drawerToggleEl = drawerContainer.querySelector(".thinking-toggle");
+        drawerBodyEl = drawerContainer.querySelector(".thinking-body");
+        drawerContentEl = drawerContainer.querySelector(".thinking-content");
+
+        if (drawerHeader) {
+          drawerHeader.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleThinkingAccordion(blockId);
+          });
+        }
+      }
+
       const headerEl = container.querySelector(".thinking-header");
       const titleEl = container.querySelector(".thinking-title");
       const pulseEl = container.querySelector(".thinking-pulse");
@@ -1268,6 +1749,7 @@
 
       if (initialContent) {
         contentEl.textContent = initialContent;
+        if (drawerContentEl) drawerContentEl.textContent = initialContent;
       }
 
       headerEl.addEventListener("click", (e) => {
@@ -1278,14 +1760,21 @@
       const block = {
         id: blockId,
         element: container,
+        drawerElement: drawerContainer,
         headerEl,
         titleEl,
+        drawerTitleEl,
         pulseEl,
+        drawerPulseEl,
         stageEl,
         durationEl,
+        drawerDurationEl,
         toggleEl,
+        drawerToggleEl,
         bodyEl,
+        drawerBodyEl,
         contentEl,
+        drawerContentEl,
         stage: stage || "PLANNER",
         content: initialContent || "",
         startTime: Date.now(),
@@ -1298,6 +1787,9 @@
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
       }
 
       return block;
@@ -1314,6 +1806,9 @@
         const durationMs = data.durationMs;
         const isDone = Boolean(data.done);
 
+        // Update Factory Studio conversational turn inline thinking disclosure
+        updateStudioThinkingDisclosure(stage, delta, durationMs, isDone);
+
         if (!activeThinkingBlock || activeThinkingBlock.stage !== stage) {
           if (activeThinkingBlock) {
             collapseThinkingBlock(activeThinkingBlock);
@@ -1322,16 +1817,26 @@
           if (activeThinkingBlock && durationMs) {
             activeThinkingBlock.durationMs = durationMs;
             activeThinkingBlock.durationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+            if (activeThinkingBlock.drawerDurationEl) {
+              activeThinkingBlock.drawerDurationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+            }
           }
         } else {
           if (delta) {
             activeThinkingBlock.content += delta;
             activeThinkingBlock.contentEl.style.whiteSpace = "pre-wrap";
             activeThinkingBlock.contentEl.textContent = activeThinkingBlock.content;
+            if (activeThinkingBlock.drawerContentEl) {
+              activeThinkingBlock.drawerContentEl.style.whiteSpace = "pre-wrap";
+              activeThinkingBlock.drawerContentEl.textContent = activeThinkingBlock.content;
+            }
           }
           if (durationMs) {
             activeThinkingBlock.durationMs = durationMs;
             activeThinkingBlock.durationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+            if (activeThinkingBlock.drawerDurationEl) {
+              activeThinkingBlock.drawerDurationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+            }
           }
         }
 
@@ -1346,9 +1851,13 @@
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock, data.durationMs);
         }
+        updateStudioThinkingDisclosure(stage, "", data.durationMs, true);
       } else if (type === "tool_start") {
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
+        }
+        if (currentStudioTurn && currentStudioTurn.activeDisclosure) {
+          collapseStudioThinkingDisclosure(currentStudioTurn.activeDisclosure);
         }
         const toolName = data.toolName;
         if (toolName === "bash" || data.command) {
@@ -1365,7 +1874,14 @@
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
         }
-        const toolName = data.toolName;
+        if (currentStudioTurn && currentStudioTurn.activeDisclosure) {
+          collapseStudioThinkingDisclosure(currentStudioTurn.activeDisclosure);
+        }
+        const toolName = data.toolName || "tool";
+
+        // Append sequential step chip inside Studio assistant turn container
+        appendStudioStepChip(toolName, data, stage);
+
         if (toolName === "bash" || data.command) {
           let card = data.toolCallId ? commandCardsMap.get(data.toolCallId) : null;
           if (!card) {
@@ -1444,37 +1960,44 @@
     }
 
     function renderCommandOutput(card) {
-      if (!card || !card.outputEl) return;
+      if (!card) return;
       const totalLines = card.lines.length;
 
       // Container height clamping based on expansion state
-      if (card.isExpanded) {
-        card.outputEl.classList.remove("max-h-80");
-        card.outputEl.classList.add("max-h-none");
-      } else {
-        card.outputEl.classList.remove("max-h-none");
-        card.outputEl.classList.add("max-h-80");
-      }
+      const clampOrExpand = (el) => {
+        if (!el) return;
+        if (card.isExpanded) {
+          el.classList.remove("max-h-80");
+          el.classList.add("max-h-none");
+        } else {
+          el.classList.remove("max-h-none");
+          el.classList.add("max-h-80");
+        }
+      };
+      clampOrExpand(card.outputEl);
+      clampOrExpand(card.drawerOutputEl);
 
       // Output line slicing and toggle button state
       let linesToRender = card.lines;
-      if (totalLines <= 100) {
-        if (card.toggleEl) {
-          card.toggleEl.classList.add("hidden");
-        }
-      } else {
-        if (card.toggleEl) {
-          card.toggleEl.classList.remove("hidden");
+      const updateToggle = (toggleEl) => {
+        if (!toggleEl) return;
+        if (totalLines <= 100) {
+          toggleEl.classList.add("hidden");
+        } else {
+          toggleEl.classList.remove("hidden");
           if (card.isExpanded) {
             const autoLabel = card.isFailure ? " (Auto-expanded on error)" : "";
-            card.toggleEl.innerHTML = `Showing all ${totalLines} lines${autoLabel} — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
+            toggleEl.innerHTML = `Showing all ${totalLines} lines${autoLabel} — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[Show last 100 lines]</button>`;
           } else {
-            card.toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
+            toggleEl.innerHTML = `Showing last 100 of ${totalLines} lines — <button type="button" class="btn-expand-output text-indigo-400 hover:text-indigo-200 underline font-medium ml-1" onclick="toggleCommandOutput('${card.id}')">[View full output]</button>`;
           }
         }
-        if (!card.isExpanded) {
-          linesToRender = card.lines.slice(-100);
-        }
+      };
+      updateToggle(card.toggleEl);
+      updateToggle(card.drawerToggleEl);
+
+      if (totalLines > 100 && !card.isExpanded) {
+        linesToRender = card.lines.slice(-100);
       }
 
       // Render content
@@ -1486,9 +2009,13 @@
           }
           return `<div class="command-line stdout-line text-slate-300 font-mono px-1 py-0.5">${escapeHtml(line)}</div>`;
         }).join("");
-        card.outputEl.innerHTML = renderedHtml || '<span class="command-placeholder text-slate-500 italic text-[11px]">(No output)</span>';
+        const content = renderedHtml || '<span class="command-placeholder text-slate-500 italic text-[11px]">(No output)</span>';
+        if (card.outputEl) card.outputEl.innerHTML = content;
+        if (card.drawerOutputEl) card.drawerOutputEl.innerHTML = content;
       } else {
-        card.outputEl.textContent = linesToRender.join("\n") || "(No output)";
+        const content = linesToRender.join("\n") || "(No output)";
+        if (card.outputEl) card.outputEl.textContent = content;
+        if (card.drawerOutputEl) card.drawerOutputEl.textContent = content;
       }
     }
 
@@ -1536,6 +2063,30 @@
       }
       terminalBody.appendChild(container);
 
+      // Clone into Studio Activity Drawer Timeline
+      let drawerContainer = syncToDrawerTimeline(container, cardId);
+      let drawerOutputEl = null;
+      let drawerTimerEl = null;
+      let drawerBadgeEl = null;
+      let drawerSpinnerEl = null;
+      let drawerToggleEl = null;
+
+      if (drawerContainer) {
+        drawerOutputEl = drawerContainer.querySelector(".command-output-box");
+        drawerTimerEl = drawerContainer.querySelector(".command-timer");
+        drawerBadgeEl = drawerContainer.querySelector(".command-badge");
+        drawerSpinnerEl = drawerContainer.querySelector(".command-spinner");
+        drawerToggleEl = drawerContainer.querySelector(".command-window-toggle");
+
+        const drawerHeader = drawerContainer.querySelector(".command-header");
+        if (drawerHeader) {
+          drawerHeader.addEventListener("click", (e) => {
+            if (e.target.closest(".command-window-toggle")) return;
+            toggleCommandOutput(cardId);
+          });
+        }
+      }
+
       const headerEl = container.querySelector(".command-header");
       const stageEl = container.querySelector(".command-stage");
       const textEl = container.querySelector(".command-text");
@@ -1549,20 +2100,27 @@
       const timerInterval = setInterval(() => {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1) + "s";
         if (timerEl) timerEl.textContent = elapsed;
+        if (drawerTimerEl) drawerTimerEl.textContent = elapsed;
       }, 100);
 
       const card = {
         id: cardId,
         toolCallId: cardId,
         element: container,
+        drawerElement: drawerContainer,
         headerEl,
         stageEl,
         textEl,
         spinnerEl,
+        drawerSpinnerEl,
         timerEl,
+        drawerTimerEl,
         badgeEl,
+        drawerBadgeEl,
         toggleEl,
+        drawerToggleEl,
         outputEl,
+        drawerOutputEl,
         stage: stage || "CODER",
         command: command || "",
         cwd: cwd || "",
@@ -1580,6 +2138,9 @@
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
       }
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
+      }
 
       return card;
     }
@@ -1595,6 +2156,9 @@
       if (card.spinnerEl) {
         card.spinnerEl.classList.add("hidden");
       }
+      if (card.drawerSpinnerEl) {
+        card.drawerSpinnerEl.classList.add("hidden");
+      }
 
       const durationMs = resultData.durationMs || (Date.now() - card.startTime);
       const durationSec = (durationMs / 1000).toFixed(1) + "s";
@@ -1602,6 +2166,11 @@
         card.timerEl.textContent = durationSec;
         card.timerEl.classList.remove("text-indigo-300");
         card.timerEl.classList.add("text-slate-400");
+      }
+      if (card.drawerTimerEl) {
+        card.drawerTimerEl.textContent = durationSec;
+        card.drawerTimerEl.classList.remove("text-indigo-300");
+        card.drawerTimerEl.classList.add("text-slate-400");
       }
 
       const exitCode = typeof resultData.exitCode === "number" ? resultData.exitCode : (resultData.isError ? 1 : 0);
@@ -1616,17 +2185,26 @@
           card.element.classList.remove("border-slate-800");
           card.element.classList.add("border-rose-700/80", "shadow-rose-950/30");
         }
+        if (card.drawerElement) {
+          card.drawerElement.classList.remove("border-slate-800");
+          card.drawerElement.classList.add("border-rose-700/80", "shadow-rose-950/30");
+        }
       }
+
+      const badgeText = !isFailure ? "Exit code 0" : (exitCode !== 0 ? `Exit code ${exitCode}` : "Command Failed");
+      const badgeClass = !isFailure
+        ? "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+        : "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30";
 
       if (card.badgeEl) {
         card.badgeEl.classList.remove("hidden");
-        if (!isFailure) {
-          card.badgeEl.textContent = "Exit code 0";
-          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-        } else {
-          card.badgeEl.textContent = exitCode !== 0 ? `Exit code ${exitCode}` : "Command Failed";
-          card.badgeEl.className = "command-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30";
-        }
+        card.badgeEl.textContent = badgeText;
+        card.badgeEl.className = badgeClass;
+      }
+      if (card.drawerBadgeEl) {
+        card.drawerBadgeEl.classList.remove("hidden");
+        card.drawerBadgeEl.textContent = badgeText;
+        card.drawerBadgeEl.className = badgeClass;
       }
 
       // Extract output text
@@ -1710,6 +2288,18 @@
       }
       terminalBody.appendChild(container);
 
+      // Clone into Studio Activity Drawer Timeline
+      let drawerContainer = syncToDrawerTimeline(container, chipId);
+      let drawerTextEl = null;
+      let drawerSpinnerEl = null;
+      let drawerChipBadgeEl = null;
+
+      if (drawerContainer) {
+        drawerTextEl = drawerContainer.querySelector(".chip-text");
+        drawerSpinnerEl = drawerContainer.querySelector(".chip-spinner");
+        drawerChipBadgeEl = drawerContainer.querySelector(".tool-chip");
+      }
+
       const textEl = container.querySelector(".chip-text");
       const spinnerEl = container.querySelector(".chip-spinner");
       const chipBadgeEl = container.querySelector(".tool-chip");
@@ -1718,9 +2308,13 @@
         id: chipId,
         toolCallId: chipId,
         element: container,
+        drawerElement: drawerContainer,
         chipBadgeEl,
+        drawerChipBadgeEl,
         textEl,
+        drawerTextEl,
         spinnerEl,
+        drawerSpinnerEl,
         stage: stage || "PLANNER",
         toolName: toolName || "",
         path: path || "",
@@ -1732,6 +2326,9 @@
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
       }
 
       return chip;
@@ -1745,55 +2342,57 @@
         chip.spinnerEl.remove();
         chip.spinnerEl = null;
       }
+      if (chip.drawerSpinnerEl) {
+        chip.drawerSpinnerEl.remove();
+        chip.drawerSpinnerEl = null;
+      }
 
       const toolName = chip.toolName || resultData.toolName || "tool";
       const path = resultData.path || chip.path || "";
       const isError = Boolean(resultData.isError);
 
+      const updateText = (text) => {
+        if (chip.textEl) chip.textEl.textContent = text;
+        if (chip.drawerTextEl) chip.drawerTextEl.textContent = text;
+      };
+
       if (isError) {
-        if (chip.chipBadgeEl) {
-          chip.chipBadgeEl.classList.remove("border-slate-800");
-          chip.chipBadgeEl.classList.add("border-rose-500/40", "bg-rose-950/20", "text-rose-300");
-        }
-        if (chip.textEl) {
-          chip.textEl.textContent = `Failed ${toolName}: ${path || "error"}`;
-        }
+        [chip.chipBadgeEl, chip.drawerChipBadgeEl].forEach((el) => {
+          if (!el) return;
+          el.classList.remove("border-slate-800");
+          el.classList.add("border-rose-500/40", "bg-rose-950/20", "text-rose-300");
+        });
+        updateText(`Failed ${toolName}: ${path || "error"}`);
         return;
       }
 
       if (toolName === "read") {
         const lineCount = typeof resultData.lineCount === "number" ? resultData.lineCount : (resultData.result?.lineCount || 0);
-        if (chip.textEl) {
-          chip.textEl.textContent = `Read ${path} (${lineCount} line${lineCount === 1 ? "" : "s"})`;
-        }
+        updateText(`Read ${path} (${lineCount} line${lineCount === 1 ? "" : "s"})`);
       } else if (toolName === "write") {
         const bytes = typeof resultData.bytes === "number" ? resultData.bytes : (resultData.result?.bytes || 0);
-        if (chip.textEl) {
-          chip.textEl.textContent = `Write ${path} (${bytes} byte${bytes === 1 ? "" : "s"})`;
-        }
+        updateText(`Write ${path} (${bytes} byte${bytes === 1 ? "" : "s"})`);
       } else if (toolName === "grep") {
         const pattern = resultData.pattern || chip.pattern || "";
         const matchCount = typeof resultData.matchCount === "number" ? resultData.matchCount : (resultData.result?.matchCount || 0);
-        if (chip.textEl) {
-          if (pattern) {
-            chip.textEl.textContent = `Grep "${pattern}" in ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`;
-          } else {
-            chip.textEl.textContent = `Grep ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`;
-          }
+        if (pattern) {
+          updateText(`Grep "${pattern}" in ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`);
+        } else {
+          updateText(`Grep ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`);
         }
       } else if (toolName === "diff") {
         const lineCount = typeof resultData.lineCount === "number" ? resultData.lineCount : (resultData.result?.lineCount || 0);
-        if (chip.textEl) {
-          chip.textEl.textContent = `Diff ${path || "working tree"} (${lineCount} line${lineCount === 1 ? "" : "s"})`;
-        }
+        updateText(`Diff ${path || "working tree"} (${lineCount} line${lineCount === 1 ? "" : "s"})`);
       } else {
-        if (chip.textEl) {
-          chip.textEl.textContent = `${toolName} ${path}`;
-        }
+        updateText(`${toolName} ${path}`);
       }
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      const drawerTimeline = document.getElementById("studio-drawer-timeline");
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
       }
     }
 
@@ -1814,11 +2413,15 @@
       if (!card) return;
       card.isCollapsed = !card.isCollapsed;
       if (card.isCollapsed) {
-        card.bodyEl.classList.add("hidden");
+        if (card.bodyEl) card.bodyEl.classList.add("hidden");
+        if (card.drawerBodyEl) card.drawerBodyEl.classList.add("hidden");
         if (card.toggleIconEl) card.toggleIconEl.textContent = "▼";
+        if (card.drawerToggleIconEl) card.drawerToggleIconEl.textContent = "▼";
       } else {
-        card.bodyEl.classList.remove("hidden");
+        if (card.bodyEl) card.bodyEl.classList.remove("hidden");
+        if (card.drawerBodyEl) card.drawerBodyEl.classList.remove("hidden");
         if (card.toggleIconEl) card.toggleIconEl.textContent = "▲";
+        if (card.drawerToggleIconEl) card.drawerToggleIconEl.textContent = "▲";
       }
     };
 
@@ -1864,6 +2467,43 @@
       }
       terminalBody.appendChild(container);
 
+      // Clone into Studio Activity Drawer Timeline
+      let drawerContainer = syncToDrawerTimeline(container, cardId);
+      let drawerHeaderEl = null;
+      let drawerPathEl = null;
+      let drawerStatsEl = null;
+      let drawerAdditionsEl = null;
+      let drawerDeletionsEl = null;
+      let drawerSpinnerEl = null;
+      let drawerTimerEl = null;
+      let drawerBadgeEl = null;
+      let drawerToggleEl = null;
+      let drawerToggleIconEl = null;
+      let drawerBodyEl = null;
+      let drawerContentEl = null;
+
+      if (drawerContainer) {
+        drawerHeaderEl = drawerContainer.querySelector(".diff-header");
+        drawerPathEl = drawerContainer.querySelector(".diff-path");
+        drawerStatsEl = drawerContainer.querySelector(".diff-stats");
+        drawerAdditionsEl = drawerContainer.querySelector(".diff-additions");
+        drawerDeletionsEl = drawerContainer.querySelector(".diff-deletions");
+        drawerSpinnerEl = drawerContainer.querySelector(".diff-spinner");
+        drawerTimerEl = drawerContainer.querySelector(".diff-timer");
+        drawerBadgeEl = drawerContainer.querySelector(".diff-badge");
+        drawerToggleEl = drawerContainer.querySelector(".diff-toggle");
+        drawerToggleIconEl = drawerContainer.querySelector(".diff-toggle-icon");
+        drawerBodyEl = drawerContainer.querySelector(".diff-body");
+        drawerContentEl = drawerContainer.querySelector(".diff-content");
+
+        if (drawerHeaderEl) {
+          drawerHeaderEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleDiffCard(cardId);
+          });
+        }
+      }
+
       const headerEl = container.querySelector(".diff-header");
       const pathEl = container.querySelector(".diff-path");
       const statsEl = container.querySelector(".diff-stats");
@@ -1886,24 +2526,38 @@
       const timerInterval = setInterval(() => {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1) + "s";
         if (timerEl) timerEl.textContent = elapsed;
+        if (drawerTimerEl) drawerTimerEl.textContent = elapsed;
       }, 100);
 
       const card = {
         id: cardId,
         toolCallId: cardId,
         element: container,
+        drawerElement: drawerContainer,
         headerEl,
+        drawerHeaderEl,
         pathEl,
+        drawerPathEl,
         statsEl,
+        drawerStatsEl,
         additionsEl,
+        drawerAdditionsEl,
         deletionsEl,
+        drawerDeletionsEl,
         spinnerEl,
+        drawerSpinnerEl,
         timerEl,
+        drawerTimerEl,
         badgeEl,
+        drawerBadgeEl,
         toggleEl,
+        drawerToggleEl,
         toggleIconEl,
+        drawerToggleIconEl,
         bodyEl,
+        drawerBodyEl,
         contentEl,
+        drawerContentEl,
         stage: stage || "CODER",
         path: path || "",
         startTime,
@@ -1916,6 +2570,9 @@
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
       }
 
       return card;
@@ -1932,34 +2589,40 @@
       if (card.spinnerEl) {
         card.spinnerEl.classList.add("hidden");
       }
+      if (card.drawerSpinnerEl) {
+        card.drawerSpinnerEl.classList.add("hidden");
+      }
 
       const durationMs = resultData.durationMs || (Date.now() - card.startTime);
       const durationSec = (durationMs / 1000).toFixed(1) + "s";
-      if (card.timerEl) {
-        card.timerEl.textContent = durationSec;
-        card.timerEl.classList.remove("text-indigo-300");
-        card.timerEl.classList.add("text-slate-400");
-      }
+      [card.timerEl, card.drawerTimerEl].forEach((el) => {
+        if (!el) return;
+        el.textContent = durationSec;
+        el.classList.remove("text-indigo-300");
+        el.classList.add("text-slate-400");
+      });
 
       const path = resultData.path || card.path;
-      if (path && card.pathEl) {
-        card.pathEl.textContent = path;
+      if (path) {
+        if (card.pathEl) card.pathEl.textContent = path;
+        if (card.drawerPathEl) card.drawerPathEl.textContent = path;
       }
 
       const isError = Boolean(resultData.isError);
-      if (card.badgeEl) {
-        card.badgeEl.classList.remove("hidden");
+      [card.badgeEl, card.drawerBadgeEl].forEach((el) => {
+        if (!el) return;
+        el.classList.remove("hidden");
         if (!isError) {
-          card.badgeEl.textContent = "Edited";
-          card.badgeEl.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          el.textContent = "Edited";
+          el.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
         } else {
-          card.badgeEl.textContent = "Edit Failed";
-          card.badgeEl.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
+          el.textContent = "Edit Failed";
+          el.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
         }
-      }
+      });
 
       const diffText = resultData.diff || resultData.patch || "";
-      if (diffText && card.contentEl) {
+      if (diffText && (card.contentEl || card.drawerContentEl)) {
         const rawLines = diffText.split(/\r?\n/);
         let additions = 0;
         let deletions = 0;
@@ -1982,27 +2645,39 @@
           return `<div class="diff-line diff-context text-slate-400 font-mono px-1 py-0.5">${escapeHtml(line)}</div>`;
         }).join("");
 
-        card.contentEl.innerHTML = renderedHtml;
+        if (card.contentEl) card.contentEl.innerHTML = renderedHtml;
+        if (card.drawerContentEl) card.drawerContentEl.innerHTML = renderedHtml;
 
-        if (card.statsEl) {
-          card.statsEl.classList.remove("hidden");
-          card.statsEl.classList.add("flex");
-          if (card.additionsEl) card.additionsEl.textContent = `+${additions}`;
-          if (card.deletionsEl) card.deletionsEl.textContent = `-${deletions}`;
-        }
-      } else if (card.contentEl) {
+        [card.statsEl, card.drawerStatsEl].forEach((el) => {
+          if (el) {
+            el.classList.remove("hidden");
+            el.classList.add("flex");
+          }
+        });
+        if (card.additionsEl) card.additionsEl.textContent = `+${additions}`;
+        if (card.drawerAdditionsEl) card.drawerAdditionsEl.textContent = `+${additions}`;
+        if (card.deletionsEl) card.deletionsEl.textContent = `-${deletions}`;
+        if (card.drawerDeletionsEl) card.drawerDeletionsEl.textContent = `-${deletions}`;
+      } else if (card.contentEl || card.drawerContentEl) {
+        let fallbackHtml = "";
         if (isError) {
           const errText = typeof resultData.result === "string"
             ? resultData.result
             : (resultData.error || resultData.result?.error || resultData.result?.message || resultData.output || "Edit failed");
-          card.contentEl.innerHTML = `<span class="text-rose-400">${escapeHtml(errText)}</span>`;
+          fallbackHtml = `<span class="text-rose-400">${escapeHtml(errText)}</span>`;
         } else {
-          card.contentEl.innerHTML = `<span class="text-slate-500 italic text-[11px]">${escapeHtml(typeof resultData.result === "string" ? resultData.result : "Edit applied successfully")}</span>`;
+          fallbackHtml = `<span class="text-slate-500 italic text-[11px]">${escapeHtml(typeof resultData.result === "string" ? resultData.result : "Edit applied successfully")}</span>`;
         }
+        if (card.contentEl) card.contentEl.innerHTML = fallbackHtml;
+        if (card.drawerContentEl) card.drawerContentEl.innerHTML = fallbackHtml;
       }
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+      const drawerTimeline = document.getElementById("studio-drawer-timeline");
+      if (drawerTimeline) {
+        drawerTimeline.scrollTop = drawerTimeline.scrollHeight;
       }
     }
 
@@ -2050,6 +2725,9 @@
         terminalBody.innerHTML = "";
       }
       terminalBody.appendChild(container);
+
+      // Clone into Studio Activity Drawer Timeline
+      syncToDrawerTimeline(container, dividerId);
 
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
@@ -2111,6 +2789,9 @@
       }
       terminalBody.appendChild(container);
 
+      // Clone into Studio Activity Drawer Timeline
+      syncToDrawerTimeline(container, cardId);
+
       if (checkAutoscroll.checked) {
         terminalBody.scrollTop = terminalBody.scrollHeight;
       }
@@ -2127,11 +2808,16 @@
         if (pendingThinking.durationMs) {
           block.durationMs = pendingThinking.durationMs;
           block.durationEl.textContent = (pendingThinking.durationMs / 1000).toFixed(1) + "s";
+          if (block.drawerDurationEl) {
+            block.drawerDurationEl.textContent = (pendingThinking.durationMs / 1000).toFixed(1) + "s";
+          }
         }
         if (isFinal && jobStatus === "RUNNING" && !pendingThinking.isDone) {
           activeThinkingBlock = block;
+          updateStudioThinkingDisclosure(pendingThinking.stage, pendingThinking.content, pendingThinking.durationMs, false);
         } else {
           collapseThinkingBlock(block, pendingThinking.durationMs);
+          updateStudioThinkingDisclosure(pendingThinking.stage, pendingThinking.content, pendingThinking.durationMs, true);
         }
         pendingThinking = null;
       }
@@ -2217,6 +2903,19 @@
       clearDiffCards();
       clearToolChips();
       clearAttemptDividers();
+
+      const drawerTimeline = document.getElementById("studio-drawer-timeline");
+      if (drawerTimeline) {
+        drawerTimeline.innerHTML = '<div class="text-slate-500 italic p-4 text-center">Waiting for telemetry events...</div>';
+      }
+      const drawerLogs = document.getElementById("studio-drawer-logs");
+      if (drawerLogs) {
+        drawerLogs.innerHTML = '<div class="text-slate-500 italic p-4 text-center">Waiting for command logs...</div>';
+      }
+      const drawerJobId = document.getElementById("studio-drawer-job-id");
+      if (drawerJobId) drawerJobId.textContent = jobId;
+
+      getOrCreateStudioAssistantTurn(jobId);
 
       eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
 

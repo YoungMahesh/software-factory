@@ -818,8 +818,286 @@ class TestSelfCorrectionVisualStatesConsole(unittest.TestCase):
         self.assertEqual(init_event["events"][1]["data"]["attempt"], 2)
 
 
+class TestStudioActivityDrawerAndInlineDisclosures(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_studio_template_contains_activity_drawer_and_inline_disclosures(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # 1. Slide-over Agent Activity drawer component exists, initially hidden
+        self.assertIn('id="studio-activity-drawer"', html)
+        self.assertIn("hidden", html)
+        self.assertIn("Agent Activity", html)
+
+        # 2. Activity button on floating status badge
+        self.assertIn('id="btn-studio-activity"', html)
+
+        # 3. Drawer timeline and synchronized raw terminal logs containers
+        self.assertIn('id="studio-drawer-timeline"', html)
+        self.assertIn('id="studio-drawer-logs"', html)
+        self.assertIn('id="btn-close-activity-drawer"', html)
+        self.assertIn('id="btn-drawer-tab-timeline"', html)
+        self.assertIn('id="btn-drawer-tab-logs"', html)
+
+        # 4. JavaScript handlers for drawer open/close and inline disclosures/step chips
+        self.assertIn("openStudioActivityDrawer", html)
+        self.assertIn("closeStudioActivityDrawer", html)
+        self.assertIn("updateStudioThinkingDisclosure", html)
+        self.assertIn("appendStudioStepChip", html)
+        self.assertIn("studio-thinking-disclosure", html)
+        self.assertIn("studio-step-chips", html)
+
+    def test_studio_chat_turn_renders_inline_thinking_and_step_chips(self):
+        """Verifies frontend JS logic streams inline thinking deltas and appends sequential tool chips using actual functions from index.html."""
+        import re
+        from pathlib import Path
+
+        template_path = Path(__file__).parent.parent / "factory" / "ui" / "templates" / "index.html"
+        template_content = template_path.read_text(encoding="utf-8")
+
+        # Extract actual Studio functions from template
+        match = re.search(
+            r'(let currentStudioTurn = null;.*?function closeStudioActivityDrawer\(\) \{.*?\n    \})',
+            template_content,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Studio assistant turn & drawer functions not found in template")
+        functions_js = match.group(1)
+
+        js_test = f"""
+        const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        let activeJobId = 'job-test-actual-1';
+        let activeJobStage = 'PLANNER';
+        const requestAnimationFrame = (cb) => cb();
+
+        class MockElement {{
+          constructor(tagName = 'div') {{
+            this.tagName = tagName;
+            this.children = [];
+            this.className = '';
+            this.classList = {{
+              classes: new Set(),
+              add(...cls) {{ cls.forEach(c => this.classes.add(c)); }},
+              remove(...cls) {{ cls.forEach(c => this.classes.delete(c)); }},
+              contains(c) {{ return this.classes.has(c); }}
+            }};
+            this.attributes = new Map();
+            this.listeners = new Map();
+            this.textContent = '';
+            this.innerHTML = '';
+            this.scrollTop = 0;
+            this.scrollHeight = 0;
+          }}
+          setAttribute(k, v) {{ this.attributes.set(k, v); }}
+          getAttribute(k) {{ return this.attributes.get(k); }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          addEventListener(evt, fn) {{
+            if (!this.listeners.has(evt)) this.listeners.set(evt, []);
+            this.listeners.get(evt).push(fn);
+          }}
+          querySelector(sel) {{
+            return this.children[0] || new MockElement();
+          }}
+          querySelectorAll(sel) {{
+            return this.children;
+          }}
+          scrollIntoView() {{}}
+        }}
+
+        const studioChatHistory = new MockElement('div');
+        let drawerOpenedWithTarget = null;
+        const drawerEl = new MockElement('div');
+        const drawerTimeline = new MockElement('div');
+
+        const document = {{
+          body: {{ contains: () => true }},
+          createElement: (tag) => new MockElement(tag),
+          querySelector: () => null,
+          querySelectorAll: () => [],
+          getElementById: (id) => {{
+            if (id === 'studio-activity-drawer') return drawerEl;
+            if (id === 'studio-drawer-timeline') return drawerTimeline;
+            return new MockElement('div');
+          }},
+          addEventListener: () => {{}}
+        }};
+
+        function switchDrawerTab(tab) {{}}
+
+        {functions_js}
+
+        // Spy on openStudioActivityDrawer
+        const origOpen = openStudioActivityDrawer;
+        openStudioActivityDrawer = function(targetToolCallId) {{
+          drawerOpenedWithTarget = targetToolCallId;
+          return origOpen(targetToolCallId);
+        }};
+
+        // 1. Thinking delta arrives -> inline pulsating disclosure active
+        updateStudioThinkingDisclosure('PLANNER', 'Synthesizing architecture...', 180, false);
+        const turn = getOrCreateStudioAssistantTurn(activeJobId);
+        const content1 = turn.activeDisclosure.content;
+        const duration1 = turn.activeDisclosure.durationMs;
+        const isCollapsed1 = turn.activeDisclosure.isCollapsed;
+
+        // 2. Thinking done arrives -> pulsation ends, duration updated, activeDisclosure collapsed
+        updateStudioThinkingDisclosure('PLANNER', '', 4500, true);
+        const clearedActive = turn.activeDisclosure === null;
+
+        // 3. Sequential tool results arrive -> appends step chips
+        appendStudioStepChip('bash', {{ command: 'pnpm test', toolCallId: 'tool-call-1' }}, 'PLANNER');
+        appendStudioStepChip('edit', {{ path: 'src/routes/index.tsx', toolCallId: 'tool-call-2' }}, 'CODER');
+
+        // Click second chip to verify drawer trigger
+        const chipBtn = turn.stepChipsContainer.children[1];
+        const clickHandler = chipBtn.listeners.get('click')[0];
+        clickHandler();
+
+        console.log(JSON.stringify({{
+          content1,
+          duration1,
+          isCollapsed1,
+          clearedActive,
+          chipCount: turn.stepChipsContainer.children.length,
+          chip1Html: turn.stepChipsContainer.children[0].innerHTML,
+          chip2Html: turn.stepChipsContainer.children[1].innerHTML,
+          drawerOpenedWithTarget
+        }}));
+        """
+        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
+        res = json.loads(proc.stdout)
+
+        self.assertEqual(res["content1"], "Synthesizing architecture...")
+        self.assertEqual(res["duration1"], 180)
+        self.assertFalse(res["isCollapsed1"])
+        self.assertTrue(res["clearedActive"])
+
+        self.assertEqual(res["chipCount"], 2)
+        self.assertIn("[Ran bash: pnpm test]", res["chip1Html"])
+        self.assertIn("[Edited src/routes/index.tsx]", res["chip2Html"])
+        self.assertEqual(res["drawerOpenedWithTarget"], "tool-call-2")
+
+    def test_slide_over_drawer_syncs_with_sse_stream(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        job.status = JobStatus.SUCCESS
+
+        # 1. Thinking delta event
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"thinking","stage":"PLANNER","data":{"delta":"Synthesizing plan...","durationMs":250},"timestamp":100.0}\n'
+        )
+        # 2. Bash command start and result
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"PLANNER","data":{"toolName":"bash","args":{"command":"pnpm test"},"toolCallId":"tool-1"},"timestamp":101.0}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"PLANNER","data":{"toolName":"bash","command":"pnpm test","exitCode":0,"output":"1 passed\\n","isError":false,"toolCallId":"tool-1"},"timestamp":102.0}\n'
+        )
+        # 3. Synchronized plain log line
+        self.registry.append_log(job.id, "Deterministic verifier completed.\n")
+
+        with self.client.stream(
+            "GET",
+            f"/api/jobs/{job.id}/stream",
+            auth=("admin", "admin"),
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            events = []
+            for chunk in response.iter_lines():
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[len("data: "):])
+                    events.append(payload)
+                    if payload.get("event") == "status":
+                        break
+                    # We expect init event
+                    if payload.get("event") == "init":
+                        break
+
+        self.assertTrue(len(events) >= 1)
+        init_event = events[0]
+        self.assertEqual(init_event["event"], "init")
+        # backlog contains synchronized plain text log
+        self.assertEqual(init_event["backlog"], ["Deterministic verifier completed.\n"])
+        # events array contains structured telemetry stream
+        self.assertEqual(len(init_event["events"]), 3)
+        self.assertEqual(init_event["events"][0]["type"], "thinking")
+        self.assertEqual(init_event["events"][0]["data"]["delta"], "Synthesizing plan...")
+        self.assertEqual(init_event["events"][1]["type"], "tool_start")
+        self.assertEqual(init_event["events"][2]["type"], "tool_result")
+        self.assertEqual(init_event["events"][2]["data"]["command"], "pnpm test")
+
+        # Verify that frontend drawer sync logic clones cards into drawer containers
+        import re
+        from pathlib import Path
+        template_path = Path(__file__).parent.parent / "factory" / "ui" / "templates" / "index.html"
+        template_content = template_path.read_text(encoding="utf-8")
+        match_sync = re.search(
+            r'(function syncToDrawerTimeline\(container, id\)\s*\{.*?\n    \})',
+            template_content,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match_sync, "syncToDrawerTimeline not found in template")
+        sync_js = match_sync.group(1)
+
+        js_drawer_test = f"""
+        const checkAutoscroll = {{ checked: true }};
+        class MockElement {{
+          constructor(tagName = 'div') {{
+            this.tagName = tagName;
+            this.children = [];
+            this.className = '';
+            this.id = '';
+            this.scrollTop = 0;
+            this.scrollHeight = 0;
+          }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          cloneNode(deep) {{
+            const copy = new MockElement(this.tagName);
+            copy.className = this.className;
+            copy.id = this.id;
+            return copy;
+          }}
+        }}
+
+        const drawerTimeline = new MockElement('div');
+        const drawerLogs = new MockElement('div');
+        const document = {{
+          getElementById: (id) => {{
+            if (id === 'studio-drawer-timeline') return drawerTimeline;
+            if (id === 'studio-drawer-logs') return drawerLogs;
+            return null;
+          }}
+        }};
+
+        {sync_js}
+
+        // Test syncing a command card into drawer timeline
+        const card = new MockElement('div');
+        card.id = 'tool-1';
+        syncToDrawerTimeline(card, 'tool-1');
+
+        console.log(JSON.stringify({{
+          drawerTimelineCount: drawerTimeline.children.length,
+          drawerCardId: drawerTimeline.children[0].id
+        }}));
+        """
+        proc_drawer = subprocess.run(["node", "-e", js_drawer_test], capture_output=True, text=True, check=True)
+        res_drawer = json.loads(proc_drawer.stdout)
+        self.assertEqual(res_drawer["drawerTimelineCount"], 1)
+        self.assertEqual(res_drawer["drawerCardId"], "drawer-tool-1")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 
