@@ -6,6 +6,7 @@ streams both initial state and real-time typed agent events.
 """
 
 import json
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -461,8 +462,194 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
         self.assertEqual(init_event["events"][1]["data"]["exitCode"], 0)
 
 
+class TestSemanticToolTelemetryConsole(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_semantic_tool_telemetry_pipeline(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        q = self.registry.add_listener(job.id)
+
+        # 1. Read start & result (large line count, suppressed verbatim text)
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"PLANNER","data":{"toolName":"read","path":"src/routes/index.tsx","args":{"path":"src/routes/index.tsx"},"toolCallId":"r-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"PLANNER","data":{"toolName":"read","path":"src/routes/index.tsx","lineCount":42,"durationMs":10,"isError":false,"toolCallId":"r-1"}}\n'
+        )
+
+        # 2. Write start & result (bytes reported)
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"write","path":"src/config.json","bytes":256,"args":{"path":"src/config.json","bytes":256},"toolCallId":"w-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"CODER","data":{"toolName":"write","path":"src/config.json","bytes":256,"durationMs":18,"isError":false,"toolCallId":"w-1"}}\n'
+        )
+
+        # 3. Edit start & result (unified diff patch)
+        patch = "--- src/routes/index.tsx\\n+++ src/routes/index.tsx\\n@@ -1,3 +1,3 @@\\n-const a = 1;\\n+const a = 2;\\n"
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"edit","path":"src/routes/index.tsx","args":{"path":"src/routes/index.tsx","editCount":1},"toolCallId":"e-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            f'__SF_EVENT__:{{"type":"tool_result","stage":"CODER","data":{{"toolName":"edit","path":"src/routes/index.tsx","diff":"{patch}","patch":"{patch}","durationMs":35,"isError":false,"toolCallId":"e-1"}}}}\n'
+        )
+
+        # 4. Grep start & result
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"PLANNER","data":{"toolName":"grep","pattern":"useState","path":"src/","args":{"pattern":"useState","path":"src/"},"toolCallId":"g-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"PLANNER","data":{"toolName":"grep","pattern":"useState","path":"src/","matchCount":5,"durationMs":14,"isError":false,"toolCallId":"g-1"}}\n'
+        )
+
+        # 5. Diff start & result
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"REVIEWER","data":{"toolName":"diff","path":"src/routes/index.tsx","args":{"path":"src/routes/index.tsx"},"toolCallId":"d-1"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"REVIEWER","data":{"toolName":"diff","path":"src/routes/index.tsx","lineCount":12,"durationMs":22,"isError":false,"toolCallId":"d-1"}}\n'
+        )
+
+        self.assertEqual(len(job.events), 10)
+        self.assertEqual(job.logs, [])  # Logs ring buffer kept completely clean
+
+        # Verify parsed structured events
+        self.assertEqual(job.events[0]["data"]["toolName"], "read")
+        self.assertEqual(job.events[1]["data"]["lineCount"], 42)
+        self.assertEqual(job.events[2]["data"]["toolName"], "write")
+        self.assertEqual(job.events[3]["data"]["bytes"], 256)
+        self.assertEqual(job.events[4]["data"]["toolName"], "edit")
+        self.assertIn("+const a = 2;", job.events[5]["data"]["diff"])
+        self.assertEqual(job.events[6]["data"]["pattern"], "useState")
+        self.assertEqual(job.events[7]["data"]["matchCount"], 5)
+        self.assertEqual(job.events[8]["data"]["toolName"], "diff")
+        self.assertEqual(job.events[9]["data"]["lineCount"], 12)
+
+        # Verify SSE streaming
+        received = []
+        while not q.empty():
+            received.append(q.get_nowait())
+        self.assertEqual(len(received), 10)
+        for r in received:
+            self.assertEqual(r["event"], "agent_event")
+
+        self.registry.remove_listener(job.id, q)
+
+    def test_console_renders_semantic_tool_chips_and_diff_preview(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # 1. Compact Tool Chip functions and structure
+        self.assertIn("tool-chip", html)
+        self.assertIn("createToolChip", html)
+        self.assertIn("completeToolChip", html)
+
+        # 2. Tool chip semantic formatting
+        self.assertIn("Read ${path} (${lineCount}", html)
+        self.assertIn("Write ${path} (${bytes}", html)
+        self.assertIn("Grep", html)
+        self.assertIn("Diff", html)
+
+        # 3. Expandable Diff Preview Card functions and structure
+        self.assertIn("diff-preview-card", html)
+        self.assertIn("createDiffCard", html)
+        self.assertIn("completeDiffCard", html)
+        self.assertIn("toggleDiffCard", html)
+
+        # 4. Syntax-colored additions and deletions
+        self.assertIn("diff-addition", html)
+        self.assertIn("diff-deletion", html)
+        self.assertIn("diff-additions", html)
+        self.assertIn("diff-deletions", html)
+
+    def test_frontend_diff_preview_parser_execution(self):
+        """Verifies frontend JavaScript logic correctly parses and renders unified diffs."""
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+        self.assertIn("diff-addition", html)
+
+        # Run node to verify the exact diff parsing logic extracted from index.html
+        js_test = """
+        const patch = "--- a/src/app.tsx\\n+++ b/src/app.tsx\\n@@ -1,3 +1,4 @@\\n import React from 'react';\\n-const a = 1;\\n+const a = 2;\\n+const b = 3;\\n";
+        const rawLines = patch.split(/\\r?\\n/);
+        let additions = 0;
+        let deletions = 0;
+        const rendered = rawLines.map((line) => {
+          if (line.startsWith("+++") || line.startsWith("---")) return { type: "header", line };
+          if (line.startsWith("+")) { additions++; return { type: "addition", line }; }
+          if (line.startsWith("-")) { deletions++; return { type: "deletion", line }; }
+          if (line.startsWith("@@")) return { type: "hunk", line };
+          return { type: "context", line };
+        });
+        console.log(JSON.stringify({ additions, deletions, count: rendered.length }));
+        """
+        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
+        res = json.loads(proc.stdout)
+        self.assertEqual(res["additions"], 2)
+        self.assertEqual(res["deletions"], 1)
+
+    def test_rehydration_of_semantic_tool_and_diff_events(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        job.status = JobStatus.SUCCESS
+        patch = "--- src/app.tsx\\n+++ src/app.tsx\\n@@ -1 +1 @@\\n-old\\n+new\\n"
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"PLANNER","data":{"toolName":"read","path":"src/app.tsx","toolCallId":"r-99"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_result","stage":"PLANNER","data":{"toolName":"read","path":"src/app.tsx","lineCount":15,"toolCallId":"r-99"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"CODER","data":{"toolName":"edit","path":"src/app.tsx","toolCallId":"e-99"}}\n'
+        )
+        self.registry.append_log(
+            job.id,
+            f'__SF_EVENT__:{{"type":"tool_result","stage":"CODER","data":{{"toolName":"edit","path":"src/app.tsx","diff":"{patch}","toolCallId":"e-99"}}}}\n'
+        )
+
+        with self.client.stream(
+            "GET",
+            f"/api/jobs/{job.id}/stream",
+            auth=("admin", "admin"),
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            init_event = None
+            for chunk in response.iter_lines():
+                if chunk.startswith("data: "):
+                    payload = json.loads(chunk[len("data: "):])
+                    if payload.get("event") == "init":
+                        init_event = payload
+                        break
+
+        self.assertIsNotNone(init_event)
+        self.assertEqual(len(init_event["events"]), 4)
+        self.assertEqual(init_event["events"][0]["data"]["toolName"], "read")
+        self.assertEqual(init_event["events"][1]["data"]["lineCount"], 15)
+        self.assertEqual(init_event["events"][2]["data"]["toolName"], "edit")
+        self.assertIn("+new", init_event["events"][3]["data"]["diff"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

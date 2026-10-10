@@ -7,6 +7,7 @@
  */
 
 import * as fs from "node:fs";
+import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
 
 // Ensure Node.js container stdout and stderr handle writes synchronously without block buffering
 try {
@@ -145,6 +146,10 @@ export function emitThinkingEvent(
 export interface ToolStartOptions extends EmitOptions {
   cwd?: string;
   command?: string;
+  path?: string;
+  pattern?: string;
+  bytes?: number;
+  [key: string]: any;
 }
 
 export interface ToolResultOptions extends EmitOptions {
@@ -154,6 +159,15 @@ export interface ToolResultOptions extends EmitOptions {
   stdout?: string;
   stderr?: string;
   output?: string;
+  path?: string;
+  pattern?: string;
+  bytes?: number;
+  lineCount?: number;
+  matchCount?: number;
+  diff?: string;
+  patch?: string;
+  args?: any;
+  [key: string]: any;
 }
 
 /**
@@ -179,6 +193,45 @@ export function emitToolStartEvent(
     data.cwd = cwd;
     if (data.args && typeof data.args === "object" && !data.args.cwd && cwd) {
       data.args.cwd = cwd;
+    }
+  } else {
+    const targetPath = args?.path ?? options?.path ?? "";
+
+    if (toolName === "edit") {
+      const editCount = Array.isArray(args?.edits) ? args.edits.length : 1;
+      data.path = targetPath;
+      data.args = { path: targetPath, editCount };
+    } else if (toolName === "write") {
+      const bytes =
+        args?.content !== undefined
+          ? Buffer.byteLength(String(args.content), "utf8")
+          : (options?.bytes ?? args?.bytes ?? 0);
+      data.path = targetPath;
+      data.bytes = bytes;
+      data.args = { path: targetPath, bytes };
+    } else if (toolName === "read") {
+      data.path = targetPath;
+      data.args = {
+        path: targetPath,
+        ...(args?.offset !== undefined ? { offset: args.offset } : {}),
+        ...(args?.limit !== undefined ? { limit: args.limit } : {}),
+      };
+    } else if (toolName === "grep") {
+      const pattern = args?.pattern ?? options?.pattern ?? "";
+      data.pattern = pattern;
+      if (targetPath) data.path = targetPath;
+      data.args = {
+        pattern,
+        ...(targetPath ? { path: targetPath } : {}),
+        ...(args?.glob ? { glob: args.glob } : {}),
+      };
+    } else if (toolName === "diff") {
+      if (targetPath) data.path = targetPath;
+      data.args = {
+        ...(targetPath ? { path: targetPath } : {}),
+        ...(args?.cached !== undefined ? { cached: args.cached } : {}),
+        ...(args?.commit ? { commit: args.commit } : {}),
+      };
     }
   }
 
@@ -273,6 +326,8 @@ export function emitToolResultEvent(
     durationMs: finalDurationMs ?? 0,
   };
 
+  const targetPath = options?.path ?? result?.path ?? options?.args?.path ?? "";
+
   if (toolName === "bash" || cmd !== undefined) {
     if (cmd !== undefined) data.command = cmd;
     if (cwd !== undefined) data.cwd = cwd;
@@ -280,6 +335,109 @@ export function emitToolResultEvent(
     data.stdout = stdout;
     data.stderr = stderr;
     data.output = output;
+  } else if (toolName === "read") {
+    let lineCount = options?.lineCount ?? result?.lineCount;
+    if (typeof lineCount !== "number") {
+      const text =
+        typeof result === "string"
+          ? result
+          : (typeof result?.structuredContent === "string"
+            ? result.structuredContent
+            : result?.content?.[0]?.text ?? "");
+      if (text === "") {
+        lineCount = 0;
+      } else {
+        const lines = text.split("\n");
+        lineCount = text.endsWith("\n") ? lines.length - 1 : lines.length;
+      }
+    }
+    data.path = targetPath;
+    data.lineCount = lineCount;
+    data.result = { path: targetPath, lineCount };
+  } else if (toolName === "write") {
+    const bytes =
+      options?.bytes ??
+      (options?.args?.content !== undefined
+        ? Buffer.byteLength(String(options.args.content), "utf8")
+        : (result?.bytes ?? 0));
+    data.path = targetPath;
+    data.bytes = bytes;
+    data.result = { path: targetPath, bytes };
+  } else if (toolName === "edit") {
+    let diff =
+      options?.diff ??
+      options?.patch ??
+      result?.details?.patch ??
+      result?.patch ??
+      result?.diff ??
+      result?.details?.diff;
+
+    if (!diff && Array.isArray(options?.args?.edits)) {
+      let gen = "";
+      for (const e of options.args.edits) {
+        if (e && e.oldText !== undefined && e.newText !== undefined) {
+          gen += generateUnifiedPatch(targetPath || "file", e.oldText, e.newText) + "\n";
+        }
+      }
+      if (gen) diff = gen.trim();
+    } else if (!diff && result?.oldContent !== undefined && result?.newContent !== undefined) {
+      diff = generateUnifiedPatch(targetPath || "file", result.oldContent, result.newContent);
+    } else if (!diff && typeof result === "string" && (result.includes("---") || result.includes("@@"))) {
+      diff = result;
+    }
+
+    if (!diff) {
+      diff = "";
+    }
+
+    data.path = targetPath;
+    data.diff = diff;
+    data.patch = diff;
+    if (finalIsError) {
+      const errText =
+        typeof result === "string"
+          ? result
+          : (result?.error ?? result?.message ?? result?.content?.[0]?.text ?? "Edit failed");
+      data.result = errText;
+      data.error = errText;
+    } else {
+      data.result =
+        typeof result === "string" && !result.includes("---") && !result.includes("@@")
+          ? result
+          : { path: targetPath, diff };
+    }
+  } else if (toolName === "grep") {
+    const pattern = options?.pattern ?? result?.pattern ?? options?.args?.pattern ?? "";
+    let matchCount = options?.matchCount ?? result?.matchCount;
+    if (typeof matchCount !== "number") {
+      const text = typeof result === "string" ? result : result?.content?.[0]?.text ?? "";
+      if (!text || text.startsWith("No matches found")) {
+        matchCount = 0;
+      } else {
+        const lines = text
+          .split("\n")
+          .filter((l: string) => !l.startsWith("[") && !l.endsWith("]") && l.trim().length > 0);
+        const matchLines = lines.filter((l: string) => /:\d+:/.test(l));
+        matchCount = matchLines.length > 0 ? matchLines.length : lines.length;
+      }
+    }
+    data.path = targetPath;
+    data.pattern = pattern;
+    data.matchCount = matchCount;
+    data.result = { path: targetPath, pattern, matchCount };
+  } else if (toolName === "diff") {
+    let lineCount = options?.lineCount ?? result?.lineCount;
+    if (typeof lineCount !== "number") {
+      const text = typeof result === "string" ? result : result?.content?.[0]?.text ?? "";
+      if (!text || text.startsWith("No changes detected") || text.startsWith("No diff output")) {
+        lineCount = 0;
+      } else {
+        lineCount = text.split("\n").filter((l: string) => l.trim().length > 0).length;
+      }
+    }
+    data.path = targetPath;
+    data.lineCount = lineCount;
+    data.result = { path: targetPath, lineCount };
   }
 
   return emitTelemetryEvent(
@@ -708,7 +866,7 @@ export class ThinkingExtractor {
     toolName: string,
     args: any,
     toolCallId?: string,
-    extra?: { cwd?: string; command?: string }
+    extra?: ToolStartOptions
   ): string {
     if (this.isThinkingActive()) {
       this.handleThinkingEnd();
@@ -773,6 +931,8 @@ export function subscribeAgentTelemetry(
       startTime: number;
       cwd?: string;
       command?: string;
+      path?: string;
+      pattern?: string;
     }
   >();
 
@@ -796,6 +956,8 @@ export function subscribeAgentTelemetry(
       const cwd =
         event.args?.cwd ?? options?.workspaceDir ?? process.cwd();
       const command = event.args?.command ?? event.args?.cmd;
+      const path = event.args?.path;
+      const pattern = event.args?.pattern;
       if (event.toolCallId) {
         activeToolCalls.set(event.toolCallId, {
           toolName: event.toolName,
@@ -803,11 +965,15 @@ export function subscribeAgentTelemetry(
           startTime: Date.now(),
           cwd,
           command,
+          path,
+          pattern,
         });
       }
       extractor.handleToolStart(event.toolName, event.args, event.toolCallId, {
         cwd,
         command,
+        path,
+        pattern,
       });
     } else if (event.type === "tool_execution_end") {
       const saved = event.toolCallId
@@ -834,6 +1000,9 @@ export function subscribeAgentTelemetry(
           stream: options?.stream,
           command: saved?.command,
           cwd: saved?.cwd,
+          path: saved?.path,
+          pattern: saved?.pattern,
+          args: saved?.args,
         }
       );
     } else if (event.type === "turn_end" || event.type === "agent_end") {

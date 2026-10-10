@@ -1350,16 +1350,23 @@
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
         }
-        if (data.toolName === "bash" || data.command) {
+        const toolName = data.toolName;
+        if (toolName === "bash" || data.command) {
           const cmd = data.command || data.args?.command || "bash";
           const cwd = data.cwd || data.args?.cwd || "";
           createCommandCard(stage, cmd, cwd, data.toolCallId);
+        } else if (toolName === "edit") {
+          const path = data.path || data.args?.path || "";
+          createDiffCard(stage, path, data.toolCallId);
+        } else if (["read", "write", "grep", "diff"].includes(toolName)) {
+          createToolChip(stage, toolName, data, data.toolCallId);
         }
       } else if (type === "tool_result") {
         if (activeThinkingBlock) {
           collapseThinkingBlock(activeThinkingBlock);
         }
-        if (data.toolName === "bash" || data.command) {
+        const toolName = data.toolName;
+        if (toolName === "bash" || data.command) {
           let card = data.toolCallId ? commandCardsMap.get(data.toolCallId) : null;
           if (!card) {
             const cmd = data.command || "bash";
@@ -1367,6 +1374,35 @@
             card = createCommandCard(stage, cmd, cwd, data.toolCallId);
           }
           completeCommandCard(card, data);
+        } else if (toolName === "edit") {
+          let card = data.toolCallId ? diffCardsMap.get(data.toolCallId) : null;
+          if (!card) {
+            for (const c of diffCardsMap.values()) {
+              if (!c.isCompleted) {
+                card = c;
+                break;
+              }
+            }
+          }
+          if (!card) {
+            const path = data.path || data.args?.path || "";
+            card = createDiffCard(stage, path, data.toolCallId);
+          }
+          completeDiffCard(card, data);
+        } else if (["read", "write", "grep", "diff"].includes(toolName)) {
+          let chip = data.toolCallId ? toolChipsMap.get(data.toolCallId) : null;
+          if (!chip) {
+            for (const c of toolChipsMap.values()) {
+              if (!c.isCompleted && c.toolName === toolName) {
+                chip = c;
+                break;
+              }
+            }
+          }
+          if (!chip) {
+            chip = createToolChip(stage, toolName, data, data.toolCallId);
+          }
+          completeToolChip(chip, data);
         }
       } else if (type === "stage") {
         // Stage transition concludes active reasoning
@@ -1573,6 +1609,357 @@
       }
     }
 
+    // -------------------------------------------------------------
+    // Agent Event Stream: Semantic Tool Chips (read, write, grep, diff)
+    // -------------------------------------------------------------
+    const toolChipsMap = new Map();
+
+    function clearToolChips() {
+      toolChipsMap.clear();
+    }
+
+    function createToolChip(stage, toolName, data, toolCallId) {
+      const chipId = toolCallId || ("chip-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7));
+      if (toolChipsMap.has(chipId)) {
+        return toolChipsMap.get(chipId);
+      }
+
+      const path = data.path || data.args?.path || "";
+      const pattern = data.pattern || data.args?.pattern || "";
+      const bytes = typeof data.bytes === "number" ? data.bytes : (data.args?.bytes || 0);
+
+      let icon = "🔧";
+      let initialText = `${escapeHtml(toolName)} ${escapeHtml(path)}...`;
+
+      if (toolName === "read") {
+        icon = "📄";
+        initialText = `Reading ${escapeHtml(path || "file")}...`;
+      } else if (toolName === "write") {
+        icon = "📝";
+        initialText = `Writing ${escapeHtml(path || "file")}...`;
+      } else if (toolName === "grep") {
+        icon = "🔍";
+        initialText = pattern
+          ? `Grepping "${escapeHtml(pattern)}" in ${escapeHtml(path || ".")}...`
+          : `Grepping in ${escapeHtml(path || ".")}...`;
+      } else if (toolName === "diff") {
+        icon = "🔍";
+        initialText = `Diffing ${escapeHtml(path || "working tree")}...`;
+      }
+
+      const container = document.createElement("div");
+      container.id = chipId;
+      container.className = "tool-chip-row my-1 flex items-center";
+      container.innerHTML = `
+        <div class="tool-chip inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800 text-xs font-mono text-slate-300 shadow-sm max-w-full transition">
+          <span class="chip-icon shrink-0">${icon}</span>
+          <span class="chip-text truncate">${initialText}</span>
+          <span class="chip-stage text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">${escapeHtml(stage || "PLANNER")}</span>
+          <span class="chip-spinner inline-block w-2.5 h-2.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0"></span>
+        </div>
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      const textEl = container.querySelector(".chip-text");
+      const spinnerEl = container.querySelector(".chip-spinner");
+      const chipBadgeEl = container.querySelector(".tool-chip");
+
+      const chip = {
+        id: chipId,
+        toolCallId: chipId,
+        element: container,
+        chipBadgeEl,
+        textEl,
+        spinnerEl,
+        stage: stage || "PLANNER",
+        toolName: toolName || "",
+        path: path || "",
+        pattern: pattern || "",
+        isCompleted: false,
+      };
+
+      toolChipsMap.set(chipId, chip);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+
+      return chip;
+    }
+
+    function completeToolChip(chip, resultData) {
+      if (!chip) return;
+      chip.isCompleted = true;
+
+      if (chip.spinnerEl) {
+        chip.spinnerEl.remove();
+        chip.spinnerEl = null;
+      }
+
+      const toolName = chip.toolName || resultData.toolName || "tool";
+      const path = resultData.path || chip.path || "";
+      const isError = Boolean(resultData.isError);
+
+      if (isError) {
+        if (chip.chipBadgeEl) {
+          chip.chipBadgeEl.classList.remove("border-slate-800");
+          chip.chipBadgeEl.classList.add("border-rose-500/40", "bg-rose-950/20", "text-rose-300");
+        }
+        if (chip.textEl) {
+          chip.textEl.textContent = `Failed ${toolName}: ${path || "error"}`;
+        }
+        return;
+      }
+
+      if (toolName === "read") {
+        const lineCount = typeof resultData.lineCount === "number" ? resultData.lineCount : (resultData.result?.lineCount || 0);
+        if (chip.textEl) {
+          chip.textEl.textContent = `Read ${path} (${lineCount} line${lineCount === 1 ? "" : "s"})`;
+        }
+      } else if (toolName === "write") {
+        const bytes = typeof resultData.bytes === "number" ? resultData.bytes : (resultData.result?.bytes || 0);
+        if (chip.textEl) {
+          chip.textEl.textContent = `Write ${path} (${bytes} byte${bytes === 1 ? "" : "s"})`;
+        }
+      } else if (toolName === "grep") {
+        const pattern = resultData.pattern || chip.pattern || "";
+        const matchCount = typeof resultData.matchCount === "number" ? resultData.matchCount : (resultData.result?.matchCount || 0);
+        if (chip.textEl) {
+          if (pattern) {
+            chip.textEl.textContent = `Grep "${pattern}" in ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`;
+          } else {
+            chip.textEl.textContent = `Grep ${path || "."} (${matchCount} match${matchCount === 1 ? "" : "es"})`;
+          }
+        }
+      } else if (toolName === "diff") {
+        const lineCount = typeof resultData.lineCount === "number" ? resultData.lineCount : (resultData.result?.lineCount || 0);
+        if (chip.textEl) {
+          chip.textEl.textContent = `Diff ${path || "working tree"} (${lineCount} line${lineCount === 1 ? "" : "s"})`;
+        }
+      } else {
+        if (chip.textEl) {
+          chip.textEl.textContent = `${toolName} ${path}`;
+        }
+      }
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Agent Event Stream: Expandable Diff Preview Cards (edit)
+    // -------------------------------------------------------------
+    const diffCardsMap = new Map();
+
+    function clearDiffCards() {
+      diffCardsMap.forEach((card) => {
+        if (card.timerInterval) clearInterval(card.timerInterval);
+      });
+      diffCardsMap.clear();
+    }
+
+    window.toggleDiffCard = function(cardId) {
+      const card = diffCardsMap.get(cardId);
+      if (!card) return;
+      card.isCollapsed = !card.isCollapsed;
+      if (card.isCollapsed) {
+        card.bodyEl.classList.add("hidden");
+        if (card.toggleIconEl) card.toggleIconEl.textContent = "▼";
+      } else {
+        card.bodyEl.classList.remove("hidden");
+        if (card.toggleIconEl) card.toggleIconEl.textContent = "▲";
+      }
+    };
+
+    function createDiffCard(stage, path, toolCallId) {
+      const cardId = toolCallId || ("diff-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7));
+      if (diffCardsMap.has(cardId)) {
+        return diffCardsMap.get(cardId);
+      }
+
+      const container = document.createElement("div");
+      container.id = cardId;
+      container.className = "diff-preview-card my-2.5 rounded-lg border border-slate-800 bg-slate-900/90 overflow-hidden shadow-lg transition-all duration-200";
+
+      container.innerHTML = `
+        <div class="diff-header px-3.5 py-2 flex items-center justify-between bg-slate-950/60 border-b border-slate-800/80 gap-3 cursor-pointer select-none hover:bg-slate-950/80 transition">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="text-sm shrink-0">📝</span>
+            <span class="diff-stage text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">${escapeHtml(stage || "CODER")}</span>
+            <code class="diff-path font-mono text-xs font-semibold text-slate-100 truncate flex-1">${escapeHtml(path || "Editing file...")}</code>
+            <div class="diff-stats hidden items-center gap-1.5 text-[11px] font-mono shrink-0">
+              <span class="diff-additions text-emerald-400 font-bold">+0</span>
+              <span class="diff-deletions text-rose-400 font-bold">-0</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2.5 shrink-0">
+            <span class="diff-spinner inline-block w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></span>
+            <span class="diff-timer font-mono text-[11px] text-indigo-300">0.0s</span>
+            <span class="diff-badge hidden text-[10px] font-bold px-2 py-0.5 rounded font-mono"></span>
+            <button type="button" class="diff-toggle text-xs text-slate-400 hover:text-slate-200 px-1 py-0.5 rounded transition flex items-center gap-1" title="Toggle diff preview">
+              <span class="diff-toggle-icon font-mono text-[10px]">▲</span>
+            </button>
+          </div>
+        </div>
+        <div class="diff-body">
+          <div class="diff-content p-3 bg-black/70 font-mono text-xs overflow-x-auto max-h-80 whitespace-pre select-text leading-relaxed divide-y divide-transparent">
+            <span class="diff-placeholder text-slate-500 italic text-[11px]">Applying edit...</span>
+          </div>
+        </div>
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      const headerEl = container.querySelector(".diff-header");
+      const pathEl = container.querySelector(".diff-path");
+      const statsEl = container.querySelector(".diff-stats");
+      const additionsEl = container.querySelector(".diff-additions");
+      const deletionsEl = container.querySelector(".diff-deletions");
+      const spinnerEl = container.querySelector(".diff-spinner");
+      const timerEl = container.querySelector(".diff-timer");
+      const badgeEl = container.querySelector(".diff-badge");
+      const toggleEl = container.querySelector(".diff-toggle");
+      const toggleIconEl = container.querySelector(".diff-toggle-icon");
+      const bodyEl = container.querySelector(".diff-body");
+      const contentEl = container.querySelector(".diff-content");
+
+      headerEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleDiffCard(cardId);
+      });
+
+      const startTime = Date.now();
+      const timerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1) + "s";
+        if (timerEl) timerEl.textContent = elapsed;
+      }, 100);
+
+      const card = {
+        id: cardId,
+        toolCallId: cardId,
+        element: container,
+        headerEl,
+        pathEl,
+        statsEl,
+        additionsEl,
+        deletionsEl,
+        spinnerEl,
+        timerEl,
+        badgeEl,
+        toggleEl,
+        toggleIconEl,
+        bodyEl,
+        contentEl,
+        stage: stage || "CODER",
+        path: path || "",
+        startTime,
+        timerInterval,
+        isCompleted: false,
+        isCollapsed: false,
+      };
+
+      diffCardsMap.set(cardId, card);
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+
+      return card;
+    }
+
+    function completeDiffCard(card, resultData) {
+      if (!card) return;
+      if (card.timerInterval) {
+        clearInterval(card.timerInterval);
+        card.timerInterval = null;
+      }
+      card.isCompleted = true;
+
+      if (card.spinnerEl) {
+        card.spinnerEl.classList.add("hidden");
+      }
+
+      const durationMs = resultData.durationMs || (Date.now() - card.startTime);
+      const durationSec = (durationMs / 1000).toFixed(1) + "s";
+      if (card.timerEl) {
+        card.timerEl.textContent = durationSec;
+        card.timerEl.classList.remove("text-indigo-300");
+        card.timerEl.classList.add("text-slate-400");
+      }
+
+      const path = resultData.path || card.path;
+      if (path && card.pathEl) {
+        card.pathEl.textContent = path;
+      }
+
+      const isError = Boolean(resultData.isError);
+      if (card.badgeEl) {
+        card.badgeEl.classList.remove("hidden");
+        if (!isError) {
+          card.badgeEl.textContent = "Edited";
+          card.badgeEl.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        } else {
+          card.badgeEl.textContent = "Edit Failed";
+          card.badgeEl.className = "diff-badge text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
+        }
+      }
+
+      const diffText = resultData.diff || resultData.patch || "";
+      if (diffText && card.contentEl) {
+        const rawLines = diffText.split(/\r?\n/);
+        let additions = 0;
+        let deletions = 0;
+
+        const renderedHtml = rawLines.map((line) => {
+          if (line.startsWith("+++") || line.startsWith("---")) {
+            return `<div class="diff-line diff-file-header text-slate-400 font-semibold px-1 py-0.5">${escapeHtml(line)}</div>`;
+          }
+          if (line.startsWith("+")) {
+            additions++;
+            return `<div class="diff-line diff-addition bg-emerald-950/40 text-emerald-400 font-mono px-1 py-0.5 rounded-sm border-l-2 border-emerald-500">${escapeHtml(line)}</div>`;
+          }
+          if (line.startsWith("-")) {
+            deletions++;
+            return `<div class="diff-line diff-deletion bg-rose-950/40 text-rose-400 font-mono px-1 py-0.5 rounded-sm border-l-2 border-rose-500">${escapeHtml(line)}</div>`;
+          }
+          if (line.startsWith("@@")) {
+            return `<div class="diff-line diff-hunk text-cyan-400/90 bg-cyan-950/20 font-mono text-[11px] px-1 py-0.5">${escapeHtml(line)}</div>`;
+          }
+          return `<div class="diff-line diff-context text-slate-400 font-mono px-1 py-0.5">${escapeHtml(line)}</div>`;
+        }).join("");
+
+        card.contentEl.innerHTML = renderedHtml;
+
+        if (card.statsEl) {
+          card.statsEl.classList.remove("hidden");
+          card.statsEl.classList.add("flex");
+          if (card.additionsEl) card.additionsEl.textContent = `+${additions}`;
+          if (card.deletionsEl) card.deletionsEl.textContent = `-${deletions}`;
+        }
+      } else if (card.contentEl) {
+        if (isError) {
+          const errText = typeof resultData.result === "string"
+            ? resultData.result
+            : (resultData.error || resultData.result?.error || resultData.result?.message || resultData.output || "Edit failed");
+          card.contentEl.innerHTML = `<span class="text-rose-400">${escapeHtml(errText)}</span>`;
+        } else {
+          card.contentEl.innerHTML = `<span class="text-slate-500 italic text-[11px]">${escapeHtml(typeof resultData.result === "string" ? resultData.result : "Edit applied successfully")}</span>`;
+        }
+      }
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+    }
+
     function rehydrateEventsHistory(events, jobStatus) {
       if (!events || !events.length) return;
       let pendingThinking = null;
@@ -1637,6 +2024,21 @@
             });
           }
         });
+        diffCardsMap.forEach((card) => {
+          if (!card.isCompleted) {
+            completeDiffCard(card, {
+              isError: fallbackExitCode !== 0,
+              durationMs: 0,
+            });
+          }
+        });
+        toolChipsMap.forEach((chip) => {
+          if (!chip.isCompleted) {
+            completeToolChip(chip, {
+              isError: fallbackExitCode !== 0,
+            });
+          }
+        });
       }
     }
 
@@ -1655,6 +2057,8 @@
       activeThinkingBlock = null;
       thinkingBlocksMap.clear();
       clearCommandCards();
+      clearDiffCards();
+      clearToolChips();
 
       eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
