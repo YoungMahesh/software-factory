@@ -50,8 +50,6 @@ Present the proposed breakdown as a numbered list. For each ticket, show:
 Ask the user:
 
 - Does the granularity feel right? (too coarse / too fine)
-- Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
-- Should any tickets be merged or split further?
 
 Iterate until the user approves the breakdown.
 
