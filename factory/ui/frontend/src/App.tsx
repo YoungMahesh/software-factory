@@ -5,7 +5,7 @@ import {
   Terminal,
   GitBranch,
 } from "lucide-react";
-import { Repo, Job, ChatMessage, LaunchJobParams } from "./types";
+import { Repo, Job, ChatMessage, LaunchJobParams, PreviewState } from "./types";
 import { formatToolLabel } from "./utils";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
@@ -30,6 +30,8 @@ export const App: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSendingPrompt, setIsSendingPrompt] = useState<boolean>(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [previewState, setPreviewState] = useState<PreviewState | null>(null);
+  const [isLaunchingPreview, setIsLaunchingPreview] = useState<boolean>(false);
 
   // Synchronize activeTab with URL history
   const switchTab = (tab: "studio" | "console") => {
@@ -157,6 +159,70 @@ export const App: React.FC = () => {
     loadRepos();
     loadJobs();
   }, []);
+
+  // Load preview state when selectedRepo changes
+  const loadPreview = async (repo: string) => {
+    if (!repo) {
+      setPreviewState(null);
+      return;
+    }
+    try {
+      const data = await api.fetchPreview(repo);
+      setPreviewState(data);
+    } catch (err) {
+      console.error(`Failed to fetch preview for ${repo}:`, err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRepo) {
+      loadPreview(selectedRepo);
+    } else {
+      setPreviewState(null);
+    }
+  }, [selectedRepo]);
+
+  // Periodic poll while preview is provisioning
+  useEffect(() => {
+    if (!selectedRepo || previewState?.status !== "PROVISIONING") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await api.fetchPreview(selectedRepo);
+        setPreviewState(data);
+        if (data.status !== "PROVISIONING") {
+          clearInterval(interval);
+        }
+      } catch (err) {
+        clearInterval(interval);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [selectedRepo, previewState?.status]);
+
+  const handleLaunchPreview = async (branch?: string) => {
+    if (!selectedRepo || isLaunchingPreview) return;
+    setIsLaunchingPreview(true);
+    try {
+      const data = await api.launchPreview(selectedRepo, branch);
+      setPreviewState(data);
+    } catch (err) {
+      console.error("Failed to launch preview:", err);
+    } finally {
+      setIsLaunchingPreview(false);
+    }
+  };
+
+  const handleStopPreview = async () => {
+    if (!selectedRepo) return;
+    try {
+      await api.stopPreview(selectedRepo);
+      setPreviewState((prev) => (prev ? { ...prev, status: "STOPPED" } : null));
+    } catch (err) {
+      console.error("Failed to stop preview:", err);
+    }
+  };
 
   // Handle Create Repo
   const handleCreateRepo = async (params: { name: string; description?: string }) => {
@@ -348,6 +414,10 @@ export const App: React.FC = () => {
             onSwitchToConsole={() => setActiveTab("console")}
             onOpenDrawer={() => setIsDrawerOpen(true)}
             isSending={isSendingPrompt}
+            previewState={previewState}
+            onLaunchPreview={handleLaunchPreview}
+            onStopPreview={handleStopPreview}
+            isLaunchingPreview={isLaunchingPreview}
           />
         ) : (
           <TestingConsoleView

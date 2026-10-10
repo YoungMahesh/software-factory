@@ -1,5 +1,20 @@
 export type JobStatus = "QUEUED" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
 
+export type PreviewStatus = "IDLE" | "PROVISIONING" | "SERVING" | "STOPPED" | "FAILED";
+
+export interface PreviewState {
+  repo: string;
+  status: PreviewStatus;
+  branch: string;
+  preview_url?: string | null;
+  sandbox_id?: string | null;
+  created_at?: number | null;
+  started_at?: number | null;
+  ended_at?: number | null;
+  error_message?: string | null;
+  log_count?: number;
+}
+
 export type JobStage =
   | "IDLE"
   | "PREFLIGHT"

@@ -594,6 +594,73 @@ class TestFastApiApp(unittest.TestCase):
             self.assertEqual(lines[0]["event"], "init")
             self.assertEqual(lines[0]["job"]["id"], job.id)
 
+    def test_preview_endpoints_require_auth(self):
+        unauth_client = TestClient(self.app)
+        resp = unauth_client.get("/api/studio/repos/test3/preview")
+        self.assertEqual(resp.status_code, 401)
+        resp_post = unauth_client.post("/api/studio/repos/test3/preview")
+        self.assertEqual(resp_post.status_code, 401)
+        resp_del = unauth_client.delete("/api/studio/repos/test3/preview")
+        self.assertEqual(resp_del.status_code, 401)
+
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_preview_lifecycle_endpoints(self, mock_create):
+        import threading
+        import time
+
+        stop_event = threading.Event()
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-preview-999"
+        mock_sandbox.stdout = iter(["Dev server started on port 3000\n"])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.side_effect = lambda **kwargs: stop_event.wait(timeout=2.0)
+        mock_sandbox.terminate.side_effect = lambda: stop_event.set()
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-preview-999-3000.modal.host")
+
+        # 1. Initial status is IDLE
+        resp_get_init = self.client.get("/api/studio/repos/test3/preview")
+        self.assertEqual(resp_get_init.status_code, 200)
+        init_data = resp_get_init.json()
+        self.assertEqual(init_data["repo"], "test3")
+        self.assertEqual(init_data["status"], "IDLE")
+
+        # 2. Launch preview via POST
+        resp_post = self.client.post(
+            "/api/studio/repos/test3/preview",
+            json={"branch": "factory/test-ui-feat"},
+        )
+        self.assertIn(resp_post.status_code, (200, 201))
+        post_data = resp_post.json()
+        self.assertEqual(post_data["repo"], "test3")
+        self.assertEqual(post_data["branch"], "factory/test-ui-feat")
+
+        # 3. Check status until SERVING
+        serving_data = None
+        for _ in range(20):
+            r = self.client.get("/api/studio/repos/test3/preview")
+            if r.status_code == 200 and r.json().get("status") == "SERVING":
+                serving_data = r.json()
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(serving_data)
+        self.assertEqual(serving_data["status"], "SERVING")
+        self.assertEqual(serving_data["preview_url"], "https://sb-preview-999-3000.modal.host")
+        self.assertEqual(serving_data["sandbox_id"], "sb-preview-999")
+
+        # 4. Stop preview via DELETE
+        resp_del = self.client.delete("/api/studio/repos/test3/preview")
+        self.assertEqual(resp_del.status_code, 200)
+        del_data = resp_del.json()
+        self.assertTrue(del_data["success"])
+        mock_sandbox.terminate.assert_called_once()
+
+        # 5. Subsequent DELETE returns 400 or 404
+        resp_del_again = self.client.delete("/api/studio/repos/test3/preview")
+        self.assertIn(resp_del_again.status_code, (400, 404))
+
+
 
 
 class TestCompiledSpaRootRouteServing(unittest.TestCase):

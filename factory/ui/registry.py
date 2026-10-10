@@ -19,7 +19,13 @@ import modal
 from factory.orchestrator import FACTORY_TIMEOUT_SECS
 from factory.spawner import (
     FactorySpawnConfig,
+    PreviewSpawnConfig,
     create_factory_sandbox,
+    create_preview_sandbox,
+)
+from factory.ui.github import (
+    fetch_repo_milestones,
+    fetch_repo_scratch_metadata,
 )
 
 DEFAULT_PREVIEW_URL: str = "https://3000.mahesh0.dev"
@@ -413,3 +419,241 @@ class JobRegistry:
 
 # Global singleton instance
 job_registry = JobRegistry()
+
+
+class PreviewStatus(str, Enum):
+    IDLE = "IDLE"
+    PROVISIONING = "PROVISIONING"
+    SERVING = "SERVING"
+    STOPPED = "STOPPED"
+    FAILED = "FAILED"
+
+
+@dataclass
+class PreviewState:
+    """Represents an active or stopped Dedicated Preview Sandbox."""
+
+    repo: str
+    status: PreviewStatus = PreviewStatus.IDLE
+    branch: str = "main"
+    preview_url: str | None = None
+    sandbox_id: str | None = None
+    sandbox: modal.Sandbox | None = None
+    created_at: float = field(default_factory=time.time)
+    started_at: float | None = None
+    ended_at: float | None = None
+    error_message: str | None = None
+    logs: list[str] = field(default_factory=list)
+    listeners: list[queue.Queue] = field(default_factory=list)
+    _stopped: bool = False
+    _thread: threading.Thread | None = None
+
+    def add_log(self, line: str, max_lines: int = 5000) -> None:
+        if len(self.logs) >= max_lines:
+            self.logs.pop(0)
+        self.logs.append(line)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "repo": self.repo,
+            "status": self.status.value,
+            "branch": self.branch,
+            "preview_url": self.preview_url,
+            "sandbox_id": self.sandbox_id,
+            "created_at": self.created_at,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "error_message": self.error_message,
+            "log_count": len(self.logs),
+        }
+
+
+def resolve_active_preview_branch(repo_name: str) -> str:
+    """Resolves active branch for preview: factory/<feature> if active milestone/issue exists, else main."""
+    try:
+        milestones = fetch_repo_milestones(repo_name=repo_name, state="open")
+        if milestones:
+            first_ms = milestones[0]
+            slug = first_ms.get("slug") or first_ms.get("title")
+            if slug:
+                return f"factory/{slug}"
+    except Exception:
+        pass
+
+    try:
+        scratch = fetch_repo_scratch_metadata(repo_name=repo_name)
+        features = scratch.get("features") or []
+        if features:
+            slug = features[0].get("slug")
+            if slug:
+                return f"factory/{slug}"
+    except Exception:
+        pass
+
+    return "main"
+
+
+class PreviewRegistry:
+    """Thread-safe manager for Dedicated Preview Sandboxes keyed by repository."""
+
+    def __init__(self, max_log_lines: int = 5000):
+        self._previews: dict[str, PreviewState] = {}
+        self._lock = threading.RLock()
+        self.max_log_lines = max_log_lines
+
+    def get_preview(self, repo: str) -> PreviewState | None:
+        """Retrieves current preview state for a repository."""
+        with self._lock:
+            return self._previews.get(repo.strip())
+
+    def launch_preview(self, repo: str, branch: str | None = None) -> PreviewState:
+        """Launches a Dedicated Preview Sandbox for the specified repository."""
+        clean_repo = repo.strip()
+        with self._lock:
+            existing = self._previews.get(clean_repo)
+            if existing and existing.status in (PreviewStatus.PROVISIONING, PreviewStatus.SERVING):
+                return existing
+
+            resolved_branch = branch.strip() if branch else resolve_active_preview_branch(clean_repo)
+            preview = PreviewState(
+                repo=clean_repo,
+                branch=resolved_branch,
+                status=PreviewStatus.PROVISIONING,
+                started_at=time.time(),
+            )
+            self._previews[clean_repo] = preview
+
+        thread = threading.Thread(
+            target=self._run_preview_worker,
+            args=(preview,),
+            daemon=True,
+            name=f"preview-{clean_repo}",
+        )
+        preview._thread = thread
+        thread.start()
+        return preview
+
+    def stop_preview(self, repo: str) -> bool:
+        """Terminates active preview sandbox for a repository."""
+        clean_repo = repo.strip()
+        sandbox_to_terminate = None
+        with self._lock:
+            preview = self._previews.get(clean_repo)
+            if not preview or preview.status in (PreviewStatus.STOPPED, PreviewStatus.IDLE):
+                return False
+
+            preview._stopped = True
+            preview.status = PreviewStatus.STOPPED
+            preview.ended_at = time.time()
+            sandbox_to_terminate = preview.sandbox
+            self._broadcast(preview, {"event": "status", "status": PreviewStatus.STOPPED.value})
+
+        if sandbox_to_terminate is not None:
+            try:
+                sandbox_to_terminate.terminate()
+            except Exception:
+                pass
+
+        return True
+
+    def add_listener(self, repo: str) -> queue.Queue | None:
+        with self._lock:
+            preview = self._previews.get(repo.strip())
+            if not preview:
+                return None
+            q: queue.Queue = queue.Queue()
+            preview.listeners.append(q)
+            return q
+
+    def remove_listener(self, repo: str, q: queue.Queue) -> None:
+        with self._lock:
+            preview = self._previews.get(repo.strip())
+            if preview and q in preview.listeners:
+                preview.listeners.remove(q)
+
+    def _broadcast(self, preview: PreviewState, payload: dict[str, Any]) -> None:
+        dead_listeners = []
+        for q in preview.listeners:
+            try:
+                q.put_nowait(payload)
+            except Exception:
+                dead_listeners.append(q)
+        for dead in dead_listeners:
+            if dead in preview.listeners:
+                preview.listeners.remove(dead)
+
+    def _run_preview_worker(self, preview: PreviewState) -> None:
+        repo = preview.repo
+        try:
+            preview.add_log(f"🚀 [PREVIEW] Provisioning dedicated preview sandbox for {repo} ({preview.branch})...\n", self.max_log_lines)
+            self._broadcast(preview, {"event": "status", "status": PreviewStatus.PROVISIONING.value})
+
+            config = PreviewSpawnConfig(
+                repo=repo,
+                branch=preview.branch,
+                testing=True,
+            )
+            sandbox, preview_url = create_preview_sandbox(config)
+
+            with self._lock:
+                if preview._stopped:
+                    try:
+                        sandbox.terminate()
+                    except Exception:
+                        pass
+                    return
+                preview.sandbox = sandbox
+                preview.sandbox_id = getattr(sandbox, "object_id", None)
+                preview.preview_url = preview_url
+                preview.status = PreviewStatus.SERVING
+                self._broadcast(preview, {
+                    "event": "status",
+                    "status": PreviewStatus.SERVING.value,
+                    "preview_url": preview_url,
+                })
+
+            preview.add_log(f"📡 [PREVIEW] Live preview server serving at {preview_url}\n", self.max_log_lines)
+
+            # Stream logs from sandbox
+            import concurrent.futures
+
+            def stream_pipe(reader):
+                try:
+                    for chunk in reader:
+                        if preview._stopped:
+                            break
+                        text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+                        preview.add_log(text, self.max_log_lines)
+                        self._broadcast(preview, {"event": "log", "data": text})
+                except Exception:
+                    pass
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                f_out = executor.submit(stream_pipe, sandbox.stdout)
+                f_err = executor.submit(stream_pipe, sandbox.stderr)
+                concurrent.futures.wait([f_out, f_err])
+
+            sandbox.wait(raise_on_termination=False)
+
+            with self._lock:
+                if not preview._stopped:
+                    preview.ended_at = time.time()
+                    if sandbox.returncode == 0:
+                        preview.status = PreviewStatus.STOPPED
+                    else:
+                        preview.status = PreviewStatus.FAILED
+                    self._broadcast(preview, {"event": "status", "status": preview.status.value})
+
+        except Exception as e:
+            with self._lock:
+                if not preview._stopped:
+                    preview.status = PreviewStatus.FAILED
+                    preview.error_message = str(e)
+                    preview.ended_at = time.time()
+                    self._broadcast(preview, {"event": "status", "status": PreviewStatus.FAILED.value, "error": str(e)})
+                    preview.add_log(f"\n❌ [ERROR] Preview failed: {e}\n", self.max_log_lines)
+
+
+# Global singleton instance
+preview_registry = PreviewRegistry()
+

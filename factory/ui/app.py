@@ -31,9 +31,13 @@ from factory.ui.github import (
     validate_github_repo_name,
 )
 from factory.ui.guard import evaluate_prompt_intent
-from factory.ui.registry import JobRegistry, job_registry
+from factory.ui.registry import JobRegistry, job_registry, PreviewRegistry, preview_registry
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
+
+
+class LaunchPreviewRequest(BaseModel):
+    branch: str | None = Field(None, description="Optional target branch to serve (e.g. 'factory/<feature>' or 'main')")
 
 
 class LaunchJobRequest(BaseModel):
@@ -59,7 +63,10 @@ class StudioPromptRequest(BaseModel):
     milestone_title: str | None = Field(None, description="Optional custom milestone title")
 
 
-def create_app(registry: JobRegistry = job_registry) -> FastAPI:
+def create_app(
+    registry: JobRegistry = job_registry,
+    preview_reg: PreviewRegistry = preview_registry,
+) -> FastAPI:
     """Creates and configures the FastAPI application."""
     app = FastAPI(
         title="Factory Studio",
@@ -220,6 +227,49 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
             "stage": job.stage.value,
             "preview_url": job.preview_url,
         }
+
+    @app.post("/api/studio/repos/{repo}/preview", status_code=201)
+    async def launch_preview_endpoint(repo: str, req: LaunchPreviewRequest | None = None):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        branch = req.branch if req else None
+        preview = preview_reg.launch_preview(clean_repo, branch=branch)
+        return JSONResponse(status_code=201, content=preview.to_dict())
+
+    @app.get("/api/studio/repos/{repo}/preview")
+    async def get_preview_endpoint(repo: str):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        preview = preview_reg.get_preview(clean_repo)
+        if not preview:
+            return {
+                "repo": clean_repo,
+                "status": "IDLE",
+                "branch": "main",
+                "preview_url": None,
+                "sandbox_id": None,
+                "created_at": None,
+                "started_at": None,
+                "ended_at": None,
+                "error_message": None,
+                "log_count": 0,
+            }
+        return preview.to_dict()
+
+    @app.delete("/api/studio/repos/{repo}/preview")
+    async def stop_preview_endpoint(repo: str):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        stopped = preview_reg.stop_preview(clean_repo)
+        if not stopped:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No active running preview found for repository '{clean_repo}'.",
+            )
+        return {"message": f"Preview for {clean_repo} stopped.", "success": True, "repo": clean_repo}
 
 
 

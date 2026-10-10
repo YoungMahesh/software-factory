@@ -84,4 +84,30 @@ describe("StudioView", () => {
     expect(screen.getByText(/Request cannot be processed/i)).toBeInTheDocument();
     expect(screen.getByText(/Out-of-scope backend infrastructure modification/i)).toBeInTheDocument();
   });
+
+  it("renders 'Preview App' button in top control bar next to repo selector and triggers onLaunchPreview", () => {
+    const handleLaunch = vi.fn();
+    render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        onLaunchPreview={handleLaunch}
+      />
+    );
+
+    const previewBtn = screen.getByTestId("preview-app-btn");
+    expect(previewBtn).toBeInTheDocument();
+    expect(previewBtn).toHaveTextContent(/Preview App/i);
+
+    fireEvent.click(previewBtn);
+    expect(handleLaunch).toHaveBeenCalledTimes(1);
+  });
 });
+

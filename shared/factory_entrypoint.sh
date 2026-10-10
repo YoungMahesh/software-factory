@@ -8,6 +8,9 @@ TRACKER="${TRACKER:-}"
 
 DEV_PREVIEW="${DEV_PREVIEW:-0}"
 
+PREVIEW_ONLY="${PREVIEW_ONLY:-0}"
+TARGET_BRANCH="${BRANCH:-}"
+
 # Parse command line arguments (supporting both flags and positional fallbacks)
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -27,12 +30,21 @@ while [[ $# -gt 0 ]]; do
             TRACKER="$2"
             shift 2
             ;;
+        --branch|-b)
+            TARGET_BRANCH="$2"
+            shift 2
+            ;;
+        --preview-only)
+            PREVIEW_ONLY="1"
+            DEV_PREVIEW="1"
+            shift
+            ;;
         --dev|--preview)
             DEV_PREVIEW="1"
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 --feature <slug> [--issue <id>] [--model <model>] [--tracker <github|local>] [--dev]"
+            echo "Usage: $0 [--feature <slug>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--branch <branch>] [--dev] [--preview-only]"
             exit 0
             ;;
         *)
@@ -55,8 +67,12 @@ if [ -z "$FEATURE_SLUG" ] && [ -n "$ISSUE_ID" ]; then
 fi
 
 if [ -z "$FEATURE_SLUG" ]; then
-    echo "ERROR: Feature slug is required (--feature <slug> or positional argument, or --issue <id>)." >&2
-    exit 1
+    if [ "${PREVIEW_ONLY:-0}" = "1" ]; then
+        FEATURE_SLUG="${TARGET_BRANCH:-preview}"
+    else
+        echo "ERROR: Feature slug is required (--feature <slug> or positional argument, or --issue <id>)." >&2
+        exit 1
+    fi
 fi
 
 echo "================================================================"
@@ -288,26 +304,38 @@ fi
 
 cd "$TARGET_DIR"
 
-# 5. Check out feature branch factory/<feature>
-BRANCH_NAME="factory/${FEATURE_SLUG}"
-echo "🌿 Checking out feature branch $BRANCH_NAME..."
-REMOTE_EXISTS=false
-if git ls-remote --heads origin "refs/heads/$BRANCH_NAME" 2>/dev/null | grep -q "refs/heads/$BRANCH_NAME"; then
-    REMOTE_EXISTS=true
-fi
-
-if [ "$REMOTE_EXISTS" = true ]; then
-    echo "   • Tracking existing remote branch origin/$BRANCH_NAME"
-    git fetch origin "+refs/heads/${BRANCH_NAME}:refs/remotes/origin/${BRANCH_NAME}" --quiet || true
-    git checkout -B "$BRANCH_NAME" "origin/${BRANCH_NAME}" --quiet
+# 5. Check out target branch
+if [ -n "${TARGET_BRANCH:-}" ]; then
+    BRANCH_NAME="$TARGET_BRANCH"
 else
-    echo "   • Forking new feature branch $BRANCH_NAME from main"
-    if git show-ref --verify --quiet "refs/remotes/origin/main"; then
-        git checkout -B "$BRANCH_NAME" "origin/main" --quiet
-    elif git show-ref --verify --quiet "refs/heads/main"; then
-        git checkout -B "$BRANCH_NAME" "main" --quiet
+    BRANCH_NAME="factory/${FEATURE_SLUG}"
+fi
+echo "🌿 Checking out branch $BRANCH_NAME..."
+if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+    if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH_NAME"; then
+        git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME" --quiet
     else
-        git checkout -B "$BRANCH_NAME" --quiet
+        git checkout "$BRANCH_NAME" --quiet || true
+    fi
+else
+    REMOTE_EXISTS=false
+    if git ls-remote --heads origin "refs/heads/$BRANCH_NAME" 2>/dev/null | grep -q "refs/heads/$BRANCH_NAME"; then
+        REMOTE_EXISTS=true
+    fi
+
+    if [ "$REMOTE_EXISTS" = true ]; then
+        echo "   • Tracking existing remote branch origin/$BRANCH_NAME"
+        git fetch origin "+refs/heads/${BRANCH_NAME}:refs/remotes/origin/${BRANCH_NAME}" --quiet || true
+        git checkout -B "$BRANCH_NAME" "origin/${BRANCH_NAME}" --quiet
+    else
+        echo "   • Forking new feature branch $BRANCH_NAME from main"
+        if git show-ref --verify --quiet "refs/remotes/origin/main"; then
+            git checkout -B "$BRANCH_NAME" "origin/main" --quiet
+        elif git show-ref --verify --quiet "refs/heads/main"; then
+            git checkout -B "$BRANCH_NAME" "main" --quiet
+        else
+            git checkout -B "$BRANCH_NAME" --quiet
+        fi
     fi
 fi
 
@@ -385,33 +413,38 @@ if [ -f "$TARGET_DIR/package.json" ] && [ ! -d "$TARGET_DIR/node_modules" ]; the
 fi
 
 # 9. Execute in-sandbox pipeline
-echo "🚀 Launching in-sandbox Assembly Line Pipeline..."
-CMD_ARGS=(
-    "--workspace" "$TARGET_DIR"
-    "--feature" "$FEATURE_SLUG"
-)
-if [ -n "$ISSUE_ID" ]; then
-    CMD_ARGS+=("--issue" "$ISSUE_ID")
-fi
-if [ -n "$MODEL_ID" ]; then
-    CMD_ARGS+=("--model" "$MODEL_ID")
-fi
-if [ -n "${TRACKER:-}" ]; then
-    CMD_ARGS+=("--tracker" "$TRACKER")
-fi
+if [ "${PREVIEW_ONLY:-0}" = "1" ]; then
+    echo "⏩ Preview-only mode: bypassing Assembly Line Pipeline agents."
+    EXIT_CODE=0
+else
+    echo "🚀 Launching in-sandbox Assembly Line Pipeline..."
+    CMD_ARGS=(
+        "--workspace" "$TARGET_DIR"
+        "--feature" "$FEATURE_SLUG"
+    )
+    if [ -n "$ISSUE_ID" ]; then
+        CMD_ARGS+=("--issue" "$ISSUE_ID")
+    fi
+    if [ -n "$MODEL_ID" ]; then
+        CMD_ARGS+=("--model" "$MODEL_ID")
+    fi
+    if [ -n "${TRACKER:-}" ]; then
+        CMD_ARGS+=("--tracker" "$TRACKER")
+    fi
 
-set +e
-export PYTHONUNBUFFERED=1
-node --experimental-strip-types "${FACTORY_DIR}/pipeline.ts" "${CMD_ARGS[@]}"
-EXIT_CODE=$?
-set -e
+    set +e
+    export PYTHONUNBUFFERED=1
+    node --experimental-strip-types "${FACTORY_DIR}/pipeline.ts" "${CMD_ARGS[@]}"
+    EXIT_CODE=$?
+    set -e
 
-echo ""
-echo "🏁 Pipeline completed with exit code: $EXIT_CODE"
+    echo ""
+    echo "🏁 Pipeline completed with exit code: $EXIT_CODE"
 
-if [ "$EXIT_CODE" -ne 0 ]; then
-    echo "❌ Pipeline failed; dev server will not be started."
-    exit "$EXIT_CODE"
+    if [ "$EXIT_CODE" -ne 0 ]; then
+        echo "❌ Pipeline failed; dev server will not be started."
+        exit "$EXIT_CODE"
+    fi
 fi
 
 # 10. Dev preview keep-alive daemon

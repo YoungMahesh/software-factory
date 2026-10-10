@@ -1,4 +1,4 @@
-import { Repo, ScratchMetadata, Milestone, Issue, Job, LaunchJobParams } from "./types";
+import { Repo, ScratchMetadata, Milestone, Issue, Job, LaunchJobParams, PreviewState } from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
@@ -117,6 +117,41 @@ export async function cancelJob(jobId: string): Promise<{ success: boolean; mess
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to cancel job: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchPreview(repo: string): Promise<PreviewState> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`);
+  if (!res.ok) throw new Error(`Failed to fetch preview: ${res.statusText}`);
+  return res.json();
+}
+
+export async function launchPreview(
+  repo: string,
+  branch?: string
+): Promise<PreviewState> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ branch }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to launch preview: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function stopPreview(
+  repo: string
+): Promise<{ success: boolean; message: string; repo?: string }> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to stop preview: ${res.statusText}`);
   }
   return res.json();
 }

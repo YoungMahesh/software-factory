@@ -1,13 +1,34 @@
 import React, { useState } from "react";
-import { Monitor, Tablet, Smartphone, RotateCw, ExternalLink, Globe } from "lucide-react";
-import { ViewportMode } from "../types";
+import {
+  Monitor,
+  Tablet,
+  Smartphone,
+  RotateCw,
+  ExternalLink,
+  Globe,
+  GitBranch,
+  Play,
+  Square,
+  Loader2,
+} from "lucide-react";
+import { ViewportMode, PreviewStatus } from "../types";
 
 interface LivePreviewProps {
   previewUrl?: string | null;
+  status?: PreviewStatus;
+  branch?: string | null;
+  onLaunchPreview?: () => void;
+  onStopPreview?: () => void;
+  isLaunching?: boolean;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
   previewUrl,
+  status = "IDLE",
+  branch = null,
+  onLaunchPreview,
+  onStopPreview,
+  isLaunching = false,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -78,17 +99,29 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           </button>
         </div>
 
+        {/* Active Branch Badge */}
+        {branch && (
+          <div
+            data-testid="preview-branch-badge"
+            id="preview-branch-badge"
+            className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
+          >
+            <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" />
+            <span className="truncate max-w-[140px]">{branch}</span>
+          </div>
+        )}
+
         {/* URL Address Bar */}
         <div className="flex-1 max-w-md mx-3">
           <div className="flex items-center px-3 py-1 bg-slate-950 rounded-lg border border-slate-800/80 text-xs font-mono text-slate-300 truncate">
             <Globe className="w-3 h-3 text-slate-500 mr-2 shrink-0" />
             <span id="preview-url-display" className="truncate text-[11px] text-slate-300">
-              {previewUrl || "Waiting for live preview..."}
+              {previewUrl || (status === "PROVISIONING" ? "Provisioning sandbox tunnel..." : "Waiting for live preview...")}
             </span>
           </div>
         </div>
 
-        {/* Actions: Reload & External */}
+        {/* Actions: Reload, External & Stop */}
         <div className="flex items-center space-x-1.5">
           <button
             data-testid="reload-preview-btn"
@@ -114,6 +147,20 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
+
+          {onStopPreview && (status === "SERVING" || status === "PROVISIONING" || previewUrl) && (
+            <button
+              data-testid="stop-preview-btn"
+              id="btn-preview-stop"
+              type="button"
+              onClick={onStopPreview}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-colors"
+              title="Stop preview sandbox"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              <span>Stop</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -136,6 +183,18 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             />
           </div>
+        ) : status === "PROVISIONING" ? (
+          <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
+            <div className="w-12 h-12 rounded-full bg-indigo-950/50 border border-indigo-800 flex items-center justify-center text-indigo-400 mb-4">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-200 mb-1">
+              Provisioning Preview Sandbox...
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Launching Modal Standard Sandbox with encrypted tunnel on port 3000.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
             <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-4">
@@ -145,8 +204,25 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
               No Application Preview Active
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Launch an assembly line with preview mode enabled or enter a prompt in Factory Studio to start the live application server.
+              Launch a Dedicated Preview Sandbox to immediately test and interact with the live application.
             </p>
+            {onLaunchPreview && (
+              <button
+                data-testid="launch-preview-cta-btn"
+                id="btn-launch-live-preview"
+                type="button"
+                onClick={onLaunchPreview}
+                disabled={isLaunching}
+                className="mt-4 flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              >
+                {isLaunching ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 fill-current" />
+                )}
+                <span>Launch Live Preview</span>
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -4,15 +4,24 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] "Preview App" button appears in the Factory Studio top control bar next to the repository selector.
-- [ ] Prominent "Launch Live Preview" primary CTA button appears in the right panel when no preview is running for the selected app.
-- [ ] Backend provisions an ephemeral Modal Standard Sandbox configured with `encrypted_ports=[3000]`, `ENABLE_CLOUDFLARE=0`, and a 30-minute idle timeout (`idle_timeout=1800`), without invoking Planner/Coder/Verifier/Reviewer agents.
-- [ ] Sandbox checks out the active Feature Branch (`factory/<feature>`) if an active milestone/issue exists; otherwise checks out `main`.
-- [ ] Spawner captures and returns the unique Modal Application Tunnel URL (`sandbox.tunnels()[3000].url`) as the preview URL.
-- [ ] In-memory preview registry manages active preview state per repository (`repo -> PreviewState`).
-- [ ] REST API endpoints for preview lifecycle (`POST /api/studio/repos/{repo}/preview`, `GET /api/studio/repos/{repo}/preview`, `DELETE /api/studio/repos/{repo}/preview`) are implemented and authenticated.
-- [ ] Right panel embeds the live application inside an `<iframe>` pointing to the Modal tunnel URL upon readiness.
-- [ ] Preview toolbar displays active branch badge (`main` or `factory/<feature>`) and a red "Stop" button that terminates the sandbox.
-- [ ] End-to-end HTTP integration tests and frontend component tests verify launch, iframe embedding, and termination.
+- [x] "Preview App" button appears in the Factory Studio top control bar next to the repository selector.
+- [x] Prominent "Launch Live Preview" primary CTA button appears in the right panel when no preview is running for the selected app.
+- [x] Backend provisions an ephemeral Modal Standard Sandbox configured with `encrypted_ports=[3000]`, `ENABLE_CLOUDFLARE=0`, and a 30-minute idle timeout (`idle_timeout=1800`), without invoking Planner/Coder/Verifier/Reviewer agents.
+- [x] Sandbox checks out the active Feature Branch (`factory/<feature>`) if an active milestone/issue exists; otherwise checks out `main`.
+- [x] Spawner captures and returns the unique Modal Application Tunnel URL (`sandbox.tunnels()[3000].url`) as the preview URL.
+- [x] In-memory preview registry manages active preview state per repository (`repo -> PreviewState`).
+- [x] REST API endpoints for preview lifecycle (`POST /api/studio/repos/{repo}/preview`, `GET /api/studio/repos/{repo}/preview`, `DELETE /api/studio/repos/{repo}/preview`) are implemented and authenticated.
+- [x] Right panel embeds the live application inside an `<iframe>` pointing to the Modal tunnel URL upon readiness.
+- [x] Preview toolbar displays active branch badge (`main` or `factory/<feature>`) and a red "Stop" button that terminates the sandbox.
+- [x] End-to-end HTTP integration tests and frontend component tests verify launch, iframe embedding, and termination.
+
+## Answer
+
+Implemented the complete Dedicated Preview Sandbox and Live Iframe Workspace:
+1. **Preview Spawner & Sandbox Configuration**: Implemented `create_preview_sandbox` / `spawn_preview_sandbox` in `factory/spawner.py` configuring Modal Standard Sandboxes with `encrypted_ports=[3000]`, `idle_timeout=1800` (30 minutes), `ENABLE_CLOUDFLARE="0"`, bypassing the multi-agent assembly line pipeline via container entrypoint flag `--preview-only` and capturing the HTTPS tunnel URL (`sandbox.tunnels()[3000].url`).
+2. **Branch Resolution & In-Memory Preview Registry**: Added `resolve_active_preview_branch` and `PreviewRegistry` in `factory/ui/registry.py` managing thread-safe `repo -> PreviewState` mappings, automatically selecting `factory/<feature>` when active milestones or scratch items exist, or defaulting to `main`.
+3. **REST API Endpoints**: Implemented and authenticated `POST /api/studio/repos/{repo}/preview`, `GET /api/studio/repos/{repo}/preview`, and `DELETE /api/studio/repos/{repo}/preview` in `factory/ui/app.py`.
+4. **Studio & Live Preview Frontend**: Added "Preview App" control bar button in `StudioView.tsx`, "Launch Live Preview" primary CTA button and active branch badge in `LivePreview.tsx`, red "Stop" sandbox termination button, and live Modal tunnel URL iframe embedding in `LivePreview.tsx` and `App.tsx`.
+5. **Testing**: Verified end-to-end with unit and integration tests in `tests/test_preview.py` and `tests/test_ui.py` (190 passing tests), and Vitest component specs in `LivePreview.test.tsx` and `StudioView.test.tsx` (34 passing tests).

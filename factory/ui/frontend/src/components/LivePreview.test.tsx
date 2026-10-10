@@ -40,4 +40,49 @@ describe("LivePreview", () => {
     expect(reloadBtn).toBeInTheDocument();
     fireEvent.click(reloadBtn);
   });
+
+  it("renders 'Launch Live Preview' CTA when no preview is active and triggers onLaunchPreview", () => {
+    const handleLaunch = vi.fn();
+    render(
+      <LivePreview
+        previewUrl={null}
+        status="IDLE"
+        onLaunchPreview={handleLaunch}
+      />
+    );
+
+    const ctaBtn = screen.getByTestId("launch-preview-cta-btn");
+    expect(ctaBtn).toBeInTheDocument();
+    expect(ctaBtn).toHaveTextContent(/Launch Live Preview/i);
+
+    fireEvent.click(ctaBtn);
+    expect(handleLaunch).toHaveBeenCalledTimes(1);
+  });
+
+  it("displays active branch badge and red Stop button when preview is active", () => {
+    const handleStop = vi.fn();
+    render(
+      <LivePreview
+        previewUrl="https://sandbox-3000.modal.host"
+        status="SERVING"
+        branch="factory/nav-tabs"
+        onStopPreview={handleStop}
+      />
+    );
+
+    // Verify branch badge
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/nav-tabs");
+
+    // Verify iframe points to Modal tunnel URL
+    const iframe = screen.getByTitle("Live Application Preview");
+    expect(iframe).toHaveAttribute("src", "https://sandbox-3000.modal.host");
+
+    // Verify red Stop button
+    const stopBtn = screen.getByTestId("stop-preview-btn");
+    expect(stopBtn).toBeInTheDocument();
+    expect(stopBtn).toHaveTextContent(/Stop/i);
+
+    fireEvent.click(stopBtn);
+    expect(handleStop).toHaveBeenCalledTimes(1);
+  });
 });
