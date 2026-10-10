@@ -8,7 +8,7 @@ import {
   XCircle,
   Eye,
 } from "lucide-react";
-import { Repo, Job, ScratchMetadata, Milestone, Issue } from "../types";
+import { Repo, Job, ScratchMetadata, Milestone, Issue, LaunchJobParams } from "../types";
 import { StageStepper } from "../components/StageStepper";
 import { TerminalLogViewer } from "../components/TerminalLogViewer";
 import { fetchScratch, fetchMilestones } from "../api";
@@ -21,14 +21,7 @@ interface TestingConsoleViewProps {
   activeJob: Job | null;
   logs?: string[];
   jobs: Job[];
-  onLaunch: (params: {
-    repo: string;
-    feature?: string;
-    issue?: string;
-    model: string;
-    vm: boolean;
-    dev: boolean;
-  }) => void;
+  onLaunch: (params: LaunchJobParams) => void;
   onCancel: (jobId: string) => void;
   onSelectJob: (job: Job) => void;
   onClearLogs?: () => void;

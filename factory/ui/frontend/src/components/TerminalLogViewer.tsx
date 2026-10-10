@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Terminal, Copy, Check, Trash2, ArrowDownToLine } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { copyToClipboard } from "../utils";
 
 interface TerminalLogViewerProps {
   logs: string[];
@@ -25,19 +27,29 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
     });
   });
 
-  useEffect(() => {
-    if (autoscroll && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [lines.length, autoscroll]);
+  const rowVirtualizer = useVirtualizer({
+    count: lines.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 20,
+    overscan: 25,
+    initialRect: { width: 800, height: 600 },
+  });
 
-  const handleCopy = () => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(lines.join("\n"));
+  useEffect(() => {
+    if (autoscroll && lines.length > 0) {
+      rowVirtualizer.scrollToIndex(lines.length - 1);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  }, [lines.length, autoscroll, rowVirtualizer]);
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(lines.join("\n"));
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
     <div className="flex flex-col h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
@@ -103,7 +115,7 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
         </div>
       </div>
 
-      {/* Terminal Body */}
+      {/* Virtualized Terminal Body */}
       <div
         id="terminal-body"
         ref={containerRef}
@@ -114,11 +126,35 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
             Awaiting sandbox logs...
           </div>
         ) : (
-          lines.map((line, idx) => (
-            <div key={idx} className="hover:bg-slate-900/40 px-1 rounded -mx-1">
-              {line || "\u00A0"}
-            </div>
-          ))
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualItems.length > 0
+              ? virtualItems.map((virtualRow) => (
+                  <div
+                    key={virtualRow.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className="hover:bg-slate-900/40 px-1 rounded -mx-1"
+                  >
+                    {lines[virtualRow.index] || "\u00A0"}
+                  </div>
+                ))
+              : lines.map((line, idx) => (
+                  <div key={idx} className="hover:bg-slate-900/40 px-1 rounded -mx-1">
+                    {line || "\u00A0"}
+                  </div>
+                ))}
+          </div>
         )}
       </div>
     </div>

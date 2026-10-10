@@ -5,15 +5,23 @@ import {
   Terminal,
   GitBranch,
 } from "lucide-react";
-import { Repo, Job, ChatMessage } from "./types";
+import { Repo, Job, ChatMessage, LaunchJobParams } from "./types";
+import { formatToolLabel } from "./utils";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
 import { useJobStream } from "./hooks/useJobStream";
 import * as api from "./api";
 
+const getInitialTab = (): "studio" | "console" => {
+  if (typeof window !== "undefined" && window.location.pathname.includes("/console")) {
+    return "console";
+  }
+  return "studio";
+};
+
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"studio" | "console">("studio");
+  const [activeTab, setActiveTab] = useState<"studio" | "console">(getInitialTab);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string>("");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -22,6 +30,25 @@ export const App: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSendingPrompt, setIsSendingPrompt] = useState<boolean>(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  // Synchronize activeTab with URL history
+  const switchTab = (tab: "studio" | "console") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const targetPath = tab === "console" ? "/v2/console" : "/v2";
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, "", targetPath);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      setActiveTab(getInitialTab());
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Real-time telemetry & logs stream
   const { job: streamedJob, logs, events, clearLogs } = useJobStream(activeJobId);
@@ -42,42 +69,50 @@ export const App: React.FC = () => {
     }
   }, [streamedJob]);
 
-  // Sync active assistant turn in chat history from telemetry events
+  // Rehydrate & sync assistant turn in chat history from telemetry events
   useEffect(() => {
     if (events.length === 0 || !activeJobId) return;
 
     setMessages((prev) => {
-      const lastMsg = prev[prev.length - 1];
-      if (!lastMsg || lastMsg.role !== "assistant" || lastMsg.jobId !== activeJobId) {
-        return prev;
+      let targetMsg = prev.find((m) => m.role === "assistant" && m.jobId === activeJobId);
+      let isNew = false;
+      if (!targetMsg) {
+        isNew = true;
+        targetMsg = {
+          id: `assistant-${activeJobId}`,
+          role: "assistant",
+          timestamp: Date.now(),
+          jobId: activeJobId,
+          text: `Assembly line execution for ${activeJob?.feature || activeJob?.repo || activeJobId}`,
+          stepChips: [],
+        };
       }
 
-      const updated = { ...lastMsg };
+      const updated: ChatMessage = {
+        ...targetMsg,
+        stepChips: [...(targetMsg.stepChips || [])],
+      };
 
-      // Process last events to update thinking and step chips
+      // Process telemetry events to update thinking and step chips
       events.forEach((evt) => {
         if (evt.type === "thinking") {
+          const delta = evt.data?.delta || "";
+          const prevText = updated.thinking?.text || "";
+          const newText = delta ? prevText + delta : prevText;
           updated.thinking = {
-            text: evt.data?.delta || evt.data?.text || "",
-            durationMs: evt.data?.durationMs,
-            done: Boolean(evt.data?.done),
+            text: newText,
+            durationMs: evt.data?.durationMs || updated.thinking?.durationMs,
+            done: Boolean(evt.data?.done) || Boolean(updated.thinking?.done),
           };
         }
 
         if (evt.type === "tool_result") {
           const chipId = evt.data?.toolCallId || `chip-${evt.data?.toolName}-${evt.timestamp || Date.now()}`;
-          if (!updated.stepChips) updated.stepChips = [];
-          if (!updated.stepChips.some((c) => c.id === chipId)) {
+          if (!updated.stepChips!.some((c) => c.id === chipId)) {
             const toolName = evt.data?.toolName || "tool";
-            const path = evt.data?.path || evt.data?.args?.path || "";
-            const cmd = evt.data?.command || evt.data?.args?.command || "";
-            let label = `Ran ${toolName}`;
-            if (toolName === "bash") label = `[Ran bash: ${cmd}]`;
-            else if (toolName === "edit") label = `[Edited ${path}]`;
-            else if (toolName === "write") label = `[Wrote ${path}]`;
-            else if (toolName === "read") label = `[Read ${path}]`;
+            const label = `[${formatToolLabel(toolName, evt.data)}]`;
 
-            updated.stepChips.push({
+            updated.stepChips!.push({
               id: chipId,
               toolName,
               label,
@@ -89,9 +124,12 @@ export const App: React.FC = () => {
         }
       });
 
-      return [...prev.slice(0, -1), updated];
+      if (isNew) {
+        return [...prev, updated];
+      }
+      return prev.map((m) => (m.id === updated.id ? updated : m));
     });
-  }, [events, activeJobId]);
+  }, [events, activeJobId, activeJob]);
 
   // Load repositories & jobs on mount
   const loadRepos = async () => {
@@ -128,14 +166,7 @@ export const App: React.FC = () => {
   };
 
   // Handle Launch Job from Testing Console
-  const handleLaunchJob = async (params: {
-    repo: string;
-    feature?: string;
-    issue?: string;
-    model: string;
-    vm: boolean;
-    dev: boolean;
-  }) => {
+  const handleLaunchJob = async (params: LaunchJobParams) => {
     clearLogs();
     const createdJob = await api.launchJob(params);
     setActiveJobId(createdJob.id);
@@ -261,7 +292,7 @@ export const App: React.FC = () => {
             <button
               id="nav-tab-studio"
               type="button"
-              onClick={() => setActiveTab("studio")}
+              onClick={() => switchTab("studio")}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === "studio"
                   ? "bg-indigo-600 text-white shadow-sm"
@@ -275,7 +306,7 @@ export const App: React.FC = () => {
             <button
               id="nav-tab-console"
               type="button"
-              onClick={() => setActiveTab("console")}
+              onClick={() => switchTab("console")}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === "console"
                   ? "bg-indigo-600 text-white shadow-sm"

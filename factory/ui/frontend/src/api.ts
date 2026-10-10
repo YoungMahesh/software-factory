@@ -1,4 +1,4 @@
-import { Repo, ScratchMetadata, Milestone, Issue, Job } from "./types";
+import { Repo, ScratchMetadata, Milestone, Issue, Job, LaunchJobParams } from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
@@ -67,14 +67,7 @@ export async function fetchIssues(
   return res.json();
 }
 
-export async function launchJob(params: {
-  repo: string;
-  feature?: string;
-  issue?: string;
-  model: string;
-  vm: boolean;
-  dev: boolean;
-}): Promise<Job> {
+export async function launchJob(params: LaunchJobParams): Promise<Job> {
   const res = await fetch("/api/jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

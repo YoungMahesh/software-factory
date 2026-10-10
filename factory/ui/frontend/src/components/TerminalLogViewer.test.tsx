@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { TerminalLogViewer } from "./TerminalLogViewer";
 
@@ -13,13 +13,15 @@ describe("TerminalLogViewer", () => {
     expect(screen.getByText("Line 3")).toBeInTheDocument();
   });
 
-  it("copies logs when copy button is clicked", () => {
+  it("copies logs when copy button is clicked", async () => {
     const logs = ["Hello world\n"];
     render(<TerminalLogViewer logs={logs} />);
 
     const copyBtn = screen.getByRole("button", { name: /Copy/i });
     fireEvent.click(copyBtn);
-    expect(screen.getByText(/Copied/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Copied/i)).toBeInTheDocument();
+    });
   });
 
   it("handles clear logs callback", () => {

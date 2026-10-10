@@ -44,6 +44,15 @@ export interface ScratchMetadata {
   features: ScratchFeature[];
 }
 
+export interface LaunchJobParams {
+  repo: string;
+  feature?: string;
+  issue?: string;
+  model: string;
+  vm: boolean;
+  dev: boolean;
+}
+
 export interface Job {
   id: string;
   repo: string;

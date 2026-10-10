@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Copy, Check, Terminal, History } from "lucide-react";
 import { AgentEvent, JobStage } from "../types";
+import { copyToClipboard } from "../utils";
 import { ThinkingAccordion } from "./ThinkingAccordion";
 import { CommandCard } from "./CommandCard";
 import { ToolChip } from "./ToolChip";
@@ -29,13 +30,13 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const handleCopyLogs = () => {
+  const handleCopyLogs = async () => {
     const text = logs.join("");
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -145,19 +146,45 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                   No activity events recorded yet.
                 </div>
               ) : (
-                events.map((evt, idx) => {
-                  const key = `evt-${idx}-${evt.type}`;
-                  if (evt.type === "thinking") {
-                    return (
-                      <ThinkingAccordion
-                        key={key}
-                        stage={evt.stage}
-                        text={evt.data?.delta || evt.data?.text || ""}
-                        durationMs={evt.data?.durationMs}
-                        done={Boolean(evt.data?.done)}
-                      />
-                    );
-                  }
+                (() => {
+                  const groupedEvents: AgentEvent[] = [];
+                  events.forEach((evt) => {
+                    if (evt.type === "thinking") {
+                      const last = groupedEvents[groupedEvents.length - 1];
+                      if (last && last.type === "thinking" && last.stage === evt.stage) {
+                        const delta = evt.data?.delta || "";
+                        const prevText = last.data?.text || "";
+                        last.data = {
+                          ...last.data,
+                          text: delta ? prevText + delta : prevText,
+                          durationMs: evt.data?.durationMs || last.data?.durationMs,
+                          done: Boolean(evt.data?.done) || Boolean(last.data?.done),
+                        };
+                        return;
+                      }
+                    }
+                    groupedEvents.push({
+                      ...evt,
+                      data: {
+                        ...evt.data,
+                        text: evt.data?.delta || evt.data?.text || "",
+                      },
+                    });
+                  });
+
+                  return groupedEvents.map((evt, idx) => {
+                    const key = `evt-${idx}-${evt.type}`;
+                    if (evt.type === "thinking") {
+                      return (
+                        <ThinkingAccordion
+                          key={key}
+                          stage={evt.stage}
+                          text={evt.data?.text || ""}
+                          durationMs={evt.data?.durationMs}
+                          done={Boolean(evt.data?.done)}
+                        />
+                      );
+                    }
 
                   if (evt.type === "tool_start" || evt.type === "tool_result") {
                     const toolName = (evt.data?.toolName || "").toLowerCase();
@@ -229,8 +256,8 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                   }
 
                   return null;
-                })
-              )}
+                });
+              })())}
             </div>
           ) : (
             <div

@@ -1,5 +1,6 @@
 import React from "react";
 import { FileText, FileEdit, Terminal, Search, GitCompare, Code2 } from "lucide-react";
+import { formatToolLabel } from "../utils";
 
 interface ToolChipProps {
   toolName: string;
@@ -34,37 +35,7 @@ export const ToolChip: React.FC<ToolChipProps> = ({
     }
   };
 
-  const getLabel = () => {
-    const d = data || {};
-    const path = d.path || d.args?.path || "file";
-    switch (toolName.toLowerCase()) {
-      case "read": {
-        const lines = d.lineCount !== undefined ? ` (${d.lineCount} lines)` : "";
-        return `Read ${path}${lines}`;
-      }
-      case "write": {
-        const bytes = d.bytes !== undefined ? ` (${d.bytes} B)` : "";
-        return `Write ${path}${bytes}`;
-      }
-      case "edit":
-        return `Edit ${path}`;
-      case "grep": {
-        const pattern = d.pattern || d.args?.pattern || "";
-        const matches = d.matchCount !== undefined ? ` (${d.matchCount} matches)` : "";
-        return `Grep "${pattern}" in ${path}${matches}`;
-      }
-      case "diff": {
-        const lines = d.lineCount !== undefined ? ` (${d.lineCount} lines)` : "";
-        return `Diff ${path}${lines}`;
-      }
-      case "bash": {
-        const cmd = d.command || d.args?.command || "bash";
-        return `Ran ${cmd}`;
-      }
-      default:
-        return `${toolName} ${path}`;
-    }
-  };
+  const label = formatToolLabel(toolName, data);
 
   return (
     <button
@@ -73,7 +44,7 @@ export const ToolChip: React.FC<ToolChipProps> = ({
       className="tool-chip inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800/80 hover:border-slate-700 transition-colors shadow-sm focus:outline-none"
     >
       {getIcon()}
-      <span className="truncate max-w-[280px]">{getLabel()}</span>
+      <span className="truncate max-w-[280px]">{label}</span>
       {stage && (
         <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400">
           {stage}
@@ -82,3 +53,4 @@ export const ToolChip: React.FC<ToolChipProps> = ({
     </button>
   );
 };
+
