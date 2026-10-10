@@ -327,6 +327,15 @@ else
         echo "   • Tracking existing remote branch origin/$BRANCH_NAME"
         git fetch origin "+refs/heads/${BRANCH_NAME}:refs/remotes/origin/${BRANCH_NAME}" --quiet || true
         git checkout -B "$BRANCH_NAME" "origin/${BRANCH_NAME}" --quiet
+    elif [ "$PREVIEW_ONLY" = true ]; then
+        echo "   • Remote branch $BRANCH_NAME does not exist; checking out main for preview"
+        if git show-ref --verify --quiet "refs/remotes/origin/main"; then
+            git checkout -B "main" "origin/main" --quiet
+        elif git show-ref --verify --quiet "refs/heads/main"; then
+            git checkout "main" --quiet
+        else
+            git checkout -B "main" --quiet
+        fi
     else
         echo "   • Forking new feature branch $BRANCH_NAME from main"
         if git show-ref --verify --quiet "refs/remotes/origin/main"; then

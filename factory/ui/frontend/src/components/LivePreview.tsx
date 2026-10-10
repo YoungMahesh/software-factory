@@ -148,7 +148,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
             </a>
           )}
 
-          {onStopPreview && (status === "SERVING" || status === "PROVISIONING" || previewUrl) && (
+          {onStopPreview && (status === "SERVING" || status === "PROVISIONING") && (
             <button
               data-testid="stop-preview-btn"
               id="btn-preview-stop"

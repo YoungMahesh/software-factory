@@ -10,6 +10,7 @@ import {
   Box,
   X,
   Play,
+  Square,
 } from "lucide-react";
 import { Repo, Job, ChatMessage, PreviewState } from "../types";
 import { LivePreview } from "../components/LivePreview";
@@ -129,40 +130,56 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </button>
 
           {selectedRepo && (
-            <button
-              id="btn-studio-preview-app"
-              data-testid="preview-app-btn"
-              type="button"
-              onClick={() => {
-                if (previewState?.status === "SERVING" && onStopPreview) {
-                  onStopPreview();
-                } else if (onLaunchPreview) {
-                  onLaunchPreview();
+            <div className="flex items-center space-x-2">
+              <button
+                id="btn-studio-preview-app"
+                data-testid="preview-app-btn"
+                type="button"
+                onClick={() => {
+                  if (previewState?.status === "SERVING" && onStopPreview) {
+                    onStopPreview();
+                  } else if (onLaunchPreview) {
+                    onLaunchPreview();
+                  }
+                }}
+                disabled={isLaunchingPreview || previewState?.status === "PROVISIONING"}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm ${
+                  previewState?.status === "SERVING"
+                    ? "bg-emerald-950/80 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
+                    : previewState?.status === "PROVISIONING" || isLaunchingPreview
+                    ? "bg-slate-800 text-slate-400 cursor-wait"
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                }`}
+                title={
+                  previewState?.status === "SERVING"
+                    ? "Preview active (click to stop)"
+                    : "Launch Dedicated Preview Sandbox"
                 }
-              }}
-              disabled={isLaunchingPreview || previewState?.status === "PROVISIONING"}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm ${
-                previewState?.status === "SERVING"
-                  ? "bg-emerald-950/80 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
-                  : previewState?.status === "PROVISIONING" || isLaunchingPreview
-                  ? "bg-slate-800 text-slate-400 cursor-wait"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
-              title={
-                previewState?.status === "SERVING"
-                  ? "Click to stop preview"
-                  : "Launch Dedicated Preview Sandbox"
-              }
-            >
-              {isLaunchingPreview || previewState?.status === "PROVISIONING" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-              ) : previewState?.status === "SERVING" ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-0.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5 text-indigo-400 fill-current" />
+              >
+                {isLaunchingPreview || previewState?.status === "PROVISIONING" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                ) : previewState?.status === "SERVING" ? (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-0.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 text-indigo-400 fill-current" />
+                )}
+                <span>Preview App</span>
+              </button>
+
+              {(previewState?.status === "SERVING" || previewState?.status === "PROVISIONING") && onStopPreview && (
+                <button
+                  id="btn-studio-preview-stop"
+                  data-testid="studio-stop-preview-btn"
+                  type="button"
+                  onClick={onStopPreview}
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-colors"
+                  title="Stop preview sandbox"
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                  <span>Stop</span>
+                </button>
               )}
-              <span>Preview App</span>
-            </button>
+            </div>
           )}
         </div>
 
@@ -367,8 +384,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
         {/* Right: Live Preview Iframe */}
         <div className="flex-1 bg-slate-950 p-4 overflow-hidden">
           <LivePreview
-            previewUrl={previewState?.preview_url || activeJob?.preview_url || null}
-            status={previewState?.status || (activeJob?.dev ? "SERVING" : "IDLE")}
+            previewUrl={previewState?.preview_url || null}
+            status={previewState?.status || "IDLE"}
             branch={previewState?.branch || null}
             onLaunchPreview={onLaunchPreview}
             onStopPreview={onStopPreview}

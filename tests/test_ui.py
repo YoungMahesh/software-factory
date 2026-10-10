@@ -624,6 +624,8 @@ class TestFastApiApp(unittest.TestCase):
         init_data = resp_get_init.json()
         self.assertEqual(init_data["repo"], "test3")
         self.assertEqual(init_data["status"], "IDLE")
+        self.assertIn("logs", init_data)
+        self.assertEqual(init_data["logs"], [])
 
         # 2. Launch preview via POST
         resp_post = self.client.post(
@@ -648,6 +650,8 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(serving_data["status"], "SERVING")
         self.assertEqual(serving_data["preview_url"], "https://sb-preview-999-3000.modal.host")
         self.assertEqual(serving_data["sandbox_id"], "sb-preview-999")
+        self.assertIn("logs", serving_data)
+        self.assertIsInstance(serving_data["logs"], list)
 
         # 4. Stop preview via DELETE
         resp_del = self.client.delete("/api/studio/repos/test3/preview")

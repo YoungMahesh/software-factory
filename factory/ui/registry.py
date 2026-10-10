@@ -24,6 +24,7 @@ from factory.spawner import (
     create_preview_sandbox,
 )
 from factory.ui.github import (
+    fetch_repo_issues,
     fetch_repo_milestones,
     fetch_repo_scratch_metadata,
 )
@@ -464,6 +465,7 @@ class PreviewState:
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "error_message": self.error_message,
+            "logs": list(self.logs),
             "log_count": len(self.logs),
         }
 
@@ -477,6 +479,16 @@ def resolve_active_preview_branch(repo_name: str) -> str:
             slug = first_ms.get("slug") or first_ms.get("title")
             if slug:
                 return f"factory/{slug}"
+    except Exception:
+        pass
+
+    try:
+        issues = fetch_repo_issues(repo_name=repo_name, state="open")
+        if issues:
+            first_issue = issues[0]
+            issue_num = first_issue.get("number")
+            if issue_num is not None:
+                return f"factory/issue-{issue_num}"
     except Exception:
         pass
 

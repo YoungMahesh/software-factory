@@ -31,7 +31,7 @@ from factory.ui.github import (
     validate_github_repo_name,
 )
 from factory.ui.guard import evaluate_prompt_intent
-from factory.ui.registry import JobRegistry, job_registry, PreviewRegistry, preview_registry
+from factory.ui.registry import JobRegistry, job_registry, PreviewRegistry, preview_registry, PreviewState
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
@@ -244,18 +244,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="Repository name is required.")
         preview = preview_reg.get_preview(clean_repo)
         if not preview:
-            return {
-                "repo": clean_repo,
-                "status": "IDLE",
-                "branch": "main",
-                "preview_url": None,
-                "sandbox_id": None,
-                "created_at": None,
-                "started_at": None,
-                "ended_at": None,
-                "error_message": None,
-                "log_count": 0,
-            }
+            return PreviewState(repo=clean_repo).to_dict()
         return preview.to_dict()
 
     @app.delete("/api/studio/repos/{repo}/preview")

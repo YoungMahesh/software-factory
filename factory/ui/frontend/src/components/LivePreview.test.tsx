@@ -85,4 +85,17 @@ describe("LivePreview", () => {
     fireEvent.click(stopBtn);
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
+
+  it("does not render Stop button when preview status is STOPPED even if previewUrl is set", () => {
+    render(
+      <LivePreview
+        previewUrl="https://sandbox-3000.modal.host"
+        status="STOPPED"
+        branch="factory/nav-tabs"
+        onStopPreview={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("stop-preview-btn")).toBeNull();
+  });
 });

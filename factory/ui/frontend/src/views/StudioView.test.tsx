@@ -109,5 +109,42 @@ describe("StudioView", () => {
     fireEvent.click(previewBtn);
     expect(handleLaunch).toHaveBeenCalledTimes(1);
   });
+
+  it("renders red 'Stop' button in top control bar when preview is active and triggers onStopPreview", () => {
+    const handleStop = vi.fn();
+    render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "SERVING",
+          branch: "factory/feature-x",
+          preview_url: "https://sandbox-3000.modal.host",
+          sandbox_id: "sb-123",
+          created_at: Date.now(),
+          started_at: Date.now(),
+          ended_at: null,
+          error_message: null,
+          log_count: 5,
+        }}
+        onStopPreview={handleStop}
+      />
+    );
+
+    const stopBtn = screen.getByTestId("studio-stop-preview-btn");
+    expect(stopBtn).toBeInTheDocument();
+    expect(stopBtn).toHaveTextContent(/Stop/i);
+
+    fireEvent.click(stopBtn);
+    expect(handleStop).toHaveBeenCalledTimes(1);
+  });
 });
 

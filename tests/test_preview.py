@@ -76,20 +76,33 @@ class TestBranchResolution(unittest.TestCase):
         branch = resolve_active_preview_branch("test3")
         self.assertEqual(branch, "factory/user-auth")
 
-    @patch("factory.ui.registry.fetch_repo_scratch_metadata")
+    @patch("factory.ui.registry.fetch_repo_issues")
     @patch("factory.ui.registry.fetch_repo_milestones")
-    def test_resolve_active_preview_branch_scratch(self, mock_milestones, mock_scratch):
+    def test_resolve_active_preview_branch_issue(self, mock_milestones, mock_issues):
         from factory.ui.registry import resolve_active_preview_branch
         mock_milestones.return_value = []
+        mock_issues.return_value = [{"number": 42, "title": "Fix navbar", "state": "open"}]
+        branch = resolve_active_preview_branch("test3")
+        self.assertEqual(branch, "factory/issue-42")
+
+    @patch("factory.ui.registry.fetch_repo_issues")
+    @patch("factory.ui.registry.fetch_repo_scratch_metadata")
+    @patch("factory.ui.registry.fetch_repo_milestones")
+    def test_resolve_active_preview_branch_scratch(self, mock_milestones, mock_scratch, mock_issues):
+        from factory.ui.registry import resolve_active_preview_branch
+        mock_milestones.return_value = []
+        mock_issues.return_value = []
         mock_scratch.return_value = {"features": [{"slug": "dashboard"}]}
         branch = resolve_active_preview_branch("test3")
         self.assertEqual(branch, "factory/dashboard")
 
+    @patch("factory.ui.registry.fetch_repo_issues")
     @patch("factory.ui.registry.fetch_repo_scratch_metadata")
     @patch("factory.ui.registry.fetch_repo_milestones")
-    def test_resolve_active_preview_branch_fallback(self, mock_milestones, mock_scratch):
+    def test_resolve_active_preview_branch_fallback(self, mock_milestones, mock_scratch, mock_issues):
         from factory.ui.registry import resolve_active_preview_branch
         mock_milestones.return_value = []
+        mock_issues.return_value = []
         mock_scratch.return_value = {"features": []}
         branch = resolve_active_preview_branch("test3")
         self.assertEqual(branch, "main")
@@ -141,3 +154,12 @@ class TestPreviewRegistry(unittest.TestCase):
         self.assertTrue(stopped)
         mock_sandbox.terminate.assert_called_once()
         self.assertEqual(p.status, "STOPPED")
+
+    def test_preview_state_to_dict_includes_logs(self):
+        from factory.ui.registry import PreviewState
+        preview = PreviewState(repo="test3")
+        preview.add_log("Starting preview server...\n")
+        d = preview.to_dict()
+        self.assertIn("logs", d)
+        self.assertEqual(d["logs"], ["Starting preview server...\n"])
+        self.assertEqual(d["log_count"], 1)
