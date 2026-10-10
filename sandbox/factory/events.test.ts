@@ -12,6 +12,7 @@ import {
   emitAttemptEvent,
   AgentEventStream,
   ThinkingBatchBuffer,
+  ThinkingExtractor,
   type TelemetryEnvelope,
 } from "./events.ts";
 
@@ -292,4 +293,131 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       assert.equal(flushed[0], "Token 1 Token 2");
     });
   });
+
+  describe("ThinkingExtractor (Dual-Extraction & Throttled Reasoning Stream)", () => {
+    it("captures native thinking_delta events and tracks duration and stage", async () => {
+      const chunks: string[] = [];
+      // @ts-ignore - will be implemented in events.ts
+      const extractor = new ThinkingExtractor({
+        stage: "PLANNER",
+        stream: { write: (c: string) => chunks.push(c) },
+        intervalMs: 50,
+      });
+
+      extractor.handleThinkingDelta("Step 1: Inspecting ");
+      extractor.handleThinkingDelta("CONTEXT.md ");
+      assert.equal(chunks.length, 0, "Deltas should be buffered in micro-batch buffer");
+
+      await new Promise((r) => setTimeout(r, 70));
+      assert.equal(chunks.length, 1, "Micro-batch buffer should flush after interval");
+
+      const env1 = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(env1?.type, "thinking");
+      assert.equal(env1?.stage, "PLANNER");
+      assert.equal(env1?.data.delta, "Step 1: Inspecting CONTEXT.md ");
+      assert.ok(typeof env1?.data.durationMs === "number");
+
+      // Signal completion of thinking
+      extractor.handleThinkingEnd();
+      assert.equal(chunks.length, 2, "Thinking end should immediately flush final event");
+      const endEnv = parseTelemetryEnvelope(chunks[1]);
+      assert.equal(endEnv?.type, "thinking");
+      assert.equal(endEnv?.data.done, true);
+      assert.ok(endEnv?.data.durationMs >= 0);
+    });
+
+    it("extracts and strips text-streamed <think>...</think> blocks across chunk boundaries", () => {
+      const chunks: string[] = [];
+      // @ts-ignore
+      const extractor = new ThinkingExtractor({
+        stage: "CODER",
+        stream: { write: (c: string) => chunks.push(c) },
+        intervalMs: 100,
+      });
+
+      // Split <think> tags across multiple delta chunks
+      const deltas = [
+        "Let me analyze: <th",
+        "ink>First, I will modify ",
+        "src/auth.ts to check credentials.",
+        "</th",
+        "ink>Here is the implementation code.",
+      ];
+
+      const strippedParts: string[] = [];
+      for (const d of deltas) {
+        const res = extractor.handleTextDelta(d);
+        if (res.strippedText) {
+          strippedParts.push(res.strippedText);
+        }
+      }
+
+      // Check stripped text: <think> and </think> tags and contents must be stripped
+      const fullStripped = strippedParts.join("");
+      assert.equal(fullStripped, "Let me analyze: Here is the implementation code.");
+
+      // Verify that reasoning content was captured and flushed on </think>
+      assert.ok(chunks.length >= 1, "Thinking should be flushed on closing tag");
+      const allThinking = chunks
+        .map((c) => parseTelemetryEnvelope(c)?.data.delta || "")
+        .join("");
+      assert.ok(allThinking.includes("First, I will modify src/auth.ts"));
+      assert.equal(extractor.getAccumulatedThinking(), "First, I will modify src/auth.ts to check credentials.");
+    });
+
+    it("throttles rapid burst of 20 reasoning deltas into 100ms envelopes", async () => {
+      const chunks: string[] = [];
+      // @ts-ignore
+      const extractor = new ThinkingExtractor({
+        stage: "REVIEWER",
+        stream: { write: (c: string) => chunks.push(c) },
+        intervalMs: 80,
+      });
+
+      // Rapid burst of 20 deltas emitted in tight sync loop
+      for (let i = 0; i < 20; i++) {
+        extractor.handleThinkingDelta(`token_${i} `);
+      }
+
+      assert.equal(chunks.length, 0, "No chunks should be emitted immediately during burst");
+
+      // Wait for one interval
+      await new Promise((r) => setTimeout(r, 100));
+      assert.equal(chunks.length, 1, "20 burst tokens should be aggregated into single envelope");
+
+      const env = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(env?.stage, "REVIEWER");
+      assert.ok(env?.data.delta.startsWith("token_0 "));
+      assert.ok(env?.data.delta.includes("token_19 "));
+    });
+
+    it("immediately flushes pending thinking when tool starts", () => {
+      const chunks: string[] = [];
+      // @ts-ignore
+      const extractor = new ThinkingExtractor({
+        stage: "CODER",
+        stream: { write: (c: string) => chunks.push(c) },
+        intervalMs: 100,
+      });
+
+      extractor.handleThinkingDelta("Decided to run tests.");
+      assert.equal(chunks.length, 0);
+
+      // Tool starts before interval expires
+      extractor.handleToolStart("bash", { command: "pytest" }, "call-1");
+
+      assert.equal(chunks.length, 2, "Both flushed thinking and tool_start should be emitted");
+      const thinkEnv = parseTelemetryEnvelope(chunks[0]);
+      assert.equal(thinkEnv?.type, "thinking");
+      assert.equal(thinkEnv?.data.delta, "Decided to run tests.");
+      assert.equal(thinkEnv?.data.done, true);
+
+      const toolEnv = parseTelemetryEnvelope(chunks[1]);
+      assert.equal(toolEnv?.type, "tool_start");
+      assert.equal(toolEnv?.data.toolName, "bash");
+    });
+  });
 });
+
+
+

@@ -7,6 +7,11 @@ import {
   assertRoleToolPrivileges,
   LeastPrivilegeViolationError,
 } from "./tools.ts";
+import {
+  AgentEventStream,
+  stripThinkTags,
+  type TelemetryStage,
+} from "./events.ts";
 
 export interface ImplementationPlan {
   ticketId: string;
@@ -409,12 +414,12 @@ function extractAssistantText(messages: any[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role === "assistant") {
-      if (typeof msg.content === "string") return msg.content;
+      if (typeof msg.content === "string") return stripThinkTags(msg.content);
       if (Array.isArray(msg.content)) {
         const textParts = msg.content
           .filter((c: any) => c.type === "text" && c.text)
           .map((c: any) => c.text);
-        if (textParts.length > 0) return textParts.join("\n");
+        if (textParts.length > 0) return stripThinkTags(textParts.join("\n"));
       }
     }
   }
@@ -453,6 +458,7 @@ export interface StageAgentCommonOptions {
   provider?: Provider;
   streamFn?: (model: Model<any>, context: any, options: any) => any;
   tools?: any[];
+  telemetryStream?: { write: (chunk: string) => any };
 }
 
 export interface PlannerOptions extends StageAgentCommonOptions {
@@ -500,6 +506,27 @@ function assertAgentSuccess(messages: any[]): void {
   }
 }
 
+async function runAgentPromptWithTelemetry(
+  agent: Agent,
+  stage: TelemetryStage,
+  prompt: string,
+  options: StageAgentCommonOptions
+): Promise<void> {
+  const eventStream = new AgentEventStream({
+    stage,
+    stream: options.telemetryStream,
+  });
+  const telemetry = eventStream.subscribe(agent);
+
+  try {
+    await agent.prompt(prompt);
+    assertAgentSuccess(agent.state.messages);
+  } finally {
+    telemetry.flush();
+    telemetry.unsubscribe();
+  }
+}
+
 /**
  * Runs the read-only Planner Agent to explore the repository and draft a structured plan.
  */
@@ -540,8 +567,7 @@ export async function runPlannerAgent(options: PlannerOptions): Promise<{
     "Please inspect the repository and draft a structured implementation plan with affectedFiles and testCommands."
   );
 
-  await agent.prompt(promptParts.join("\n\n"));
-  assertAgentSuccess(agent.state.messages);
+  await runAgentPromptWithTelemetry(agent, "PLANNER", promptParts.join("\n\n"), options);
 
   const responseText = extractAssistantText(agent.state.messages);
   const plan = parseImplementationPlan(responseText, ticketObj.id);
@@ -596,8 +622,7 @@ export async function runCoderAgent(options: CoderOptions): Promise<{
     promptParts.push("Please implement the requested changes and any required reproduction tests.");
   }
 
-  await agent.prompt(promptParts.join("\n\n"));
-  assertAgentSuccess(agent.state.messages);
+  await runAgentPromptWithTelemetry(agent, "CODER", promptParts.join("\n\n"), options);
 
   const responseText = extractAssistantText(agent.state.messages);
   return {
@@ -648,8 +673,7 @@ export async function runReviewerAgent(options: ReviewerOptions): Promise<{
 
   promptParts.push("Review the implementation against the ticket and repo standards and emit your review verdict.");
 
-  await agent.prompt(promptParts.join("\n\n"));
-  assertAgentSuccess(agent.state.messages);
+  await runAgentPromptWithTelemetry(agent, "REVIEWER", promptParts.join("\n\n"), options);
 
   const responseText = extractAssistantText(agent.state.messages);
   const verdict = parseReviewVerdict(responseText);

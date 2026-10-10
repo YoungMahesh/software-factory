@@ -14,6 +14,7 @@ import {
   LeastPrivilegeViolationError,
   createRoleTools,
 } from "./tools.ts";
+import { parseTelemetryEnvelope } from "./events.ts";
 
 test("runPlannerAgent: throws LeastPrivilegeViolationError if forbidden tools are provided", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
@@ -260,6 +261,138 @@ test("agent runners throw HarnessExecutionError when assistant run errors", asyn
         }),
       (err: any) => err.name === "HarnessExecutionError" && /failed/i.test(err.message)
     );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runPlannerAgent: subscribes to agent events, emits stage-attributed thinking, and strips <think> tags from output", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const chunks: string[] = [];
+  const faux = fauxProvider();
+
+  // Model outputs reasoning in <think> tags followed by plan
+  faux.setResponses([
+    fauxAssistantMessage(`<think>Inspecting dependencies and planning the seam modifications.</think>
+\`\`\`json
+{
+  "ticketId": "02",
+  "summary": "Implement reasoning telemetry",
+  "affectedFiles": ["sandbox/factory/events.ts"],
+  "testCommands": ["pnpm test"],
+  "steps": ["Step 1"]
+}
+\`\`\``),
+  ]);
+
+  try {
+    const result = await runPlannerAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "02", content: "Implement reasoning telemetry" },
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+      telemetryStream: { write: (c: string) => chunks.push(c) },
+    });
+
+    assert.equal(result.plan.ticketId, "02");
+    assert.deepEqual(result.plan.affectedFiles, ["sandbox/factory/events.ts"]);
+
+    // Verify thinking envelopes were emitted over telemetryStream
+    const thinkingEnvelopes = chunks
+      .map((c) => parseTelemetryEnvelope(c))
+      .filter((e) => e?.type === "thinking");
+
+    assert.ok(thinkingEnvelopes.length >= 1, "Should emit thinking envelopes over telemetry stream");
+    assert.equal(thinkingEnvelopes[0]?.stage, "PLANNER");
+    assert.ok(typeof thinkingEnvelopes[0]?.data.durationMs === "number");
+
+    // Verify that <think> was stripped from the response text
+    const assistantContent = result.messages.find((m) => m.role === "assistant")?.content;
+    const rawText = typeof assistantContent === "string" ? assistantContent : "";
+    assert.ok(!result.plan.rawContent.includes("<think>"), "Implementation plan rawContent should strip <think> tag");
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runCoderAgent: subscribes to agent events, streams CODER reasoning, and flushes before tool start", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const chunks: string[] = [];
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage([
+      { type: "text", text: "<think>Let me run tests to see failure.</think>" },
+      fauxToolCall("read", { path: "package.json" }),
+    ]),
+    fauxAssistantMessage("Implementation finished successfully."),
+  ]);
+
+  try {
+    await runCoderAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "02", content: "Implement reasoning" },
+      plan: {
+        ticketId: "02",
+        summary: "test",
+        affectedFiles: ["package.json"],
+        testCommands: ["pnpm test"],
+        steps: ["step"],
+        rawContent: "...",
+      },
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+      telemetryStream: { write: (c: string) => chunks.push(c) },
+    });
+
+    const parsed = chunks.map((c) => parseTelemetryEnvelope(c)).filter(Boolean);
+    const thinkingEnvs = parsed.filter((e) => e?.type === "thinking");
+    const toolEnvs = parsed.filter((e) => e?.type === "tool_start");
+
+    assert.ok(thinkingEnvs.length >= 1, "Should emit thinking envelopes for CODER");
+    assert.equal(thinkingEnvs[0]?.stage, "CODER");
+    assert.ok(toolEnvs.length >= 1, "Should emit tool_start envelope");
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runReviewerAgent: subscribes to agent events and emits REVIEWER reasoning telemetry", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const chunks: string[] = [];
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage(`<think>Reviewing diff and checking against CONTEXT.md standards.</think>
+\`\`\`json
+{
+  "verdict": "approved",
+  "summary": "Looks great",
+  "specCompliance": { "passed": true, "details": "ok" },
+  "standardsCompliance": { "passed": true, "details": "ok" },
+  "issues": []
+}
+\`\`\``),
+  ]);
+
+  try {
+    const result = await runReviewerAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "02", content: "Review ticket" },
+      plan: "Plan for 02",
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+      telemetryStream: { write: (c: string) => chunks.push(c) },
+    });
+
+    assert.equal(result.verdict.verdict, "approved");
+
+    const thinkingEnvs = chunks
+      .map((c) => parseTelemetryEnvelope(c))
+      .filter((e) => e?.type === "thinking");
+
+    assert.ok(thinkingEnvs.length >= 1, "Should emit thinking envelopes for REVIEWER");
+    assert.equal(thinkingEnvs[0]?.stage, "REVIEWER");
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

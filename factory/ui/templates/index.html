@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Software Factory • Studio & Testing Console</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -1130,6 +1131,7 @@
 
     // Append logs to terminal in Console View
     let lineCount = 0;
+    let cleanLogsText = "";
     function appendTerminalText(text) {
       if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
         terminalBody.innerHTML = "";
@@ -1145,6 +1147,268 @@
       }
     }
 
+    // -------------------------------------------------------------
+    // Agent Event Stream: Thinking Accordion & Telemetry Handlers
+    // -------------------------------------------------------------
+    const thinkingBlocksMap = new Map();
+    let activeThinkingBlock = null;
+
+    function renderThinkingContent(block) {
+      if (!block || !block.contentEl) return;
+      if (window.marked && typeof window.marked.parse === "function") {
+        try {
+          block.contentEl.style.whiteSpace = "normal";
+          block.contentEl.innerHTML = window.marked.parse(block.content || "");
+          return;
+        } catch (e) {
+          console.error("Failed to render markdown:", e);
+        }
+      }
+      block.contentEl.style.whiteSpace = "pre-wrap";
+      block.contentEl.textContent = block.content || "";
+    }
+
+    function toggleThinkingAccordion(blockId) {
+      const block = thinkingBlocksMap.get(blockId);
+      if (!block) return;
+
+      if (block.isCollapsed) {
+        // Expand
+        block.isCollapsed = false;
+        block.bodyEl.classList.remove("hidden");
+        const icon = block.toggleEl.querySelector(".toggle-icon");
+        if (icon) icon.textContent = "▲";
+        renderThinkingContent(block);
+      } else {
+        // Collapse
+        block.isCollapsed = true;
+        block.bodyEl.classList.add("hidden");
+        const icon = block.toggleEl.querySelector(".toggle-icon");
+        if (icon) icon.textContent = "▼";
+      }
+    }
+
+    function collapseThinkingBlock(block, finalDurationMs) {
+      if (!block || block.isCollapsed) return;
+      block.isCollapsed = true;
+
+      // Stop pulsing animation
+      if (block.pulseEl) {
+        block.pulseEl.classList.add("hidden");
+        block.pulseEl.classList.remove("animate-pulse");
+      }
+
+      const durationMs = finalDurationMs || block.durationMs || (Date.now() - block.startTime);
+      const durationSec = (durationMs / 1000).toFixed(1);
+      const durationText = `${durationSec}s`;
+
+      if (block.titleEl) {
+        block.titleEl.textContent = `Reasoning finished in ${durationText}`;
+      }
+      if (block.durationEl) {
+        block.durationEl.textContent = durationText;
+      }
+
+      // Transition visual style to compact collapsed badge
+      block.element.classList.remove("border-indigo-500/40", "bg-slate-900/90", "shadow-lg");
+      block.element.classList.add("border-slate-800", "bg-slate-900/50");
+
+      block.headerEl.classList.remove("bg-indigo-950/40", "border-indigo-500/20");
+      block.headerEl.classList.add("bg-slate-900/40", "border-transparent");
+
+      // Auto-collapse content body
+      block.bodyEl.classList.add("hidden");
+      const icon = block.toggleEl.querySelector(".toggle-icon");
+      if (icon) icon.textContent = "▼";
+
+      if (activeThinkingBlock === block) {
+        activeThinkingBlock = null;
+      }
+    }
+
+    function createThinkingBlock(stage, initialContent = "") {
+      const blockId = "thinking-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+      const container = document.createElement("div");
+      container.id = blockId;
+      container.className = "thinking-accordion my-2 rounded-lg border border-indigo-500/40 bg-slate-900/90 overflow-hidden shadow-lg transition-all duration-200";
+
+      container.innerHTML = `
+        <div class="thinking-header px-3.5 py-2 flex items-center justify-between cursor-pointer select-none bg-indigo-950/40 hover:bg-indigo-950/60 border-b border-indigo-500/20 transition">
+          <div class="flex items-center gap-2 text-xs font-medium text-indigo-300">
+            <span class="thinking-icon text-sm">🧠</span>
+            <span class="thinking-title font-semibold">Thinking...</span>
+            <span class="thinking-pulse w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+            <span class="thinking-stage text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${stage || 'PLANNER'}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="thinking-duration font-mono text-[11px] text-indigo-300/80">0.0s</span>
+            <button type="button" class="thinking-toggle text-xs text-indigo-400 hover:text-indigo-200 px-1 py-0.5 rounded transition flex items-center gap-1" title="Toggle reasoning view">
+              <span class="toggle-icon font-mono text-[10px]">▲</span>
+            </button>
+          </div>
+        </div>
+        <div class="thinking-body p-3 font-mono text-xs text-slate-300 bg-black/40 overflow-y-auto max-h-64 whitespace-pre-wrap leading-relaxed select-text">
+          <div class="thinking-content prose prose-invert prose-xs max-w-none"></div>
+        </div>
+      `;
+
+      if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
+        terminalBody.innerHTML = "";
+      }
+      terminalBody.appendChild(container);
+
+      const headerEl = container.querySelector(".thinking-header");
+      const titleEl = container.querySelector(".thinking-title");
+      const pulseEl = container.querySelector(".thinking-pulse");
+      const stageEl = container.querySelector(".thinking-stage");
+      const durationEl = container.querySelector(".thinking-duration");
+      const toggleEl = container.querySelector(".thinking-toggle");
+      const bodyEl = container.querySelector(".thinking-body");
+      const contentEl = container.querySelector(".thinking-content");
+
+      if (initialContent) {
+        contentEl.textContent = initialContent;
+      }
+
+      headerEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleThinkingAccordion(blockId);
+      });
+
+      const block = {
+        id: blockId,
+        element: container,
+        headerEl,
+        titleEl,
+        pulseEl,
+        stageEl,
+        durationEl,
+        toggleEl,
+        bodyEl,
+        contentEl,
+        stage: stage || "PLANNER",
+        content: initialContent || "",
+        startTime: Date.now(),
+        durationMs: 0,
+        isCollapsed: false,
+      };
+
+      thinkingBlocksMap.set(blockId, block);
+      activeThinkingBlock = block;
+
+      if (checkAutoscroll.checked) {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+      }
+
+      return block;
+    }
+
+    function handleAgentTelemetryEvent(eventData) {
+      if (!eventData || typeof eventData !== "object") return;
+      const type = eventData.type;
+      const stage = eventData.stage || activeJobStage;
+      const data = eventData.data || {};
+
+      if (type === "thinking" || type === "thinking_delta") {
+        const delta = data.delta || "";
+        const durationMs = data.durationMs;
+        const isDone = Boolean(data.done);
+
+        if (!activeThinkingBlock || activeThinkingBlock.stage !== stage) {
+          if (activeThinkingBlock) {
+            collapseThinkingBlock(activeThinkingBlock);
+          }
+          createThinkingBlock(stage, delta);
+          if (activeThinkingBlock && durationMs) {
+            activeThinkingBlock.durationMs = durationMs;
+            activeThinkingBlock.durationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+          }
+        } else {
+          if (delta) {
+            activeThinkingBlock.content += delta;
+            activeThinkingBlock.contentEl.style.whiteSpace = "pre-wrap";
+            activeThinkingBlock.contentEl.textContent = activeThinkingBlock.content;
+          }
+          if (durationMs) {
+            activeThinkingBlock.durationMs = durationMs;
+            activeThinkingBlock.durationEl.textContent = (durationMs / 1000).toFixed(1) + "s";
+          }
+        }
+
+        if (isDone && activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock, durationMs);
+        }
+
+        if (checkAutoscroll.checked) {
+          terminalBody.scrollTop = terminalBody.scrollHeight;
+        }
+      } else if (type === "thinking_end") {
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock, data.durationMs);
+        }
+      } else if (type === "tool_start" || type === "tool_result" || type === "stage") {
+        // Any tool execution or stage transition concludes active reasoning
+        if (activeThinkingBlock) {
+          collapseThinkingBlock(activeThinkingBlock);
+        }
+      }
+    }
+
+    function rehydrateEventsHistory(events, jobStatus) {
+      if (!events || !events.length) return;
+      let pendingThinking = null;
+
+      function flushPendingThinking(isFinal = false) {
+        if (!pendingThinking) return;
+        const block = createThinkingBlock(pendingThinking.stage, pendingThinking.content);
+        if (pendingThinking.durationMs) {
+          block.durationMs = pendingThinking.durationMs;
+          block.durationEl.textContent = (pendingThinking.durationMs / 1000).toFixed(1) + "s";
+        }
+        if (isFinal && jobStatus === "RUNNING" && !pendingThinking.isDone) {
+          activeThinkingBlock = block;
+        } else {
+          collapseThinkingBlock(block, pendingThinking.durationMs);
+        }
+        pendingThinking = null;
+      }
+
+      for (const ev of events) {
+        if (!ev || typeof ev !== "object") continue;
+        const type = ev.type;
+        const stage = ev.stage || activeJobStage;
+        const data = ev.data || {};
+
+        if (type === "thinking" || type === "thinking_delta") {
+          if (!pendingThinking || pendingThinking.stage !== stage) {
+            flushPendingThinking();
+            pendingThinking = {
+              stage: stage,
+              content: data.delta || "",
+              durationMs: data.durationMs || 0,
+              isDone: Boolean(data.done),
+            };
+          } else {
+            if (data.delta) pendingThinking.content += data.delta;
+            if (data.durationMs) pendingThinking.durationMs = data.durationMs;
+            if (data.done) pendingThinking.isDone = true;
+          }
+          if (pendingThinking.isDone) {
+            flushPendingThinking();
+          }
+        } else if (type === "thinking_end") {
+          if (pendingThinking) {
+            if (data.durationMs) pendingThinking.durationMs = data.durationMs;
+            flushPendingThinking();
+          }
+        } else {
+          flushPendingThinking();
+          handleAgentTelemetryEvent(ev);
+        }
+      }
+      flushPendingThinking(true);
+    }
+
     // Connect SSE Stream (Shared between Studio & Console)
     function connectJobStream(jobId) {
       if (eventSource) {
@@ -1155,7 +1419,10 @@
       activeJobIdEl.textContent = jobId;
       btnCancel.disabled = false;
       terminalBody.innerHTML = "";
+      cleanLogsText = "";
       lineCount = 0;
+      activeThinkingBlock = null;
+      thinkingBlocksMap.clear();
 
       eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
@@ -1180,12 +1447,24 @@
             }
 
             if (msg.backlog && msg.backlog.length > 0) {
+              cleanLogsText = msg.backlog.join("");
               msg.backlog.forEach(l => appendTerminalText(l));
             }
+
+            // Rehydrate structured events history (including past reasoning blocks)
+            if (msg.events && msg.events.length > 0) {
+              rehydrateEventsHistory(msg.events, job.status);
+            }
           } else if (msg.event === "log") {
+            cleanLogsText += msg.data;
             appendTerminalText(msg.data);
+          } else if (msg.event === "agent_event") {
+            handleAgentTelemetryEvent(msg.data);
           } else if (msg.event === "stage") {
             activeJobStage = msg.stage;
+            if (activeThinkingBlock) {
+              collapseThinkingBlock(activeThinkingBlock);
+            }
             updateStepper(msg.stage);
             updateStudioBadge(msg.stage, activeJobStatusEl.textContent);
           } else if (msg.event === "status") {
@@ -1193,6 +1472,9 @@
             updateStudioBadge(activeJobStage, msg.status);
             refreshHistory();
             if (["SUCCESS", "FAILED", "CANCELLED"].includes(msg.status)) {
+              if (activeThinkingBlock) {
+                collapseThinkingBlock(activeThinkingBlock);
+              }
               btnCancel.disabled = true;
               btnStudioCancel.classList.add("hidden");
               stopTimer();
@@ -1336,7 +1618,8 @@
 
     // Copy Log Button
     document.getElementById("btn-copy-log").addEventListener("click", () => {
-      navigator.clipboard.writeText(terminalBody.innerText).then(() => {
+      const textToCopy = cleanLogsText || terminalBody.innerText;
+      navigator.clipboard.writeText(textToCopy).then(() => {
         alert("Logs copied to clipboard!");
       });
     });
@@ -1344,7 +1627,10 @@
     // Clear Log Button
     document.getElementById("btn-clear-log").addEventListener("click", () => {
       terminalBody.innerHTML = "";
+      cleanLogsText = "";
       lineCount = 0;
+      activeThinkingBlock = null;
+      thinkingBlocksMap.clear();
       logLineCount.textContent = "0 lines";
     });
 

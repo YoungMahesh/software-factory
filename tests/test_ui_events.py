@@ -249,5 +249,87 @@ class TestAgentEventStreamDemux(unittest.TestCase):
                 self.assertEqual(agent_event["data"]["data"]["toolName"], "bash")
 
 
+class TestThinkingAccordionConsole(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_console_template_contains_thinking_accordion_components(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.text
+
+        # 1. Active thinking container with animated pulse accent
+        self.assertIn("thinking-accordion", html)
+        self.assertIn("animate-pulse", html)
+
+        # 2. Collapsed badge with elapsed time
+        self.assertIn("Reasoning finished in", html)
+
+        # 3. Expand / collapse toggle handler
+        self.assertIn("toggleThinkingAccordion", html)
+
+        # 4. Agent Event Stream telemetry handler for thinking events
+        self.assertIn("handleAgentTelemetryEvent", html)
+
+        # 5. Auto-collapses on completion / tool_start
+        self.assertIn("collapseThinkingBlock", html)
+
+        # 6. Markdown rendering and history rehydration
+        self.assertIn("marked.min.js", html)
+        self.assertIn("renderThinkingContent", html)
+        self.assertIn("rehydrateEventsHistory", html)
+
+    def test_thinking_events_pipeline_and_duration_tracking(self):
+        job = self.registry.create_job(repo="test-repo", feature="test-feat")
+        q = self.registry.add_listener(job.id)
+
+        # 1. Stream PLANNER thinking deltas
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"thinking","stage":"PLANNER","data":{"delta":"Investigating CONTEXT.md...","durationMs":120},"timestamp":100.0}\n'
+        )
+        # 2. Thinking done with total duration
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"thinking","stage":"PLANNER","data":{"delta":"","done":true,"durationMs":4200},"timestamp":104.2}\n'
+        )
+        # 3. Tool execution start
+        self.registry.append_log(
+            job.id,
+            '__SF_EVENT__:{"type":"tool_start","stage":"PLANNER","data":{"toolName":"read","args":{"path":"CONTEXT.md"}},"timestamp":104.5}\n'
+        )
+
+        self.assertEqual(len(job.events), 3)
+        self.assertEqual(job.events[0]["stage"], "PLANNER")
+        self.assertEqual(job.events[0]["data"]["durationMs"], 120)
+        self.assertEqual(job.events[1]["data"]["done"], True)
+        self.assertEqual(job.events[1]["data"]["durationMs"], 4200)
+
+        # Ensure raw __SF_EVENT__ lines were not added to job.logs
+        self.assertEqual(job.logs, [])
+
+        received = []
+        while not q.empty():
+            received.append(q.get_nowait())
+
+        self.assertEqual(len(received), 3)
+        self.assertEqual(received[0]["event"], "agent_event")
+        self.assertEqual(received[0]["data"]["type"], "thinking")
+        self.assertEqual(received[0]["data"]["data"]["durationMs"], 120)
+
+        self.assertEqual(received[1]["data"]["data"]["done"], True)
+        self.assertEqual(received[1]["data"]["data"]["durationMs"], 4200)
+
+        self.assertEqual(received[2]["data"]["type"], "tool_start")
+        self.assertEqual(received[2]["data"]["data"]["toolName"], "read")
+
+        self.registry.remove_listener(job.id, q)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
