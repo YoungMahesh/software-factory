@@ -447,17 +447,23 @@ PREVIEW_STAGE_ORDER: dict[PreviewStage, int] = {
 }
 
 
+PREVIEW_COMPILATION_ERROR_PATTERN = re.compile(
+    r"\[vite:esbuild\]|\[vite\] Internal server error|Failed to compile|SyntaxError:|Compilation failed|error when starting dev server",
+    re.IGNORECASE,
+)
+
+
 PREVIEW_STAGE_PATTERNS = [
     (
         re.compile(
-            r"PREVIEW_STAGE:SERVING|ready in \d+|Local:\s+http|Network:\s+http|Container entering active serving keep-alive state|Dev server (?:running|started) on port|started on port",
+            r"PREVIEW_STAGE:SERVING|ready in \d+|Local:\s+http|Network:\s+http|Dev server (?:running|started) on port|started on port",
             re.IGNORECASE,
         ),
         PreviewStage.SERVING,
     ),
     (
         re.compile(
-            r"PREVIEW_STAGE:STARTING_DEV|Launching Dev Preview Keep-Alive Daemon|pnpm dev|VITE v|vite v|Dev server running with PID",
+            r"PREVIEW_STAGE:STARTING_DEV|Launching Dev Preview Keep-Alive Daemon|Container entering active serving keep-alive state|pnpm dev|VITE v|vite v|Dev server running with PID",
             re.IGNORECASE,
         ),
         PreviewStage.STARTING_DEV,
@@ -497,6 +503,21 @@ class PreviewState:
         if len(self.logs) >= max_lines:
             self.logs.pop(0)
         self.logs.append(line)
+
+    def buffer_and_extract_lines(self, incoming_chunk: str, flush: bool = False) -> list[str]:
+        """Appends chunk to line buffer and returns complete lines."""
+        incoming = self._line_buffer + incoming_chunk
+        self._line_buffer = ""
+        if not flush:
+            if "\n" in incoming:
+                parts = incoming.split("\n")
+                self._line_buffer = parts[-1]
+                return [p + "\n" for p in parts[:-1]]
+            else:
+                self._line_buffer = incoming
+                return []
+        else:
+            return [incoming] if incoming else []
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -662,38 +683,30 @@ class PreviewRegistry:
             if not preview:
                 return
 
-            incoming = preview._line_buffer + line
-            preview._line_buffer = ""
-
-            if not flush:
-                if "\n" in incoming:
-                    parts = incoming.split("\n")
-                    complete_lines = [p + "\n" for p in parts[:-1]]
-                    preview._line_buffer = parts[-1]
-                else:
-                    preview._line_buffer = incoming
-                    complete_lines = []
-            else:
-                complete_lines = [incoming] if incoming else []
+            complete_lines = preview.buffer_and_extract_lines(line, flush=flush)
 
             for raw_line in complete_lines:
-                for pattern, detected_stage in PREVIEW_STAGE_PATTERNS:
-                    if pattern.search(raw_line):
-                        self._set_stage(preview, detected_stage)
-                        break
+                if PREVIEW_COMPILATION_ERROR_PATTERN.search(raw_line):
+                    if preview.status != PreviewStatus.FAILED:
+                        preview.status = PreviewStatus.FAILED
+                        preview.error_message = raw_line.strip()
+                        self._broadcast(preview, {
+                            "event": "status",
+                            "status": PreviewStatus.FAILED.value,
+                            "error": preview.error_message,
+                        })
+                elif preview.status != PreviewStatus.FAILED:
+                    for pattern, detected_stage in PREVIEW_STAGE_PATTERNS:
+                        if pattern.search(raw_line):
+                            self._set_stage(preview, detected_stage)
+                            break
 
                 preview.add_log(raw_line, self.max_log_lines)
                 self._broadcast(preview, {"event": "log", "data": raw_line})
 
     def flush_buffer(self, repo: str) -> None:
         """Flushes any buffered incomplete log line for the preview."""
-        with self._lock:
-            preview = self._previews.get(repo.strip())
-            if not preview or not preview._line_buffer:
-                return
-            remaining = preview._line_buffer
-            preview._line_buffer = ""
-        self.append_log(repo, remaining, flush=True)
+        self.append_log(repo, "", flush=True)
 
     def _run_preview_worker(self, preview: PreviewState) -> None:
         repo = preview.repo
@@ -754,11 +767,12 @@ class PreviewRegistry:
             with self._lock:
                 if not preview._stopped:
                     preview.ended_at = time.time()
-                    if sandbox.returncode == 0:
-                        preview.status = PreviewStatus.STOPPED
-                    else:
-                        preview.status = PreviewStatus.FAILED
-                        preview.error_message = f"Process exited with code {sandbox.returncode}"
+                    if preview.status != PreviewStatus.FAILED:
+                        if sandbox.returncode == 0:
+                            preview.status = PreviewStatus.STOPPED
+                        else:
+                            preview.status = PreviewStatus.FAILED
+                            preview.error_message = f"Process exited with code {sandbox.returncode}"
                     self._broadcast(preview, {
                         "event": "status",
                         "status": preview.status.value,

@@ -195,20 +195,6 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
             </a>
           )}
 
-          {status === "FAILED" && (
-            <button
-              data-testid="retry-preview-btn"
-              id="btn-preview-retry"
-              type="button"
-              onClick={handleRetry}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
-              title="Retry preview sandbox"
-            >
-              <RotateCw className="w-3 h-3" />
-              <span>Retry</span>
-            </button>
-          )}
-
           {onStopPreview && (status === "SERVING" || status === "PROVISIONING") && (
             <button
               data-testid="stop-preview-btn"
@@ -259,7 +245,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
                 Booting Dedicated Preview Sandbox
               </h3>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Starting Modal standard container on port 3000, installing dependencies, and compiling Vite dev server.
+                Starting Modal Standard Sandbox on port 3000, installing dependencies, and compiling Vite dev server.
               </p>
             </div>
           </div>

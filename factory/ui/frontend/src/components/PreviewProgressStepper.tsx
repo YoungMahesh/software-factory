@@ -20,27 +20,19 @@ const PREVIEW_STEPS: StepConfig[] = [
   { id: "starting_dev", stage: "STARTING_DEV", label: "Starting dev server" },
 ];
 
+const STAGE_ORDER: Record<string, number> = {
+  PROVISIONING: 0,
+  INSTALLING_DEPS: 1,
+  STARTING_DEV: 2,
+  SERVING: 3,
+};
+
 export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
   currentStage = "PROVISIONING",
   status = "PROVISIONING",
   errorMessage = null,
 }) => {
-  const getStageIndex = (stage: string): number => {
-    switch (stage.toUpperCase()) {
-      case "PROVISIONING":
-        return 0;
-      case "INSTALLING_DEPS":
-        return 1;
-      case "STARTING_DEV":
-        return 2;
-      case "SERVING":
-        return 3;
-      default:
-        return 0;
-    }
-  };
-
-  const activeIndex = getStageIndex(currentStage || "PROVISIONING");
+  const activeIndex = STAGE_ORDER[(currentStage || "PROVISIONING").toUpperCase()] ?? 0;
   const isFailed = status === "FAILED";
   const isServing = currentStage === "SERVING" || status === "SERVING";
 

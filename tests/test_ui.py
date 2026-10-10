@@ -683,22 +683,40 @@ class TestFastApiApp(unittest.TestCase):
         preview.add_log("Booting container...\n")
         preview_registry._previews["stream-repo"] = preview
 
-        with self.client.stream("GET", "/api/studio/repos/stream-repo/preview/stream") as response:
-            self.assertEqual(response.status_code, 200)
-            self.assertIn("text/event-stream", response.headers["content-type"])
-            events = []
-            for chunk in response.iter_lines():
-                if chunk.startswith("data: "):
-                    payload = json.loads(chunk[len("data: "):])
-                    events.append(payload)
+        orig_add_listener = preview_registry.add_listener
 
-            self.assertTrue(len(events) > 0)
-            init_event = events[0]
-            self.assertEqual(init_event["event"], "init")
-            self.assertEqual(init_event["status"], "STOPPED")
-            self.assertEqual(init_event["stage"], "SERVING")
-            self.assertEqual(init_event["preview_url"], "https://preview.modal.host")
-            self.assertIn("Booting container...\n", init_event["backlog"])
+        def mock_add_listener(repo_name):
+            q = orig_add_listener(repo_name)
+            if repo_name == "stream-repo" and q is not None:
+                q.put_nowait({"event": "log", "data": "Compiling Vite...\n"})
+                q.put_nowait({"event": "stage", "stage": "STARTING_DEV"})
+            return q
+
+        with patch.object(preview_registry, "add_listener", side_effect=mock_add_listener):
+            with self.client.stream("GET", "/api/studio/repos/stream-repo/preview/stream") as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("text/event-stream", response.headers["content-type"])
+                events = []
+                for chunk in response.iter_lines():
+                    if chunk.startswith("data: "):
+                        payload = json.loads(chunk[len("data: "):])
+                        events.append(payload)
+
+                self.assertTrue(len(events) >= 3)
+                init_event = events[0]
+                self.assertEqual(init_event["event"], "init")
+                self.assertEqual(init_event["status"], "STOPPED")
+                self.assertEqual(init_event["stage"], "SERVING")
+                self.assertEqual(init_event["preview_url"], "https://preview.modal.host")
+                self.assertIn("Booting container...\n", init_event["backlog"])
+
+                log_events = [e for e in events if e.get("event") == "log"]
+                self.assertTrue(len(log_events) >= 1)
+                self.assertEqual(log_events[0]["data"], "Compiling Vite...\n")
+
+                stage_events = [e for e in events if e.get("event") == "stage"]
+                self.assertTrue(len(stage_events) >= 1)
+                self.assertEqual(stage_events[0]["stage"], "STARTING_DEV")
 
 
 

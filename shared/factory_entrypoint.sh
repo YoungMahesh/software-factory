@@ -298,7 +298,7 @@ git config --global user.email "factory@modal.internal"
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "🏝️  Cloning $GH_REPO..."
-    GIT_ASKPASS=echo git clone --quiet \
+    GIT_ASKPASS=echo git clone \
         "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
 fi
 
@@ -412,13 +412,14 @@ if [ ! -d "${FACTORY_DIR}/node_modules" ]; then
 fi
 
 if [ -f "$TARGET_DIR/package.json" ] && [ ! -d "$TARGET_DIR/node_modules" ]; then
-    echo "📦 Installing target repository dependencies (pnpm)..."
-    echo "PREVIEW_STAGE:INSTALLING_DEPS"
-    if [ -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
-        (cd "$TARGET_DIR" && pnpm install)
-    elif [ -f "$TARGET_DIR/package-lock.json" ]; then
+    if [ "${DEV_PREVIEW:-0}" = "1" ]; then
+        echo "PREVIEW_STAGE:INSTALLING_DEPS"
+    fi
+    if [ -f "$TARGET_DIR/package-lock.json" ] && [ ! -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
+        echo "📦 Installing target repository dependencies (npm)..."
         (cd "$TARGET_DIR" && npm install)
     else
+        echo "📦 Installing target repository dependencies (pnpm)..."
         (cd "$TARGET_DIR" && pnpm install)
     fi
 fi

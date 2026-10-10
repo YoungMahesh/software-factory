@@ -215,3 +215,48 @@ class TestPreviewRegistry(unittest.TestCase):
         statuses = [e["status"] for e in status_events]
         self.assertIn("SERVING", statuses)
 
+    def test_preview_registry_append_log_detects_compilation_error(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+        preview = PreviewState(
+            repo="test-compile-err",
+            branch="main",
+            status=PreviewStatus.PROVISIONING,
+            stage=PreviewStage.STARTING_DEV,
+        )
+        self.registry._previews["test-compile-err"] = preview
+        q = self.registry.add_listener("test-compile-err")
+        self.assertIsNotNone(q)
+
+        err_line = "[vite:esbuild] SyntaxError: Unexpected token 'export' (12:4)\n"
+        self.registry.append_log("test-compile-err", err_line)
+
+        self.assertEqual(preview.status, PreviewStatus.FAILED)
+        self.assertEqual(preview.error_message, err_line.strip())
+
+        events = []
+        while not q.empty():
+            events.append(q.get_nowait())
+
+        status_events = [e for e in events if e.get("event") == "status"]
+        self.assertTrue(len(status_events) > 0)
+        self.assertEqual(status_events[0]["status"], "FAILED")
+        self.assertEqual(status_events[0]["error"], err_line.strip())
+
+    def test_preview_state_buffer_and_extract_lines(self):
+        from factory.ui.registry import PreviewState
+        preview = PreviewState(repo="test-buffering")
+
+        lines1 = preview.buffer_and_extract_lines("hello ")
+        self.assertEqual(lines1, [])
+
+        lines2 = preview.buffer_and_extract_lines("world\nsecond line\nthird ")
+        self.assertEqual(lines2, ["hello world\n", "second line\n"])
+
+        lines3 = preview.buffer_and_extract_lines("line completed\n")
+        self.assertEqual(lines3, ["third line completed\n"])
+
+        # Flush incomplete trailing buffer
+        preview.buffer_and_extract_lines("incomplete footer")
+        lines_flushed = preview.buffer_and_extract_lines("", flush=True)
+        self.assertEqual(lines_flushed, ["incomplete footer"])
+
