@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -33,6 +34,7 @@ from factory.ui.guard import evaluate_prompt_intent
 from factory.ui.registry import JobRegistry, job_registry
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
 
 class LaunchJobRequest(BaseModel):
@@ -67,7 +69,34 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
     )
     app.add_middleware(BasicAuthMiddleware)
 
+    STATIC_DIST_DIR.mkdir(parents=True, exist_ok=True)
+    assets_dir = STATIC_DIST_DIR / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    app.mount("/v2/assets", StaticFiles(directory=str(assets_dir)), name="v2_assets")
+    app.mount("/static/dist", StaticFiles(directory=str(STATIC_DIST_DIR)), name="static_dist")
+
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+    @app.get("/v2", response_class=HTMLResponse)
+    @app.get("/v2/{subpath:path}", response_class=HTMLResponse)
+    async def v2_spa(request: Request, subpath: str = ""):
+        dist_index = STATIC_DIST_DIR / "index.html"
+        if dist_index.is_file():
+            return HTMLResponse(content=dist_index.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            content="""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Factory Studio (v2)</title></head>
+<body class="bg-slate-900 text-slate-100 p-8 font-sans">
+  <div id="root">
+    <h1 class="text-xl font-bold mb-2">Factory Studio &amp; Testing Console (v2)</h1>
+    <p class="text-slate-400">Compiled SPA bundle not found in <code>factory/ui/static/dist/</code>. Run <code>pnpm --dir factory/ui/frontend build</code> to compile the frontend.</p>
+  </div>
+</body>
+</html>""",
+            status_code=200,
+        )
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):

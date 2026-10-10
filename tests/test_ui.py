@@ -600,6 +600,92 @@ class TestFastApiApp(unittest.TestCase):
             self.assertEqual(lines[0]["job"]["id"], job.id)
 
 
+
+class TestSpaDualRouteServing(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_legacy_root_continues_serving(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Software Factory", resp.text)
+        self.assertIn("Testing Console", resp.text)
+
+    def test_v2_requires_authentication(self):
+        unauth_client = TestClient(self.app)
+        resp = unauth_client.get("/v2")
+        self.assertEqual(resp.status_code, 401)
+        self.assertIn("www-authenticate", resp.headers)
+
+    def test_v2_serves_spa_shell_html(self):
+        resp = self.client.get("/v2")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp.text)
+
+    def test_v2_client_routing_fallback(self):
+        resp = self.client.get("/v2/console")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp.text)
+
+        resp2 = self.client.get("/v2/studio/repo/my-app")
+        self.assertEqual(resp2.status_code, 200)
+        self.assertIn("text/html", resp2.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp2.text)
+
+    def test_v2_compiled_bundle_delivery(self):
+        from factory.ui.app import STATIC_DIST_DIR
+
+        assets_dir = STATIC_DIST_DIR / "assets"
+        js_files = list(assets_dir.glob("*.js"))
+        css_files = list(assets_dir.glob("*.css"))
+
+        if js_files:
+            js_name = js_files[0].name
+            resp_js = self.client.get(f"/v2/assets/{js_name}")
+            self.assertEqual(resp_js.status_code, 200)
+            self.assertIn("javascript", resp_js.headers["content-type"])
+
+        if css_files:
+            css_name = css_files[0].name
+            resp_css = self.client.get(f"/v2/assets/{css_name}")
+            self.assertEqual(resp_css.status_code, 200)
+            self.assertIn("text/css", resp_css.headers["content-type"])
+
+    def test_v2_fallback_when_dist_index_missing(self):
+        with patch("pathlib.Path.is_file", return_value=False):
+            resp = self.client.get("/v2")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("text/html", resp.headers["content-type"])
+            self.assertIn("Compiled SPA bundle not found", resp.text)
+
+    def test_v2_static_assets_serving(self):
+        from factory.ui.app import STATIC_DIST_DIR
+
+        # Create a mock asset in STATIC_DIST_DIR/assets
+        assets_dir = STATIC_DIST_DIR / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        test_asset = assets_dir / "test-bundle.js"
+        test_asset.write_text("console.log('spa bundle');", encoding="utf-8")
+        try:
+            resp = self.client.get("/v2/assets/test-bundle.js")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("javascript", resp.headers["content-type"])
+            self.assertEqual(resp.text, "console.log('spa bundle');")
+
+            # Also verify via /static/dist/assets/test-bundle.js
+            resp_dist = self.client.get("/static/dist/assets/test-bundle.js")
+            self.assertEqual(resp_dist.status_code, 200)
+            self.assertIn("javascript", resp_dist.headers["content-type"])
+        finally:
+            if test_asset.exists():
+                test_asset.unlink()
+
+
 class TestCliDispatcherUiFlag(unittest.TestCase):
     def test_parse_args_ui_flags(self):
         with patch.dict("os.environ", {}, clear=True):

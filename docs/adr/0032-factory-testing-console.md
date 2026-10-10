@@ -23,4 +23,6 @@ To streamline verification and interactive observation of autonomous assembly li
 ## Amendments
 
 - **Port 3000 Default Alignment**: The default port was amended from `8080` to `3000` (with fallback to `PORT` environment variable) to align with standard sandbox web ingress per ADR 0021 (`https://3000.mahesh0.dev`), enabling zero-config access through Cloudflare Tunnel.
+- **Frontend Build Chain Transition**: The zero-build restriction on the host control plane was superseded by ADR 0036 (`docs/adr/0036-vite-spa-for-factory-studio.md`), adopting a compiled Vite React SPA served statically by FastAPI to accommodate complex IDE UI state, virtualized terminal streams, and component modularity.
+
 
