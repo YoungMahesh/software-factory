@@ -1,6 +1,6 @@
 # Spec: GitHub Issues and Pull Requests for Feature Delivery
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
