@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Software Factory • Testing Console</title>
+  <title>Software Factory • Studio & Testing Console</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
         <h1 class="text-base font-bold text-white flex items-center gap-2">
           Software Factory
           <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            Testing Console
+            Studio
           </span>
         </h1>
         <p class="text-xs text-slate-400 flex items-center gap-1.5">
@@ -39,6 +39,19 @@
         </p>
       </div>
     </div>
+
+    <!-- Dual-View Navigation Toggle -->
+    <div class="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-lg text-xs shadow-inner">
+      <button id="nav-tab-studio" type="button" onclick="switchView('studio')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm">
+        <span>🎨</span>
+        <span>Studio</span>
+      </button>
+      <button id="nav-tab-console" type="button" onclick="switchView('console')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <span>📟</span>
+        <span>Console</span>
+      </button>
+    </div>
+
     <div class="flex items-center gap-3 text-xs">
       <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -47,284 +60,500 @@
     </div>
   </header>
 
-  <!-- Main Split-Pane Workspace -->
-  <main class="flex-1 flex overflow-hidden">
-    <!-- Left Panel: Launch Parameters & Controls -->
-    <aside class="w-96 border-r border-slate-800 bg-slate-950/40 p-5 flex flex-col gap-5 overflow-y-auto shrink-0">
-      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-          <span>⚙️</span> Launch Configuration
-        </h2>
-        <button id="btn-refresh-repos" title="Refresh repositories from GitHub" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        </button>
-      </div>
+  <!-- Main Multi-View Workspace -->
+  <main class="flex-1 flex overflow-hidden relative">
 
-      <form id="launch-form" class="flex flex-col gap-4">
-        <!-- Target Repository -->
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Target Repository</label>
-          <div class="flex gap-2">
-            <select id="select-repo" class="flex-1 bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
-              {% for r in repos %}
-              <option value="{{ r }}">{{ r }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <p class="text-[11px] text-slate-400 mt-1">Cloned into ephemeral sandbox with Organization Credentials</p>
-        </div>
-
-        <!-- Target Milestone / Feature -->
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Milestone (Feature)</label>
-          <div class="flex flex-col gap-1.5">
-            <select id="select-feature" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
-              <option value="">Loading milestones...</option>
-            </select>
-            <input type="text" id="input-feature-custom" placeholder="Or enter custom milestone title / slug" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
-          </div>
-          <p class="text-[11px] text-slate-400 mt-1">Discovered GitHub Milestone in test repository</p>
-        </div>
-
-        <!-- Target Ticket / Issue -->
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Target Issue / Ticket (Optional)</label>
-          <div class="flex flex-col gap-1.5">
-            <select id="select-issue" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
-              <option value="">Autonomous Feature Batch (All Frontier Issues)</option>
-            </select>
-            <input type="text" id="input-issue-custom" placeholder="Or enter ad-hoc issue # directly (e.g. 42)" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
-          </div>
-          <p class="text-[11px] text-slate-400 mt-1">Leave empty for Autonomous Feature Batch, or specify issue # for single-issue dispatch</p>
-        </div>
-
-        <!-- Issue / Milestone Badges & Preview Panel -->
-        <div id="issue-badge-preview" class="border border-slate-800 rounded-lg p-3 bg-slate-900/60 hidden flex-col gap-2">
+    <!-- VIEW 1: STUDIO VIEW (Split-Pane Factory Studio Workspace) -->
+    <div id="studio-view" class="flex-1 flex overflow-hidden">
+      <!-- Left Sidebar: App Selector, Conversation History & Prompt Bar -->
+      <aside class="w-96 border-r border-slate-800 bg-slate-950/70 flex flex-col shrink-0 overflow-hidden">
+        <!-- Project Selector & New App Header -->
+        <div class="p-4 border-b border-slate-800 bg-slate-950/50 flex flex-col gap-2">
           <div class="flex items-center justify-between">
-            <span id="preview-title" class="font-mono text-xs font-semibold text-slate-200 truncate"></span>
-            <span id="preview-status-badge" class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+            <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span>📱</span> Project Application
+            </span>
+            <button id="btn-studio-new-app" type="button" class="text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-1 rounded-md transition flex items-center gap-1">
+              <span>+</span>
+              <span>New App</span>
+            </button>
           </div>
-          <div id="preview-details" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
-        </div>
-
-        <!-- Model Selection -->
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1.5">Flagship LLM Model</label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
-              <div class="flex items-center gap-1.5">
-                <input type="radio" name="model" value="deepseek-v4.1-flash" checked class="text-indigo-600 focus:ring-0">
-                <span class="text-xs font-semibold text-slate-200">DeepSeek</span>
-              </div>
-              <span class="text-[10px] text-slate-400 pl-4">V4.1 Flash (Default)</span>
-            </label>
-            <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
-              <div class="flex items-center gap-1.5">
-                <input type="radio" name="model" value="mimo-v2.6-flash" class="text-indigo-600 focus:ring-0">
-                <span class="text-xs font-semibold text-slate-200">MiMo</span>
-              </div>
-              <span class="text-[10px] text-slate-400 pl-4">V2.6 Flash</span>
-            </label>
+          <select id="studio-select-repo" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+            {% for r in repos %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>Base: TanStack Start</span>
+            <span class="text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Live Sync
+            </span>
           </div>
         </div>
 
-        <!-- VM Sandbox Toggle -->
-        <div class="border border-slate-800 rounded-lg p-3 bg-slate-900/40">
-          <label class="flex items-center justify-between cursor-pointer">
-            <div>
-              <span class="text-xs font-medium text-slate-200 block">VM Virtualization</span>
-              <span class="text-[10px] text-slate-400 block">Docker daemon & swap memory</span>
+        <!-- Conversation History Area -->
+        <div id="studio-chat-history" class="flex-1 overflow-y-auto p-4 space-y-4">
+          <!-- Initial Welcome Card -->
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs text-white shrink-0 shadow-md shadow-indigo-600/30">🤖</div>
+            <div class="max-w-[88%] bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-3.5 text-xs text-slate-300 space-y-2 shadow-sm">
+              <div class="font-semibold text-slate-200">Welcome to Factory Studio!</div>
+              <p class="leading-relaxed text-slate-400">
+                Describe the frontend application or feature you'd like to build. Prompts automatically synthesize milestones, issues, and assemble client-side TanStack Start code with live dev preview.
+              </p>
+              <div class="pt-1 border-t border-slate-800/80 text-[11px] text-indigo-300/80">
+                💡 <span class="italic">Pure frontend apps only (databases, backend APIs, and server storage are rejected).</span>
+              </div>
             </div>
-            <input type="checkbox" id="check-vm" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4 cursor-pointer">
-          </label>
-        </div>
-
-        <!-- Launch CTA -->
-        <button type="submit" id="btn-launch" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition active:scale-[0.99]">
-          <span>🚀</span>
-          <span>Launch Factory Sandbox</span>
-        </button>
-      </form>
-
-      <!-- Quick Tips -->
-      <div class="mt-auto border-t border-slate-800 pt-4 text-[11px] text-slate-400 space-y-1.5">
-        <div class="font-medium text-slate-300">Assembly Line Protocol:</div>
-        <div>1. Pre-flight Guard verifies target repo & milestones</div>
-        <div>2. Feature branch <code class="text-indigo-400">factory/&lt;feature&gt;</code> or <code class="text-indigo-400">factory/issue-&lt;id&gt;</code> created</div>
-        <div>3. Stages: Planner ➔ Coder ➔ Verifier ➔ Reviewer</div>
-        <div>4. Draft Feature PR opened and verified before human gate</div>
-      </div>
-    </aside>
-
-    <!-- Center Panel: Live Execution Dashboard -->
-    <section class="flex-1 flex flex-col bg-slate-950 overflow-hidden">
-      <!-- Active Job Control Banner -->
-      <div class="border-b border-slate-800 bg-slate-900/60 px-6 py-3.5 flex items-center justify-between shrink-0">
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-400">Active Job:</span>
-            <span id="active-job-id" class="font-mono text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">None</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-400">Target:</span>
-            <span id="active-job-target" class="font-mono text-xs text-indigo-400">-</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-400">Status:</span>
-            <span id="active-job-status" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
-          <span id="active-job-timer" class="font-mono text-xs text-slate-400">00:00</span>
-          <button id="btn-cancel" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition">
-            <span>🛑</span>
-            <span>Cancel Run</span>
+        <!-- Prompt Input Bar -->
+        <div class="p-3 border-t border-slate-800 bg-slate-950/80 shrink-0">
+          <form id="studio-prompt-form" class="flex flex-col gap-2">
+            <div class="relative">
+              <textarea id="studio-prompt-input" rows="3" placeholder="Type what you want to build (e.g. 'Build an interactive kanban board with localStorage persistence')..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none leading-relaxed"></textarea>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span class="font-mono text-indigo-400">DeepSeek V4.1 Flash</span>
+              </div>
+              <button id="btn-studio-send" type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs py-1.5 px-4 rounded-lg shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <span>Send</span>
+                <span>➤</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </aside>
+
+      <!-- Right Workspace: Interactive Live Preview Iframe -->
+      <section class="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+        <!-- Live Preview Header Toolbar -->
+        <div class="border-b border-slate-800 bg-slate-900/70 px-4 py-2.5 flex items-center justify-between shrink-0">
+          <!-- Viewport Size Toggles -->
+          <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+            <button id="btn-viewport-desktop" type="button" onclick="switchViewport('desktop')" class="px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1" title="Desktop View (100%)">
+              <span>🖥️</span>
+              <span>Desktop</span>
+            </button>
+            <button id="btn-viewport-tablet" type="button" onclick="switchViewport('tablet')" class="px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1" title="Tablet View (768px)">
+              <span>📱</span>
+              <span>Tablet</span>
+            </button>
+            <button id="btn-viewport-mobile" type="button" onclick="switchViewport('mobile')" class="px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1" title="Mobile View (375px)">
+              <span>📲</span>
+              <span>Mobile</span>
+            </button>
+          </div>
+
+          <!-- URL Bar -->
+          <div class="flex-1 max-w-md mx-4">
+            <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono">
+              <span class="text-emerald-400 text-[11px]">🔒</span>
+              <span id="preview-url-display" class="truncate flex-1">https://3000.mahesh0.dev</span>
+            </div>
+          </div>
+
+          <!-- Preview Actions -->
+          <div class="flex items-center gap-2 text-xs">
+            <button id="btn-preview-reload" type="button" title="Reload Live Preview" class="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>Reload</span>
+            </button>
+            <a id="preview-open-link" href="https://3000.mahesh0.dev" target="_blank" class="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition flex items-center gap-1">
+              <span>Open</span>
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- Preview Frame Viewport Area -->
+        <div class="flex-1 bg-slate-950 p-4 flex items-center justify-center overflow-auto relative">
+          <div id="preview-frame-wrapper" class="w-full h-full bg-white rounded-lg shadow-2xl transition-all duration-300 overflow-hidden flex flex-col relative">
+            <iframe id="preview-frame" src="https://3000.mahesh0.dev" class="w-full h-full border-0 bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- VIEW 2: CONSOLE VIEW (Existing Testing Console & Live Terminal Streaming) -->
+    <div id="console-view" class="flex-1 flex overflow-hidden hidden">
+      <!-- Left Panel: Launch Parameters & Controls -->
+      <aside class="w-96 border-r border-slate-800 bg-slate-950/40 p-5 flex flex-col gap-5 overflow-y-auto shrink-0">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+          <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span>⚙️</span> Launch Configuration
+          </h2>
+          <button id="btn-refresh-repos" title="Refresh repositories from GitHub" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           </button>
         </div>
-      </div>
 
-      <!-- Assembly Line Stage Stepper -->
-      <div class="border-b border-slate-800 bg-slate-950/80 px-6 py-3 shrink-0">
-        <div class="flex items-center justify-between max-w-4xl mx-auto" id="stage-stepper">
-          <!-- Step: Provisioning -->
-          <div class="step-item flex items-center gap-2" data-stage="PROVISIONING">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">0</div>
-            <span class="text-xs font-medium text-slate-400">Sandbox</span>
+        <form id="launch-form" class="flex flex-col gap-4">
+          <!-- Target Repository -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Target Repository</label>
+            <div class="flex gap-2">
+              <select id="select-repo" class="flex-1 bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                {% for r in repos %}
+                <option value="{{ r }}">{{ r }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Cloned into ephemeral sandbox with Organization Credentials</p>
           </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
 
-          <!-- Step: Preflight -->
-          <div class="step-item flex items-center gap-2" data-stage="PREFLIGHT">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">1</div>
-            <span class="text-xs font-medium text-slate-400">Pre-flight</span>
+          <!-- Target Milestone / Feature -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Milestone (Feature)</label>
+            <div class="flex flex-col gap-1.5">
+              <select id="select-feature" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                <option value="">Loading milestones...</option>
+              </select>
+              <input type="text" id="input-feature-custom" placeholder="Or enter custom milestone title / slug" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Discovered GitHub Milestone in test repository</p>
           </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
 
-          <!-- Step: Planner -->
-          <div class="step-item flex items-center gap-2" data-stage="PLANNER">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">2</div>
-            <span class="text-xs font-medium text-slate-400">Planner</span>
+          <!-- Target Ticket / Issue -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Target Issue / Ticket (Optional)</label>
+            <div class="flex flex-col gap-1.5">
+              <select id="select-issue" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                <option value="">Autonomous Feature Batch (All Frontier Issues)</option>
+              </select>
+              <input type="text" id="input-issue-custom" placeholder="Or enter ad-hoc issue # directly (e.g. 42)" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Leave empty for Autonomous Feature Batch, or specify issue # for single-issue dispatch</p>
           </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
 
-          <!-- Step: Coder -->
-          <div class="step-item flex items-center gap-2" data-stage="CODER">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">3</div>
-            <span class="text-xs font-medium text-slate-400">Coder</span>
+          <!-- Issue / Milestone Badges & Preview Panel -->
+          <div id="issue-badge-preview" class="border border-slate-800 rounded-lg p-3 bg-slate-900/60 hidden flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span id="preview-title" class="font-mono text-xs font-semibold text-slate-200 truncate"></span>
+              <span id="preview-status-badge" class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+            </div>
+            <div id="preview-details" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
           </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
 
-          <!-- Step: Verifier -->
-          <div class="step-item flex items-center gap-2" data-stage="VERIFIER">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">4</div>
-            <span class="text-xs font-medium text-slate-400">Verifier</span>
+          <!-- Model Selection -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1.5">Flagship LLM Model</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
+                <div class="flex items-center gap-1.5">
+                  <input type="radio" name="model" value="deepseek-v4.1-flash" checked class="text-indigo-600 focus:ring-0">
+                  <span class="text-xs font-semibold text-slate-200">DeepSeek</span>
+                </div>
+                <span class="text-[10px] text-slate-400 pl-4">V4.1 Flash (Default)</span>
+              </label>
+              <label class="cursor-pointer border border-slate-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600/10 rounded-lg p-2.5 flex flex-col gap-0.5 transition">
+                <div class="flex items-center gap-1.5">
+                  <input type="radio" name="model" value="mimo-v2.6-flash" class="text-indigo-600 focus:ring-0">
+                  <span class="text-xs font-semibold text-slate-200">MiMo</span>
+                </div>
+                <span class="text-[10px] text-slate-400 pl-4">V2.6 Flash</span>
+              </label>
+            </div>
           </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
 
-          <!-- Step: Reviewer -->
-          <div class="step-item flex items-center gap-2" data-stage="REVIEWER">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">5</div>
-            <span class="text-xs font-medium text-slate-400">Reviewer</span>
-          </div>
-          <div class="h-0.5 w-8 bg-slate-800"></div>
-
-          <!-- Step: Quality Gate -->
-          <div class="step-item flex items-center gap-2" data-stage="COMPLETED">
-            <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">✓</div>
-            <span class="text-xs font-medium text-slate-400">Gate</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Live Terminal Output -->
-      <div class="flex-1 flex flex-col bg-black/90 overflow-hidden relative">
-        <!-- Terminal Header Toolbar -->
-        <div class="px-4 py-2 border-b border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400 shrink-0">
-          <div class="flex items-center gap-3">
-            <span class="font-medium text-slate-300 flex items-center gap-1.5">
-              <span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-600"></span>
-              Live Execution Stream
-            </span>
-            <span id="log-line-count" class="font-mono text-[11px] bg-slate-800/60 px-2 py-0.5 rounded text-slate-400">0 lines</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <label class="flex items-center gap-1 cursor-pointer hover:text-slate-200">
-              <input type="checkbox" id="check-autoscroll" checked class="rounded bg-slate-800 text-indigo-600 w-3.5 h-3.5">
-              <span>Auto-scroll</span>
+          <!-- VM Sandbox Toggle -->
+          <div class="border border-slate-800 rounded-lg p-3 bg-slate-900/40">
+            <label class="flex items-center justify-between cursor-pointer">
+              <div>
+                <span class="text-xs font-medium text-slate-200 block">VM Virtualization</span>
+                <span class="text-[10px] text-slate-400 block">Docker daemon & swap memory</span>
+              </div>
+              <input type="checkbox" id="check-vm" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4 cursor-pointer">
             </label>
-            <button id="btn-copy-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
-              Copy Logs
-            </button>
-            <button id="btn-clear-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
-              Clear
+          </div>
+
+          <!-- Launch CTA -->
+          <button type="submit" id="btn-launch" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+            <span>🚀</span>
+            <span>Launch Factory Sandbox</span>
+          </button>
+        </form>
+
+        <!-- Quick Tips -->
+        <div class="mt-auto border-t border-slate-800 pt-4 text-[11px] text-slate-400 space-y-1.5">
+          <div class="font-medium text-slate-300">Assembly Line Protocol:</div>
+          <div>1. Pre-flight Guard verifies target repo & milestones</div>
+          <div>2. Feature branch <code class="text-indigo-400">factory/&lt;feature&gt;</code> or <code class="text-indigo-400">factory/issue-&lt;id&gt;</code> created</div>
+          <div>3. Stages: Planner ➔ Coder ➔ Verifier ➔ Reviewer</div>
+          <div>4. Draft Feature PR opened and verified before human gate</div>
+        </div>
+      </aside>
+
+      <!-- Center Panel: Live Execution Dashboard -->
+      <section class="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+        <!-- Active Job Control Banner -->
+        <div class="border-b border-slate-800 bg-slate-900/60 px-6 py-3.5 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Active Job:</span>
+              <span id="active-job-id" class="font-mono text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">None</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Target:</span>
+              <span id="active-job-target" class="font-mono text-xs text-indigo-400">-</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Status:</span>
+              <span id="active-job-status" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <span id="active-job-timer" class="font-mono text-xs text-slate-400">00:00</span>
+            <button id="btn-cancel" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition">
+              <span>🛑</span>
+              <span>Cancel Run</span>
             </button>
           </div>
         </div>
 
-        <!-- Terminal Output View -->
-        <div id="terminal-body" class="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-200 space-y-0.5 selection:bg-indigo-500 selection:text-white whitespace-pre-wrap break-all">
-          <div class="text-slate-500 italic">Select launch parameters and click "Launch Factory Sandbox" to start a test run.</div>
-        </div>
-      </div>
+        <!-- Assembly Line Stage Stepper -->
+        <div class="border-b border-slate-800 bg-slate-950/80 px-6 py-3 shrink-0">
+          <div class="flex items-center justify-between max-w-4xl mx-auto" id="stage-stepper">
+            <!-- Step: Provisioning -->
+            <div class="step-item flex items-center gap-2" data-stage="PROVISIONING">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">0</div>
+              <span class="text-xs font-medium text-slate-400">Sandbox</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
 
-      <!-- Session Run History Drawer -->
-      <div class="border-t border-slate-800 bg-slate-950/90 h-44 shrink-0 flex flex-col">
-        <div class="px-6 py-2 border-b border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
-          <span>RECENT TEST RUNS</span>
-          <span id="history-count" class="text-[11px] text-slate-500">0 jobs</span>
+            <!-- Step: Preflight -->
+            <div class="step-item flex items-center gap-2" data-stage="PREFLIGHT">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">1</div>
+              <span class="text-xs font-medium text-slate-400">Pre-flight</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
+
+            <!-- Step: Planner -->
+            <div class="step-item flex items-center gap-2" data-stage="PLANNER">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">2</div>
+              <span class="text-xs font-medium text-slate-400">Planner</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
+
+            <!-- Step: Coder -->
+            <div class="step-item flex items-center gap-2" data-stage="CODER">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">3</div>
+              <span class="text-xs font-medium text-slate-400">Coder</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
+
+            <!-- Step: Verifier -->
+            <div class="step-item flex items-center gap-2" data-stage="VERIFIER">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">4</div>
+              <span class="text-xs font-medium text-slate-400">Verifier</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
+
+            <!-- Step: Reviewer -->
+            <div class="step-item flex items-center gap-2" data-stage="REVIEWER">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">5</div>
+              <span class="text-xs font-medium text-slate-400">Reviewer</span>
+            </div>
+            <div class="h-0.5 w-8 bg-slate-800"></div>
+
+            <!-- Step: Quality Gate -->
+            <div class="step-item flex items-center gap-2" data-stage="COMPLETED">
+              <div class="step-icon w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">✓</div>
+              <span class="text-xs font-medium text-slate-400">Gate</span>
+            </div>
+          </div>
         </div>
-        <div class="flex-1 overflow-y-auto">
-          <table class="w-full text-left text-xs font-mono">
-            <thead class="text-[11px] text-slate-500 bg-slate-900/40 sticky top-0 border-b border-slate-800/50">
-              <tr>
-                <th class="px-6 py-1.5 font-medium">Job ID</th>
-                <th class="px-4 py-1.5 font-medium">Target Repo</th>
-                <th class="px-4 py-1.5 font-medium">Feature</th>
-                <th class="px-4 py-1.5 font-medium">Issue</th>
-                <th class="px-4 py-1.5 font-medium">Model</th>
-                <th class="px-4 py-1.5 font-medium">Status</th>
-                <th class="px-4 py-1.5 font-medium">Duration</th>
-                <th class="px-6 py-1.5 font-medium text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody id="history-table-body" class="divide-y divide-slate-800/40 text-slate-300">
-              {% for job in jobs %}
-              <tr class="hover:bg-slate-900/40 transition">
-                <td class="px-6 py-2 font-bold text-slate-200">{{ job.id }}</td>
-                <td class="px-4 py-2">{{ job.repo }}</td>
-                <td class="px-4 py-2 text-indigo-400">{{ job.feature }}</td>
-                <td class="px-4 py-2">{{ job.issue or 'BATCH' }}</td>
-                <td class="px-4 py-2">{{ job.model.split('-')[0] }}</td>
-                <td class="px-4 py-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if job.status == 'SUCCESS' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% elif job.status == 'RUNNING' %}bg-blue-500/10 text-blue-400 border border-blue-500/20{% elif job.status == 'FAILED' %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else %}bg-slate-800 text-slate-400{% endif %}">
-                    {{ job.status }}
-                  </span>
-                </td>
-                <td class="px-4 py-2">{{ job.duration or '-' }}s</td>
-                <td class="px-6 py-2 text-right">
-                  <button onclick="viewJob('{{ job.id }}')" class="text-indigo-400 hover:text-indigo-300 hover:underline">View</button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+
+        <!-- Live Terminal Output -->
+        <div class="flex-1 flex flex-col bg-black/90 overflow-hidden relative">
+          <!-- Terminal Header Toolbar -->
+          <div class="px-4 py-2 border-b border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400 shrink-0">
+            <div class="flex items-center gap-3">
+              <span class="font-medium text-slate-300 flex items-center gap-1.5">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+                Live Execution Stream
+              </span>
+              <span id="log-line-count" class="font-mono text-[11px] bg-slate-800/60 px-2 py-0.5 rounded text-slate-400">0 lines</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                <input type="checkbox" id="check-autoscroll" checked class="rounded bg-slate-800 text-indigo-600 w-3.5 h-3.5">
+                <span>Auto-scroll</span>
+              </label>
+              <button id="btn-copy-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
+                Copy Logs
+              </button>
+              <button id="btn-clear-log" class="hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800/60 transition">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Terminal Output View -->
+          <div id="terminal-body" class="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-200 space-y-0.5 selection:bg-indigo-500 selection:text-white whitespace-pre-wrap break-all">
+            <div class="text-slate-500 italic">Select launch parameters and click "Launch Factory Sandbox" to start a test run.</div>
+          </div>
+        </div>
+
+        <!-- Session Run History Drawer -->
+        <div class="border-t border-slate-800 bg-slate-950/90 h-44 shrink-0 flex flex-col">
+          <div class="px-6 py-2 border-b border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+            <span>RECENT TEST RUNS</span>
+            <span id="history-count" class="text-[11px] text-slate-500">0 jobs</span>
+          </div>
+          <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="text-[11px] text-slate-500 bg-slate-900/40 sticky top-0 border-b border-slate-800/50">
+                <tr>
+                  <th class="px-6 py-1.5 font-medium">Job ID</th>
+                  <th class="px-4 py-1.5 font-medium">Target Repo</th>
+                  <th class="px-4 py-1.5 font-medium">Feature</th>
+                  <th class="px-4 py-1.5 font-medium">Issue</th>
+                  <th class="px-4 py-1.5 font-medium">Model</th>
+                  <th class="px-4 py-1.5 font-medium">Status</th>
+                  <th class="px-4 py-1.5 font-medium">Duration</th>
+                  <th class="px-6 py-1.5 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body" class="divide-y divide-slate-800/40 text-slate-300">
+                {% for job in jobs %}
+                <tr class="hover:bg-slate-900/40 transition">
+                  <td class="px-6 py-2 font-bold text-slate-200">{{ job.id }}</td>
+                  <td class="px-4 py-2">{{ job.repo }}</td>
+                  <td class="px-4 py-2 text-indigo-400">{{ job.feature }}</td>
+                  <td class="px-4 py-2">{{ job.issue or 'BATCH' }}</td>
+                  <td class="px-4 py-2">{{ job.model.split('-')[0] }}</td>
+                  <td class="px-4 py-2">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if job.status == 'SUCCESS' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% elif job.status == 'RUNNING' %}bg-blue-500/10 text-blue-400 border border-blue-500/20{% elif job.status == 'FAILED' %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else %}bg-slate-800 text-slate-400{% endif %}">
+                      {{ job.status }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2">{{ job.duration or '-' }}s</td>
+                  <td class="px-6 py-2 text-right">
+                    <button onclick="viewJob('{{ job.id }}')" class="text-indigo-400 hover:text-indigo-300 hover:underline">View</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Compact Floating Status Badge (Studio View Active Tracking) -->
+    <div id="studio-floating-status-badge" class="hidden fixed bottom-6 right-6 z-40 bg-slate-900/95 border border-indigo-500/40 rounded-xl shadow-2xl shadow-indigo-950/50 p-3 backdrop-blur flex items-center gap-3 transition">
+      <div class="flex items-center gap-2">
+        <span class="relative flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+        </span>
+        <div class="flex flex-col">
+          <span id="studio-badge-stage-text" class="text-xs font-bold text-slate-100">PROVISIONING</span>
+          <span id="studio-badge-job-detail" class="text-[10px] text-slate-400 font-mono">-</span>
         </div>
       </div>
-    </section>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div class="flex items-center gap-2">
+        <button id="btn-inspect-logs" type="button" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow transition">
+          <span>📟 Inspect Logs</span>
+        </button>
+        <button id="btn-studio-cancel" type="button" class="text-xs bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium px-2 py-1.5 rounded-lg transition" title="Cancel active run">
+          <span>🛑</span>
+        </button>
+      </div>
+    </div>
   </main>
 
+  <!-- Modal: Create New TanStack Start App -->
+  <div id="modal-new-app" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <span>✨</span>
+          <span>Create New TanStack Start App</span>
+        </h3>
+        <button id="btn-close-modal-x" type="button" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800">✕</button>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Initializes a fresh repository under <span class="font-mono text-indigo-400">{{ org }}</span> seeded from the canonical <span class="font-mono text-slate-200">tanstack-start-template</span>.
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Application / Repository Name</label>
+          <input type="text" id="input-new-app-name" placeholder="e.g. calculator-app" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono">
+          <p class="text-[10px] text-slate-500 mt-1">Lowercase alphanumeric characters and hyphens only.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Description (Optional)</label>
+          <input type="text" id="input-new-app-desc" placeholder="e.g. Interactive financial calculator in TanStack Start" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div id="new-app-error" class="hidden text-rose-400 text-xs p-2 rounded bg-rose-500/10 border border-rose-500/20"></div>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button id="btn-cancel-new-app" type="button" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition">Cancel</button>
+        <button id="btn-create-new-app" type="button" class="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition">
+          <span>Create App</span>
+          <span>🚀</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // State management
+    // Global State management
     let activeJobId = null;
     let eventSource = null;
     let timerInterval = null;
     let jobStartTime = null;
     let repoMetadataCache = {};
+    let activeJobMetadata = null;
+    let activeJobStage = "IDLE";
 
-    const STAGES = ["PROVISIONING", "PREFLIGHT", "PLANNER", "CODER", "VERIFIER", "REVIEWER", "COMPLETED"];
+    const STAGES = ["PROVISIONING", "PREFLIGHT", "PLANNER", "CODER", "VERIFIER", "REVIEWER", "COMPLETED", "SERVING"];
 
-    // DOM Elements
+    // DOM Elements - Navigation & Views
+    const navTabStudio = document.getElementById("nav-tab-studio");
+    const navTabConsole = document.getElementById("nav-tab-console");
+    const studioView = document.getElementById("studio-view");
+    const consoleView = document.getElementById("console-view");
+
+    // Studio View Elements
+    const studioSelectRepo = document.getElementById("studio-select-repo");
+    const btnStudioNewApp = document.getElementById("btn-studio-new-app");
+    const modalNewApp = document.getElementById("modal-new-app");
+    const btnCloseModalX = document.getElementById("btn-close-modal-x");
+    const btnCancelNewApp = document.getElementById("btn-cancel-new-app");
+    const btnCreateNewApp = document.getElementById("btn-create-new-app");
+    const inputNewAppName = document.getElementById("input-new-app-name");
+    const inputNewAppDesc = document.getElementById("input-new-app-desc");
+    const newAppError = document.getElementById("new-app-error");
+
+    const studioChatHistory = document.getElementById("studio-chat-history");
+    const studioPromptForm = document.getElementById("studio-prompt-form");
+    const studioPromptInput = document.getElementById("studio-prompt-input");
+    const btnStudioSend = document.getElementById("btn-studio-send");
+
+    const previewFrameWrapper = document.getElementById("preview-frame-wrapper");
+    const previewFrame = document.getElementById("preview-frame");
+    const previewUrlDisplay = document.getElementById("preview-url-display");
+    const previewOpenLink = document.getElementById("preview-open-link");
+    const btnPreviewReload = document.getElementById("btn-preview-reload");
+    const btnViewportDesktop = document.getElementById("btn-viewport-desktop");
+    const btnViewportTablet = document.getElementById("btn-viewport-tablet");
+    const btnViewportMobile = document.getElementById("btn-viewport-mobile");
+
+    const studioFloatingStatusBadge = document.getElementById("studio-floating-status-badge");
+    const studioBadgeStageText = document.getElementById("studio-badge-stage-text");
+    const studioBadgeJobDetail = document.getElementById("studio-badge-job-detail");
+    const btnInspectLogs = document.getElementById("btn-inspect-logs");
+    const btnStudioCancel = document.getElementById("btn-studio-cancel");
+
+    // Console View Elements
     const selectRepo = document.getElementById("select-repo");
     const selectFeature = document.getElementById("select-feature");
     const inputFeatureCustom = document.getElementById("input-feature-custom");
@@ -347,6 +576,299 @@
     const previewStatusBadgeEl = document.getElementById("preview-status-badge");
     const previewDetailsEl = document.getElementById("preview-details");
 
+    // Utility: HTML escaping
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Helper: Badge status styling
+    function getStatusBadgeClasses(status) {
+      if (status === "SUCCESS") return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      if (status === "RUNNING") return "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse";
+      if (status === "FAILED") return "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+      if (status === "CANCELLED") return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
+      return "bg-slate-800 text-slate-400 border border-slate-700";
+    }
+
+    // Helper: Append repo options to dual dropdowns
+    function appendRepoOption(repoName, isSelected = false) {
+      const optConsole = document.createElement("option");
+      optConsole.value = repoName;
+      optConsole.textContent = repoName;
+      if (isSelected) optConsole.selected = true;
+      selectRepo.appendChild(optConsole);
+
+      const optStudio = document.createElement("option");
+      optStudio.value = repoName;
+      optStudio.textContent = repoName;
+      if (isSelected) optStudio.selected = true;
+      studioSelectRepo.appendChild(optStudio);
+    }
+
+    // View Switching (Studio <-> Console)
+    window.switchView = function(viewName) {
+      if (viewName === 'studio') {
+        studioView.classList.remove("hidden");
+        studioView.classList.add("flex");
+        consoleView.classList.add("hidden");
+        consoleView.classList.remove("flex");
+
+        navTabStudio.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm";
+        navTabConsole.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60";
+      } else {
+        consoleView.classList.remove("hidden");
+        consoleView.classList.add("flex");
+        studioView.classList.add("hidden");
+        studioView.classList.remove("flex");
+
+        navTabConsole.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm";
+        navTabStudio.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60";
+      }
+    };
+
+    // Viewport Toggle for Live Preview
+    window.switchViewport = function(mode) {
+      const allButtons = [btnViewportDesktop, btnViewportTablet, btnViewportMobile];
+      allButtons.forEach(btn => {
+        btn.className = "px-2.5 py-1 rounded-md font-medium transition text-slate-400 hover:text-white flex items-center gap-1";
+      });
+
+      if (mode === 'tablet') {
+        previewFrameWrapper.className = "w-[768px] h-full bg-white rounded-lg shadow-2xl transition-all duration-300 overflow-hidden flex flex-col relative border border-slate-800";
+        btnViewportTablet.className = "px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1";
+      } else if (mode === 'mobile') {
+        previewFrameWrapper.className = "w-[375px] h-full bg-white rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden flex flex-col relative border border-slate-800";
+        btnViewportMobile.className = "px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1";
+      } else {
+        // Desktop default (100%)
+        previewFrameWrapper.className = "w-full h-full bg-white rounded-lg shadow-2xl transition-all duration-300 overflow-hidden flex flex-col relative";
+        btnViewportDesktop.className = "px-2.5 py-1 rounded-md font-medium transition bg-slate-800 text-white flex items-center gap-1";
+      }
+    };
+
+    // Inspect Logs Shortcut
+    btnInspectLogs.addEventListener("click", () => {
+      switchView('console');
+    });
+
+    // Reload Live Preview
+    btnPreviewReload.addEventListener("click", () => {
+      if (previewFrame) {
+        const currentSrc = previewFrame.src;
+        previewFrame.src = "";
+        previewFrame.src = currentSrc;
+      }
+    });
+
+    // New App Modal Handlers
+    function toggleNewAppModal(show) {
+      if (show) {
+        modalNewApp.classList.remove("hidden");
+        inputNewAppName.value = "";
+        inputNewAppDesc.value = "";
+        newAppError.classList.add("hidden");
+        inputNewAppName.focus();
+      } else {
+        modalNewApp.classList.add("hidden");
+      }
+    }
+
+    btnStudioNewApp.addEventListener("click", () => toggleNewAppModal(true));
+    btnCloseModalX.addEventListener("click", () => toggleNewAppModal(false));
+    btnCancelNewApp.addEventListener("click", () => toggleNewAppModal(false));
+
+    btnCreateNewApp.addEventListener("click", async () => {
+      const name = inputNewAppName.value.trim();
+      const desc = inputNewAppDesc.value.trim();
+
+      if (!name) {
+        newAppError.textContent = "Please enter an application name.";
+        newAppError.classList.remove("hidden");
+        return;
+      }
+
+      btnCreateNewApp.disabled = true;
+      btnCreateNewApp.classList.add("opacity-60");
+      newAppError.classList.add("hidden");
+
+      try {
+        const resp = await fetch("/api/studio/repos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, description: desc || null, private: false }),
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(errData.detail || "Failed to create application.");
+        }
+
+        const data = await resp.json();
+        toggleNewAppModal(false);
+
+        // Add option to dual selectors & select it
+        appendRepoOption(data.name, true);
+
+        // Add welcome message to chat
+        appendChatMessage("agent", `🎉 Created <strong>${escapeHtml(data.name)}</strong> from TanStack Start template! What feature or page would you like to build first?`);
+        await loadRepoMetadata(data.name);
+      } catch (err) {
+        newAppError.textContent = err.message;
+        newAppError.classList.remove("hidden");
+      } finally {
+        btnCreateNewApp.disabled = false;
+        btnCreateNewApp.classList.remove("opacity-60");
+      }
+    });
+
+    // Chat Message Helpers
+    function appendChatMessage(sender, htmlContent, extraClasses = "") {
+      const wrapper = document.createElement("div");
+      if (sender === "user") {
+        wrapper.className = "flex items-start gap-3 justify-end";
+        wrapper.innerHTML = `
+          <div class="max-w-[85%] bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs shadow-sm">
+            <div class="font-semibold text-[10px] text-indigo-200 mb-0.5">You</div>
+            <div class="whitespace-pre-wrap">${htmlContent}</div>
+          </div>
+          <div class="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold text-white shrink-0">👤</div>
+        `;
+      } else {
+        wrapper.className = "flex items-start gap-3 " + extraClasses;
+        wrapper.innerHTML = `
+          <div class="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs text-white shrink-0 shadow-md shadow-purple-600/30">🤖</div>
+          <div class="max-w-[88%] bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-3.5 text-xs text-slate-200 space-y-2 shadow-sm">
+            ${htmlContent}
+          </div>
+        `;
+      }
+      studioChatHistory.appendChild(wrapper);
+      studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+      return wrapper;
+    }
+
+    // Studio Prompt Submission
+    studioPromptForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const repo = studioSelectRepo.value;
+      const prompt = studioPromptInput.value.trim();
+
+      if (!repo) {
+        alert("Please select or create an application project first.");
+        return;
+      }
+      if (!prompt) return;
+
+      // Add user message
+      appendChatMessage("user", escapeHtml(prompt));
+      studioPromptInput.value = "";
+
+      // Add loading state
+      const loadingEl = document.createElement("div");
+      loadingEl.id = "studio-loading-bubble";
+      loadingEl.className = "flex items-start gap-3";
+      loadingEl.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs text-white shrink-0">🤖</div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-slate-300 flex items-center gap-2">
+          <svg class="animate-spin h-3.5 w-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          <span>Evaluating request & orchestrating assembly line...</span>
+        </div>
+      `;
+      studioChatHistory.appendChild(loadingEl);
+      studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+
+      btnStudioSend.disabled = true;
+
+      try {
+        const resp = await fetch("/api/studio/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            repo: repo,
+            prompt: prompt,
+            model: "deepseek-v4.1-flash",
+            vm: false,
+          }),
+        });
+
+        loadingEl.remove();
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(errData.detail || "Server error processing prompt.");
+        }
+
+        const data = await resp.json();
+
+        if (!data.accepted) {
+          // Strict Refusal Message
+          const refusalWrapper = document.createElement("div");
+          refusalWrapper.className = "flex items-start gap-3";
+          refusalWrapper.innerHTML = `
+            <div class="w-7 h-7 rounded-full bg-rose-600 flex items-center justify-center text-xs text-white shrink-0 shadow-md shadow-rose-600/30">⚠️</div>
+            <div class="max-w-[88%] bg-rose-950/40 border border-rose-500/40 text-rose-200 rounded-2xl rounded-tl-sm p-3.5 text-xs space-y-1.5 shadow-sm">
+              <div class="font-bold flex items-center gap-1.5 text-rose-400 text-xs">
+                <span>🛑 Request Refused: Frontend-Only Boundary</span>
+              </div>
+              <p class="text-rose-200 leading-relaxed">${escapeHtml(data.refusal)}</p>
+              <p class="text-[11px] text-rose-300/80 italic mt-1 border-t border-rose-500/20 pt-1">
+                Please re-craft your prompt to describe client-side components, mock data, or browser APIs (e.g. localStorage).
+              </p>
+            </div>
+          `;
+          studioChatHistory.appendChild(refusalWrapper);
+          studioChatHistory.scrollTop = studioChatHistory.scrollHeight;
+        } else {
+          // Job Dispatched Successfully
+          const successContent = `
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-800">
+              <span class="font-semibold text-indigo-400">⚡ Job Dispatched</span>
+              <span class="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">${data.job.id}</span>
+            </div>
+            <div>
+              <div class="text-slate-400 text-[11px]">Milestone: <span class="text-slate-200 font-medium">${escapeHtml(data.milestone.title)}</span></div>
+              <div class="text-slate-400 text-[11px]">Issue: <a href="${data.issue.html_url || '#'}" target="_blank" class="text-indigo-400 hover:underline font-mono">#${data.issue.number} ${escapeHtml(data.issue.title)}</a></div>
+            </div>
+            <div class="flex items-center justify-between pt-1 text-[11px] border-t border-slate-800/60">
+              <span class="text-emerald-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Cloudflare Tunnel: ${data.preview_url || 'https://3000.mahesh0.dev'}
+              </span>
+              <button onclick="switchView('console')" class="text-indigo-400 hover:text-indigo-300 hover:underline font-medium">View Logs ➔</button>
+            </div>
+          `;
+          appendChatMessage("agent", successContent);
+
+          // Update active job metadata & connect SSE stream
+          connectJobStream(data.job.id);
+          refreshHistory();
+        }
+      } catch (err) {
+        if (loadingEl.parentNode) loadingEl.remove();
+        appendChatMessage("agent", `<div class="text-rose-400 font-semibold">Error: ${escapeHtml(err.message)}</div>`);
+      } finally {
+        btnStudioSend.disabled = false;
+      }
+    });
+
+    // Sync repo selections
+    studioSelectRepo.addEventListener("change", () => {
+      selectRepo.value = studioSelectRepo.value;
+      loadRepoMetadata(studioSelectRepo.value);
+    });
+
+    selectRepo.addEventListener("change", () => {
+      studioSelectRepo.value = selectRepo.value;
+      loadRepoMetadata(selectRepo.value);
+    });
+
+    // Badge preview in Console view
     function hideBadgePreview() {
       if (badgePreviewEl) {
         badgePreviewEl.classList.add("hidden");
@@ -450,7 +972,7 @@
       }
       previewDetailsEl.innerHTML = "";
 
-      // Case 1: Ad-hoc issue typed directly
+      // Ad-hoc issue typed directly
       if (inputIssueCustom.value.trim()) {
         const adHocNum = inputIssueCustom.value.trim();
         previewTitleEl.textContent = `Ad-Hoc Issue #${adHocNum}`;
@@ -466,14 +988,12 @@
 
       const milestoneObj = meta && meta.milestones ? meta.milestones.find(m => m.slug === selectedMilestone || m.title === selectedMilestone) : null;
 
-      // Case 2: Specific issue selected from dropdown within a milestone
       if (milestoneObj && milestoneObj.issues && selectedIssueNum) {
         const iss = milestoneObj.issues.find(i => String(i.number) === selectedIssueNum);
         if (iss) {
           previewTitleEl.textContent = `#${iss.number} ${iss.title}`;
           renderStatusBadge(iss.status, previewStatusBadgeEl);
 
-          // Dependencies Badge
           const depSpan = document.createElement("span");
           if (iss.blocked_by && iss.blocked_by.length > 0) {
             depSpan.className = "px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20";
@@ -484,7 +1004,6 @@
           }
           previewDetailsEl.appendChild(depSpan);
 
-          // Labels
           if (iss.labels && iss.labels.length > 0) {
             iss.labels.forEach(lbl => {
               const lblSpan = document.createElement("span");
@@ -497,7 +1016,6 @@
         }
       }
 
-      // Case 3: Milestone Autonomous Feature Batch
       if (milestoneObj) {
         previewTitleEl.textContent = `Milestone: ${milestoneObj.title}`;
         previewStatusBadgeEl.textContent = "AUTONOMOUS FEATURE BATCH";
@@ -529,11 +1047,8 @@
       hideBadgePreview();
     }
 
-    selectRepo.addEventListener("change", () => loadRepoMetadata(selectRepo.value));
     selectFeature.addEventListener("change", () => {
-      if (selectFeature.value) {
-        inputIssueCustom.value = "";
-      }
+      if (selectFeature.value) inputIssueCustom.value = "";
       updateIssuesDropdown();
     });
     selectIssue.addEventListener("change", updateBadgePreview);
@@ -552,13 +1067,10 @@
         const data = await resp.json();
         const current = selectRepo.value;
         selectRepo.innerHTML = "";
+        studioSelectRepo.innerHTML = "";
         data.repos.forEach(r => {
           const repoName = typeof r === "object" && r !== null ? r.name : r;
-          const opt = document.createElement("option");
-          opt.value = repoName;
-          opt.textContent = repoName;
-          if (repoName === current) opt.selected = true;
-          selectRepo.appendChild(opt);
+          appendRepoOption(repoName, repoName === current);
         });
         await loadRepoMetadata(selectRepo.value);
       } finally {
@@ -566,7 +1078,7 @@
       }
     });
 
-    // Update Stepper UI
+    // Update Stepper UI in Console View
     function updateStepper(currentStage) {
       const stageIdx = STAGES.indexOf(currentStage);
       document.querySelectorAll(".step-item").forEach(el => {
@@ -588,7 +1100,35 @@
       });
     }
 
-    // Append logs to terminal
+    // Update Floating Status Badge in Studio View
+    function updateStudioBadge(stage, status) {
+      if (!activeJobId) {
+        studioFloatingStatusBadge.classList.add("hidden");
+        return;
+      }
+      studioFloatingStatusBadge.classList.remove("hidden");
+      studioBadgeStageText.textContent = stage || status || "RUNNING";
+
+      if (activeJobMetadata) {
+        studioBadgeJobDetail.textContent = `${activeJobMetadata.repo} (${activeJobMetadata.feature}${activeJobMetadata.issue ? ` #${activeJobMetadata.issue}` : ''})`;
+      } else {
+        studioBadgeJobDetail.textContent = activeJobId;
+      }
+
+      if (["RUNNING", "QUEUED"].includes(status)) {
+        btnStudioCancel.classList.remove("hidden");
+      } else {
+        btnStudioCancel.classList.add("hidden");
+        // Automatically hide completed/failed/cancelled badge after timeout
+        setTimeout(() => {
+          if (["SUCCESS", "FAILED", "CANCELLED"].includes(activeJobStatusEl.textContent)) {
+            studioFloatingStatusBadge.classList.add("hidden");
+          }
+        }, 8000);
+      }
+    }
+
+    // Append logs to terminal in Console View
     let lineCount = 0;
     function appendTerminalText(text) {
       if (terminalBody.children.length === 1 && terminalBody.children[0].classList.contains("italic")) {
@@ -605,7 +1145,7 @@
       }
     }
 
-    // Connect SSE Stream
+    // Connect SSE Stream (Shared between Studio & Console)
     function connectJobStream(jobId) {
       if (eventSource) {
         eventSource.close();
@@ -624,22 +1164,47 @@
           const msg = JSON.parse(e.data);
           if (msg.event === "init") {
             const job = msg.job;
+            activeJobMetadata = job;
+            activeJobStage = job.stage || "PROVISIONING";
             activeJobTargetEl.textContent = `${job.repo} (${job.feature}${job.issue ? ` #${job.issue}` : ''})`;
             setJobStatus(job.status);
-            updateStepper(job.stage);
+            updateStepper(activeJobStage);
+            updateStudioBadge(activeJobStage, job.status);
+
+            if (job.preview_url) {
+              previewUrlDisplay.textContent = job.preview_url;
+              previewOpenLink.href = job.preview_url;
+              if (previewFrame.src !== job.preview_url) {
+                previewFrame.src = job.preview_url;
+              }
+            }
+
             if (msg.backlog && msg.backlog.length > 0) {
               msg.backlog.forEach(l => appendTerminalText(l));
             }
           } else if (msg.event === "log") {
             appendTerminalText(msg.data);
           } else if (msg.event === "stage") {
+            activeJobStage = msg.stage;
             updateStepper(msg.stage);
+            updateStudioBadge(msg.stage, activeJobStatusEl.textContent);
           } else if (msg.event === "status") {
             setJobStatus(msg.status);
+            updateStudioBadge(activeJobStage, msg.status);
             refreshHistory();
             if (["SUCCESS", "FAILED", "CANCELLED"].includes(msg.status)) {
               btnCancel.disabled = true;
+              btnStudioCancel.classList.add("hidden");
               stopTimer();
+
+              if (msg.status === "SUCCESS") {
+                appendChatMessage("agent", `🎉 <strong>Assembly Line Pipeline Completed!</strong> Live preview is ready and running via Cloudflare Tunnel at <a href="https://3000.mahesh0.dev" target="_blank" class="text-indigo-400 underline">https://3000.mahesh0.dev</a>.`);
+                if (previewFrame) {
+                  const currentSrc = previewFrame.src;
+                  previewFrame.src = "";
+                  previewFrame.src = currentSrc;
+                }
+              }
             }
           }
         } catch (err) {
@@ -654,21 +1219,11 @@
 
     function setJobStatus(status) {
       activeJobStatusEl.textContent = status;
-      activeJobStatusEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full border ";
+      activeJobStatusEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full border " + getStatusBadgeClasses(status);
       if (status === "RUNNING") {
-        activeJobStatusEl.className += "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse";
         startTimer();
-      } else if (status === "SUCCESS") {
-        activeJobStatusEl.className += "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-        stopTimer();
-      } else if (status === "FAILED") {
-        activeJobStatusEl.className += "bg-rose-500/10 text-rose-400 border-rose-500/20";
-        stopTimer();
-      } else if (status === "CANCELLED") {
-        activeJobStatusEl.className += "bg-amber-500/10 text-amber-400 border-amber-500/20";
-        stopTimer();
       } else {
-        activeJobStatusEl.className += "bg-slate-800 text-slate-400 border-slate-700";
+        stopTimer();
       }
     }
 
@@ -687,7 +1242,7 @@
       if (timerInterval) clearInterval(timerInterval);
     }
 
-    // Launch Job Form Submission
+    // Launch Job Form Submission in Console View
     document.getElementById("launch-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const repo = selectRepo.value;
@@ -695,6 +1250,8 @@
       const customMilestone = inputFeatureCustom.value.trim();
       const milestone = isAdHoc ? customMilestone : (customMilestone || selectFeature.value);
       const issue = inputIssueCustom.value.trim() || selectIssue.value || null;
+      const model = document.querySelector('input[name="model"]:checked')?.value || "deepseek-v4.1-flash";
+      const vm = document.getElementById("check-vm").checked;
 
       if (!milestone && !issue) {
         alert("Please select a milestone or enter an issue # to launch.");
@@ -710,7 +1267,7 @@
         const resp = await fetch("/api/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo, feature, issue, model, vm }),
+          body: JSON.stringify({ repo, feature, issue, model, vm, dev: false }),
         });
         if (!resp.ok) {
           const errData = await resp.json().catch(() => ({ detail: resp.statusText }));
@@ -727,17 +1284,21 @@
       }
     });
 
-    // Cancel Job
-    btnCancel.addEventListener("click", async () => {
+    // Cancel Job (Console View & Studio View)
+    async function cancelActiveJob() {
       if (!activeJobId) return;
       if (!confirm("Are you sure you want to terminate this sandbox run?")) return;
       try {
         await fetch(`/api/jobs/${activeJobId}/cancel`, { method: "POST" });
         btnCancel.disabled = true;
+        btnStudioCancel.classList.add("hidden");
       } catch (err) {
         alert("Failed to cancel job: " + err.message);
       }
-    });
+    }
+
+    btnCancel.addEventListener("click", cancelActiveJob);
+    btnStudioCancel.addEventListener("click", cancelActiveJob);
 
     // Refresh History Table
     async function refreshHistory() {
@@ -755,12 +1316,7 @@
             <td class="px-4 py-2">${job.issue || 'BATCH'}</td>
             <td class="px-4 py-2">${job.model.split('-')[0]}</td>
             <td class="px-4 py-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${
-                job.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                job.status === 'RUNNING' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                job.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                'bg-slate-800 text-slate-400'
-              }">${job.status}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${getStatusBadgeClasses(job.status)}">${job.status}</span>
             </td>
             <td class="px-4 py-2">${job.duration || '-'}s</td>
             <td class="px-6 py-2 text-right">
@@ -792,7 +1348,7 @@
       logLineCount.textContent = "0 lines";
     });
 
-    // Initial load
+    // Initial repo metadata loading
     if (selectRepo.value) {
       loadRepoMetadata(selectRepo.value);
     }

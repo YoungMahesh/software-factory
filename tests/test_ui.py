@@ -1501,6 +1501,110 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+class TestStudioSplitPaneAndDualView(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
+
+    def test_top_navigation_view_toggle(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Interactive view toggle buttons in top navigation header
+        self.assertIn('id="nav-tab-studio"', resp.text)
+        self.assertIn('id="nav-tab-console"', resp.text)
+        self.assertIn("Studio", resp.text)
+        self.assertIn("Console", resp.text)
+        # Both views containers exist in the DOM
+        self.assertIn('id="studio-view"', resp.text)
+        self.assertIn('id="console-view"', resp.text)
+
+    def test_studio_view_left_sidebar_components(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Project selector dropdown and New App modal trigger
+        self.assertIn('id="studio-select-repo"', resp.text)
+        self.assertIn('id="btn-studio-new-app"', resp.text)
+        self.assertIn('id="modal-new-app"', resp.text)
+        self.assertIn('id="input-new-app-name"', resp.text)
+        self.assertIn('id="btn-create-new-app"', resp.text)
+        # Conversation history and prompt input bar
+        self.assertIn('id="studio-chat-history"', resp.text)
+        self.assertIn('id="studio-prompt-form"', resp.text)
+        self.assertIn('id="studio-prompt-input"', resp.text)
+        self.assertIn('id="btn-studio-send"', resp.text)
+
+    def test_studio_view_right_workspace_preview_iframe(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Interactive live preview iframe pointing to 3000.mahesh0.dev
+        self.assertIn('id="preview-frame"', resp.text)
+        self.assertIn('https://3000.mahesh0.dev', resp.text)
+        # Viewport toggles
+        self.assertIn('id="btn-viewport-desktop"', resp.text)
+        self.assertIn('id="btn-viewport-tablet"', resp.text)
+        self.assertIn('id="btn-viewport-mobile"', resp.text)
+        # URL bar and manual reload
+        self.assertIn('id="preview-url-display"', resp.text)
+        self.assertIn('id="btn-preview-reload"', resp.text)
+
+    def test_compact_floating_status_badge_and_inspect_logs(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Floating status badge with inspect logs shortcut
+        self.assertIn('id="studio-floating-status-badge"', resp.text)
+        self.assertIn('id="btn-inspect-logs"', resp.text)
+        self.assertIn('id="studio-badge-stage-text"', resp.text)
+
+    def test_console_view_maintains_full_functionality(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Full parameter dispatch controls
+        self.assertIn('id="launch-form"', resp.text)
+        self.assertIn('id="select-repo"', resp.text)
+        self.assertIn('id="select-feature"', resp.text)
+        self.assertIn('id="select-issue"', resp.text)
+        self.assertIn('id="btn-launch"', resp.text)
+        # Stepper, terminal, cancel button, history
+        self.assertIn('id="stage-stepper"', resp.text)
+        self.assertIn('id="terminal-body"', resp.text)
+        self.assertIn('id="btn-cancel"', resp.text)
+        self.assertIn('id="history-table-body"', resp.text)
+
+    def test_repo_options_rendered_in_both_views(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Should render repo options in both studio and console dropdowns
+        self.assertIn('<select id="studio-select-repo"', resp.text)
+        self.assertIn('<select id="select-repo"', resp.text)
+
+    def test_recent_runs_rendered_in_console_view(self):
+        # Create a job in registry
+        job = self.registry.create_job(repo="my-cool-app", feature="v1-init", issue="1", model="deepseek-v4.1-flash")
+        job.status = JobStatus.SUCCESS
+        job.started_at = 100.0
+        job.ended_at = 142.0
+
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(job.id, resp.text)
+        self.assertIn("my-cool-app", resp.text)
+        self.assertIn("v1-init", resp.text)
+        self.assertIn("42.0s", resp.text)
+
+    def test_studio_authentication_compatibility(self):
+        unauth_client = TestClient(self.app)
+        self.assertEqual(unauth_client.get("/").status_code, 401)
+        self.assertEqual(unauth_client.get("/api/studio/repos").status_code, 401)
+        self.assertEqual(unauth_client.post("/api/studio/repos", json={"name": "test"}).status_code, 401)
+        self.assertEqual(unauth_client.post("/api/studio/prompt", json={"repo": "test", "prompt": "build"}).status_code, 401)
+
+        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.client.get("/api/studio/repos").status_code, 200)
+
+
+
 
 
 
