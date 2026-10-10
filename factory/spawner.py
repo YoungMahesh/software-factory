@@ -16,6 +16,7 @@ import modal
 
 from shared.image import (
     LOCAL_OPENCODE_SECRET,
+    REMOTE_CLOUDFLARE_SECRET,
     REMOTE_FACTORY_ENTRYPOINT,
     REMOTE_OPENCODE_SECRET,
     REMOTE_ORG_SECRETS_DIR,
@@ -214,6 +215,13 @@ def build_factory_image(
     if entrypoint_script.is_file():
         image = image.add_local_file(
             entrypoint_script, REMOTE_FACTORY_ENTRYPOINT, copy=True
+        )
+
+    # Stage Cloudflare Tunnel secret for dev preview keep-alive
+    cloudflare_secret = root / "secrets" / "cloudflare.env"
+    if cloudflare_secret.is_file():
+        image = image.add_local_file(
+            cloudflare_secret, REMOTE_CLOUDFLARE_SECRET, copy=True
         )
 
     # Stage target project or organization secrets

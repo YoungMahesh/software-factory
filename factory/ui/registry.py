@@ -298,7 +298,7 @@ class JobRegistry:
                 f_err = executor.submit(stream_pipe, sandbox.stderr, True)
                 concurrent.futures.wait([f_out, f_err])
 
-            sandbox.wait()
+            sandbox.wait(raise_on_termination=False)
             exit_code = sandbox.returncode
 
             with self._lock:
@@ -320,7 +320,7 @@ class JobRegistry:
                     job.error_message = str(e)
                     job.ended_at = time.time()
                     self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
-            self.append_log(job_id, f"\n❌ [ERROR] Execution failed: {e}\n")
+                    self.append_log(job_id, f"\n❌ [ERROR] Execution failed: {e}\n")
 
 
 # Global singleton instance

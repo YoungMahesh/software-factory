@@ -103,6 +103,7 @@ export async function runAssemblyLinePipeline(
     });
 
   // 1. Stage 0: Pre-flight Guard Check on checked out branch
+  console.log(`\n🛡️  Stage 0: Pre-flight Guard Check on workspace...`);
   await assertPreflightAsync(workspaceDir, featureSlug, {
     tracker,
     trackerType: options.trackerType,

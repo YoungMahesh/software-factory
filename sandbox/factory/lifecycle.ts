@@ -110,6 +110,7 @@ export async function runTicketLifecycle(
     : undefined;
 
   // 3. Stage 1: Planner Agent
+  console.log(`\n🧠 Stage 1: Planner Agent: Planning implementation for ticket #${ticket.number ?? ticket.id}...`);
   let plan: ImplementationPlan;
   try {
     const planResult = await plannerRunner({
@@ -175,6 +176,7 @@ export async function runTicketLifecycle(
     retriesUsed = attempt;
 
     // Stage 2: Coder Agent
+    console.log(`\n💻 Stage 2: Coder Agent: Coding implementation (attempt ${attempt + 1}/${maxRetries + 1})...`);
     await coderRunner({
       workspaceDir,
       ticket,
@@ -185,6 +187,7 @@ export async function runTicketLifecycle(
     });
 
     // Stage 3: Deterministic Verifier
+    console.log(`\n🧪 Stage 3: Deterministic Verifier: Running verification suites...`);
     const verifierLogPath = path.join(scratchDir, "verification.md");
     const verification = await verifierRunner({
       workspacePath: workspaceDir,
@@ -199,6 +202,7 @@ export async function runTicketLifecycle(
     }
 
     // Stage 4: Reviewer Agent (only after verifier passes)
+    console.log(`\n🔍 Stage 4: Reviewer Agent: Reviewing diff against repo standards...`);
     let gitDiff = "";
     try {
       execSync("git add -N .", {
