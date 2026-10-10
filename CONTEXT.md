@@ -197,3 +197,7 @@ _Avoid_: Factory UI, test dashboard, web runner, factory web app
 An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory. Binds to port 3010 by default (overrideable via `PORT` environment variable) and is protected by HTTP Basic Authentication (`FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`), with a local development fallback (`admin`:`admin`) and startup warning.
 _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 
+**Agent Event Stream**:
+A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into the Factory Testing Console and Factory Studio.
+_Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
+
