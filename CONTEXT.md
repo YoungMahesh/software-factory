@@ -193,3 +193,7 @@ _Avoid_: Healthcheck, bootstrap check, repo validator
 An interactive local web interface running on the developer workstation used to discover repositories under the Test Organization (`software-factory-09-test`), configure and dispatch ephemeral software factory sandboxes with test parameters, and monitor real-time assembly line stage transitions and execution logs.
 _Avoid_: Factory UI, test dashboard, web runner, factory web app
 
+**Factory Studio**:
+An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory.
+_Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
+
