@@ -13,9 +13,18 @@ bash scripts/setup.sh --modal --agy --opencode
 
 Decrypts credentials via local SOPS into standard user paths (`~/.modal.toml`, `~/.gemini/antigravity-cli/`, `~/.config/opencode/`).
 
+For frontend development, Node.js 24 and pnpm 10 are required:
+```bash
+pnpm --dir factory/ui/frontend install
+```
+
 ---
 
 ## 2. Web Workspace (Factory Studio & Console)
+
+The web workspace is a compiled Vite React SPA statically served by FastAPI at `/` (per ADR 0036).
+
+### Launch Server (Compiled React SPA)
 
 ```bash
 python factory/run.py --ui  # Default: http://127.0.0.1:3010
@@ -24,6 +33,25 @@ python factory/run.py --ui  # Default: http://127.0.0.1:3010
 - **Factory Studio**: Split-pane prompt interface with live preview (`https://3000.mahesh0.dev`) for frontend applications.
 - **Factory Testing Console**: Real-time assembly line orchestration, SSE log streaming, and milestone stepper for `software-factory-09-test`.
 - **Auth**: Basic HTTP Auth (`admin:admin` default; configure via `FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`).
+- **Flags**: `--host <ip>` (default `127.0.0.1`), `--port <port>` (default `3010`), `--open` (auto-open browser).
+
+### Frontend Development (Vite HMR)
+
+For active React UI development with Hot Module Replacement (HMR):
+
+```bash
+# 1. Start backend API server on port 3010:
+python factory/run.py --ui
+
+# 2. Start Vite React dev server on port 5173 (proxies /api to port 3010):
+pnpm --dir factory/ui/frontend dev
+
+# 3. Compile production bundle into factory/ui/static/dist/:
+pnpm --dir factory/ui/frontend build
+
+# 4. Run Vitest test suite:
+pnpm --dir factory/ui/frontend test
+```
 
 ---
 
