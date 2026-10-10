@@ -45,6 +45,7 @@ def dispatch_job(
     project: str,
     feature: str | None = None,
     issue: str | None = None,
+    tracker: str | None = None,
     vm: bool = False,
     testing: bool = False,
     model: str | None = None,
@@ -59,6 +60,7 @@ def dispatch_job(
         project: Target project secret name (under secrets/ or software-factory-09-test/ when testing).
         feature: Target feature slug (e.g. 'queues-page') or None when issue is provided.
         issue: Optional specific ticket ID. When None, runs full autonomous batch.
+        tracker: Issue tracker provider type ('github' or 'local').
         vm: Whether to run in a full VM Sandbox with Docker support.
         testing: Whether to run against canonical Test Organization under secrets_org/ per ADR 0031.
         model: Optional model override ('deepseek-v4.1-flash' or 'mimo-v2.6-flash').
@@ -80,10 +82,12 @@ def dispatch_job(
         project=project,
         feature=effective_feature,
         issue=issue,
+        tracker=tracker,
         vm=vm,
         testing=testing,
         model=model,
         memory_gb=memory_gb,
         timeout_secs=timeout_secs,
     )
+
     return run_factory_sandbox(config, stdout=stdout, stderr=stderr)

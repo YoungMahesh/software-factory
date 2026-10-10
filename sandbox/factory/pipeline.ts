@@ -139,12 +139,13 @@ export async function runAssemblyLinePipeline(
   if (options.issueId) {
     // Mode A: Targeted single-ticket mode
     const tickets = await tracker.getTickets(workspaceDir, featureSlug, options.issueId);
-    const targetId = options.issueId.trim();
+    const targetId = options.issueId.trim().replace(/^#/, "");
     const targetTicket = tickets.find(
       (t) =>
         t.id === targetId ||
         String(t.number) === targetId ||
-        t.slug === targetId
+        t.slug === targetId ||
+        t.id === options.issueId?.trim()
     );
 
     if (!targetTicket) {
@@ -316,6 +317,7 @@ function parseCliArgs(): {
   feature: string;
   issue?: string;
   model?: string;
+  tracker?: string;
   push: boolean;
 } {
   const args = process.argv.slice(2);
@@ -323,6 +325,7 @@ function parseCliArgs(): {
   let feature = "";
   let issue: string | undefined;
   let model: string | undefined;
+  let tracker: string | undefined;
   let push = true;
 
   for (let i = 0; i < args.length; i++) {
@@ -335,21 +338,23 @@ function parseCliArgs(): {
       issue = args[++i];
     } else if (arg === "--model" || arg === "-m") {
       model = args[++i];
+    } else if (arg === "--tracker" || arg === "-t") {
+      tracker = args[++i];
     } else if (arg === "--no-push") {
       push = false;
     }
   }
 
   if (!feature && issue) {
-    feature = `issue-${issue}`;
+    feature = `issue-${issue.trim().replace(/^#/, "")}`;
   }
 
   if (!feature) {
-    console.error("Usage: node pipeline.ts --feature <slug> [--workspace <dir>] [--issue <id>] [--model <model>] [--no-push]");
+    console.error("Usage: node pipeline.ts --feature <slug> [--workspace <dir>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--no-push]");
     process.exit(1);
   }
 
-  return { workspace, feature, issue, model, push };
+  return { workspace, feature, issue, model, tracker, push };
 }
 
 const isDirectRun =
@@ -359,7 +364,7 @@ const isDirectRun =
     path.basename(process.argv[1]) === "pipeline.js");
 
 if (isDirectRun) {
-  const { workspace, feature, issue, model, push } = parseCliArgs();
+  const { workspace, feature, issue, model, tracker, push } = parseCliArgs();
   console.log(`🚀 Launching Assembly Line Pipeline for feature "${feature}" in ${workspace}...`);
 
   runAssemblyLinePipeline({
@@ -367,6 +372,7 @@ if (isDirectRun) {
     featureSlug: feature,
     issueId: issue,
     modelId: model,
+    trackerType: (tracker as TrackerType) || undefined,
     push,
   })
     .then((result) => {

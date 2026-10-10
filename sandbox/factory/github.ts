@@ -47,6 +47,7 @@ export interface GitHubIssue {
 
 export interface GitHubPullRequest {
   id: number;
+  node_id?: string;
   number: number;
   title: string;
   body: string | null;
@@ -231,11 +232,29 @@ export class GitHubClient {
       draft?: boolean;
     }
   ): Promise<GitHubPullRequest> {
-    return this.request<GitHubPullRequest>(`/repos/${this.owner}/${this.repo}/pulls/${pullNumber}`, {
+    const res = await this.request<GitHubPullRequest>(`/repos/${this.owner}/${this.repo}/pulls/${pullNumber}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(update),
     });
+
+    if (update.draft === false && res?.node_id) {
+      try {
+        await this.request<any>("/graphql", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { id isDraft } } }`,
+            variables: { id: res.node_id },
+          }),
+        });
+        res.draft = false;
+      } catch {
+        // Fallback gracefully if GraphQL is not available or mocked
+      }
+    }
+
+    return res;
   }
 
   public async listPullRequests(options?: {

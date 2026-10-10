@@ -4,6 +4,7 @@ set -euo pipefail
 FEATURE_SLUG=""
 ISSUE_ID=""
 MODEL_ID=""
+TRACKER="${TRACKER:-}"
 
 # Parse command line arguments (supporting both flags and positional fallbacks)
 while [[ $# -gt 0 ]]; do
@@ -20,8 +21,12 @@ while [[ $# -gt 0 ]]; do
             MODEL_ID="$2"
             shift 2
             ;;
+        --tracker|-t)
+            TRACKER="$2"
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: $0 --feature <slug> [--issue <id>] [--model <model>]"
+            echo "Usage: $0 --feature <slug> [--issue <id>] [--model <model>] [--tracker <github|local>]"
             exit 0
             ;;
         *)
@@ -143,6 +148,8 @@ if [ -f "/root/secrets/org/token" ]; then
     fi
     rm -f /root/secrets/org/token
     echo "🧹 Purged encrypted organization token from disk."
+    export ORG_TOKEN="1"
+    export TRACKER="${TRACKER:-github}"
 else
     FETCH_SECRET_FILE=""
     if [ -f "/root/secrets/repo/fetch.env" ]; then
@@ -313,6 +320,9 @@ if [ -n "$ISSUE_ID" ]; then
 fi
 if [ -n "$MODEL_ID" ]; then
     CMD_ARGS+=("--model" "$MODEL_ID")
+fi
+if [ -n "${TRACKER:-}" ]; then
+    CMD_ARGS+=("--tracker" "$TRACKER")
 fi
 
 set +e

@@ -118,6 +118,8 @@ if [ -f "/root/secrets/org/token" ]; then
     fi
     rm -f /root/secrets/org/token
     echo "🧹 Purged encrypted organization token from disk."
+    export ORG_TOKEN="1"
+    export TRACKER="${TRACKER:-github}"
 elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
     FETCH_SECRET_FILE=""
     if [ -f "/root/secrets/repo/fetch.env" ]; then

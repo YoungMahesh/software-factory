@@ -104,6 +104,13 @@ def create_parser() -> argparse.ArgumentParser:
         help="Toggle LLM between 'DeepSeek V4.1 Flash' (default) and 'MiMo-V2.6-Flash'.",
     )
     parser.add_argument(
+        "--tracker",
+        "-t",
+        choices=["github", "local"],
+        default=None,
+        help="Explicitly select issue tracker provider ('github' or 'local').",
+    )
+    parser.add_argument(
         "--testing",
         "--test",
         dest="testing",
@@ -217,18 +224,22 @@ def main(
         return 1
 
     # Trigger Modal spawner and stream live execution logs
+    dispatch_kwargs = {
+        "project": args.project,
+        "feature": args.feature,
+        "issue": args.issue,
+        "vm": args.vm,
+        "testing": args.testing,
+        "model": args.model,
+        "memory_gb": args.memory_gb,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+    if getattr(args, "tracker", None):
+        dispatch_kwargs["tracker"] = args.tracker
+
     with modal.enable_output():
-        return dispatch_job(
-            project=args.project,
-            feature=args.feature,
-            issue=args.issue,
-            vm=args.vm,
-            testing=args.testing,
-            model=args.model,
-            memory_gb=args.memory_gb,
-            stdout=stdout,
-            stderr=stderr,
-        )
+        return dispatch_job(**dispatch_kwargs)
 
 
 if __name__ == "__main__":

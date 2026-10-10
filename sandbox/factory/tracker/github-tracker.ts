@@ -31,8 +31,11 @@ export interface GitHubIssueTrackerOptions {
 }
 
 export function extractIssueNumber(issueId?: string, featureSlug?: string): number | null {
-  if (issueId && /^\d+$/.test(issueId.trim())) {
-    return parseInt(issueId.trim(), 10);
+  if (issueId) {
+    const cleanId = issueId.trim().replace(/^#/, "");
+    if (/^\d+$/.test(cleanId)) {
+      return parseInt(cleanId, 10);
+    }
   }
   if (featureSlug) {
     const match = featureSlug.trim().match(/^issue-(\d+)$/i);
@@ -374,6 +377,7 @@ export class GitHubIssueTracker implements IssueTracker {
           (p: any) =>
             p.head === branch ||
             p.head?.ref === branch ||
+            p.head?.label === `${this.client.owner}:${branch}` ||
             p.head === `${this.client.owner}:${branch}`
         ) ?? null;
       return this.activePullRequest;

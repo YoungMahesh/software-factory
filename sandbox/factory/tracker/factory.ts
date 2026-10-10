@@ -29,8 +29,9 @@ function getGitHubClient(options: IssueTrackerFactoryOptions): GitHubClient {
 /**
  * Resolves the issue tracker by examining options, environment variables, and repository files.
  * Defaults to GitHubIssueTracker when repository environment includes an organization token or
- * TRACKER=github is set, or if .scratch/ is absent and GitHub credentials are present.
- * Defaults to LocalScratchTracker when .scratch/ is detected.
+ * TRACKER=github is set, or if target repository belongs to software-factory-09-test, or if
+ * .scratch/<feature>/spec.md is absent and GitHub credentials are present.
+ * Defaults to LocalScratchTracker when a local feature spec exists or when explicitly requested.
  */
 export function resolveIssueTracker(options: IssueTrackerFactoryOptions = {}): IssueTracker {
   if (options.trackerType === "github" || process.env.TRACKER === "github") {
@@ -42,12 +43,32 @@ export function resolveIssueTracker(options: IssueTrackerFactoryOptions = {}): I
   }
 
   const workspace = options.workspaceDir ?? process.cwd();
-  const hasScratch = fs.existsSync(path.join(workspace, ".scratch"));
   const hasToken = Boolean(
     options.token || process.env.GH_TOKEN || process.env.GITHUB_TOKEN
   );
 
-  if (hasToken && !hasScratch) {
+  // If organization token / canonical test org is present in environment
+  const isOrgRepo = Boolean(
+    process.env.ORG_TOKEN ||
+    (process.env.GH_REPO && process.env.GH_REPO.startsWith("software-factory-09-test/"))
+  );
+  if (hasToken && isOrgRepo) {
+    try {
+      return new GitHubIssueTracker({ client: getGitHubClient(options) });
+    } catch {
+      // Fall through to local tracker if client cannot be created
+    }
+  }
+
+  const hasScratch = fs.existsSync(path.join(workspace, ".scratch"));
+
+  // Fallback to LocalScratchTracker if .scratch/ is detected
+  if (hasScratch) {
+    return new LocalScratchTracker();
+  }
+
+  // If GitHub credentials exist and no .scratch/ is found, prefer GitHubIssueTracker
+  if (hasToken) {
     try {
       return new GitHubIssueTracker({ client: getGitHubClient(options) });
     } catch {

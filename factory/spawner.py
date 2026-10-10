@@ -43,6 +43,7 @@ class FactorySpawnConfig:
     project: str
     feature: str
     issue: str | None = None
+    tracker: str | None = None
     vm: bool = False
     testing: bool = False
     model: str | None = None
@@ -274,12 +275,18 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
     if not feature_slug and config.issue:
         feature_slug = f"issue-{config.issue.strip()}"
 
+    effective_tracker = config.tracker
+    if not effective_tracker and (config.testing or target_repo or (secrets_dir / "token").is_file()):
+        effective_tracker = "github"
+
     env: dict[str, str | None] = {
         "APP_NAME": app_name,
         "FEATURE_SLUG": feature_slug,
         "ENABLE_CLOUDFLARE": "0",
         "ENABLE_DOCKER": "1" if config.vm else "0",
     }
+    if effective_tracker:
+        env["TRACKER"] = effective_tracker
     if target_repo:
         env["GH_REPO"] = target_repo
 
@@ -316,6 +323,8 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
         entrypoint_args.extend(["--issue", config.issue])
     if config.model:
         entrypoint_args.extend(["--model", config.model])
+    if config.tracker:
+        entrypoint_args.extend(["--tracker", config.tracker])
 
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
