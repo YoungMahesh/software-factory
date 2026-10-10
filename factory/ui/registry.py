@@ -21,6 +21,8 @@ from factory.spawner import (
     create_factory_sandbox,
 )
 
+DEFAULT_PREVIEW_URL: str = "https://3000.mahesh0.dev"
+
 
 class JobStatus(str, Enum):
     QUEUED = "QUEUED"
@@ -39,6 +41,7 @@ class JobStage(str, Enum):
     VERIFIER = "VERIFIER"
     REVIEWER = "REVIEWER"
     COMPLETED = "COMPLETED"
+    SERVING = "SERVING"
 
 
 STAGE_PATTERNS = [
@@ -48,6 +51,7 @@ STAGE_PATTERNS = [
     (re.compile(r"Stage 3: Deterministic Verifier|verifyWorkspace|Deterministic Verification", re.IGNORECASE), JobStage.VERIFIER),
     (re.compile(r"Stage 4: Reviewer Agent|runReviewerAgent|Reviewing diff", re.IGNORECASE), JobStage.REVIEWER),
     (re.compile(r"Assembly line pipeline completed successfully|IN-CONTAINER ASSEMBLY LINE PIPELINE PASSED", re.IGNORECASE), JobStage.COMPLETED),
+    (re.compile(r"active serving keep-alive state|Dev server running with PID|Launching Dev Preview Keep-Alive Daemon", re.IGNORECASE), JobStage.SERVING),
 ]
 
 
@@ -61,6 +65,8 @@ class FactoryJob:
     issue: str | None
     model: str
     vm: bool
+    dev: bool = False
+    preview_url: str | None = None
     status: JobStatus = JobStatus.QUEUED
     stage: JobStage = JobStage.IDLE
     created_at: float = field(default_factory=time.time)
@@ -86,6 +92,8 @@ class FactoryJob:
             "issue": self.issue,
             "model": self.model,
             "vm": self.vm,
+            "dev": self.dev,
+            "preview_url": self.preview_url,
             "status": self.status.value,
             "stage": self.stage.value,
             "created_at": self.created_at,
@@ -113,9 +121,11 @@ class JobRegistry:
         issue: str | None = None,
         model: str = "deepseek-v4.1-flash",
         vm: bool = False,
+        dev: bool = False,
     ) -> FactoryJob:
         """Creates and registers a new test job."""
         job_id = uuid.uuid4().hex[:10]
+        preview_url = DEFAULT_PREVIEW_URL if dev else None
         job = FactoryJob(
             id=job_id,
             repo=repo.strip(),
@@ -123,6 +133,8 @@ class JobRegistry:
             issue=issue.strip() if issue else None,
             model=model.strip(),
             vm=vm,
+            dev=dev,
+            preview_url=preview_url,
         )
         with self._lock:
             self._jobs[job_id] = job
@@ -249,6 +261,7 @@ class JobRegistry:
                 vm=job.vm,
                 testing=True,
                 model=job.model,
+                dev=job.dev,
                 timeout_secs=FACTORY_TIMEOUT_SECS,
             )
 

@@ -183,6 +183,38 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertEqual(env["ENABLE_DOCKER"], "1")
         self.assertEqual(env["SWAP_GB"], "4")
 
+    @patch("modal.App.lookup")
+    @patch("modal.Sandbox.create")
+    def test_create_factory_sandbox_with_dev_preview(self, mock_sandbox_create, mock_app_lookup):
+        mock_app = MagicMock()
+        mock_app_lookup.return_value = mock_app
+        mock_sandbox = MagicMock()
+        mock_sandbox_create.return_value = mock_sandbox
+
+        config = FactorySpawnConfig(
+            project="test3",
+            feature="preview-app",
+            testing=True,
+            dev=True,
+            repo_root=self.repo_root,
+        )
+
+        sandbox = create_factory_sandbox(config)
+        self.assertEqual(sandbox, mock_sandbox)
+
+        mock_sandbox_create.assert_called_once()
+        args, kwargs = mock_sandbox_create.call_args
+
+        self.assertIn("--dev", args)
+        env = kwargs["env"]
+        self.assertEqual(env["DEV_PREVIEW"], "1")
+        self.assertEqual(env["ENABLE_CLOUDFLARE"], "1")
+        self.assertEqual(env["PORT"], "3000")
+
+        # Emergency cancellation test via sandbox.terminate()
+        sandbox.terminate()
+        mock_sandbox.terminate.assert_called_once()
+
     @patch("factory.spawner.create_factory_sandbox")
     def test_spawn_factory_sandbox_alias(self, mock_create):
         mock_sandbox = MagicMock()

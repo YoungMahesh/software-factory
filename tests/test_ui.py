@@ -298,6 +298,39 @@ class TestJobRegistry(unittest.TestCase):
         mock_sandbox.terminate.assert_called_once()
         self.assertIn("cancelled", job.logs[-1].lower())
 
+    def test_create_job_with_dev_preview(self):
+        job = self.registry.create_job(
+            repo="test3",
+            feature="preview-feat",
+            dev=True,
+        )
+        self.assertTrue(job.dev)
+        self.assertEqual(job.preview_url, "https://3000.mahesh0.dev")
+        d = job.to_dict()
+        self.assertTrue(d["dev"])
+        self.assertEqual(d["preview_url"], "https://3000.mahesh0.dev")
+
+    def test_stage_detection_serving(self):
+        job = self.registry.create_job(repo="test3", feature="slug-generator", dev=True)
+        self.registry.append_log(job.id, "🎉 Assembly line pipeline completed successfully!\n")
+        self.assertEqual(job.stage, JobStage.COMPLETED)
+
+        self.registry.append_log(job.id, "⏳ Container entering active serving keep-alive state (https://3000.mahesh0.dev)...\n")
+        self.assertEqual(job.stage, JobStage.SERVING)
+
+    def test_cancel_serving_job_terminates_sandbox(self):
+        job = self.registry.create_job(repo="test3", feature="slug-generator", dev=True)
+        mock_sandbox = MagicMock()
+        job.sandbox = mock_sandbox
+        job.status = JobStatus.RUNNING
+        job.stage = JobStage.SERVING
+
+        res = self.registry.cancel_job(job.id)
+        self.assertTrue(res)
+        self.assertEqual(job.status, JobStatus.CANCELLED)
+        mock_sandbox.terminate.assert_called_once()
+        self.assertIn("cancelled", job.logs[-1].lower())
+
 
 class TestFastApiApp(unittest.TestCase):
     def setUp(self):
@@ -519,6 +552,25 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(job_data["repo"], "test3")
         self.assertEqual(job_data["feature"], "slug-generator")
         self.assertEqual(job_data["status"], "QUEUED")
+        self.assertFalse(job_data["dev"])
+        mock_start_job.assert_called_once_with(job_data["id"])
+
+    @patch.object(JobRegistry, "start_job")
+    def test_launch_job_with_dev_preview(self, mock_start_job):
+        payload = {
+            "repo": "test3",
+            "feature": "slug-generator",
+            "issue": "01",
+            "model": "deepseek-v4.1-flash",
+            "vm": False,
+            "dev": True,
+        }
+        resp = self.client.post("/api/jobs", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        job_data = resp.json()
+        self.assertEqual(job_data["repo"], "test3")
+        self.assertTrue(job_data["dev"])
+        self.assertEqual(job_data["preview_url"], "https://3000.mahesh0.dev")
         mock_start_job.assert_called_once_with(job_data["id"])
 
     def test_cancel_job_endpoint(self):
@@ -1395,6 +1447,9 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
             self.assertEqual(data["job"]["repo"], "test3")
             self.assertEqual(data["job"]["feature"], "v1-initial-app")
             self.assertEqual(data["job"]["issue"], "1")
+            self.assertTrue(data["job"]["dev"])
+            self.assertEqual(data["job"]["preview_url"], "https://3000.mahesh0.dev")
+            self.assertEqual(data["preview_url"], "https://3000.mahesh0.dev")
             self.assertEqual(data["milestone"]["number"], 1)
             self.assertEqual(data["milestone"]["slug"], "v1-initial-app")
             self.assertEqual(data["issue"]["number"], 1)

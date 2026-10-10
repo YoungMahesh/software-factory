@@ -119,6 +119,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Target isolated test repositories under canonical test organization software-factory-09-test/.",
     )
     parser.add_argument(
+        "--dev",
+        "--preview",
+        dest="dev",
+        action="store_true",
+        default=False,
+        help="Launch in-sandbox dev preview keep-alive daemon on port 3000.",
+    )
+    parser.add_argument(
         "--ui",
         "--console",
         dest="ui",
@@ -227,6 +235,7 @@ def main(
         "testing": args.testing,
         "model": args.model,
         "memory_gb": args.memory_gb,
+        "dev": getattr(args, "dev", False),
         "stdout": stdout,
         "stderr": stderr,
     }

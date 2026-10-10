@@ -53,6 +53,7 @@ class FactorySpawnConfig:
     app_name: str | None = None
     repo_root: Path | None = None
     install_deps: bool = True
+    dev: bool = False
 
 
 def resolve_repo_root(repo_root: Path | None = None) -> Path:
@@ -282,9 +283,12 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
     env: dict[str, str | None] = {
         "APP_NAME": app_name,
         "FEATURE_SLUG": feature_slug,
-        "ENABLE_CLOUDFLARE": "0",
+        "ENABLE_CLOUDFLARE": "1" if config.dev else "0",
         "ENABLE_DOCKER": "1" if config.vm else "0",
     }
+    if config.dev:
+        env["DEV_PREVIEW"] = "1"
+        env["PORT"] = "3000"
     if effective_tracker:
         env["TRACKER"] = effective_tracker
     if target_repo:
@@ -325,6 +329,8 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
         entrypoint_args.extend(["--model", config.model])
     if config.tracker:
         entrypoint_args.extend(["--tracker", config.tracker])
+    if config.dev:
+        entrypoint_args.append("--dev")
 
     with modal.enable_output():
         sandbox = modal.Sandbox.create(

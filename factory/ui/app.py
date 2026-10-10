@@ -41,6 +41,7 @@ class LaunchJobRequest(BaseModel):
     issue: str | None = Field(None, description="Optional ticket ID (e.g. '01' or '42')")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
+    dev: bool = Field(False, description="Launch in dev preview mode with port 3000 keep-alive")
 
 
 class CreateRepoRequest(BaseModel):
@@ -165,6 +166,7 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
             issue=str(issue["number"]),
             model=req.model,
             vm=req.vm,
+            dev=True,
         )
         registry.start_job(job.id)
 
@@ -177,6 +179,7 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
             "issue": issue,
             "milestone": milestone,
             "stage": job.stage.value,
+            "preview_url": job.preview_url,
         }
 
 
@@ -223,6 +226,7 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
             issue=issue,
             model=req.model,
             vm=req.vm,
+            dev=req.dev,
         )
         registry.start_job(job.id)
         return job.to_dict()

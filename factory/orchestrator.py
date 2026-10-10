@@ -51,6 +51,7 @@ def dispatch_job(
     model: str | None = None,
     memory_gb: int | None = None,
     timeout_secs: int = FACTORY_TIMEOUT_SECS,
+    dev: bool = False,
     stdout: TextIO = sys.stdout,
     stderr: TextIO = sys.stderr,
 ) -> int:
@@ -66,6 +67,7 @@ def dispatch_job(
         model: Optional model override ('deepseek-v4.1-flash' or 'mimo-v2.6-flash').
         memory_gb: Memory allocation in GB (for VM sandboxes).
         timeout_secs: Maximum sandbox runtime in seconds (default 16 hours).
+        dev: Whether to launch dev preview keep-alive daemon on port 3000.
         stdout: Standard output stream for live execution logs.
         stderr: Standard error stream for live execution logs.
 
@@ -88,6 +90,7 @@ def dispatch_job(
         model=model,
         memory_gb=memory_gb,
         timeout_secs=timeout_secs,
+        dev=dev,
     )
 
     return run_factory_sandbox(config, stdout=stdout, stderr=stderr)

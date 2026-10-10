@@ -53,6 +53,21 @@ class TestFactoryOrchestrator(unittest.TestCase):
         self.assertTrue(config.vm)
         self.assertEqual(config.model, "mimo")
         self.assertEqual(config.memory_gb, 2)
+        self.assertFalse(config.dev)
+
+    @patch("factory.orchestrator.run_factory_sandbox")
+    def test_dispatch_job_with_dev_preview(self, mock_run):
+        mock_run.return_value = 0
+        code = dispatch_job(
+            project="test3",
+            feature="slug-generator",
+            testing=True,
+            dev=True,
+        )
+        self.assertEqual(code, 0)
+        mock_run.assert_called_once()
+        config = mock_run.call_args[0][0]
+        self.assertTrue(config.dev)
 
 
 if __name__ == "__main__":

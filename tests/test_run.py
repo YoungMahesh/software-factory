@@ -51,6 +51,16 @@ class TestCliDispatcherArgs(unittest.TestCase):
         self.assertTrue(args.vm)
         self.assertEqual(args.memory_gb, 4)
 
+    def test_parse_args_dev_flags(self):
+        args1 = parse_args(["--project", "test3", "--feature", "slug-gen", "--dev"])
+        self.assertTrue(args1.dev)
+
+        args2 = parse_args(["--project", "test3", "--feature", "slug-gen", "--preview"])
+        self.assertTrue(args2.dev)
+
+        args3 = parse_args(["--project", "test3", "--feature", "slug-gen"])
+        self.assertFalse(args3.dev)
+
     def test_model_normalization_default(self):
         self.assertEqual(normalize_model_name(None), "deepseek-v4.1-flash")
         self.assertEqual(normalize_model_name(""), "deepseek-v4.1-flash")
@@ -170,6 +180,7 @@ class TestCliExecution(unittest.TestCase):
             testing=True,
             model="deepseek-v4.1-flash",
             memory_gb=None,
+            dev=False,
             stdout=stdout_buf,
             stderr=stderr_buf,
         )
@@ -189,6 +200,7 @@ class TestCliExecution(unittest.TestCase):
                 "--memory", "2",
                 "--model", "MiMo-V2.6-Flash",
                 "--testing",
+                "--dev",
             ],
             stdout=stdout_buf,
             stderr=stderr_buf,
@@ -204,6 +216,7 @@ class TestCliExecution(unittest.TestCase):
             testing=True,
             model="mimo-v2.6-flash",
             memory_gb=2,
+            dev=True,
             stdout=stdout_buf,
             stderr=stderr_buf,
         )
