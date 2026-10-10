@@ -252,7 +252,7 @@ def create_app(
         clean_repo = repo.strip()
         if not clean_repo:
             raise HTTPException(status_code=400, detail="Repository name is required.")
-        stopped = preview_reg.stop_preview(clean_repo)
+        stopped = await preview_reg.stop_preview(clean_repo)
         if not stopped:
             raise HTTPException(
                 status_code=400,

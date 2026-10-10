@@ -461,6 +461,8 @@ fi
 
 # 10. Dev preview keep-alive daemon
 if [ "${DEV_PREVIEW:-0}" = "1" ]; then
+    export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-.modal.host,3000.mahesh0.dev}"
+
     echo ""
     echo "================================================================"
     echo "🌟 Launching Dev Preview Keep-Alive Daemon"
@@ -468,6 +470,7 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     echo "  • Working Directory: ${TARGET_DIR}"
     echo "  • Dev Command: pnpm dev --port 3000 --host 0.0.0.0"
     echo "  • Preview URL: https://3000.mahesh0.dev"
+    echo "  • Allowed Hosts: ${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS}"
     echo "================================================================"
 
     cd "$TARGET_DIR"

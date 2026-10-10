@@ -40,6 +40,7 @@ FACTORY_CPU: tuple[float, float] = (0.125, 4.0)
 # Dedicated preview constants per ADR 0037
 PREVIEW_PORT: int = 3000
 PREVIEW_IDLE_TIMEOUT_SECS: int = 1800  # 30 minutes
+PREVIEW_ALLOWED_HOSTS: str = ".modal.host,3000.mahesh0.dev"
 
 
 @dataclass
@@ -316,6 +317,7 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
     if config.dev:
         env["DEV_PREVIEW"] = "1"
         env["PORT"] = "3000"
+        env["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"] = PREVIEW_ALLOWED_HOSTS
     if effective_tracker:
         env["TRACKER"] = effective_tracker
     if target_repo:
@@ -411,6 +413,7 @@ def create_preview_sandbox(config: PreviewSpawnConfig) -> tuple[modal.Sandbox, s
         "ENABLE_DOCKER": "0",
         "DEV_PREVIEW": "1",
         "PORT": str(PREVIEW_PORT),
+        "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": PREVIEW_ALLOWED_HOSTS,
     }
 
     entrypoint_args: list[str] = [

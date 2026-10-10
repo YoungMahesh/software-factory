@@ -142,6 +142,7 @@ class TestFactorySpawner(unittest.TestCase):
         env = kwargs["env"]
         self.assertEqual(env["FEATURE_SLUG"], "slug-generator")
         self.assertEqual(env["ENABLE_DOCKER"], "0")
+        self.assertNotIn("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS", env)
 
     @patch("modal.App.lookup")
     @patch("modal.Sandbox.create")
@@ -210,6 +211,7 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertEqual(env["DEV_PREVIEW"], "1")
         self.assertEqual(env["ENABLE_CLOUDFLARE"], "1")
         self.assertEqual(env["PORT"], "3000")
+        self.assertEqual(env["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"], ".modal.host,3000.mahesh0.dev")
 
         # Emergency cancellation test via sandbox.terminate()
         sandbox.terminate()

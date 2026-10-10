@@ -89,6 +89,7 @@ exit {pipeline_exit}
 echo "pnpm $@" >> "{log_file}"
 if [ "$1" = "dev" ]; then
     echo "pnpm dev started" >> "{log_file}"
+    echo "ALLOWED_HOSTS=$__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS" >> "{log_file}"
     # Keep alive until terminated
     while true; do
         sleep 0.1
@@ -273,6 +274,45 @@ exit 0
             )
             self.assertNotEqual(res.returncode, 0)
             self.assertIn("Cloudflare Tunnel secret file not found", res.stderr)
+
+    def _run_dev_preview_server(self, env_overrides: dict[str, str] | None = None) -> str:
+        import signal
+        import tempfile
+        import time
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0)
+            if env_overrides is not None:
+                env.update(env_overrides)
+            else:
+                env.pop("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS", None)
+
+            proc = subprocess.Popen(
+                ["bash", str(self.entrypoint_script), "--feature", "test-feat", "--dev"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+
+            for _ in range(50):
+                time.sleep(0.1)
+                if log_file.exists() and "pnpm dev started" in log_file.read_text():
+                    break
+
+            proc.send_signal(signal.SIGTERM)
+            proc.communicate(timeout=5)
+            return log_file.read_text()
+
+    def test_dev_preview_exports_fallback_allowed_hosts(self):
+        logs = self._run_dev_preview_server()
+        self.assertIn("ALLOWED_HOSTS=.modal.host,3000.mahesh0.dev", logs)
+
+    def test_dev_preview_preserves_custom_allowed_hosts(self):
+        logs = self._run_dev_preview_server(
+            {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "custom.modal.host,3000.mahesh0.dev"}
+        )
+        self.assertIn("ALLOWED_HOSTS=custom.modal.host,3000.mahesh0.dev", logs)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -616,7 +616,8 @@ class TestFastApiApp(unittest.TestCase):
         mock_sandbox.stdout = iter(["Dev server started on port 3000\n"])
         mock_sandbox.stderr = iter([])
         mock_sandbox.wait.side_effect = lambda **kwargs: stop_event.wait(timeout=2.0)
-        mock_sandbox.terminate.side_effect = lambda: stop_event.set()
+        mock_sandbox.terminate = MagicMock()
+        mock_sandbox.terminate.aio = AsyncMock(side_effect=lambda: stop_event.set())
         mock_sandbox.returncode = 0
         mock_create.return_value = (mock_sandbox, "https://sb-preview-999-3000.modal.host")
 
@@ -660,7 +661,7 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(resp_del.status_code, 200)
         del_data = resp_del.json()
         self.assertTrue(del_data["success"])
-        mock_sandbox.terminate.assert_called_once()
+        mock_sandbox.terminate.aio.assert_awaited_once()
 
         # 5. Subsequent DELETE returns 400 or 404
         resp_del_again = self.client.delete("/api/studio/repos/test3/preview")

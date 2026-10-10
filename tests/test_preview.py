@@ -1,8 +1,9 @@
 """Unit tests for Dedicated Preview Sandbox spawner and in-memory registry."""
 
+import asyncio
 from pathlib import Path
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from factory.spawner import (
     FACTORY_CPU,
@@ -66,6 +67,7 @@ class TestPreviewSpawner(unittest.TestCase):
         self.assertEqual(env["DEV_PREVIEW"], "1")
         self.assertEqual(env["PORT"], "3000")
         self.assertEqual(env["BRANCH"], "factory/preview-feature")
+        self.assertEqual(env["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"], ".modal.host,3000.mahesh0.dev")
 
 
 class TestBranchResolution(unittest.TestCase):
@@ -127,7 +129,8 @@ class TestPreviewRegistry(unittest.TestCase):
         mock_sandbox.stdout = iter(["Ready in 250ms\n"])
         mock_sandbox.stderr = iter([])
         mock_sandbox.wait.side_effect = lambda **kwargs: stop_event.wait(timeout=2.0)
-        mock_sandbox.terminate.side_effect = lambda: stop_event.set()
+        mock_sandbox.terminate = MagicMock()
+        mock_sandbox.terminate.aio = AsyncMock(side_effect=lambda: stop_event.set())
         mock_sandbox.returncode = 0
         mock_create.return_value = (mock_sandbox, "https://sb-12345-3000.modal.host")
 
@@ -149,10 +152,10 @@ class TestPreviewRegistry(unittest.TestCase):
         self.assertEqual(p.preview_url, "https://sb-12345-3000.modal.host")
         self.assertEqual(p.sandbox_id, "sb-12345")
 
-        # Stop preview
-        stopped = self.registry.stop_preview("test3")
+        # Stop preview asynchronously
+        stopped = asyncio.run(self.registry.stop_preview("test3"))
         self.assertTrue(stopped)
-        mock_sandbox.terminate.assert_called_once()
+        mock_sandbox.terminate.aio.assert_awaited_once()
         self.assertEqual(p.status, "STOPPED")
 
     def test_preview_state_to_dict_includes_logs(self):

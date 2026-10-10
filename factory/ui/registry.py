@@ -7,6 +7,7 @@ via regular expressions, and provides sandbox termination control.
 
 from dataclasses import dataclass, field
 from enum import Enum
+import inspect
 import json
 import queue
 import re
@@ -612,8 +613,8 @@ class PreviewRegistry:
         thread.start()
         return preview
 
-    def stop_preview(self, repo: str) -> bool:
-        """Terminates active preview sandbox for a repository."""
+    async def stop_preview(self, repo: str) -> bool:
+        """Terminates active Dedicated Preview Sandbox for a repository asynchronously."""
         clean_repo = repo.strip()
         sandbox_to_terminate = None
         with self._lock:
@@ -629,7 +630,19 @@ class PreviewRegistry:
 
         if sandbox_to_terminate is not None:
             try:
-                sandbox_to_terminate.terminate()
+                terminate_fn = getattr(sandbox_to_terminate, "terminate", None)
+                if terminate_fn is not None:
+                    terminate_aio = getattr(terminate_fn, "aio", None)
+                    if callable(terminate_aio):
+                        result = terminate_aio()
+                        if inspect.isawaitable(result):
+                            await result
+                    elif inspect.iscoroutinefunction(terminate_fn):
+                        await terminate_fn()
+                    else:
+                        result = terminate_fn()
+                        if inspect.isawaitable(result):
+                            await result
             except Exception:
                 pass
 
