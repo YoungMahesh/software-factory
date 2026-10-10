@@ -35,7 +35,7 @@ async function runLiveGitHubSandboxVerification() {
   // 1. Verify remote milestones
   const milestones = await client.listMilestones("open");
   console.log(`📋 Found ${milestones.length} open milestone(s) on GitHub:`, milestones.map((m) => m.title));
-  const targetMilestone = milestones.find((m) => m.title === featureSlug || m.slug === featureSlug);
+  const targetMilestone = milestones.find((m) => m.title === featureSlug);
   if (!targetMilestone) {
     throw new Error(`Target milestone "${featureSlug}" not found on GitHub`);
   }
@@ -131,6 +131,9 @@ test("slugify handles underscore delimiter in delivery gate verification", () =>
   });
   if (!gateInitResult) {
     throw new Error("initializeDeliveryGate returned null");
+  }
+  if (!gateInitResult.pullRequestNumber) {
+    throw new Error("initializeDeliveryGate did not return pullRequestNumber");
   }
   console.log(`Draft PR created: #${gateInitResult.pullRequestNumber} (${gateInitResult.pullRequestUrl})`);
   const pr = await client.getPullRequest(gateInitResult.pullRequestNumber);

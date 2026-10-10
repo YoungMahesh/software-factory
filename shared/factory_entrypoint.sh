@@ -401,6 +401,7 @@ if [ -n "${TRACKER:-}" ]; then
 fi
 
 set +e
+export PYTHONUNBUFFERED=1
 node --experimental-strip-types "${FACTORY_DIR}/pipeline.ts" "${CMD_ARGS[@]}"
 EXIT_CODE=$?
 set -e

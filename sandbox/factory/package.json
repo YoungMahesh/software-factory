@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-strip-types preflight.test.ts verifier.test.ts provider.test.ts tools.test.ts parsers.test.ts harness.test.ts ticket.test.ts git.test.ts lifecycle.test.ts pipeline.test.ts github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts",
+    "test": "node --test --experimental-strip-types events.test.ts preflight.test.ts verifier.test.ts provider.test.ts tools.test.ts parsers.test.ts harness.test.ts ticket.test.ts git.test.ts lifecycle.test.ts pipeline.test.ts github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts",
     "test:tracker": "node --test --experimental-strip-types github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts",
     "test:pipeline": "node --test --experimental-strip-types ticket.test.ts git.test.ts lifecycle.test.ts pipeline.test.ts",
     "test:verifier": "node --test --experimental-strip-types verifier.test.ts",

@@ -269,6 +269,7 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
                     "event": "init",
                     "job": job.to_dict(),
                     "backlog": job.logs,
+                    "events": job.events,
                 }
                 yield f"data: {json.dumps(init_payload)}\n\n"
 

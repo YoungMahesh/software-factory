@@ -7,6 +7,7 @@ via regular expressions, and provides sandbox termination control.
 
 from dataclasses import dataclass, field
 from enum import Enum
+import json
 import queue
 import re
 import threading
@@ -75,6 +76,7 @@ class FactoryJob:
     exit_code: int | None = None
     error_message: str | None = None
     logs: list[str] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
     listeners: list[queue.Queue] = field(default_factory=list)
     sandbox: modal.Sandbox | None = None
     _cancelled: bool = False
@@ -103,16 +105,18 @@ class FactoryJob:
             "exit_code": self.exit_code,
             "error_message": self.error_message,
             "log_count": len(self.logs),
+            "event_count": len(self.events),
         }
 
 
 class JobRegistry:
     """Thread-safe manager for software factory test jobs."""
 
-    def __init__(self, max_log_lines: int = 10000):
+    def __init__(self, max_log_lines: int = 10000, max_events: int = 10000):
         self._jobs: dict[str, FactoryJob] = {}
         self._lock = threading.RLock()
         self.max_log_lines = max_log_lines
+        self.max_events = max_events
 
     def create_job(
         self,
@@ -169,26 +173,63 @@ class JobRegistry:
                 job.listeners.remove(q)
 
     def append_log(self, job_id: str, line: str) -> None:
-        """Appends a log line, detects stage transitions, and notifies listeners."""
+        """Appends log text or structured telemetry, detects stages, and notifies listeners.
+
+        Detects single-line JSON telemetry envelopes prefixed with '__SF_EVENT__:', parses
+        and records them in job.events, and broadcasts typed 'agent_event' payloads.
+        Raw __SF_EVENT__: lines are stripped from job.logs. Plain-text lines are preserved
+        in job.logs, checked for stage transitions, and broadcast as 'log' payloads.
+        """
         with self._lock:
             job = self._jobs.get(job_id)
             if not job:
                 return
 
-            # Detect stage transitions from log line
-            for pattern, detected_stage in STAGE_PATTERNS:
-                if pattern.search(line):
-                    if job.stage != detected_stage:
-                        job.stage = detected_stage
-                        self._broadcast(job, {"event": "stage", "stage": detected_stage.value})
-                    break
+            lines = line.splitlines(keepends=True)
+            for raw_line in lines:
+                stripped = raw_line.strip()
+                if stripped.startswith("__SF_EVENT__:"):
+                    payload_str = stripped[len("__SF_EVENT__:"):].strip()
+                    try:
+                        event_obj = json.loads(payload_str)
+                    except Exception:
+                        continue
 
-            if len(job.logs) >= self.max_log_lines:
-                job.logs.pop(0)
-            job.logs.append(line)
+                    if not isinstance(event_obj, dict):
+                        continue
 
-            payload = {"event": "log", "data": line}
-            self._broadcast(job, payload)
+                    if len(job.events) >= self.max_events:
+                        job.events.pop(0)
+                    job.events.append(event_obj)
+
+                    # Stage transition detection from structured telemetry
+                    if event_obj.get("type") == "stage":
+                        stage_name = event_obj.get("stage") or event_obj.get("data", {}).get("stage")
+                        if stage_name:
+                            try:
+                                detected_stage = JobStage(stage_name)
+                                if job.stage != detected_stage:
+                                    job.stage = detected_stage
+                                    self._broadcast(job, {"event": "stage", "stage": detected_stage.value})
+                            except ValueError:
+                                pass
+
+                    self._broadcast(job, {"event": "agent_event", "data": event_obj})
+                else:
+                    # Detect stage transitions from log line
+                    for pattern, detected_stage in STAGE_PATTERNS:
+                        if pattern.search(raw_line):
+                            if job.stage != detected_stage:
+                                job.stage = detected_stage
+                                self._broadcast(job, {"event": "stage", "stage": detected_stage.value})
+                            break
+
+                    if len(job.logs) >= self.max_log_lines:
+                        job.logs.pop(0)
+                    job.logs.append(raw_line)
+
+                    payload = {"event": "log", "data": raw_line}
+                    self._broadcast(job, payload)
 
     def _broadcast(self, job: FactoryJob, payload: dict[str, Any]) -> None:
         dead_listeners = []
