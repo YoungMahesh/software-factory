@@ -21,10 +21,10 @@ def get_default_port() -> int:
             return int(env_port)
         except ValueError:
             pass
-    return 3000
+    return 3010
 
 
-DEFAULT_PORT = 3000
+DEFAULT_PORT = 3010
 
 
 def start_server(
@@ -49,9 +49,17 @@ def start_server(
 
         threading.Thread(target=_open, daemon=True).start()
 
+    from factory.ui.auth import get_auth_credentials
+    creds = get_auth_credentials()
+
     print(f"\n========================================================")
-    print(f"🏭 Factory Testing Console running at http://{host}:{port}")
+    print(f"🏭 Factory Studio running at http://{host}:{port}")
     print(f"   Target Organization: software-factory-09-test")
+    if creds.is_fallback:
+        print(f"   ⚠️  SECURITY WARNING: Using local dev fallback ('{creds.username}':'{creds.password}')")
+        print(f"      Set FACTORY_AUTH_USER and FACTORY_AUTH_PASS in production!")
+    else:
+        print(f"   🔒 HTTP Basic Auth enabled (user: '{creds.username}')")
     print(f"   Press Ctrl+C to terminate.")
     print(f"========================================================\n")
 
@@ -59,10 +67,10 @@ def start_server(
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entrypoint for running the Factory Testing Console."""
+    """CLI entrypoint for running the Factory Studio web interface."""
     parser = argparse.ArgumentParser(
         prog="factory.ui",
-        description="Launch the Factory Testing Console web interface.",
+        description="Launch the Factory Studio web interface.",
     )
     parser.add_argument(
         "--host",

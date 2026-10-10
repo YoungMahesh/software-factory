@@ -124,26 +124,21 @@ def create_parser() -> argparse.ArgumentParser:
         dest="ui",
         action="store_true",
         default=False,
-        help="Launch the interactive Factory Testing Console web interface.",
+        help="Launch the interactive Factory Studio web interface.",
     )
-    default_port = 3000
-    env_port = os.getenv("PORT")
-    if env_port is not None:
-        try:
-            default_port = int(env_port)
-        except ValueError:
-            default_port = 3000
+    from factory.ui.server import get_default_port
+    default_port = get_default_port()
 
     parser.add_argument(
         "--port",
         type=int,
         default=default_port,
-        help="Port for the Factory Testing Console (default: 3000).",
+        help="Port for the Factory Studio web interface (default: 3010).",
     )
     parser.add_argument(
         "--host",
         default="127.0.0.1",
-        help="Host address for the Factory Testing Console (default: 127.0.0.1).",
+        help="Host address for the Factory Studio web interface (default: 127.0.0.1).",
     )
     return parser
 

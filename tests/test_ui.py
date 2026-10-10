@@ -290,6 +290,7 @@ class TestFastApiApp(unittest.TestCase):
         self.registry = JobRegistry()
         self.app = create_app(registry=self.registry)
         self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
 
     def test_index_page(self):
         resp = self.client.get("/")
@@ -439,10 +440,11 @@ class TestFastApiApp(unittest.TestCase):
 
 class TestCliDispatcherUiFlag(unittest.TestCase):
     def test_parse_args_ui_flags(self):
-        args1 = parse_args(["--ui"])
-        self.assertTrue(args1.ui)
-        self.assertEqual(args1.port, 3000)
-        self.assertEqual(args1.host, "127.0.0.1")
+        with patch.dict("os.environ", {}, clear=True):
+            args1 = parse_args(["--ui"])
+            self.assertTrue(args1.ui)
+            self.assertEqual(args1.port, 3010)
+            self.assertEqual(args1.host, "127.0.0.1")
 
         args2 = parse_args(["--console", "--port", "9090", "--host", "0.0.0.0"])
         self.assertTrue(args2.ui)
@@ -470,7 +472,7 @@ class TestServerRunner(unittest.TestCase):
     def test_get_default_port_fallback(self):
         with patch.dict("os.environ", {}, clear=True):
             from factory.ui.server import get_default_port
-            self.assertEqual(get_default_port(), 3000)
+            self.assertEqual(get_default_port(), 3010)
 
     def test_get_default_port_env(self):
         with patch.dict("os.environ", {"PORT": "4000"}):
@@ -480,18 +482,220 @@ class TestServerRunner(unittest.TestCase):
     def test_get_default_port_invalid_env(self):
         with patch.dict("os.environ", {"PORT": "invalid"}):
             from factory.ui.server import get_default_port
-            self.assertEqual(get_default_port(), 3000)
+            self.assertEqual(get_default_port(), 3010)
 
     @patch("factory.ui.server.start_server")
     def test_server_main_defaults(self, mock_start_server):
         from factory.ui.server import main as server_main
         with patch.dict("os.environ", {}, clear=True):
             server_main([])
-            mock_start_server.assert_called_once_with(host="127.0.0.1", port=3000, open_browser=False)
+            mock_start_server.assert_called_once_with(host="127.0.0.1", port=3010, open_browser=False)
 
     @patch("factory.ui.server.start_server")
     def test_server_main_custom_args(self, mock_start_server):
         from factory.ui.server import main as server_main
         server_main(["--host", "0.0.0.0", "-p", "5000", "--open"])
         mock_start_server.assert_called_once_with(host="0.0.0.0", port=5000, open_browser=True)
+
+    @patch("uvicorn.run")
+    def test_start_server_warning_fallback(self, mock_uvicorn_run):
+        from factory.ui.server import start_server
+        import io
+        from contextlib import redirect_stdout
+
+        with patch.dict("os.environ", {}, clear=True):
+            f = io.StringIO()
+            with redirect_stdout(f):
+                start_server(host="127.0.0.1", port=3010)
+            output = f.getvalue()
+            self.assertIn("Factory Studio", output)
+            self.assertIn("3010", output)
+            self.assertIn("SECURITY WARNING: Using local dev fallback", output)
+            mock_uvicorn_run.assert_called_once()
+
+    @patch("uvicorn.run")
+    def test_start_server_configured_auth(self, mock_uvicorn_run):
+        from factory.ui.server import start_server
+        import io
+        from contextlib import redirect_stdout
+
+        with patch.dict("os.environ", {"FACTORY_AUTH_USER": "produser", "FACTORY_AUTH_PASS": "secret"}, clear=True):
+            f = io.StringIO()
+            with redirect_stdout(f):
+                start_server(host="127.0.0.1", port=3010)
+            output = f.getvalue()
+            self.assertIn("HTTP Basic Auth enabled (user: 'produser')", output)
+            mock_uvicorn_run.assert_called_once()
+
+
+class TestAuthCredentials(unittest.TestCase):
+    def test_get_auth_credentials_from_env(self):
+        with patch.dict("os.environ", {"FACTORY_AUTH_USER": "myuser", "FACTORY_AUTH_PASS": "mypass123"}, clear=True):
+            from factory.ui.auth import get_auth_credentials
+            user, password, is_fallback = get_auth_credentials()
+            self.assertEqual(user, "myuser")
+            self.assertEqual(password, "mypass123")
+            self.assertFalse(is_fallback)
+
+    def test_get_auth_credentials_fallback_when_unset(self):
+        with patch.dict("os.environ", {}, clear=True):
+            from factory.ui.auth import get_auth_credentials
+            with self.assertLogs("factory.ui.auth", level="WARNING") as log_cm:
+                user, password, is_fallback = get_auth_credentials()
+                self.assertEqual(user, "admin")
+                self.assertEqual(password, "admin")
+                self.assertTrue(is_fallback)
+                self.assertTrue(any("FACTORY_AUTH_USER" in msg for msg in log_cm.output))
+
+    def test_get_auth_credentials_fallback_when_partial(self):
+        with patch.dict("os.environ", {"FACTORY_AUTH_USER": "myuser"}, clear=True):
+            from factory.ui.auth import get_auth_credentials
+            with self.assertLogs("factory.ui.auth", level="WARNING") as log_cm:
+                user, password, is_fallback = get_auth_credentials()
+                self.assertEqual(user, "admin")
+                self.assertEqual(password, "admin")
+                self.assertTrue(is_fallback)
+                self.assertTrue(any("FACTORY_AUTH_PASS" in msg for msg in log_cm.output))
+
+
+class TestBasicAuthSecurity(unittest.TestCase):
+    def test_unauthenticated_request_returns_401(self):
+        registry = JobRegistry()
+        app = create_app(registry=registry)
+        client = TestClient(app)
+
+        resp = client.get("/")
+        self.assertEqual(resp.status_code, 401)
+        self.assertIn("www-authenticate", resp.headers)
+        self.assertIn('Basic realm="Factory Studio"', resp.headers["www-authenticate"])
+
+        resp_api = client.get("/api/repos")
+        self.assertEqual(resp_api.status_code, 401)
+        self.assertIn("www-authenticate", resp_api.headers)
+
+    def test_invalid_credentials_returns_401(self):
+        registry = JobRegistry()
+        app = create_app(registry=registry)
+        client = TestClient(app)
+
+        resp = client.get("/", auth=("wronguser", "wrongpass"))
+        self.assertEqual(resp.status_code, 401)
+        self.assertIn("www-authenticate", resp.headers)
+
+    def test_malformed_auth_header_returns_401(self):
+        registry = JobRegistry()
+        app = create_app(registry=registry)
+        client = TestClient(app)
+
+        resp = client.get("/", headers={"Authorization": "Bearer not-a-basic-token"})
+        self.assertEqual(resp.status_code, 401)
+
+        resp_bad_b64 = client.get("/", headers={"Authorization": "Basic !!!not-valid-b64!!!"})
+        self.assertEqual(resp_bad_b64.status_code, 401)
+
+        resp_no_colon = client.get("/", headers={"Authorization": "Basic YWRtaW4="})  # 'admin' without ':'
+        self.assertEqual(resp_no_colon.status_code, 401)
+
+    def test_authenticated_request_with_env_credentials(self):
+        with patch.dict(
+            "os.environ",
+            {"FACTORY_AUTH_USER": "custom_user", "FACTORY_AUTH_PASS": "custom_pass"},
+            clear=True,
+        ):
+            registry = JobRegistry()
+            app = create_app(registry=registry)
+            client = TestClient(app)
+
+            # Incorrect credentials fail
+            resp_fail = client.get("/api/repos", auth=("admin", "admin"))
+            self.assertEqual(resp_fail.status_code, 401)
+
+            # Correct credentials succeed
+            resp_ok = client.get("/api/repos", auth=("custom_user", "custom_pass"))
+            self.assertEqual(resp_ok.status_code, 200)
+
+    def test_authenticated_request_with_dev_fallback(self):
+        with patch.dict("os.environ", {}, clear=True):
+            registry = JobRegistry()
+            app = create_app(registry=registry)
+            client = TestClient(app)
+
+            resp = client.get("/api/repos", auth=("admin", "admin"))
+            self.assertEqual(resp.status_code, 200)
+
+    def test_sse_stream_unauthenticated_returns_401(self):
+        registry = JobRegistry()
+        job = registry.create_job(repo="test3", feature="test-feature")
+        job.status = JobStatus.SUCCESS
+        app = create_app(registry=registry)
+        client = TestClient(app)
+
+        with client.stream("GET", f"/api/jobs/{job.id}/stream") as resp:
+            self.assertEqual(resp.status_code, 401)
+            self.assertIn("www-authenticate", resp.headers)
+
+    def test_sse_stream_authenticated_succeeds(self):
+        with patch.dict(
+            "os.environ",
+            {"FACTORY_AUTH_USER": "stream_user", "FACTORY_AUTH_PASS": "stream_pass"},
+            clear=True,
+        ):
+            registry = JobRegistry()
+            job = registry.create_job(repo="test3", feature="test-feature")
+            job.status = JobStatus.SUCCESS
+            registry.append_log(job.id, "Stream line 1\n")
+            app = create_app(registry=registry)
+            client = TestClient(app)
+
+            with client.stream(
+                "GET",
+                f"/api/jobs/{job.id}/stream",
+                auth=("stream_user", "stream_pass"),
+            ) as response:
+                self.assertEqual(response.status_code, 200)
+                for chunk in response.iter_lines():
+                    if chunk.startswith("data: "):
+                        data = json.loads(chunk[len("data: "):])
+                        self.assertEqual(data["event"], "init")
+                        break
+
+    def test_case_insensitive_basic_scheme(self):
+        import base64
+        with patch.dict("os.environ", {"FACTORY_AUTH_USER": "u", "FACTORY_AUTH_PASS": "p"}, clear=True):
+            app = create_app()
+            client = TestClient(app)
+            raw = base64.b64encode(b"u:p").decode("ascii")
+
+            # Lowercase "basic <b64>"
+            resp_lower = client.get("/api/repos", headers={"Authorization": f"basic {raw}"})
+            self.assertEqual(resp_lower.status_code, 200)
+
+            # Mixed case "bAsIc <b64>"
+            resp_mixed = client.get("/api/repos", headers={"Authorization": f"bAsIc {raw}"})
+            self.assertEqual(resp_mixed.status_code, 200)
+
+    def test_static_asset_protection(self):
+        import tempfile
+        from starlette.staticfiles import StaticFiles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "style.css"
+            test_file.write_text("body { color: red; }")
+
+            app = create_app()
+            app.mount("/static", StaticFiles(directory=tmpdir), name="static")
+            client = TestClient(app)
+
+            # Unauthenticated access to static asset is blocked with 401
+            resp_unauth = client.get("/static/style.css")
+            self.assertEqual(resp_unauth.status_code, 401)
+            self.assertIn("www-authenticate", resp_unauth.headers)
+
+            # Authenticated access to static asset succeeds with 200
+            resp_auth = client.get("/static/style.css", auth=("admin", "admin"))
+            self.assertEqual(resp_auth.status_code, 200)
+            self.assertIn("color: red", resp_auth.text)
+
+
+
 

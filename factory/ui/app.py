@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from factory.ui.auth import BasicAuthMiddleware
 from factory.ui.github import (
     DEFAULT_TEST_ORG,
     fetch_repo_issue,
@@ -38,10 +39,11 @@ class LaunchJobRequest(BaseModel):
 def create_app(registry: JobRegistry = job_registry) -> FastAPI:
     """Creates and configures the FastAPI application."""
     app = FastAPI(
-        title="Factory Testing Console",
+        title="Factory Studio",
         description="Interactive testing interface for Software Factory on software-factory-09-test",
         version="1.0.0",
     )
+    app.add_middleware(BasicAuthMiddleware)
 
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 

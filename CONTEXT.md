@@ -194,6 +194,6 @@ An interactive local web interface running on the developer workstation used to 
 _Avoid_: Factory UI, test dashboard, web runner, factory web app
 
 **Factory Studio**:
-An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory.
+An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory. Binds to port 3010 by default (overrideable via `PORT` environment variable) and is protected by HTTP Basic Authentication (`FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`), with a local development fallback (`admin`:`admin`) and startup warning.
 _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 
