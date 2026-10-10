@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: "/v2/",
+  base: "/",
   build: {
     outDir: path.resolve(import.meta.dirname, "../static/dist"),
     emptyOutDir: true,

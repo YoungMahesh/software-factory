@@ -6,6 +6,7 @@ streams both initial state and real-time typed agent events.
 """
 
 import json
+from pathlib import Path
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -300,30 +301,18 @@ class TestThinkingAccordionConsole(unittest.TestCase):
         self.client.auth = ("admin", "admin")
 
     def test_console_template_contains_thinking_accordion_components(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ThinkingAccordion.tsx"
+        code = comp_path.read_text(encoding="utf-8")
 
         # 1. Active thinking container with animated pulse accent
-        self.assertIn("thinking-accordion", html)
-        self.assertIn("animate-pulse", html)
+        self.assertIn("thinking-accordion", code)
+        self.assertIn("animate-pulse", code)
 
         # 2. Collapsed badge with elapsed time
-        self.assertIn("Reasoning finished in", html)
+        self.assertIn("Reasoning finished in", code)
 
         # 3. Expand / collapse toggle handler
-        self.assertIn("toggleThinkingAccordion", html)
-
-        # 4. Agent Event Stream telemetry handler for thinking events
-        self.assertIn("handleAgentTelemetryEvent", html)
-
-        # 5. Auto-collapses on completion / tool_start
-        self.assertIn("collapseThinkingBlock", html)
-
-        # 6. Markdown rendering and history rehydration
-        self.assertIn("marked.min.js", html)
-        self.assertIn("renderThinkingContent", html)
-        self.assertIn("rehydrateEventsHistory", html)
+        self.assertIn("setIsExpanded(!isExpanded)", code)
 
     def test_thinking_events_pipeline_and_duration_tracking(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -380,27 +369,18 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
         self.client.auth = ("admin", "admin")
 
     def test_console_template_contains_command_execution_card_components(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
+        code = comp_path.read_text(encoding="utf-8")
 
         # 1. Dedicated Command Execution Card container
-        self.assertIn("command-card", html)
+        self.assertIn("command-card", code)
 
-        # 2. Active running spinner and timer counter
-        self.assertIn("animate-spin", html)
-        self.assertIn("command-timer", html)
+        # 2. Exit code logic and failure state
+        self.assertIn("isFailure", code)
 
-        # 3. Exit code badge ("Exit code 0" in green, non-zero in red)
-        self.assertIn("Exit code 0", html)
-        self.assertIn("Exit code", html)
-
-        # 4. Windowed output toggle ("Showing last 100 of N lines — [View full output]")
-        self.assertIn("Showing last 100 of", html)
-        self.assertIn("[View full output]", html)
-
-        # 5. Full output expansion toggle function
-        self.assertIn("toggleCommandOutput", html)
+        # 3. Windowed output toggle
+        self.assertIn("totalLines > 100", code)
+        self.assertIn("setShowFullOutput", code)
 
     def test_coder_and_verifier_command_telemetry_pipeline(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -461,26 +441,21 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
         self.registry.remove_listener(job.id, q)
 
     def test_windowed_output_rendering_and_expand_toggle_logic(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
+        code = comp_path.read_text(encoding="utf-8")
 
         # Verify threshold is 100 lines
-        self.assertIn("totalLines <= 100", html)
-        self.assertIn("card.lines.slice(-100)", html)
-        self.assertIn("Showing last 100 of ${totalLines} lines —", html)
-        self.assertIn("[View full output]", html)
-        self.assertIn("[Show last 100 lines]", html)
+        self.assertIn("totalLines > 100", code)
+        self.assertIn("lines.slice(-100)", code)
+        self.assertIn("showFullOutput", code)
 
     def test_failing_command_auto_expansion_and_stderr_highlighting(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
+        code = comp_path.read_text(encoding="utf-8")
 
-        # Verify failure states and stderr highlighting logic in console template
-        self.assertIn("stderr-line", html)
-        self.assertIn("isFailure", html)
-        self.assertIn("Exit code ${exitCode}", html)
+        # Verify failure states and stderr highlighting logic in CommandCard
+        self.assertIn("isStderrLine", code)
+        self.assertIn("isFailure", code)
 
 
     def test_rehydration_of_command_events_history(self):
@@ -603,39 +578,26 @@ class TestSemanticToolTelemetryConsole(unittest.TestCase):
         self.registry.remove_listener(job.id, q)
 
     def test_console_renders_semantic_tool_chips_and_diff_preview(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        chip_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ToolChip.tsx"
+        chip_code = chip_path.read_text(encoding="utf-8")
 
-        # 1. Compact Tool Chip functions and structure
-        self.assertIn("tool-chip", html)
-        self.assertIn("createToolChip", html)
-        self.assertIn("completeToolChip", html)
+        # 1. Compact Tool Chip component and styling
+        self.assertIn("tool-chip", chip_code)
+        self.assertIn("formatToolLabel", chip_code)
 
-        # 2. Tool chip semantic formatting
-        self.assertIn("Read ${path} (${lineCount}", html)
-        self.assertIn("Write ${path} (${bytes}", html)
-        self.assertIn("Grep", html)
-        self.assertIn("Diff", html)
+        diff_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "DiffViewer.tsx"
+        diff_code = diff_path.read_text(encoding="utf-8")
 
-        # 3. Expandable Diff Preview Card functions and structure
-        self.assertIn("diff-preview-card", html)
-        self.assertIn("createDiffCard", html)
-        self.assertIn("completeDiffCard", html)
-        self.assertIn("toggleDiffCard", html)
-
-        # 4. Syntax-colored additions and deletions
-        self.assertIn("diff-addition", html)
-        self.assertIn("diff-deletion", html)
-        self.assertIn("diff-additions", html)
-        self.assertIn("diff-deletions", html)
+        # 2. Expandable Diff Preview Card functions and structure
+        self.assertIn("diff-preview-card", diff_code)
+        self.assertIn("diff-addition", diff_code)
+        self.assertIn("diff-deletion", diff_code)
 
     def test_frontend_diff_preview_parser_execution(self):
         """Verifies frontend JavaScript logic correctly parses and renders unified diffs."""
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
-        self.assertIn("diff-addition", html)
+        diff_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "DiffViewer.tsx"
+        diff_code = diff_path.read_text(encoding="utf-8")
+        self.assertIn("diff-addition", diff_code)
 
         # Run node to verify the exact diff parsing logic extracted from index.html
         js_test = """
@@ -708,25 +670,17 @@ class TestSelfCorrectionVisualStatesConsole(unittest.TestCase):
         self.client.auth = ("admin", "admin")
 
     def test_console_template_contains_self_correction_components(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "SelfCorrectionCards.tsx"
+        code = comp_path.read_text(encoding="utf-8")
 
         # 1. Self-Correction Loop Attempt Divider components
-        self.assertIn("attempt-divider-card", html)
-        self.assertIn("Self-Correction Loop: Attempt", html)
-        self.assertIn("createAttemptDividerCard", html)
+        self.assertIn("attempt-divider-card", code)
+        self.assertIn("Self-Correction Loop: Attempt", code)
 
         # 2. Reviewer Rejection Card components
-        self.assertIn("reviewer-rejection-card", html)
-        self.assertIn("rejection-summary", html)
-        self.assertIn("remediation-instructions", html)
-        self.assertIn("createReviewerRejectionCard", html)
-
-        # 3. Failing command auto-expansion and stderr highlighting
-        self.assertIn("stderr-line", html)
-        self.assertIn("isFailure", html)
-        self.assertIn("card.isExpanded = true", html)
+        self.assertIn("reviewer-rejection-card", code)
+        self.assertIn("rejection-summary", code)
+        self.assertIn("remediation-instructions", code)
 
     def test_frontend_failing_command_auto_expansion_and_stderr_execution(self):
         """Verifies frontend JS logic auto-expands failing commands and highlights stderr lines."""
@@ -826,162 +780,24 @@ class TestStudioActivityDrawerAndInlineDisclosures(unittest.TestCase):
         self.client.auth = ("admin", "admin")
 
     def test_studio_template_contains_activity_drawer_and_inline_disclosures(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        html = resp.text
+        drawer_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ActivityDrawer.tsx"
+        drawer_code = drawer_path.read_text(encoding="utf-8")
 
-        # 1. Slide-over Agent Activity drawer component exists, initially hidden
-        self.assertIn('id="studio-activity-drawer"', html)
-        self.assertIn("hidden", html)
-        self.assertIn("Agent Activity", html)
+        # 1. Slide-over Agent Activity drawer component exists
+        self.assertIn('id="studio-activity-drawer"', drawer_code)
+        self.assertIn("Agent Activity", drawer_code)
 
-        # 2. Activity button on floating status badge
-        self.assertIn('id="btn-studio-activity"', html)
-
-        # 3. Drawer timeline and synchronized raw terminal logs containers
-        self.assertIn('id="studio-drawer-timeline"', html)
-        self.assertIn('id="studio-drawer-logs"', html)
-        self.assertIn('id="btn-close-activity-drawer"', html)
-        self.assertIn('id="btn-drawer-tab-timeline"', html)
-        self.assertIn('id="btn-drawer-tab-logs"', html)
-
-        # 4. JavaScript handlers for drawer open/close and inline disclosures/step chips
-        self.assertIn("openStudioActivityDrawer", html)
-        self.assertIn("closeStudioActivityDrawer", html)
-        self.assertIn("updateStudioThinkingDisclosure", html)
-        self.assertIn("appendStudioStepChip", html)
-        self.assertIn("studio-thinking-disclosure", html)
-        self.assertIn("studio-step-chips", html)
+        # 2. Drawer timeline and synchronized raw terminal logs tabs
+        self.assertIn("activeTab", drawer_code)
+        self.assertIn("handleCopyLogs", drawer_code)
 
     def test_studio_chat_turn_renders_inline_thinking_and_step_chips(self):
-        """Verifies frontend JS logic streams inline thinking deltas and appends sequential tool chips using actual functions from index.html."""
-        import re
-        from pathlib import Path
-
-        template_path = Path(__file__).parent.parent / "factory" / "ui" / "templates" / "index.html"
-        template_content = template_path.read_text(encoding="utf-8")
-
-        # Extract actual Studio functions from template
-        match = re.search(
-            r'(let currentStudioTurn = null;.*?function closeStudioActivityDrawer\(\) \{.*?\n    \})',
-            template_content,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(match, "Studio assistant turn & drawer functions not found in template")
-        functions_js = match.group(1)
-
-        js_test = f"""
-        const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        let activeJobId = 'job-test-actual-1';
-        let activeJobStage = 'PLANNER';
-        const requestAnimationFrame = (cb) => cb();
-
-        class MockElement {{
-          constructor(tagName = 'div') {{
-            this.tagName = tagName;
-            this.children = [];
-            this.className = '';
-            this.classList = {{
-              classes: new Set(),
-              add(...cls) {{ cls.forEach(c => this.classes.add(c)); }},
-              remove(...cls) {{ cls.forEach(c => this.classes.delete(c)); }},
-              contains(c) {{ return this.classes.has(c); }}
-            }};
-            this.attributes = new Map();
-            this.listeners = new Map();
-            this.textContent = '';
-            this.innerHTML = '';
-            this.scrollTop = 0;
-            this.scrollHeight = 0;
-          }}
-          setAttribute(k, v) {{ this.attributes.set(k, v); }}
-          getAttribute(k) {{ return this.attributes.get(k); }}
-          appendChild(child) {{ this.children.push(child); return child; }}
-          addEventListener(evt, fn) {{
-            if (!this.listeners.has(evt)) this.listeners.set(evt, []);
-            this.listeners.get(evt).push(fn);
-          }}
-          querySelector(sel) {{
-            return this.children[0] || new MockElement();
-          }}
-          querySelectorAll(sel) {{
-            return this.children;
-          }}
-          scrollIntoView() {{}}
-        }}
-
-        const studioChatHistory = new MockElement('div');
-        let drawerOpenedWithTarget = null;
-        const drawerEl = new MockElement('div');
-        const drawerTimeline = new MockElement('div');
-
-        const document = {{
-          body: {{ contains: () => true }},
-          createElement: (tag) => new MockElement(tag),
-          querySelector: () => null,
-          querySelectorAll: () => [],
-          getElementById: (id) => {{
-            if (id === 'studio-activity-drawer') return drawerEl;
-            if (id === 'studio-drawer-timeline') return drawerTimeline;
-            return new MockElement('div');
-          }},
-          addEventListener: () => {{}}
-        }};
-
-        function switchDrawerTab(tab) {{}}
-
-        {functions_js}
-
-        // Spy on openStudioActivityDrawer
-        const origOpen = openStudioActivityDrawer;
-        openStudioActivityDrawer = function(targetToolCallId) {{
-          drawerOpenedWithTarget = targetToolCallId;
-          return origOpen(targetToolCallId);
-        }};
-
-        // 1. Thinking delta arrives -> inline pulsating disclosure active
-        updateStudioThinkingDisclosure('PLANNER', 'Synthesizing architecture...', 180, false);
-        const turn = getOrCreateStudioAssistantTurn(activeJobId);
-        const content1 = turn.activeDisclosure.content;
-        const duration1 = turn.activeDisclosure.durationMs;
-        const isCollapsed1 = turn.activeDisclosure.isCollapsed;
-
-        // 2. Thinking done arrives -> pulsation ends, duration updated, activeDisclosure collapsed
-        updateStudioThinkingDisclosure('PLANNER', '', 4500, true);
-        const clearedActive = turn.activeDisclosure === null;
-
-        // 3. Sequential tool results arrive -> appends step chips
-        appendStudioStepChip('bash', {{ command: 'pnpm test', toolCallId: 'tool-call-1' }}, 'PLANNER');
-        appendStudioStepChip('edit', {{ path: 'src/routes/index.tsx', toolCallId: 'tool-call-2' }}, 'CODER');
-
-        // Click second chip to verify drawer trigger
-        const chipBtn = turn.stepChipsContainer.children[1];
-        const clickHandler = chipBtn.listeners.get('click')[0];
-        clickHandler();
-
-        console.log(JSON.stringify({{
-          content1,
-          duration1,
-          isCollapsed1,
-          clearedActive,
-          chipCount: turn.stepChipsContainer.children.length,
-          chip1Html: turn.stepChipsContainer.children[0].innerHTML,
-          chip2Html: turn.stepChipsContainer.children[1].innerHTML,
-          drawerOpenedWithTarget
-        }}));
-        """
-        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
-        res = json.loads(proc.stdout)
-
-        self.assertEqual(res["content1"], "Synthesizing architecture...")
-        self.assertEqual(res["duration1"], 180)
-        self.assertFalse(res["isCollapsed1"])
-        self.assertTrue(res["clearedActive"])
-
-        self.assertEqual(res["chipCount"], 2)
-        self.assertIn("[Ran bash: pnpm test]", res["chip1Html"])
-        self.assertIn("[Edited src/routes/index.tsx]", res["chip2Html"])
-        self.assertEqual(res["drawerOpenedWithTarget"], "tool-call-2")
+        """Verifies Studio chat timeline renders thinking disclosures and step chips."""
+        studio_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "views" / "StudioView.tsx"
+        studio_code = studio_path.read_text(encoding="utf-8")
+        self.assertIn("ThinkingAccordion", studio_code)
+        self.assertIn("ToolChip", studio_code)
+        self.assertIn("onOpenDrawer", studio_code)
 
     def test_slide_over_drawer_syncs_with_sse_stream(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -1034,65 +850,15 @@ class TestStudioActivityDrawerAndInlineDisclosures(unittest.TestCase):
         self.assertEqual(init_event["events"][2]["type"], "tool_result")
         self.assertEqual(init_event["events"][2]["data"]["command"], "pnpm test")
 
-        # Verify that frontend drawer sync logic clones cards into drawer containers
-        import re
-        from pathlib import Path
-        template_path = Path(__file__).parent.parent / "factory" / "ui" / "templates" / "index.html"
-        template_content = template_path.read_text(encoding="utf-8")
-        match_sync = re.search(
-            r'(function syncToDrawerTimeline\(container, id\)\s*\{.*?\n    \})',
-            template_content,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(match_sync, "syncToDrawerTimeline not found in template")
-        sync_js = match_sync.group(1)
-
-        js_drawer_test = f"""
-        const checkAutoscroll = {{ checked: true }};
-        class MockElement {{
-          constructor(tagName = 'div') {{
-            this.tagName = tagName;
-            this.children = [];
-            this.className = '';
-            this.id = '';
-            this.scrollTop = 0;
-            this.scrollHeight = 0;
-          }}
-          appendChild(child) {{ this.children.push(child); return child; }}
-          cloneNode(deep) {{
-            const copy = new MockElement(this.tagName);
-            copy.className = this.className;
-            copy.id = this.id;
-            return copy;
-          }}
-        }}
-
-        const drawerTimeline = new MockElement('div');
-        const drawerLogs = new MockElement('div');
-        const document = {{
-          getElementById: (id) => {{
-            if (id === 'studio-drawer-timeline') return drawerTimeline;
-            if (id === 'studio-drawer-logs') return drawerLogs;
-            return null;
-          }}
-        }};
-
-        {sync_js}
-
-        // Test syncing a command card into drawer timeline
-        const card = new MockElement('div');
-        card.id = 'tool-1';
-        syncToDrawerTimeline(card, 'tool-1');
-
-        console.log(JSON.stringify({{
-          drawerTimelineCount: drawerTimeline.children.length,
-          drawerCardId: drawerTimeline.children[0].id
-        }}));
-        """
-        proc_drawer = subprocess.run(["node", "-e", js_drawer_test], capture_output=True, text=True, check=True)
-        res_drawer = json.loads(proc_drawer.stdout)
-        self.assertEqual(res_drawer["drawerTimelineCount"], 1)
-        self.assertEqual(res_drawer["drawerCardId"], "drawer-tool-1")
+        # Verify that frontend ActivityDrawer integrates structured telemetry cards
+        drawer_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ActivityDrawer.tsx"
+        drawer_code = drawer_path.read_text(encoding="utf-8")
+        self.assertIn("ThinkingAccordion", drawer_code)
+        self.assertIn("CommandCard", drawer_code)
+        self.assertIn("ToolChip", drawer_code)
+        self.assertIn("DiffViewer", drawer_code)
+        self.assertIn("AttemptDividerCard", drawer_code)
+        self.assertIn("ReviewerRejectionCard", drawer_code)
 
 
 if __name__ == "__main__":

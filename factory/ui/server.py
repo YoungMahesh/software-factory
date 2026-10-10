@@ -54,6 +54,7 @@ def start_server(
 
     print(f"\n========================================================")
     print(f"🏭 Factory Studio running at http://{host}:{port}")
+    print(f"   Frontend: Compiled Vite React SPA (/)")
     print(f"   Target Organization: software-factory-09-test")
     if creds.is_fallback:
         print(f"   ⚠️  SECURITY WARNING: Using local dev fallback ('{creds.username}':'{creds.password}')")

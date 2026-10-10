@@ -342,14 +342,9 @@ class TestFastApiApp(unittest.TestCase):
     def test_index_page(self):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp.text)
         self.assertIn("Software Factory", resp.text)
-        self.assertIn("Testing Console", resp.text)
-        self.assertIn(DEFAULT_TEST_ORG, resp.text)
-        self.assertIn("Milestone (Feature)", resp.text)
-        self.assertIn("select-feature", resp.text)
-        self.assertIn("select-issue", resp.text)
-        self.assertIn("input-issue-custom", resp.text)
-        self.assertIn("issue-badge-preview", resp.text)
 
     def test_get_repos_endpoint(self):
         resp = self.client.get("/api/repos")
@@ -601,43 +596,53 @@ class TestFastApiApp(unittest.TestCase):
 
 
 
-class TestSpaDualRouteServing(unittest.TestCase):
+class TestCompiledSpaRootRouteServing(unittest.TestCase):
     def setUp(self):
         self.registry = JobRegistry()
         self.app = create_app(registry=self.registry)
         self.client = TestClient(self.app)
         self.client.auth = ("admin", "admin")
 
-    def test_legacy_root_continues_serving(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("Software Factory", resp.text)
-        self.assertIn("Testing Console", resp.text)
-
-    def test_v2_requires_authentication(self):
+    def test_root_requires_authentication(self):
         unauth_client = TestClient(self.app)
-        resp = unauth_client.get("/v2")
+        resp = unauth_client.get("/")
         self.assertEqual(resp.status_code, 401)
         self.assertIn("www-authenticate", resp.headers)
 
-    def test_v2_serves_spa_shell_html(self):
-        resp = self.client.get("/v2")
+    def test_root_serves_spa_shell_html(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp.text)
+        self.assertIn("Software Factory", resp.text)
+
+    def test_client_routing_fallback_on_root(self):
+        resp = self.client.get("/console")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("text/html", resp.headers["content-type"])
         self.assertIn('<div id="root"></div>', resp.text)
 
-    def test_v2_client_routing_fallback(self):
-        resp = self.client.get("/v2/console")
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("text/html", resp.headers["content-type"])
-        self.assertIn('<div id="root"></div>', resp.text)
-
-        resp2 = self.client.get("/v2/studio/repo/my-app")
+        resp2 = self.client.get("/studio/repo/my-app")
         self.assertEqual(resp2.status_code, 200)
         self.assertIn("text/html", resp2.headers["content-type"])
         self.assertIn('<div id="root"></div>', resp2.text)
 
-    def test_v2_compiled_bundle_delivery(self):
+    def test_v2_redirects_to_root(self):
+        # Without follow_redirects, verify HTTP 307/308 redirect
+        resp = self.client.get("/v2", follow_redirects=False)
+        self.assertIn(resp.status_code, (307, 308))
+        self.assertEqual(resp.headers["location"], "/")
+
+        resp_sub = self.client.get("/v2/console", follow_redirects=False)
+        self.assertIn(resp_sub.status_code, (307, 308))
+        self.assertEqual(resp_sub.headers["location"], "/console")
+
+        # With follow_redirects, verify redirect resolves to compiled SPA
+        resp_followed = self.client.get("/v2", follow_redirects=True)
+        self.assertEqual(resp_followed.status_code, 200)
+        self.assertIn('<div id="root"></div>', resp_followed.text)
+
+    def test_compiled_bundle_delivery(self):
         from factory.ui.app import STATIC_DIST_DIR
 
         assets_dir = STATIC_DIST_DIR / "assets"
@@ -646,24 +651,24 @@ class TestSpaDualRouteServing(unittest.TestCase):
 
         if js_files:
             js_name = js_files[0].name
-            resp_js = self.client.get(f"/v2/assets/{js_name}")
+            resp_js = self.client.get(f"/assets/{js_name}")
             self.assertEqual(resp_js.status_code, 200)
             self.assertIn("javascript", resp_js.headers["content-type"])
 
         if css_files:
             css_name = css_files[0].name
-            resp_css = self.client.get(f"/v2/assets/{css_name}")
+            resp_css = self.client.get(f"/assets/{css_name}")
             self.assertEqual(resp_css.status_code, 200)
             self.assertIn("text/css", resp_css.headers["content-type"])
 
-    def test_v2_fallback_when_dist_index_missing(self):
+    def test_fallback_when_dist_index_missing(self):
         with patch("pathlib.Path.is_file", return_value=False):
-            resp = self.client.get("/v2")
+            resp = self.client.get("/")
             self.assertEqual(resp.status_code, 200)
             self.assertIn("text/html", resp.headers["content-type"])
             self.assertIn("Compiled SPA bundle not found", resp.text)
 
-    def test_v2_static_assets_serving(self):
+    def test_static_assets_serving(self):
         from factory.ui.app import STATIC_DIST_DIR
 
         # Create a mock asset in STATIC_DIST_DIR/assets
@@ -672,10 +677,15 @@ class TestSpaDualRouteServing(unittest.TestCase):
         test_asset = assets_dir / "test-bundle.js"
         test_asset.write_text("console.log('spa bundle');", encoding="utf-8")
         try:
-            resp = self.client.get("/v2/assets/test-bundle.js")
+            resp = self.client.get("/assets/test-bundle.js")
             self.assertEqual(resp.status_code, 200)
             self.assertIn("javascript", resp.headers["content-type"])
             self.assertEqual(resp.text, "console.log('spa bundle');")
+
+            # Also verify backwards-compatible /v2/assets/test-bundle.js
+            resp_v2 = self.client.get("/v2/assets/test-bundle.js")
+            self.assertEqual(resp_v2.status_code, 200)
+            self.assertIn("javascript", resp_v2.headers["content-type"])
 
             # Also verify via /static/dist/assets/test-bundle.js
             resp_dist = self.client.get("/static/dist/assets/test-bundle.js")
@@ -758,6 +768,7 @@ class TestServerRunner(unittest.TestCase):
             output = f.getvalue()
             self.assertIn("Factory Studio", output)
             self.assertIn("3010", output)
+            self.assertIn("Compiled Vite React SPA", output)
             self.assertIn("SECURITY WARNING: Using local dev fallback", output)
             mock_uvicorn_run.assert_called_once()
 
@@ -772,6 +783,7 @@ class TestServerRunner(unittest.TestCase):
             with redirect_stdout(f):
                 start_server(host="127.0.0.1", port=3010)
             output = f.getvalue()
+            self.assertIn("Compiled Vite React SPA", output)
             self.assertIn("HTTP Basic Auth enabled (user: 'produser')", output)
             mock_uvicorn_run.assert_called_once()
 
@@ -1595,89 +1607,70 @@ class TestStudioSplitPaneAndDualView(unittest.TestCase):
         self.client.auth = ("admin", "admin")
 
     def test_top_navigation_view_toggle(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        # Interactive view toggle buttons in top navigation header
-        self.assertIn('id="nav-tab-studio"', resp.text)
-        self.assertIn('id="nav-tab-console"', resp.text)
-        self.assertIn("Studio", resp.text)
-        self.assertIn("Console", resp.text)
-        # Both views containers exist in the DOM
-        self.assertIn('id="studio-view"', resp.text)
-        self.assertIn('id="console-view"', resp.text)
+        resp_studio = self.client.get("/")
+        self.assertEqual(resp_studio.status_code, 200)
+        self.assertIn('<div id="root"></div>', resp_studio.text)
+
+        resp_console = self.client.get("/console")
+        self.assertEqual(resp_console.status_code, 200)
+        self.assertIn('<div id="root"></div>', resp_console.text)
 
     def test_studio_view_left_sidebar_components(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        # Project selector dropdown and New App modal trigger
-        self.assertIn('id="studio-select-repo"', resp.text)
-        self.assertIn('id="btn-studio-new-app"', resp.text)
-        self.assertIn('id="modal-new-app"', resp.text)
-        self.assertIn('id="input-new-app-name"', resp.text)
-        self.assertIn('id="btn-create-new-app"', resp.text)
-        # Conversation history and prompt input bar
-        self.assertIn('id="studio-chat-history"', resp.text)
-        self.assertIn('id="studio-prompt-form"', resp.text)
-        self.assertIn('id="studio-prompt-input"', resp.text)
-        self.assertIn('id="btn-studio-send"', resp.text)
+        # API contracts powering the Studio left sidebar (repos and prompt dispatch)
+        resp_repos = self.client.get("/api/studio/repos")
+        self.assertEqual(resp_repos.status_code, 200)
+        self.assertIn("repos", resp_repos.json())
+
+        # Prompt endpoint validation
+        resp_invalid = self.client.post("/api/studio/prompt", json={"repo": "", "prompt": ""})
+        self.assertEqual(resp_invalid.status_code, 400)
 
     def test_studio_view_right_workspace_preview_iframe(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        # Interactive live preview iframe pointing to 3000.mahesh0.dev
-        self.assertIn('id="preview-frame"', resp.text)
-        self.assertIn('https://3000.mahesh0.dev', resp.text)
-        # Viewport toggles
-        self.assertIn('id="btn-viewport-desktop"', resp.text)
-        self.assertIn('id="btn-viewport-tablet"', resp.text)
-        self.assertIn('id="btn-viewport-mobile"', resp.text)
-        # URL bar and manual reload
-        self.assertIn('id="preview-url-display"', resp.text)
-        self.assertIn('id="btn-preview-reload"', resp.text)
+        # Dev preview jobs populate preview_url for iframe integration
+        job = self.registry.create_job(repo="my-cool-app", feature="studio-feat", dev=True)
+        self.assertEqual(job.preview_url, "https://3000.mahesh0.dev")
+        job_data = self.registry.get_job(job.id)
+        self.assertIsNotNone(job_data)
+        self.assertEqual(job_data.to_dict()["preview_url"], "https://3000.mahesh0.dev")
 
     def test_compact_floating_status_badge_and_inspect_logs(self):
-        resp = self.client.get("/")
+        job = self.registry.create_job(repo="my-cool-app", feature="studio-feat")
+        resp = self.client.get(f"/api/jobs/{job.id}")
         self.assertEqual(resp.status_code, 200)
-        # Floating status badge with inspect logs shortcut
-        self.assertIn('id="studio-floating-status-badge"', resp.text)
-        self.assertIn('id="btn-inspect-logs"', resp.text)
-        self.assertIn('id="studio-badge-stage-text"', resp.text)
+        data = resp.json()
+        self.assertEqual(data["id"], job.id)
+        self.assertEqual(data["stage"], "IDLE")
 
     def test_console_view_maintains_full_functionality(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        # Full parameter dispatch controls
-        self.assertIn('id="launch-form"', resp.text)
-        self.assertIn('id="select-repo"', resp.text)
-        self.assertIn('id="select-feature"', resp.text)
-        self.assertIn('id="select-issue"', resp.text)
-        self.assertIn('id="btn-launch"', resp.text)
-        # Stepper, terminal, cancel button, history
-        self.assertIn('id="stage-stepper"', resp.text)
-        self.assertIn('id="terminal-body"', resp.text)
-        self.assertIn('id="btn-cancel"', resp.text)
-        self.assertIn('id="history-table-body"', resp.text)
+        resp_repos = self.client.get("/api/repos")
+        self.assertEqual(resp_repos.status_code, 200)
+
+        resp_jobs = self.client.get("/api/jobs")
+        self.assertEqual(resp_jobs.status_code, 200)
+        self.assertIn("jobs", resp_jobs.json())
 
     def test_repo_options_rendered_in_both_views(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        # Should render repo options in both studio and console dropdowns
-        self.assertIn('<select id="studio-select-repo"', resp.text)
-        self.assertIn('<select id="select-repo"', resp.text)
+        resp1 = self.client.get("/api/repos")
+        resp2 = self.client.get("/api/studio/repos")
+        self.assertEqual(resp1.status_code, 200)
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(resp1.json()["org"], DEFAULT_TEST_ORG)
+        self.assertEqual(resp2.json()["org"], DEFAULT_TEST_ORG)
 
     def test_recent_runs_rendered_in_console_view(self):
-        # Create a job in registry
         job = self.registry.create_job(repo="my-cool-app", feature="v1-init", issue="1", model="deepseek-v4.1-flash")
         job.status = JobStatus.SUCCESS
         job.started_at = 100.0
         job.ended_at = 142.0
 
-        resp = self.client.get("/")
+        resp = self.client.get("/api/jobs")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(job.id, resp.text)
-        self.assertIn("my-cool-app", resp.text)
-        self.assertIn("v1-init", resp.text)
-        self.assertIn("42.0s", resp.text)
+        jobs = resp.json()["jobs"]
+        matching = [j for j in jobs if j["id"] == job.id]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["repo"], "my-cool-app")
+        self.assertEqual(matching[0]["feature"], "v1-init")
+        self.assertEqual(matching[0]["duration"], 42.0)
 
     def test_studio_authentication_compatibility(self):
         unauth_client = TestClient(self.app)

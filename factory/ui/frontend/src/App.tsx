@@ -35,7 +35,7 @@ export const App: React.FC = () => {
   const switchTab = (tab: "studio" | "console") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
-      const targetPath = tab === "console" ? "/v2/console" : "/v2";
+      const targetPath = tab === "console" ? "/console" : "/";
       if (window.location.pathname !== targetPath) {
         window.history.pushState(null, "", targetPath);
       }
