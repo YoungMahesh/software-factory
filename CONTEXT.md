@@ -109,6 +109,11 @@ _Avoid_: Modal web tunnel, web url tunnel, preview port forward
 An ephemeral Modal sandbox provisioned to build and serve a target application's active branch on port 3000 without executing the multi-agent assembly line.
 _Avoid_: Dev runner, preview container, standalone server, test preview container
 
+**Unified Studio Sandbox**:
+A persistent Modal sandbox provisioned for an active repository in Factory Studio combining a background Vite development server bound to a Modal Application Tunnel on port 3000 with on-demand Assembly Line Pipeline execution via in-sandbox process execution (`sandbox.exec`).
+_Avoid_: Dual sandbox, preview container, dev runner, split runner
+
+
 **Software Factory**:
 An automated software delivery system that ingests work items from an Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
 _Avoid_: Agent swarm, AI dev platform, autonomous loop
