@@ -25,15 +25,18 @@ from factory.ui.github import (
     fetch_test_org_repos_detailed,
     instantiate_repo_from_template,
     RepoCreationError,
+    resolve_or_create_milestone,
+    synthesize_and_create_issue,
     validate_github_repo_name,
 )
+from factory.ui.guard import evaluate_prompt_intent
 from factory.ui.registry import JobRegistry, job_registry
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 
 class LaunchJobRequest(BaseModel):
-    repo: str = Field(..., description="Target repository name in test org (e.g. 'test3')")
+    repo: str = Field(..., description="Target repository name in Test Organization (e.g. 'test3')")
     feature: str | None = Field(None, description="Feature / milestone slug (e.g. 'slug-generator')")
     issue: str | None = Field(None, description="Optional ticket ID (e.g. '01' or '42')")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
@@ -44,6 +47,14 @@ class CreateRepoRequest(BaseModel):
     name: str = Field(..., description="Project / repository name (e.g. 'inventory-tracker')")
     description: str | None = Field(None, description="Optional repository description")
     private: bool = Field(False, description="Whether created repository is private")
+
+
+class StudioPromptRequest(BaseModel):
+    repo: str = Field(..., description="Target repository name in Test Organization (e.g. 'inventory-tracker')")
+    prompt: str = Field(..., description="User prompt describing what to build")
+    model: str = Field("deepseek-v4.1-flash", description="Model identifier")
+    vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
+    milestone_title: str | None = Field(None, description="Optional custom milestone title")
 
 
 def create_app(registry: JobRegistry = job_registry) -> FastAPI:
@@ -107,6 +118,66 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
     @app.post("/api/studio/repos", status_code=201)
     async def create_studio_repo(req: CreateRepoRequest):
         return await create_repo(req)
+
+    @app.post("/api/studio/prompt")
+    @app.post("/api/prompt")
+    async def studio_prompt(req: StudioPromptRequest):
+        repo = req.repo.strip() if req.repo else ""
+        if not repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        prompt = req.prompt.strip() if req.prompt else ""
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required.")
+
+        # 1. Fast Intent Classification Guard
+        guard_result = evaluate_prompt_intent(prompt)
+        if not guard_result.allowed:
+            return {
+                "accepted": False,
+                "refusal": guard_result.refusal_message,
+                "reason": guard_result.reason,
+                "category": guard_result.category,
+                "job": None,
+                "issue": None,
+                "milestone": None,
+                "stage": None,
+            }
+
+        # 2. Resolve or Create Active Milestone
+        milestone = resolve_or_create_milestone(
+            repo_name=repo,
+            title=req.milestone_title,
+        )
+
+        # 3. Synthesize sequential GitHub Issue with acceptance criteria
+        issue = synthesize_and_create_issue(
+            repo_name=repo,
+            prompt=prompt,
+            milestone_number=milestone["number"],
+            milestone_slug=milestone["slug"],
+        )
+
+        # 4. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
+        job = registry.create_job(
+            repo=repo,
+            feature=milestone["slug"],
+            issue=str(issue["number"]),
+            model=req.model,
+            vm=req.vm,
+        )
+        registry.start_job(job.id)
+
+        # 5. Return job metadata, synthesized issue reference, and stage tracking
+        return {
+            "accepted": True,
+            "refusal": None,
+            "reason": None,
+            "job": job.to_dict(),
+            "issue": issue,
+            "milestone": milestone,
+            "stage": job.stage.value,
+        }
 
 
 

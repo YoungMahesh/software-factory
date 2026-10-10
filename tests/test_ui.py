@@ -25,6 +25,15 @@ from factory.ui.github import (
     parse_github_blocked_by,
     RepoCreationError,
     validate_github_repo_name,
+    create_repo_milestone,
+    create_repo_issue,
+    resolve_or_create_milestone,
+    synthesize_ticket_content,
+    synthesize_and_create_issue,
+)
+from factory.ui.guard import (
+    evaluate_prompt_intent,
+    IntentGuardResult,
 )
 from factory.ui.registry import (
     JobRegistry,
@@ -1006,6 +1015,438 @@ class TestGitHubTemplateInstantiation(unittest.TestCase):
                 instantiate_repo_from_template("new-app", token="test-token")
             self.assertEqual(ctx.exception.status_code, 502)
             self.assertIn("not found", ctx.exception.message)
+
+
+class TestFastIntentGuard(unittest.TestCase):
+    def test_guard_allows_pure_frontend_requests(self):
+        frontend_prompts = [
+            "Build a responsive calculator app with arithmetic history and dark mode toggle.",
+            "Create a kanban board with drag and drop columns using client-side state and localStorage.",
+            "Design a dashboard with Chart.js showing interactive metrics with mock data.",
+            "Build a weather app calling the Open-Meteo public REST API and rendering forecast cards.",
+            "Implement a markdown editor with live side-by-side preview and syntax highlighting in TanStack Start.",
+            "Create an interactive todo list with filtering, search, and sessionStorage persistence.",
+        ]
+        for prompt in frontend_prompts:
+            with self.subTest(prompt=prompt):
+                result = evaluate_prompt_intent(prompt)
+                self.assertTrue(result.allowed, f"Expected prompt to be allowed: {prompt}")
+                self.assertIsNone(result.refusal_message)
+                self.assertIsNone(result.category)
+
+    def test_guard_rejects_database_prompts(self):
+        database_prompts = [
+            "Create a blog with a PostgreSQL database and Prisma schema migrations.",
+            "Build a user service storing profiles in MongoDB with mongoose models.",
+            "Set up a Redis caching database with session persistence.",
+            "Create an application with MySQL tables, foreign keys, and SQL queries.",
+            "Build a todo app backed by SQLite database with server migrations.",
+            "Connect this to a Supabase database to persist user records in Postgres.",
+        ]
+        for prompt in database_prompts:
+            with self.subTest(prompt=prompt):
+                result = evaluate_prompt_intent(prompt)
+                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
+                self.assertIsNotNone(result.refusal_message)
+                self.assertEqual(result.category, "database")
+                self.assertIn("TanStack Start", result.refusal_message)
+                self.assertIn("frontend", result.refusal_message.lower())
+
+    def test_guard_rejects_backend_server_prompts(self):
+        backend_prompts = [
+            "Build a Node.js Express server with backend endpoints for authentication.",
+            "Create a Python FastAPI backend service with background tasks.",
+            "Build a REST backend API with Flask and server-side routes.",
+            "Implement a Spring Boot backend microservice architecture.",
+            "Add a Django backend server handling user registration and server sessions.",
+            "Create a WebSocket server daemon running on the backend.",
+        ]
+        for prompt in backend_prompts:
+            with self.subTest(prompt=prompt):
+                result = evaluate_prompt_intent(prompt)
+                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
+                self.assertIsNotNone(result.refusal_message)
+                self.assertEqual(result.category, "backend_api")
+                self.assertIn("TanStack Start", result.refusal_message)
+
+    def test_guard_rejects_external_storage_prompts(self):
+        storage_prompts = [
+            "Store uploaded user images in an AWS S3 bucket.",
+            "Upload files to Google Cloud Storage (GCS) blob storage.",
+            "Persist customer attachments on Azure Blob Storage containers.",
+            "Implement server filesystem persistence storing files in /var/data on the server.",
+        ]
+        for prompt in storage_prompts:
+            with self.subTest(prompt=prompt):
+                result = evaluate_prompt_intent(prompt)
+                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
+                self.assertIsNotNone(result.refusal_message)
+                self.assertEqual(result.category, "server_storage")
+                self.assertIn("storage", result.refusal_message.lower())
+
+    def test_guard_handles_empty_or_whitespace_prompts(self):
+        result = evaluate_prompt_intent("")
+        self.assertFalse(result.allowed)
+        self.assertIn("empty", result.reason.lower() if result.reason else "")
+
+        result2 = evaluate_prompt_intent("   \n\t  ")
+        self.assertFalse(result2.allowed)
+
+
+class TestTicketAndMilestoneSynthesis(unittest.TestCase):
+    def test_synthesize_ticket_content_initial_ticket(self):
+        prompt = "Build a responsive calculator app with arithmetic history and dark mode toggle."
+        title, body = synthesize_ticket_content(prompt, seq_num=1, previous_issue_number=None)
+
+        self.assertTrue(title.startswith("01: "))
+        self.assertIn("Calculator", title)
+        self.assertIn("# 01: ", body)
+        self.assertIn("**What to build:**", body)
+        self.assertIn("**Blocked by:** None", body)
+        self.assertIn("**Status:** ready-for-agent", body)
+        self.assertIn("- [ ]", body)
+        self.assertIn("calculator", body.lower())
+
+    def test_synthesize_ticket_content_sequential_ticket(self):
+        prompt = "Add CSV export for calculation history with a download button."
+        title, body = synthesize_ticket_content(prompt, seq_num=2, previous_issue_number=1)
+
+        self.assertTrue(title.startswith("02: "))
+        self.assertIn("CSV", title)
+        self.assertIn("**Blocked by:** #1", body)
+        self.assertIn("**Status:** ready-for-agent", body)
+        self.assertIn("- [ ]", body)
+
+    def test_create_repo_milestone_success(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {
+            "id": 991,
+            "number": 1,
+            "title": "v1: Initial App",
+            "description": "Initial frontend application",
+            "state": "open",
+            "html_url": "https://github.com/software-factory-09-test/test-calc/milestone/1",
+        }
+
+        with patch("httpx.Client.post", return_value=mock_resp) as mock_post:
+            ms = create_repo_milestone(
+                repo_name="test-calc",
+                title="v1: Initial App",
+                description="Initial frontend application",
+                token="test-token",
+            )
+            self.assertEqual(ms["number"], 1)
+            self.assertEqual(ms["title"], "v1: Initial App")
+            self.assertEqual(ms["slug"], "v1-initial-app")
+            mock_post.assert_called_once()
+            args, kwargs = mock_post.call_args
+            self.assertIn("/repos/software-factory-09-test/test-calc/milestones", args[0])
+            self.assertEqual(kwargs["json"]["title"], "v1: Initial App")
+
+    @patch("factory.ui.github.fetch_repo_milestones")
+    def test_resolve_or_create_milestone_finds_existing(self, mock_fetch):
+        mock_fetch.return_value = [
+            {
+                "id": 991,
+                "number": 1,
+                "title": "v1: Initial App",
+                "slug": "v1-initial-app",
+                "state": "open",
+                "html_url": "https://github.com/software-factory-09-test/test-calc/milestone/1",
+            }
+        ]
+        with patch("factory.ui.github.create_repo_milestone") as mock_create:
+            ms = resolve_or_create_milestone(
+                repo_name="test-calc",
+                title="v1: Initial App",
+                token="test-token",
+            )
+            self.assertEqual(ms["number"], 1)
+            self.assertEqual(ms["title"], "v1: Initial App")
+            mock_create.assert_not_called()
+
+    @patch("factory.ui.github.fetch_repo_milestones")
+    def test_resolve_or_create_milestone_reuses_active_when_title_omitted(self, mock_fetch):
+        mock_fetch.return_value = [
+            {
+                "id": 993,
+                "number": 2,
+                "title": "v2: Advanced Widgets",
+                "slug": "v2-advanced-widgets",
+                "state": "open",
+            }
+        ]
+        with patch("factory.ui.github.create_repo_milestone") as mock_create:
+            ms = resolve_or_create_milestone(
+                repo_name="test-calc",
+                title=None,
+                token="test-token",
+            )
+            self.assertEqual(ms["number"], 2)
+            self.assertEqual(ms["title"], "v2: Advanced Widgets")
+            mock_create.assert_not_called()
+
+    @patch("factory.ui.github.fetch_repo_milestones", return_value=[])
+    @patch("factory.ui.github.create_repo_milestone")
+    def test_resolve_or_create_milestone_creates_if_missing(self, mock_create, mock_fetch):
+        mock_create.return_value = {
+            "id": 992,
+            "number": 1,
+            "title": "v1: Initial App",
+            "slug": "v1-initial-app",
+            "state": "open",
+        }
+        ms = resolve_or_create_milestone(
+            repo_name="test-calc",
+            title="v1: Initial App",
+            token="test-token",
+        )
+        self.assertEqual(ms["number"], 1)
+        mock_create.assert_called_once()
+
+    def test_create_repo_issue_success(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {
+            "id": 771,
+            "number": 1,
+            "title": "01: Initial App UI",
+            "body": "Issue spec",
+            "state": "open",
+            "labels": [{"name": "factory:ready"}],
+            "html_url": "https://github.com/software-factory-09-test/test-calc/issues/1",
+        }
+
+        with patch("httpx.Client.post", return_value=mock_resp) as mock_post:
+            issue = create_repo_issue(
+                repo_name="test-calc",
+                title="01: Initial App UI",
+                body="Issue spec",
+                milestone_number=1,
+                labels=["factory:ready"],
+                token="test-token",
+            )
+            self.assertEqual(issue["number"], 1)
+            self.assertEqual(issue["title"], "01: Initial App UI")
+            mock_post.assert_called_once()
+            args, kwargs = mock_post.call_args
+            self.assertIn("/repos/software-factory-09-test/test-calc/issues", args[0])
+            self.assertEqual(kwargs["json"]["milestone"], 1)
+            self.assertEqual(kwargs["json"]["labels"], ["factory:ready"])
+
+    @patch("factory.ui.github.fetch_repo_issues")
+    @patch("factory.ui.github.create_repo_issue")
+    def test_synthesize_and_create_issue_sequential_flow(self, mock_create_issue, mock_fetch_issues):
+        # 1. First prompt in milestone (no existing issues)
+        mock_fetch_issues.return_value = []
+        mock_create_issue.return_value = {
+            "id": 771,
+            "number": 1,
+            "title": "01: Calculator App Scaffolding",
+            "body": "# 01...",
+            "html_url": "https://github.com/software-factory-09-test/test-calc/issues/1",
+        }
+
+        first_issue = synthesize_and_create_issue(
+            repo_name="test-calc",
+            prompt="Build a calculator application with state and dark mode",
+            milestone_number=1,
+            milestone_slug="v1-initial-app",
+            token="test-token",
+        )
+        self.assertEqual(first_issue["number"], 1)
+        mock_create_issue.assert_called_once()
+        args, kwargs = mock_create_issue.call_args
+        self.assertTrue(kwargs["title"].startswith("01: "))
+        self.assertIn("**Blocked by:** None", kwargs["body"])
+
+        # 2. Second prompt in milestone (1 existing issue)
+        mock_create_issue.reset_mock()
+        mock_fetch_issues.return_value = [first_issue]
+        mock_create_issue.return_value = {
+            "id": 772,
+            "number": 2,
+            "title": "02: Calculation History CSV Export",
+            "body": "# 02...",
+            "html_url": "https://github.com/software-factory-09-test/test-calc/issues/2",
+        }
+
+        second_issue = synthesize_and_create_issue(
+            repo_name="test-calc",
+            prompt="Add export calculation history to CSV",
+            milestone_number=1,
+            milestone_slug="v1-initial-app",
+            token="test-token",
+        )
+        self.assertEqual(second_issue["number"], 2)
+        mock_create_issue.assert_called_once()
+        args2, kwargs2 = mock_create_issue.call_args
+        self.assertTrue(kwargs2["title"].startswith("02: "))
+        self.assertIn("**Blocked by:** #1", kwargs2["body"])
+
+
+class TestConversationalPromptOrchestration(unittest.TestCase):
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.app = create_app(registry=self.registry)
+        self.client = TestClient(
+            self.app,
+            headers={"Authorization": "Basic YWRtaW46YWRtaW4="},  # admin:admin
+        )
+
+    def test_prompt_endpoint_missing_repo_returns_400(self):
+        resp = self.client.post("/api/studio/prompt", json={"repo": "", "prompt": "Build a calculator"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Repository name is required", resp.json()["detail"])
+
+    def test_prompt_endpoint_missing_prompt_returns_400(self):
+        resp = self.client.post("/api/studio/prompt", json={"repo": "test3", "prompt": "   "})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Prompt is required", resp.json()["detail"])
+
+    def test_prompt_endpoint_rejects_database_prompt_without_dispatching_job(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Build a user login app with a PostgreSQL database and Prisma migrations",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["accepted"])
+        self.assertIsNotNone(data["refusal"])
+        self.assertIn("TanStack Start", data["refusal"])
+        self.assertIsNone(data["job"])
+        self.assertIsNone(data["issue"])
+        self.assertIsNone(data["milestone"])
+        # Ensure no job dispatched in registry
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+
+    def test_prompt_endpoint_rejects_backend_server_prompt_without_dispatching_job(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Build a FastAPI backend server with background worker endpoints",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["accepted"])
+        self.assertIn("backend", data["refusal"].lower())
+        self.assertIsNone(data["job"])
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+
+    def test_prompt_endpoint_rejects_storage_prompt_without_dispatching_job(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Upload and store customer documents in an AWS S3 bucket",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["accepted"])
+        self.assertIn("storage", data["refusal"].lower())
+        self.assertIsNone(data["job"])
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+
+    @patch("factory.ui.app.resolve_or_create_milestone")
+    @patch("factory.ui.app.synthesize_and_create_issue")
+    def test_prompt_endpoint_accepts_valid_frontend_prompt_and_orchestrates_job(
+        self,
+        mock_synthesize_issue,
+        mock_resolve_milestone,
+    ):
+        mock_resolve_milestone.return_value = {
+            "id": 991,
+            "number": 1,
+            "title": "v1: Initial App",
+            "slug": "v1-initial-app",
+            "html_url": "https://github.com/software-factory-09-test/test-calc/milestone/1",
+        }
+        mock_synthesize_issue.return_value = {
+            "id": 771,
+            "number": 1,
+            "title": "01: Calculator UI And Logic",
+            "body": "# 01...",
+            "html_url": "https://github.com/software-factory-09-test/test-calc/issues/1",
+        }
+
+        with patch.object(self.registry, "start_job") as mock_start_job:
+            resp = self.client.post(
+                "/api/studio/prompt",
+                json={
+                    "repo": "test3",
+                    "prompt": "Build a responsive calculator app with arithmetic history and dark mode",
+                    "model": "deepseek-v4.1-flash",
+                    "vm": False,
+                },
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            self.assertIsNone(data["refusal"])
+            self.assertIsNotNone(data["job"])
+            self.assertEqual(data["job"]["repo"], "test3")
+            self.assertEqual(data["job"]["feature"], "v1-initial-app")
+            self.assertEqual(data["job"]["issue"], "1")
+            self.assertEqual(data["milestone"]["number"], 1)
+            self.assertEqual(data["milestone"]["slug"], "v1-initial-app")
+            self.assertEqual(data["issue"]["number"], 1)
+            self.assertEqual(data["stage"], JobStage.IDLE.value)
+
+            mock_resolve_milestone.assert_called_once_with(
+                repo_name="test3",
+                title=None,
+            )
+            mock_synthesize_issue.assert_called_once()
+            mock_start_job.assert_called_once()
+
+    @patch("factory.ui.app.resolve_or_create_milestone")
+    @patch("factory.ui.app.synthesize_and_create_issue")
+    def test_prompt_endpoint_alias_api_prompt(
+        self,
+        mock_synthesize_issue,
+        mock_resolve_milestone,
+    ):
+        mock_resolve_milestone.return_value = {
+            "id": 991,
+            "number": 1,
+            "title": "v1: Initial App",
+            "slug": "v1-initial-app",
+        }
+        mock_synthesize_issue.return_value = {
+            "id": 771,
+            "number": 1,
+            "title": "01: App",
+            "body": "# 01...",
+        }
+        with patch.object(self.registry, "start_job"):
+            resp = self.client.post(
+                "/api/prompt",
+                json={
+                    "repo": "test3",
+                    "prompt": "Build a simple weather dashboard",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(resp.json()["accepted"])
+
+    def test_prompt_endpoint_unauthenticated_returns_401(self):
+        unauth_client = TestClient(self.app)
+        resp = unauth_client.post(
+            "/api/studio/prompt",
+            json={"repo": "test3", "prompt": "Build a calculator"},
+        )
+        self.assertEqual(resp.status_code, 401)
+
+
+
 
 
 
