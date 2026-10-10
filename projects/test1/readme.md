@@ -1,3 +1,7 @@
-Running `node run.js` in this directory will publish `./index.html` to localhost:3000, 
+# test1
 
-To test if server is running you can execute `curl localhost:3000` 
+Static HTTP fixture serving `index.html` on port 3000 to verify Cloudflare Tunnel ingress in Modal Sandboxes.
+
+```bash
+node run.js  # Serves on http://localhost:3000
+```
