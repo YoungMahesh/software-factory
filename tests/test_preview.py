@@ -361,7 +361,7 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         self.assertEqual(len(preview_refresh), 1)
 
     @patch("factory.ui.registry.create_factory_sandbox")
-    def test_job_registry_spawns_new_sandbox_when_no_active_container(self, mock_create_sandbox):
+    def test_job_registry_spawns_new_sandbox_when_no_active_studio_sandbox(self, mock_create_sandbox):
         import time
 
         mock_sandbox = MagicMock()
@@ -388,6 +388,46 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         self.assertIsNotNone(j)
         self.assertEqual(j.status, "SUCCESS")
         self.assertFalse(j.is_in_sandbox_exec)
+        mock_create_sandbox.assert_called_once()
+
+    @patch("factory.ui.registry.create_factory_sandbox")
+    def test_job_registry_does_not_delegate_when_preview_is_provisioning(self, mock_create_sandbox):
+        import time
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-fallback"
+        mock_sandbox.stdout = iter(["Step 1 complete\n"])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create_sandbox.return_value = mock_sandbox
+
+        preview = PreviewState(
+            repo="test-prov",
+            status=PreviewStatus.PROVISIONING,
+            stage=PreviewStage.PROVISIONING,
+            sandbox=mock_sandbox,
+        )
+        self.preview_reg._previews["test-prov"] = preview
+
+        job = self.job_reg.create_job(
+            repo="test-prov",
+            feature="feat-prov",
+        )
+        self.job_reg.start_job(job.id)
+
+        for _ in range(50):
+            time.sleep(0.05)
+            j = self.job_reg.get_job(job.id)
+            if j and j.status in ("SUCCESS", "FAILED"):
+                break
+
+        j = self.job_reg.get_job(job.id)
+        self.assertIsNotNone(j)
+        self.assertEqual(j.status, "SUCCESS")
+        self.assertFalse(j.is_in_sandbox_exec)
+        # Should not have called sandbox.exec because preview was still PROVISIONING
         mock_create_sandbox.assert_called_once()
 
     @patch("factory.ui.registry.create_factory_sandbox")

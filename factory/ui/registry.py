@@ -142,7 +142,6 @@ class JobRegistry:
         preview_registry: Any = None,
     ):
         self._jobs: dict[str, FactoryJob] = {}
-        self._active_sandboxes: dict[str, modal.Sandbox] = {}
         self._lock = threading.RLock()
         self.max_log_lines = max_log_lines
         self.max_events = max_events
@@ -154,59 +153,11 @@ class JobRegistry:
         return globals().get("preview_registry")
 
     def get_active_sandbox(self, repo: str) -> tuple[modal.Sandbox, str | None] | tuple[None, None]:
-        """Detects if an active running container is associated with the target repository.
-
-        Returns (sandbox, preview_url) if an active container is found, else (None, None).
-        Checks explicit registered sandboxes, preview registry, and other active jobs.
-        """
-        clean_repo = repo.strip()
-        bare_repo = clean_repo.split("/")[-1]
-
-        with self._lock:
-            for r in (clean_repo, bare_repo):
-                if r in self._active_sandboxes:
-                    return self._active_sandboxes[r], None
-
+        """Detects if an active Unified Studio Sandbox is serving for the target repository."""
         p_reg = self._get_effective_preview_registry()
-        if p_reg is not None:
-            for r in (clean_repo, bare_repo):
-                preview = p_reg.get_preview(r)
-                if (
-                    preview is not None
-                    and preview.sandbox is not None
-                    and preview.status in (PreviewStatus.SERVING, PreviewStatus.PROVISIONING)
-                    and not getattr(preview, "_stopped", False)
-                ):
-                    return preview.sandbox, preview.preview_url
-
-        with self._lock:
-            for j in self._jobs.values():
-                for r in (clean_repo, bare_repo):
-                    if (
-                        (j.repo == r or j.repo.split("/")[-1] == r)
-                        and j.sandbox is not None
-                        and j.status == JobStatus.RUNNING
-                        and not j._cancelled
-                    ):
-                        return j.sandbox, j.preview_url
-
+        if p_reg is not None and hasattr(p_reg, "get_active_sandbox"):
+            return p_reg.get_active_sandbox(repo)
         return None, None
-
-    def register_active_sandbox(self, repo: str, sandbox: modal.Sandbox) -> None:
-        """Explicitly registers an active container for a repository."""
-        clean_repo = repo.strip()
-        bare_repo = clean_repo.split("/")[-1]
-        with self._lock:
-            self._active_sandboxes[clean_repo] = sandbox
-            self._active_sandboxes[bare_repo] = sandbox
-
-    def unregister_active_sandbox(self, repo: str) -> None:
-        """Unregisters an active container for a repository."""
-        clean_repo = repo.strip()
-        bare_repo = clean_repo.split("/")[-1]
-        with self._lock:
-            self._active_sandboxes.pop(clean_repo, None)
-            self._active_sandboxes.pop(bare_repo, None)
 
     def create_job(
         self,
@@ -398,6 +349,61 @@ class JobRegistry:
         )
         thread.start()
 
+    def _stream_and_wait(self, job: FactoryJob, stream_src: Any) -> int:
+        import concurrent.futures
+
+        def stream_pipe(reader):
+            try:
+                for chunk in reader:
+                    if job._cancelled:
+                        break
+                    text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+                    self.append_log(job.id, text)
+            except Exception:
+                pass
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            f_out = executor.submit(stream_pipe, stream_src.stdout)
+            f_err = executor.submit(stream_pipe, stream_src.stderr)
+            concurrent.futures.wait([f_out, f_err])
+
+        if hasattr(stream_src, "wait"):
+            try:
+                exit_code = stream_src.wait()
+            except TypeError:
+                stream_src.wait(raise_on_termination=False)
+                exit_code = getattr(stream_src, "returncode", None)
+        else:
+            exit_code = getattr(stream_src, "returncode", 0)
+
+        self.flush_buffer(job.id)
+        return exit_code if exit_code is not None else getattr(stream_src, "returncode", 0)
+
+    def _finalize_job(self, job: FactoryJob, exit_code: int, is_in_sandbox: bool = False) -> None:
+        with self._lock:
+            if not job._cancelled:
+                job.exit_code = exit_code
+                job.ended_at = time.time()
+                if exit_code == 0:
+                    job.status = JobStatus.SUCCESS
+                    job.stage = JobStage.COMPLETED
+                else:
+                    job.status = JobStatus.FAILED
+                self._broadcast(job, {"event": "status", "status": job.status.value})
+                self._broadcast(job, {"event": "stage", "stage": job.stage.value})
+
+                if exit_code == 0 and is_in_sandbox:
+                    refresh_payload = {
+                        "event": "preview_refresh",
+                        "repo": job.repo,
+                        "job_id": job.id,
+                    }
+                    self._broadcast(job, refresh_payload)
+
+                    p_reg = self._get_effective_preview_registry()
+                    if p_reg is not None and hasattr(p_reg, "broadcast_refresh"):
+                        p_reg.broadcast_refresh(job.repo)
+
     def _run_job_worker(self, job_id: str) -> None:
         job = self.get_job(job_id)
         if not job:
@@ -407,10 +413,7 @@ class JobRegistry:
             if job._cancelled:
                 return
             job.status = JobStatus.RUNNING
-            job.stage = JobStage.PROVISIONING
             job.started_at = time.time()
-            self._broadcast(job, {"event": "status", "status": JobStatus.RUNNING.value})
-            self._broadcast(job, {"event": "stage", "stage": JobStage.PROVISIONING.value})
 
         active_sandbox, preview_url = self.get_active_sandbox(job.repo)
 
@@ -420,12 +423,15 @@ class JobRegistry:
                     return
                 job.sandbox = active_sandbox
                 job.is_in_sandbox_exec = True
+                job.stage = JobStage.PREFLIGHT
                 if preview_url and not job.preview_url:
                     job.preview_url = preview_url
+                self._broadcast(job, {"event": "status", "status": JobStatus.RUNNING.value})
+                self._broadcast(job, {"event": "stage", "stage": JobStage.PREFLIGHT.value})
 
             self.append_log(
                 job_id,
-                f"🚀 [DELEGATE] Active container detected for {job.repo}. Delegating in-sandbox execution via sandbox.exec()...\n",
+                f"🚀 [DELEGATE] Active Unified Studio Sandbox detected for {job.repo}. Delegating in-sandbox execution via sandbox.exec()...\n",
             )
 
             try:
@@ -449,74 +455,17 @@ class JobRegistry:
 
                 pipeline_cmd = " ".join(shlex.quote(a) for a in cmd_args)
                 exec_cmd = (
-                    "if [ -f /root/.factory.env ]; then "
-                    "set -a; source /root/.factory.env; set +a; "
+                    "if [ ! -f /root/.factory.env ]; then "
+                    "echo 'ERROR: /root/.factory.env not found in sandbox' >&2; exit 1; "
                     "fi; "
+                    "set -a; source /root/.factory.env; set +a; "
                     f"export PYTHONUNBUFFERED=1; "
                     f"exec {pipeline_cmd}"
                 )
 
                 process = active_sandbox.exec("bash", "-c", exec_cmd)
-
-                # Stream logs line by line
-                import concurrent.futures
-
-                def stream_pipe(reader, is_err=False):
-                    try:
-                        for chunk in reader:
-                            if job._cancelled:
-                                break
-                            if isinstance(chunk, bytes):
-                                text = chunk.decode("utf-8", errors="replace")
-                            else:
-                                text = str(chunk)
-                            self.append_log(job_id, text)
-                    except Exception:
-                        pass
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                    f_out = executor.submit(stream_pipe, process.stdout, False)
-                    f_err = executor.submit(stream_pipe, process.stderr, True)
-                    concurrent.futures.wait([f_out, f_err])
-
-                if hasattr(process, "wait"):
-                    try:
-                        exit_code = process.wait()
-                    except TypeError:
-                        process.wait(raise_on_termination=False)
-                        exit_code = getattr(process, "returncode", None)
-                else:
-                    exit_code = getattr(process, "returncode", 0)
-
-                if exit_code is None:
-                    exit_code = getattr(process, "returncode", 0)
-
-                self.flush_buffer(job_id)
-
-                with self._lock:
-                    if not job._cancelled:
-                        job.exit_code = exit_code
-                        job.ended_at = time.time()
-                        if exit_code == 0:
-                            job.status = JobStatus.SUCCESS
-                            job.stage = JobStage.COMPLETED
-                        else:
-                            job.status = JobStatus.FAILED
-                        self._broadcast(job, {"event": "status", "status": job.status.value})
-                        self._broadcast(job, {"event": "stage", "stage": job.stage.value})
-
-                        # Upon successful completion of an in-sandbox pipeline run, broadcast preview_refresh event
-                        if exit_code == 0:
-                            refresh_payload = {
-                                "event": "preview_refresh",
-                                "repo": job.repo,
-                                "job_id": job.id,
-                            }
-                            self._broadcast(job, refresh_payload)
-
-                            p_reg = self._get_effective_preview_registry()
-                            if p_reg is not None and hasattr(p_reg, "broadcast_refresh"):
-                                p_reg.broadcast_refresh(job.repo)
+                exit_code = self._stream_and_wait(job, process)
+                self._finalize_job(job, exit_code, is_in_sandbox=True)
 
             except Exception as e:
                 with self._lock:
@@ -527,6 +476,13 @@ class JobRegistry:
                         self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
                         self.append_log(job_id, f"\n❌ [ERROR] In-sandbox execution failed: {e}\n")
             return
+
+        with self._lock:
+            if job._cancelled:
+                return
+            job.stage = JobStage.PROVISIONING
+            self._broadcast(job, {"event": "status", "status": JobStatus.RUNNING.value})
+            self._broadcast(job, {"event": "stage", "stage": JobStage.PROVISIONING.value})
 
         self.append_log(
             job_id,
@@ -557,42 +513,8 @@ class JobRegistry:
 
             self.append_log(job_id, f"📦 [MODAL] Sandbox created: {sandbox.object_id}\n")
 
-            # Stream logs line by line
-            import concurrent.futures
-
-            def stream_pipe(reader, is_err=False):
-                try:
-                    for chunk in reader:
-                        if job._cancelled:
-                            break
-                        if isinstance(chunk, bytes):
-                            text = chunk.decode("utf-8", errors="replace")
-                        else:
-                            text = str(chunk)
-                        self.append_log(job_id, text)
-                except Exception:
-                    pass
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                f_out = executor.submit(stream_pipe, sandbox.stdout, False)
-                f_err = executor.submit(stream_pipe, sandbox.stderr, True)
-                concurrent.futures.wait([f_out, f_err])
-
-            sandbox.wait(raise_on_termination=False)
-            exit_code = sandbox.returncode
-            self.flush_buffer(job_id)
-
-            with self._lock:
-                if not job._cancelled:
-                    job.exit_code = exit_code
-                    job.ended_at = time.time()
-                    if exit_code == 0:
-                        job.status = JobStatus.SUCCESS
-                        job.stage = JobStage.COMPLETED
-                    else:
-                        job.status = JobStatus.FAILED
-                    self._broadcast(job, {"event": "status", "status": job.status.value})
-                    self._broadcast(job, {"event": "stage", "stage": job.stage.value})
+            exit_code = self._stream_and_wait(job, sandbox)
+            self._finalize_job(job, exit_code, is_in_sandbox=False)
 
         except Exception as e:
             with self._lock:
@@ -858,6 +780,22 @@ class PreviewRegistry:
         for dead in dead_listeners:
             if dead in preview.listeners:
                 preview.listeners.remove(dead)
+
+    def get_active_sandbox(self, repo: str) -> tuple[modal.Sandbox, str | None] | tuple[None, None]:
+        """Returns (sandbox, preview_url) if an active Unified Studio Sandbox is serving for the repository."""
+        clean_repo = repo.strip()
+        bare_repo = clean_repo.split("/")[-1]
+        with self._lock:
+            for r in (clean_repo, bare_repo):
+                preview = self._previews.get(r)
+                if (
+                    preview is not None
+                    and preview.sandbox is not None
+                    and preview.status == PreviewStatus.SERVING
+                    and not getattr(preview, "_stopped", False)
+                ):
+                    return preview.sandbox, preview.preview_url
+        return None, None
 
     def broadcast_refresh(self, repo: str) -> None:
         """Broadcasts a preview_refresh event to all preview listeners for the repository."""
