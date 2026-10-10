@@ -627,15 +627,27 @@ class TestCompiledSpaRootRouteServing(unittest.TestCase):
         self.assertIn("text/html", resp2.headers["content-type"])
         self.assertIn('<div id="root"></div>', resp2.text)
 
+        resp3 = self.client.get("/arbitrary/nested/deep-link")
+        self.assertEqual(resp3.status_code, 200)
+        self.assertIn("text/html", resp3.headers["content-type"])
+        self.assertIn('<div id="root"></div>', resp3.text)
+
+        resp_api_404 = self.client.get("/api/unknown_endpoint")
+        self.assertEqual(resp_api_404.status_code, 404)
+
     def test_v2_redirects_to_root(self):
-        # Without follow_redirects, verify HTTP 307/308 redirect
+        # Without follow_redirects, verify HTTP 307/308 redirect and query preservation
         resp = self.client.get("/v2", follow_redirects=False)
         self.assertIn(resp.status_code, (307, 308))
         self.assertEqual(resp.headers["location"], "/")
 
-        resp_sub = self.client.get("/v2/console", follow_redirects=False)
+        resp_query = self.client.get("/v2?feature=test", follow_redirects=False)
+        self.assertIn(resp_query.status_code, (307, 308))
+        self.assertEqual(resp_query.headers["location"], "/?feature=test")
+
+        resp_sub = self.client.get("/v2/console?tab=1", follow_redirects=False)
         self.assertIn(resp_sub.status_code, (307, 308))
-        self.assertEqual(resp_sub.headers["location"], "/console")
+        self.assertEqual(resp_sub.headers["location"], "/console?tab=1")
 
         # With follow_redirects, verify redirect resolves to compiled SPA
         resp_followed = self.client.get("/v2", follow_redirects=True)
@@ -682,10 +694,14 @@ class TestCompiledSpaRootRouteServing(unittest.TestCase):
             self.assertIn("javascript", resp.headers["content-type"])
             self.assertEqual(resp.text, "console.log('spa bundle');")
 
-            # Also verify backwards-compatible /v2/assets/test-bundle.js
-            resp_v2 = self.client.get("/v2/assets/test-bundle.js")
-            self.assertEqual(resp_v2.status_code, 200)
-            self.assertIn("javascript", resp_v2.headers["content-type"])
+            # Legacy /v2/assets path redirects to /assets
+            resp_v2 = self.client.get("/v2/assets/test-bundle.js", follow_redirects=False)
+            self.assertIn(resp_v2.status_code, (307, 308))
+            self.assertEqual(resp_v2.headers["location"], "/assets/test-bundle.js")
+
+            resp_v2_followed = self.client.get("/v2/assets/test-bundle.js", follow_redirects=True)
+            self.assertEqual(resp_v2_followed.status_code, 200)
+            self.assertEqual(resp_v2_followed.text, "console.log('spa bundle');")
 
             # Also verify via /static/dist/assets/test-bundle.js
             resp_dist = self.client.get("/static/dist/assets/test-bundle.js")

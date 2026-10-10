@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from factory.ui.auth import BasicAuthMiddleware
 from factory.ui.github import (
@@ -72,7 +73,6 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
     assets_dir.mkdir(parents=True, exist_ok=True)
 
     app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-    app.mount("/v2/assets", StaticFiles(directory=str(assets_dir)), name="v2_assets")
     app.mount("/static/dist", StaticFiles(directory=str(STATIC_DIST_DIR)), name="static_dist")
 
     def _get_spa_html() -> HTMLResponse:
@@ -94,20 +94,33 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
         )
 
     @app.get("/v2", response_class=RedirectResponse)
-    async def v2_redirect_root():
-        return RedirectResponse(url="/", status_code=307)
+    async def v2_redirect_root(request: Request):
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(url=f"/{query}", status_code=307)
 
     @app.get("/v2/{subpath:path}", response_class=RedirectResponse)
-    async def v2_redirect_subpath(subpath: str):
-        return RedirectResponse(url=f"/{subpath}", status_code=307)
+    async def v2_redirect_subpath(request: Request, subpath: str):
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(url=f"/{subpath}{query}", status_code=307)
 
     @app.get("/", response_class=HTMLResponse)
-    @app.get("/console", response_class=HTMLResponse)
-    @app.get("/console/{subpath:path}", response_class=HTMLResponse)
-    @app.get("/studio", response_class=HTMLResponse)
-    @app.get("/studio/{subpath:path}", response_class=HTMLResponse)
-    async def root_spa(request: Request, subpath: str = ""):
+    async def root_spa():
         return _get_spa_html()
+
+    @app.exception_handler(404)
+    @app.exception_handler(StarletteHTTPException)
+    async def spa_404_fallback(request: Request, exc: Exception):
+        status_code = getattr(exc, "status_code", 404)
+        if status_code != 404:
+            detail = getattr(exc, "detail", "Error")
+            return JSONResponse(status_code=status_code, content={"detail": detail})
+        path = request.url.path
+        if path.startswith("/api") or path.startswith("/assets") or path.startswith("/static"):
+            detail = getattr(exc, "detail", "Not Found")
+            return JSONResponse(status_code=404, content={"detail": detail})
+        if request.method == "GET":
+            return _get_spa_html()
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
     @app.get("/api/repos")
     async def get_repos():
