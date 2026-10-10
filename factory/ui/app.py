@@ -22,6 +22,10 @@ from factory.ui.github import (
     fetch_repo_milestones_and_issues,
     fetch_repo_scratch_metadata,
     fetch_test_org_repos,
+    fetch_test_org_repos_detailed,
+    instantiate_repo_from_template,
+    RepoCreationError,
+    validate_github_repo_name,
 )
 from factory.ui.registry import JobRegistry, job_registry
 
@@ -34,6 +38,12 @@ class LaunchJobRequest(BaseModel):
     issue: str | None = Field(None, description="Optional ticket ID (e.g. '01' or '42')")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
+
+
+class CreateRepoRequest(BaseModel):
+    name: str = Field(..., description="Project / repository name (e.g. 'inventory-tracker')")
+    description: str | None = Field(None, description="Optional repository description")
+    private: bool = Field(False, description="Whether created repository is private")
 
 
 def create_app(registry: JobRegistry = job_registry) -> FastAPI:
@@ -63,8 +73,42 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
 
     @app.get("/api/repos")
     async def get_repos():
-        repos = fetch_test_org_repos()
-        return {"org": DEFAULT_TEST_ORG, "repos": repos}
+        detailed_repos = fetch_test_org_repos_detailed()
+        return {
+            "org": DEFAULT_TEST_ORG,
+            "repos": detailed_repos,
+        }
+
+    @app.get("/api/studio/repos")
+    async def get_studio_repos():
+        detailed_repos = fetch_test_org_repos_detailed()
+        return {
+            "org": DEFAULT_TEST_ORG,
+            "repos": detailed_repos,
+        }
+
+    @app.post("/api/repos", status_code=201)
+    async def create_repo(req: CreateRepoRequest):
+        repo_name = req.name.strip()
+        valid, err_msg = validate_github_repo_name(repo_name)
+        if not valid:
+            raise HTTPException(status_code=400, detail=err_msg or "Invalid repository name.")
+
+        try:
+            result = instantiate_repo_from_template(
+                repo_name=repo_name,
+                description=req.description,
+                private=req.private,
+            )
+            return JSONResponse(status_code=201, content=result)
+        except RepoCreationError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    @app.post("/api/studio/repos", status_code=201)
+    async def create_studio_repo(req: CreateRepoRequest):
+        return await create_repo(req)
+
+
 
     @app.get("/api/repos/{repo}/scratch")
     async def get_repo_scratch(repo: str):

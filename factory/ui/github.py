@@ -22,6 +22,33 @@ FACTORY_LABELS = {
     "READY_FOR_HUMAN": "factory:ready-for-human",
 }
 
+CANONICAL_TEMPLATE_ORG = "software-factory-09-test"
+CANONICAL_TEMPLATE_REPO = "tanstack-start-template"
+
+REPO_NAME_REGEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+
+
+def validate_github_repo_name(name: str) -> tuple[bool, str | None]:
+    """Validates that a repository name complies with GitHub repository slug requirements."""
+    if not isinstance(name, str) or not name.strip():
+        return False, "Repository name cannot be empty."
+
+    trimmed = name.strip()
+    if len(trimmed) > 100:
+        return False, "Repository name cannot exceed 100 characters."
+
+    if trimmed in (".", "..") or trimmed.lower() == ".git" or trimmed.lower().endswith(".git"):
+        return False, "Repository name cannot be '.', '..', or end with '.git'."
+
+    if not REPO_NAME_REGEX.match(trimmed):
+        return False, (
+            "Repository name must start with an alphanumeric character and contain "
+            "only alphanumeric characters, hyphens, underscores, or periods."
+        )
+
+    return True, None
+
+
 _cached_token: str | None = None
 
 
@@ -69,15 +96,56 @@ def get_test_org_token(repo_root: Path | None = None, force_refresh: bool = Fals
     return None
 
 
-def fetch_test_org_repos(
+def check_tanstack_start_compatibility(repo_item: dict[str, Any]) -> bool:
+    """Checks if a repository is compatible with TanStack Start template scaffolding."""
+    if not repo_item or not isinstance(repo_item, dict):
+        return False
+
+    name = repo_item.get("name") or ""
+    if name == CANONICAL_TEMPLATE_REPO:
+        return True
+
+    template_repo = repo_item.get("template_repository")
+    if isinstance(template_repo, dict):
+        tpl_name = template_repo.get("name") or ""
+        if tpl_name == CANONICAL_TEMPLATE_REPO:
+            return True
+
+    topics = [str(t).lower() for t in repo_item.get("topics") or []]
+    if "tanstack-start" in topics:
+        return True
+
+    description = (repo_item.get("description") or "").lower()
+    if "tanstack start" in description or "@tanstack/start" in description:
+        return True
+
+    return False
+
+
+def _fallback_repo_items(org: str = DEFAULT_TEST_ORG) -> list[dict[str, Any]]:
+    """Generates default fallback repository items when organization credentials or API calls are unavailable."""
+    return [
+        {
+            "name": r,
+            "is_tanstack_compatible": False,
+            "description": None,
+            "html_url": f"https://github.com/{org}/{r}",
+            "topics": [],
+            "default_branch": "main",
+        }
+        for r in sorted(FALLBACK_REPOS)
+    ]
+
+
+def fetch_test_org_repos_detailed(
     token: str | None = None,
     org: str = DEFAULT_TEST_ORG,
     timeout_secs: float = 8.0,
-) -> list[str]:
-    """Fetches list of member repositories from GitHub API, falling back to known fixtures on error."""
+) -> list[dict[str, Any]]:
+    """Fetches list of member repositories with TanStack Start compatibility indicator."""
     auth_token = token or get_test_org_token()
     if not auth_token:
-        return list(FALLBACK_REPOS)
+        return _fallback_repo_items(org)
 
     headers = {
         "Authorization": f"Bearer {auth_token}",
@@ -86,17 +154,143 @@ def fetch_test_org_repos(
         "User-Agent": "SoftwareFactory-TestingConsole/1.0",
     }
 
-    url = f"https://api.github.com/orgs/{org}/repos?per_page=100&type=all"
     try:
+        results: list[dict[str, Any]] = []
+        page = 1
         with httpx.Client(timeout=timeout_secs) as client:
-            resp = client.get(url, headers=headers)
-            if resp.status_code == 200:
-                repos = [r["name"] for r in resp.json() if "name" in r]
-                return sorted(repos)
+            while True:
+                url = f"https://api.github.com/orgs/{org}/repos?per_page=100&page={page}&type=all"
+                resp = client.get(url, headers=headers)
+                if resp.status_code != 200:
+                    break
+                raw_repos = resp.json()
+                if not isinstance(raw_repos, list) or not raw_repos:
+                    break
+                for r in raw_repos:
+                    if not isinstance(r, dict) or "name" not in r:
+                        continue
+                    results.append({
+                        "name": r["name"],
+                        "is_tanstack_compatible": check_tanstack_start_compatibility(r),
+                        "description": r.get("description"),
+                        "html_url": r.get("html_url") or f"https://github.com/{org}/{r['name']}",
+                        "topics": r.get("topics") or [],
+                        "default_branch": r.get("default_branch", "main"),
+                    })
+                if len(raw_repos) < 100:
+                    break
+                page += 1
+
+            if results:
+                return sorted(results, key=lambda x: str(x["name"]))
     except Exception:
         pass
 
-    return list(FALLBACK_REPOS)
+    return _fallback_repo_items(org)
+
+
+def fetch_test_org_repos(
+    token: str | None = None,
+    org: str = DEFAULT_TEST_ORG,
+    timeout_secs: float = 8.0,
+) -> list[str]:
+    """Fetches list of member repositories from GitHub API, falling back to known fixtures on error."""
+    detailed = fetch_test_org_repos_detailed(token=token, org=org, timeout_secs=timeout_secs)
+    return [d["name"] for d in detailed]
+
+
+class RepoCreationError(Exception):
+    """Raised when repository instantiation fails."""
+
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def instantiate_repo_from_template(
+    repo_name: str,
+    description: str | None = None,
+    private: bool = False,
+    token: str | None = None,
+    org: str = DEFAULT_TEST_ORG,
+    template_org: str = CANONICAL_TEMPLATE_ORG,
+    template_repo: str = CANONICAL_TEMPLATE_REPO,
+    timeout_secs: float = 15.0,
+) -> dict[str, Any]:
+    """Creates a new repository in the test organization instantiated from the canonical TanStack Start template."""
+    # 1. Slug validation
+    valid, err_msg = validate_github_repo_name(repo_name)
+    if not valid:
+        raise RepoCreationError(err_msg or "Invalid repository name.", status_code=400)
+
+    clean_name = repo_name.strip()
+
+    # 2. Check for duplicate repo name in organization
+    existing_repos = fetch_test_org_repos(token=token, org=org, timeout_secs=timeout_secs)
+    if clean_name in existing_repos:
+        raise RepoCreationError(f"Repository '{clean_name}' already exists in {org}.", status_code=409)
+
+    # 3. Ephemerally decrypt Organization Credentials in memory
+    auth_token = token or get_test_org_token()
+    if not auth_token:
+        raise RepoCreationError("Organization credentials not found or failed to decrypt.", status_code=500)
+
+    headers = {
+        "Authorization": f"Bearer {auth_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SoftwareFactory-Studio/1.0",
+    }
+
+    url = f"https://api.github.com/repos/{template_org}/{template_repo}/generate"
+    payload = {
+        "owner": org,
+        "name": clean_name,
+        "description": description or f"TanStack Start application generated by Factory Studio",
+        "include_all_branches": False,
+        "private": private,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout_secs) as client:
+            resp = client.post(url, headers=headers, json=payload)
+    except Exception as e:
+        raise RepoCreationError(f"Network error communicating with GitHub API: {e}", status_code=502)
+
+    if resp.status_code == 201:
+        data = resp.json()
+        return {
+            "name": data.get("name", clean_name),
+            "full_name": data.get("full_name", f"{org}/{clean_name}"),
+            "html_url": data.get("html_url", f"https://github.com/{org}/{clean_name}"),
+            "description": data.get("description", payload["description"]),
+            "private": data.get("private", private),
+            "is_tanstack_compatible": True,
+            "template_repository": f"{template_org}/{template_repo}",
+        }
+
+    # Error handling
+    try:
+        error_json = resp.json()
+        error_message = error_json.get("message", "GitHub API error")
+        errors = error_json.get("errors", [])
+        if errors and isinstance(errors, list):
+            error_message += f": {', '.join(str(e) for e in errors)}"
+    except Exception:
+        error_message = resp.text or f"HTTP {resp.status_code}"
+
+    if resp.status_code == 422:
+        if "already exists" in error_message.lower():
+            raise RepoCreationError(f"Repository '{clean_name}' already exists in {org}.", status_code=409)
+        raise RepoCreationError(f"GitHub rejected repository creation: {error_message}", status_code=422)
+
+    if resp.status_code == 404:
+        raise RepoCreationError(f"Template repository '{template_org}/{template_repo}' not found.", status_code=502)
+
+    raise RepoCreationError(f"GitHub API error ({resp.status_code}): {error_message}", status_code=502)
+
+
 
 
 def fetch_repo_scratch_metadata(

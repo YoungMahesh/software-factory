@@ -553,10 +553,11 @@
         const current = selectRepo.value;
         selectRepo.innerHTML = "";
         data.repos.forEach(r => {
+          const repoName = typeof r === "object" && r !== null ? r.name : r;
           const opt = document.createElement("option");
-          opt.value = r;
-          opt.textContent = r;
-          if (r === current) opt.selected = true;
+          opt.value = repoName;
+          opt.textContent = repoName;
+          if (repoName === current) opt.selected = true;
           selectRepo.appendChild(opt);
         });
         await loadRepoMetadata(selectRepo.value);
