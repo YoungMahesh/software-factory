@@ -74,6 +74,8 @@ def create_app(
         version="1.0.0",
     )
     app.add_middleware(BasicAuthMiddleware)
+    if getattr(registry, "preview_registry", None) is None:
+        registry.preview_registry = preview_reg
 
     STATIC_DIST_DIR.mkdir(parents=True, exist_ok=True)
     assets_dir = STATIC_DIST_DIR / "assets"

@@ -113,6 +113,8 @@ exit 0
 if [ "$1" = "decrypt" ]; then
     if [[ "$*" == *"CF_TOKEN"* ]]; then
         echo "mock-cf-token"
+    elif [[ "$*" == *"opencode"* ]]; then
+        echo "OPENCODE_GO_API_KEY=mock-opencode-key"
     else
         echo "GH_REPO=software-factory-09-test/test-repo"
         echo "GH_TOKEN=dummy-token"
@@ -315,5 +317,95 @@ exit 0
         self.assertIn("ALLOWED_HOSTS=custom.modal.host,3000.mahesh0.dev", logs)
 
 
+    def test_container_bootstrap_writes_protected_factory_env(self):
+        import stat
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            # Create mock opencode secret
+            (tmpdir / "secrets").mkdir(parents=True, exist_ok=True)
+            (tmpdir / "secrets" / "opencode.env").write_text("OPENCODE_GO_API_KEY=mock-opencode-key\n")
+
+            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0)
+            res = subprocess.run(
+                ["bash", str(self.entrypoint_script), "--feature", "test-feat"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(res.returncode, 0, f"Entrypoint failed: {res.stderr}")
+
+            factory_env_file = tmpdir / ".factory.env"
+            self.assertTrue(factory_env_file.is_file(), f"Expected {factory_env_file} to exist")
+
+            # Verify file mode is 0600
+            file_mode = stat.S_IMODE(factory_env_file.stat().st_mode)
+            self.assertEqual(file_mode, 0o600, f"Expected mode 0600, got {oct(file_mode)}")
+
+            # Verify contents
+            content = factory_env_file.read_text()
+            self.assertIn('export GH_TOKEN="dummy-token"', content)
+            self.assertIn('export GITHUB_TOKEN="dummy-token"', content)
+            self.assertIn('export GH_REPO="software-factory-09-test/test-repo"', content)
+            self.assertIn('export OPENCODE_API_KEY="mock-opencode-key"', content)
+
+    def test_dev_server_supervisor_auto_restarts_on_failure(self):
+        import signal
+        import tempfile
+        import time
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0)
+
+            # Custom pnpm that exits with 1 on first call to 'dev', then stays alive on second call
+            bin_dir = tmpdir / "bin"
+            pnpm_bin = bin_dir / "pnpm"
+            counter_file = tmpdir / "pnpm_runs.txt"
+            pnpm_bin.write_text(f"""#!/usr/bin/env bash
+echo "pnpm $@" >> "{log_file}"
+if [ "$1" = "dev" ]; then
+    RUNS=$(wc -l < "{counter_file}" 2>/dev/null || echo 0)
+    echo "run" >> "{counter_file}"
+    if [ "$RUNS" -eq 0 ]; then
+        echo "pnpm dev failed on first attempt" >> "{log_file}"
+        exit 1
+    else
+        echo "pnpm dev restarted successfully" >> "{log_file}"
+        while true; do
+            sleep 0.1
+        done
+    fi
+fi
+exit 0
+""")
+            pnpm_bin.chmod(0o755)
+
+            proc = subprocess.Popen(
+                ["bash", str(self.entrypoint_script), "--feature", "test-feat", "--dev"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+
+            # Wait for supervisor to restart pnpm dev
+            restarted = False
+            for _ in range(50):
+                time.sleep(0.1)
+                if log_file.exists() and "pnpm dev restarted successfully" in log_file.read_text():
+                    restarted = True
+                    break
+
+            self.assertTrue(restarted, "Supervisor failed to restart pnpm dev after transient failure.")
+
+            # Terminate entrypoint with SIGTERM
+            proc.send_signal(signal.SIGTERM)
+            stdout, stderr = proc.communicate(timeout=5)
+
+            self.assertEqual(proc.returncode, 0)
+            self.assertIn("Auto-restarting", stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
+

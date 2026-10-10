@@ -404,6 +404,39 @@ echo "🧹 Purged temporary SOPS credentials (~/.config/sops)."
 export GH_TOKEN="$GH_TOKEN"
 export GITHUB_TOKEN="$GH_TOKEN"
 
+# Persist credentials to protected container environment file per ADR 0038
+FACTORY_ENV_FILE="${BASE_DIR}/.factory.env"
+echo "🔐 Persisting container environment to ${FACTORY_ENV_FILE}..."
+touch "$FACTORY_ENV_FILE"
+chmod 600 "$FACTORY_ENV_FILE"
+
+cat << EOF > "$FACTORY_ENV_FILE"
+export GH_TOKEN="${GH_TOKEN:-}"
+export GITHUB_TOKEN="${GH_TOKEN:-}"
+export GH_REPO="${GH_REPO:-}"
+EOF
+
+if [ -n "${OPENCODE_API_KEY:-}" ]; then
+    echo "export OPENCODE_API_KEY=\"${OPENCODE_API_KEY}\"" >> "$FACTORY_ENV_FILE"
+fi
+if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
+    echo "export OPENCODE_GO_API_KEY=\"${OPENCODE_GO_API_KEY}\"" >> "$FACTORY_ENV_FILE"
+fi
+if [ -n "${EXA_API_KEY:-}" ]; then
+    echo "export EXA_API_KEY=\"${EXA_API_KEY}\"" >> "$FACTORY_ENV_FILE"
+fi
+if [ -n "${CONTEXT7_API_KEY:-}" ]; then
+    echo "export CONTEXT7_API_KEY=\"${CONTEXT7_API_KEY}\"" >> "$FACTORY_ENV_FILE"
+fi
+if [ -n "${TRACKER:-}" ]; then
+    echo "export TRACKER=\"${TRACKER}\"" >> "$FACTORY_ENV_FILE"
+fi
+if [ -n "${ORG_TOKEN:-}" ]; then
+    echo "export ORG_TOKEN=\"${ORG_TOKEN}\"" >> "$FACTORY_ENV_FILE"
+fi
+
+chmod 600 "$FACTORY_ENV_FILE"
+
 # 8. Ensure dependencies are installed in factory harness and target repository
 FACTORY_DIR="${BASE_DIR}/factory"
 if [ ! -d "${FACTORY_DIR}/node_modules" ]; then
@@ -476,9 +509,11 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     cd "$TARGET_DIR"
 
     DEV_PID=""
+    SUPERVISOR_STOPPED=0
     cleanup_dev() {
         echo ""
-        echo "🛑 Shutting down dev server keep-alive daemon..."
+        echo "🛑 Shutting down dev server supervisor daemon..."
+        SUPERVISOR_STOPPED=1
         if [ -n "${WATCHER_PID:-}" ] && kill -0 "$WATCHER_PID" 2>/dev/null; then
             kill -TERM "$WATCHER_PID" 2>/dev/null || true
         fi
@@ -490,17 +525,27 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     }
     trap cleanup_dev SIGTERM SIGINT SIGHUP
 
-    pnpm dev --port 3000 --host 0.0.0.0 &
-    DEV_PID=$!
+    while [ "$SUPERVISOR_STOPPED" -eq 0 ]; do
+        pnpm dev --port 3000 --host 0.0.0.0 &
+        DEV_PID=$!
 
-    echo "📡 Dev server running with PID ${DEV_PID}."
-    echo "⏳ Container entering active serving keep-alive state (https://3000.mahesh0.dev)..."
+        echo "📡 Dev server running with PID ${DEV_PID}."
+        echo "⏳ Container entering active serving keep-alive state (https://3000.mahesh0.dev)..."
 
-    # Maintain serving keep-alive state until process termination or cancellation
-    wait "$DEV_PID"
-    DEV_EXIT_CODE=$?
-    echo "🛑 Dev server process exited with code ${DEV_EXIT_CODE}."
-    exit "$DEV_EXIT_CODE"
+        # Maintain serving keep-alive state until process termination or cancellation
+        set +e
+        wait "$DEV_PID"
+        DEV_EXIT_CODE=$?
+        set -e
+
+        if [ "$SUPERVISOR_STOPPED" -eq 1 ]; then
+            break
+        fi
+
+        echo "⚠️ Dev server process exited with code ${DEV_EXIT_CODE}. Auto-restarting in 1s..."
+        sleep 1
+    done
+    exit 0
 fi
 
 exit "$EXIT_CODE"
