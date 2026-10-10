@@ -71,31 +71,40 @@
               {% endfor %}
             </select>
           </div>
-          <p class="text-[11px] text-slate-400 mt-1">Cloned into ephemeral sandbox with org token</p>
+          <p class="text-[11px] text-slate-400 mt-1">Cloned into ephemeral sandbox with Organization Credentials</p>
         </div>
 
-        <!-- Target Feature Slug -->
+        <!-- Target Milestone / Feature -->
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Feature Slug</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Milestone (Feature)</label>
           <div class="flex flex-col gap-1.5">
             <select id="select-feature" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
-              <option value="">Loading features...</option>
+              <option value="">Loading milestones...</option>
             </select>
-            <input type="text" id="input-feature-custom" placeholder="Or enter custom feature slug" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+            <input type="text" id="input-feature-custom" placeholder="Or enter custom milestone title / slug" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
           </div>
-          <p class="text-[11px] text-slate-400 mt-1">Directory under <code class="text-indigo-400">.scratch/&lt;feature&gt;/</code></p>
+          <p class="text-[11px] text-slate-400 mt-1">Discovered GitHub Milestone in test repository</p>
         </div>
 
         <!-- Target Ticket / Issue -->
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Issue Ticket (Optional)</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Target Issue / Ticket (Optional)</label>
           <div class="flex flex-col gap-1.5">
             <select id="select-issue" class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
-              <option value="">Full Autonomous Batch (All Unblocked)</option>
+              <option value="">Autonomous Feature Batch (All Frontier Issues)</option>
             </select>
-            <input type="text" id="input-issue-custom" placeholder="Or specify ticket ID (e.g. 01)" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
+            <input type="text" id="input-issue-custom" placeholder="Or enter ad-hoc issue # directly (e.g. 42)" class="w-full bg-slate-900/60 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono" />
           </div>
-          <p class="text-[11px] text-slate-400 mt-1">Leave empty to resolve all frontier tickets</p>
+          <p class="text-[11px] text-slate-400 mt-1">Leave empty for Autonomous Feature Batch, or specify issue # for single-issue dispatch</p>
+        </div>
+
+        <!-- Issue / Milestone Badges & Preview Panel -->
+        <div id="issue-badge-preview" class="border border-slate-800 rounded-lg p-3 bg-slate-900/60 hidden flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span id="preview-title" class="font-mono text-xs font-semibold text-slate-200 truncate"></span>
+            <span id="preview-status-badge" class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+          </div>
+          <div id="preview-details" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
         </div>
 
         <!-- Model Selection -->
@@ -140,10 +149,10 @@
       <!-- Quick Tips -->
       <div class="mt-auto border-t border-slate-800 pt-4 text-[11px] text-slate-400 space-y-1.5">
         <div class="font-medium text-slate-300">Assembly Line Protocol:</div>
-        <div>1. Pre-flight Guard verifies target repo</div>
-        <div>2. Feature branch <code class="text-indigo-400">factory/&lt;feature&gt;</code> created</div>
+        <div>1. Pre-flight Guard verifies target repo & milestones</div>
+        <div>2. Feature branch <code class="text-indigo-400">factory/&lt;feature&gt;</code> or <code class="text-indigo-400">factory/issue-&lt;id&gt;</code> created</div>
         <div>3. Stages: Planner ➔ Coder ➔ Verifier ➔ Reviewer</div>
-        <div>4. Passing commits pushed to remote origin</div>
+        <div>4. Draft Feature PR opened and verified before human gate</div>
       </div>
     </aside>
 
@@ -333,55 +342,208 @@
     const checkAutoscroll = document.getElementById("check-autoscroll");
     const historyTableBody = document.getElementById("history-table-body");
 
-    // Load repo metadata (.scratch/ features and tickets)
+    const badgePreviewEl = document.getElementById("issue-badge-preview");
+    const previewTitleEl = document.getElementById("preview-title");
+    const previewStatusBadgeEl = document.getElementById("preview-status-badge");
+    const previewDetailsEl = document.getElementById("preview-details");
+
+    function hideBadgePreview() {
+      if (badgePreviewEl) {
+        badgePreviewEl.classList.add("hidden");
+        badgePreviewEl.classList.remove("flex");
+      }
+    }
+
+    function renderStatusBadge(status, targetEl) {
+      targetEl.className = "shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ";
+      if (status === "resolved") {
+        targetEl.textContent = "✓ RESOLVED";
+        targetEl.className += "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+      } else if (status === "claimed") {
+        targetEl.textContent = "⚡ CLAIMED";
+        targetEl.className += "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      } else if (status === "ready-for-human") {
+        targetEl.textContent = "⚠️ READY FOR HUMAN";
+        targetEl.className += "bg-rose-500/10 text-rose-400 border-rose-500/20";
+      } else {
+        targetEl.textContent = "● READY FOR AGENT";
+        targetEl.className += "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
+      }
+    }
+
+    // Load repo milestones & candidate issues from GitHub API
     async function loadRepoMetadata(repoName) {
       if (!repoName) return;
-      selectFeature.innerHTML = '<option value="">Loading features from GitHub...</option>';
-      selectIssue.innerHTML = '<option value="">Full Autonomous Batch (All Unblocked)</option>';
+      selectFeature.innerHTML = '<option value="">Loading milestones from GitHub...</option>';
+      selectIssue.innerHTML = '<option value="">Full Autonomous Batch (All Frontier Issues)</option>';
+      hideBadgePreview();
 
       try {
-        const resp = await fetch(`/api/repos/${repoName}/scratch`);
+        const resp = await fetch(`/api/repos/${repoName}/milestones`);
         const data = await resp.json();
         repoMetadataCache[repoName] = data;
 
         selectFeature.innerHTML = '';
-        if (data.features && data.features.length > 0) {
-          data.features.forEach(f => {
+        if (data.milestones && data.milestones.length > 0) {
+          const defaultOpt = document.createElement("option");
+          defaultOpt.value = "";
+          defaultOpt.textContent = "-- Select a Milestone (or use ad-hoc issue # below) --";
+          selectFeature.appendChild(defaultOpt);
+
+          data.milestones.forEach(m => {
             const opt = document.createElement("option");
-            opt.value = f.slug;
-            opt.textContent = `${f.slug} (${f.issues.length} tickets)`;
+            opt.value = m.slug || m.title;
+            const openCount = m.open_issues !== undefined ? m.open_issues : (m.issues || []).filter(i => i.state === 'open').length;
+            const totalCount = m.issues ? m.issues.length : (m.open_issues + (m.closed_issues || 0));
+            opt.textContent = `${m.title} (${openCount} open / ${totalCount} issues)`;
             selectFeature.appendChild(opt);
           });
+          selectFeature.value = data.milestones[0].slug || data.milestones[0].title;
           updateIssuesDropdown();
         } else {
-          selectFeature.innerHTML = '<option value="">No .scratch/ features detected</option>';
+          selectFeature.innerHTML = '<option value="">No open milestones found (Use ad-hoc issue # below)</option>';
+          updateIssuesDropdown();
         }
       } catch (err) {
-        selectFeature.innerHTML = '<option value="">Failed to query GitHub tree</option>';
+        selectFeature.innerHTML = '<option value="">Failed to query GitHub milestones</option>';
       }
     }
 
     function updateIssuesDropdown() {
       const repoName = selectRepo.value;
       const meta = repoMetadataCache[repoName];
-      const selectedFeatureSlug = selectFeature.value;
+      const selectedMilestone = selectFeature.value;
 
-      selectIssue.innerHTML = '<option value="">Full Autonomous Batch (All Unblocked)</option>';
-      if (!meta || !meta.features) return;
+      selectIssue.innerHTML = '<option value="">Autonomous Feature Batch (All Frontier Issues)</option>';
+      if (!meta || !meta.milestones) {
+        updateBadgePreview();
+        return;
+      }
 
-      const featureObj = meta.features.find(f => f.slug === selectedFeatureSlug);
-      if (featureObj && featureObj.issues) {
-        featureObj.issues.forEach(iss => {
+      const milestoneObj = meta.milestones.find(m => m.slug === selectedMilestone || m.title === selectedMilestone);
+      if (milestoneObj && milestoneObj.issues) {
+        milestoneObj.issues.forEach(iss => {
           const opt = document.createElement("option");
-          opt.value = iss.id;
-          opt.textContent = `Ticket ${iss.id} (${iss.slug})`;
+          opt.value = String(iss.number);
+          const statusText = (iss.status || 'ready-for-agent').toUpperCase();
+          opt.textContent = `#${iss.number} - ${iss.title} [${statusText}]`;
           selectIssue.appendChild(opt);
         });
       }
+      updateBadgePreview();
+    }
+
+    function updateBadgePreview() {
+      const repoName = selectRepo.value;
+      const meta = repoMetadataCache[repoName];
+      const selectedMilestone = inputFeatureCustom.value.trim() || selectFeature.value;
+      const selectedIssueNum = inputIssueCustom.value.trim() || selectIssue.value;
+
+      if (!repoName) {
+        hideBadgePreview();
+        return;
+      }
+
+      if (badgePreviewEl) {
+        badgePreviewEl.classList.remove("hidden");
+        badgePreviewEl.classList.add("flex");
+      }
+      previewDetailsEl.innerHTML = "";
+
+      // Case 1: Ad-hoc issue typed directly
+      if (inputIssueCustom.value.trim()) {
+        const adHocNum = inputIssueCustom.value.trim();
+        previewTitleEl.textContent = `Ad-Hoc Issue #${adHocNum}`;
+        previewStatusBadgeEl.textContent = "ISOLATED RUN";
+        previewStatusBadgeEl.className = "shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-500/10 text-purple-400 border-purple-500/20";
+
+        const branchSpan = document.createElement("span");
+        branchSpan.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-indigo-400 border border-slate-700";
+        branchSpan.textContent = `Branch: factory/issue-${adHocNum}`;
+        previewDetailsEl.appendChild(branchSpan);
+        return;
+      }
+
+      const milestoneObj = meta && meta.milestones ? meta.milestones.find(m => m.slug === selectedMilestone || m.title === selectedMilestone) : null;
+
+      // Case 2: Specific issue selected from dropdown within a milestone
+      if (milestoneObj && milestoneObj.issues && selectedIssueNum) {
+        const iss = milestoneObj.issues.find(i => String(i.number) === selectedIssueNum);
+        if (iss) {
+          previewTitleEl.textContent = `#${iss.number} ${iss.title}`;
+          renderStatusBadge(iss.status, previewStatusBadgeEl);
+
+          // Dependencies Badge
+          const depSpan = document.createElement("span");
+          if (iss.blocked_by && iss.blocked_by.length > 0) {
+            depSpan.className = "px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+            depSpan.textContent = `Blocked by: #${iss.blocked_by.join(", #")}`;
+          } else {
+            depSpan.className = "px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+            depSpan.textContent = "✓ Unblocked Frontier";
+          }
+          previewDetailsEl.appendChild(depSpan);
+
+          // Labels
+          if (iss.labels && iss.labels.length > 0) {
+            iss.labels.forEach(lbl => {
+              const lblSpan = document.createElement("span");
+              lblSpan.className = "px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700";
+              lblSpan.textContent = lbl;
+              previewDetailsEl.appendChild(lblSpan);
+            });
+          }
+          return;
+        }
+      }
+
+      // Case 3: Milestone Autonomous Feature Batch
+      if (milestoneObj) {
+        previewTitleEl.textContent = `Milestone: ${milestoneObj.title}`;
+        previewStatusBadgeEl.textContent = "AUTONOMOUS FEATURE BATCH";
+        previewStatusBadgeEl.className = "shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
+
+        const issues = milestoneObj.issues || [];
+        const unblockedCount = issues.filter(i => (!i.blocked_by || i.blocked_by.length === 0) && i.status !== 'resolved').length;
+        const resolvedCount = issues.filter(i => i.status === 'resolved').length;
+
+        const infoSpan = document.createElement("span");
+        infoSpan.className = "px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium";
+        infoSpan.textContent = `${unblockedCount} unblocked frontier`;
+        previewDetailsEl.appendChild(infoSpan);
+
+        if (resolvedCount > 0) {
+          const resSpan = document.createElement("span");
+          resSpan.className = "px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-slate-700 font-medium";
+          resSpan.textContent = `${resolvedCount} resolved`;
+          previewDetailsEl.appendChild(resSpan);
+        }
+
+        const totalSpan = document.createElement("span");
+        totalSpan.className = "px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-slate-700";
+        totalSpan.textContent = `${issues.length} total issues`;
+        previewDetailsEl.appendChild(totalSpan);
+        return;
+      }
+
+      hideBadgePreview();
     }
 
     selectRepo.addEventListener("change", () => loadRepoMetadata(selectRepo.value));
-    selectFeature.addEventListener("change", updateIssuesDropdown);
+    selectFeature.addEventListener("change", () => {
+      if (selectFeature.value) {
+        inputIssueCustom.value = "";
+      }
+      updateIssuesDropdown();
+    });
+    selectIssue.addEventListener("change", updateBadgePreview);
+    inputIssueCustom.addEventListener("input", () => {
+      if (inputIssueCustom.value.trim() && !inputFeatureCustom.value.trim()) {
+        selectFeature.value = "";
+      }
+      updateBadgePreview();
+    });
+    inputFeatureCustom.addEventListener("input", updateBadgePreview);
 
     btnRefreshRepos.addEventListener("click", async () => {
       btnRefreshRepos.classList.add("animate-spin");
@@ -528,15 +690,17 @@
     document.getElementById("launch-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const repo = selectRepo.value;
-      const feature = inputFeatureCustom.value.trim() || selectFeature.value;
+      const isAdHoc = !!inputIssueCustom.value.trim();
+      const customMilestone = inputFeatureCustom.value.trim();
+      const milestone = isAdHoc ? customMilestone : (customMilestone || selectFeature.value);
       const issue = inputIssueCustom.value.trim() || selectIssue.value || null;
-      const model = document.querySelector('input[name="model"]:checked').value;
-      const vm = document.getElementById("check-vm").checked;
 
-      if (!feature) {
-        alert("Please provide or select a feature slug.");
+      if (!milestone && !issue) {
+        alert("Please select a milestone or enter an issue # to launch.");
         return;
       }
+
+      const feature = milestone || (issue ? `issue-${issue}` : "");
 
       btnLaunch.disabled = true;
       btnLaunch.classList.add("opacity-60");
@@ -547,6 +711,10 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo, feature, issue, model, vm }),
         });
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(errData.detail || "Failed to launch job");
+        }
         const job = await resp.json();
         connectJobStream(job.id);
         refreshHistory();

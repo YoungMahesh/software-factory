@@ -33,6 +33,12 @@ class TestCliDispatcherArgs(unittest.TestCase):
         self.assertEqual(args.feature, "slug-gen")
         self.assertEqual(args.issue, "01")
 
+    def test_parse_args_adhoc_issue_without_feature(self):
+        args = parse_args(["-p", "test3", "-i", "42"])
+        self.assertEqual(args.project, "test3")
+        self.assertEqual(args.issue, "42")
+        self.assertEqual(args.feature, "issue-42")
+
     def test_parse_args_testing_flags(self):
         args1 = parse_args(["--project", "test3", "--feature", "slug-gen", "--testing"])
         self.assertTrue(args1.testing)

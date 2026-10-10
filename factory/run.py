@@ -152,7 +152,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if not args.project:
         parser.error("the following arguments are required: -p/--project")
     if not args.feature:
-        parser.error("the following arguments are required: -f/--feature")
+        if args.issue:
+            args.feature = f"issue-{args.issue.strip()}"
+        else:
+            parser.error("the following arguments are required: -f/--feature or -i/--issue")
 
     try:
         args.model = normalize_model_name(args.model)

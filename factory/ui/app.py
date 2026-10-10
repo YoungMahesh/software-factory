@@ -16,6 +16,9 @@ from pydantic import BaseModel, Field
 
 from factory.ui.github import (
     DEFAULT_TEST_ORG,
+    fetch_repo_issue,
+    fetch_repo_issues,
+    fetch_repo_milestones_and_issues,
     fetch_repo_scratch_metadata,
     fetch_test_org_repos,
 )
@@ -26,8 +29,8 @@ TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 class LaunchJobRequest(BaseModel):
     repo: str = Field(..., description="Target repository name in test org (e.g. 'test3')")
-    feature: str = Field(..., description="Feature slug (e.g. 'slug-generator')")
-    issue: str | None = Field(None, description="Optional ticket ID (e.g. '01')")
+    feature: str | None = Field(None, description="Feature / milestone slug (e.g. 'slug-generator')")
+    issue: str | None = Field(None, description="Optional ticket ID (e.g. '01' or '42')")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
 
@@ -66,17 +69,41 @@ def create_app(registry: JobRegistry = job_registry) -> FastAPI:
         metadata = fetch_repo_scratch_metadata(repo)
         return metadata
 
+    @app.get("/api/repos/{repo}/milestones")
+    async def get_repo_milestones(repo: str):
+        metadata = fetch_repo_milestones_and_issues(repo)
+        return metadata
+
+    @app.get("/api/repos/{repo}/issues")
+    async def get_repo_issues(repo: str, milestone: int | None = None, state: str = "all"):
+        issues = fetch_repo_issues(repo, milestone_number=milestone, state=state)
+        return {"repo": repo, "org": DEFAULT_TEST_ORG, "issues": issues}
+
+    @app.get("/api/repos/{repo}/issues/{issue_number}")
+    async def get_repo_issue_detail(repo: str, issue_number: int):
+        issue = fetch_repo_issue(repo, issue_number=issue_number)
+        if issue is None:
+            raise HTTPException(status_code=404, detail=f"Issue #{issue_number} not found in {repo}.")
+        return issue
+
     @app.post("/api/jobs")
     async def launch_job(req: LaunchJobRequest):
-        if not req.repo.strip():
+        if not req.repo or not req.repo.strip():
             raise HTTPException(status_code=400, detail="Repository name is required.")
-        if not req.feature.strip():
-            raise HTTPException(status_code=400, detail="Feature slug is required.")
+
+        feature = (req.feature or "").strip()
+        issue = (req.issue or "").strip() or None
+
+        if not feature:
+            if issue:
+                feature = f"issue-{issue}"
+            else:
+                raise HTTPException(status_code=400, detail="Feature / milestone slug or issue ID is required.")
 
         job = registry.create_job(
             repo=req.repo,
-            feature=req.feature,
-            issue=req.issue,
+            feature=feature,
+            issue=issue,
             model=req.model,
             vm=req.vm,
         )

@@ -43,7 +43,7 @@ __all__ = [
 
 def dispatch_job(
     project: str,
-    feature: str,
+    feature: str | None = None,
     issue: str | None = None,
     vm: bool = False,
     testing: bool = False,
@@ -57,7 +57,7 @@ def dispatch_job(
 
     Args:
         project: Target project secret name (under secrets/ or software-factory-09-test/ when testing).
-        feature: Target feature slug (e.g. 'queues-page').
+        feature: Target feature slug (e.g. 'queues-page') or None when issue is provided.
         issue: Optional specific ticket ID. When None, runs full autonomous batch.
         vm: Whether to run in a full VM Sandbox with Docker support.
         testing: Whether to run against canonical Test Organization under secrets_org/ per ADR 0031.
@@ -70,9 +70,15 @@ def dispatch_job(
     Returns:
         The exit code of the in-container pipeline (0 on success).
     """
+    effective_feature = feature
+    if not effective_feature and issue:
+        effective_feature = f"issue-{issue.strip()}"
+    if not effective_feature:
+        raise ValueError("Either feature or issue must be specified.")
+
     config = FactorySpawnConfig(
         project=project,
-        feature=feature,
+        feature=effective_feature,
         issue=issue,
         vm=vm,
         testing=testing,

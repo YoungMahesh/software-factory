@@ -270,9 +270,13 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
 
     target_repo = resolve_target_repo(config.project, testing=config.testing)
 
+    feature_slug = config.feature
+    if not feature_slug and config.issue:
+        feature_slug = f"issue-{config.issue.strip()}"
+
     env: dict[str, str | None] = {
         "APP_NAME": app_name,
-        "FEATURE_SLUG": config.feature,
+        "FEATURE_SLUG": feature_slug,
         "ENABLE_CLOUDFLARE": "0",
         "ENABLE_DOCKER": "1" if config.vm else "0",
     }
@@ -306,7 +310,7 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
         "bash",
         REMOTE_FACTORY_ENTRYPOINT,
         "--feature",
-        config.feature,
+        feature_slug,
     ]
     if config.issue:
         entrypoint_args.extend(["--issue", config.issue])
