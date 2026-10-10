@@ -99,7 +99,15 @@ _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
 A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
-_Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel, modal web tunnel, web url tunnel
+_Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
+
+**Modal Application Tunnel**:
+An ephemeral encrypted HTTPS tunnel provided by Modal (`sandbox.tunnels()[3000].url`) forwarding traffic to container port 3000, yielding a unique, collision-free preview URL per sandbox for interactive application testing in Factory Studio.
+_Avoid_: Modal web tunnel, web url tunnel, preview port forward
+
+**Dedicated Preview Sandbox**:
+An ephemeral Modal sandbox provisioned to build and serve a target application's active branch on port 3000 without executing the multi-agent assembly line.
+_Avoid_: Dev runner, preview container, standalone server, test preview container
 
 **Software Factory**:
 An automated software delivery system that ingests work items from an Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
