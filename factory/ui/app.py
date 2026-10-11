@@ -298,11 +298,13 @@ def create_app(
         # 2. Conversational Grilling Assistant Turn (Grill Mode)
         if req.grill:
             assistant = GrillingAssistant(mock=req.mock)
+            milestone_slug = normalize_milestone_slug(req.milestone_title) if req.milestone_title else None
             turn = await assistant.handle_turn(
                 repo=repo,
                 prompt=prompt,
                 history=req.history,
                 model=req.model,
+                milestone_slug=milestone_slug,
             )
             turn_dict = turn.to_dict()
             db.save_chat_message(

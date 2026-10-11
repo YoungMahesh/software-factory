@@ -63,6 +63,14 @@ class DomainTermSharpening:
 
 
 @dataclass
+class CodebaseGroundingContext:
+    """Encapsulates autonomous codebase facts discovered for grilling."""
+    branch: str = "main"
+    file_tree: list[str] = field(default_factory=list)
+    candidate_contents: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class GrillTurnResult:
     """Structured response for a conversational grilling turn."""
     type: Literal["grill_round", "ready_for_approval", "error"]
@@ -269,6 +277,157 @@ def compute_next_adr_metadata(repo: str, prompt: str, existing_adrs: list[str] |
     return next_num, title, filename
 
 
+FALLBACK_REPO_TREE = [
+    "app/routes/__root.tsx",
+    "app/routes/index.tsx",
+    "app/components/Header.tsx",
+    "app/components/Footer.tsx",
+    "app/router.tsx",
+    "package.json",
+    "CONTEXT.md",
+]
+
+FALLBACK_FILE_CONTENTS: dict[str, str] = {
+    "app/components/Footer.tsx": """import React from "react";
+
+export function Footer() {
+  return (
+    <footer className="border-t py-6 text-center text-sm text-gray-500">
+      <div className="flex justify-center space-x-6 mb-4">
+        <a href="https://github.com" className="hover:text-gray-900">GitHub</a>
+        <a href="https://x.com" className="hover:text-gray-900">X (Twitter)</a>
+        <a href="https://discord.com" className="hover:text-gray-900">Discord</a>
+      </div>
+      <p>© 2026 Software Factory. All rights reserved.</p>
+    </footer>
+  );
+}
+""",
+    "app/components/Header.tsx": """import React from "react";
+
+export function Header() {
+  return (
+    <header className="border-b px-6 py-4 flex items-center justify-between">
+      <div className="font-bold text-xl">App</div>
+      <nav className="flex space-x-4">
+        <a href="/" className="hover:underline">Home</a>
+      </nav>
+    </header>
+  );
+}
+""",
+}
+
+PROMPT_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+    "by", "from", "up", "about", "into", "through", "after", "before", "is", "are", "was",
+    "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "can",
+    "could", "should", "would", "will", "shall", "may", "might", "must", "it", "its",
+    "this", "that", "these", "those", "i", "we", "you", "they", "he", "she", "me", "us",
+    "him", "her", "my", "our", "your", "their", "what", "which", "who", "whom", "whose",
+    "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most",
+    "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+    "build", "make", "create", "add", "remove", "delete", "update", "modify", "change",
+    "like", "etc", "please", "want", "need", "app", "application", "file", "code",
+}
+
+KEYWORD_EXPANSIONS: dict[str, dict[str, int]] = {
+    "social": {"footer": 8, "social": 10, "icons": 6, "links": 8, "header": 2},
+    "link": {"links": 8, "nav": 6, "menu": 6, "footer": 5, "header": 4, "sidebar": 4},
+    "links": {"links": 8, "nav": 6, "menu": 6, "footer": 5, "header": 4, "sidebar": 4},
+    "media": {"footer": 4, "social": 6, "media": 8},
+    "footer": {"footer": 10, "bottom": 6},
+    "header": {"header": 10, "topbar": 8, "nav": 6, "navbar": 6},
+    "nav": {"nav": 10, "navbar": 10, "header": 8, "menu": 6, "sidebar": 6},
+    "navigation": {"nav": 10, "navbar": 10, "header": 8, "menu": 6, "sidebar": 6},
+    "navbar": {"navbar": 10, "nav": 10, "header": 8},
+    "sidebar": {"sidebar": 10, "aside": 8, "nav": 6, "menu": 6},
+    "menu": {"menu": 10, "nav": 8, "header": 6, "sidebar": 6},
+    "theme": {"theme": 10, "toggle": 8, "header": 6, "navbar": 6},
+    "dark": {"theme": 8, "toggle": 8, "header": 6, "navbar": 6},
+    "auth": {"auth": 10, "login": 8, "user": 6},
+    "login": {"login": 10, "auth": 8, "user": 6},
+}
+
+
+def extract_path_tokens(path: str) -> set[str]:
+    """Extracts searchable tokens from a file path."""
+    p = Path(path)
+    stem = p.stem
+    stem_tokens = re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)", stem)
+    parts = re.split(r"[/\\._-]+", path.lower())
+    return set(t.lower() for t in stem_tokens + parts if len(t) > 1)
+
+
+def score_path_against_keywords(
+    path: str,
+    direct_keywords: set[str],
+    keyword_weights: dict[str, int],
+) -> int:
+    """Scores a file path based on overlap with prompt keywords and domain associations."""
+    path_lower = path.lower()
+    valid_exts = {".tsx", ".ts", ".jsx", ".js", ".css"}
+    if not any(path_lower.endswith(ext) for ext in valid_exts):
+        return 0
+
+    tokens = extract_path_tokens(path)
+    score = 0
+
+    for kw in direct_keywords:
+        if kw in tokens:
+            score += 10
+        elif any(kw in t or t in kw for t in tokens if len(kw) >= 3 and len(t) >= 3):
+            score += 4
+
+    for term, weight in keyword_weights.items():
+        if term in tokens:
+            score += weight
+        elif any(term in t or t in term for t in tokens if len(term) >= 3 and len(t) >= 3):
+            score += max(1, weight // 2)
+
+    if score > 0:
+        if "components/" in path_lower:
+            score += 3
+        elif "routes/" in path_lower:
+            score += 1
+
+    return score
+
+
+def format_repo_structure_summary(file_paths: list[str], branch: str) -> str:
+    """Formats file paths into routes, components, and other files summary."""
+    routes = [p for p in file_paths if "routes/" in p.lower()]
+    components = [p for p in file_paths if "components/" in p.lower()]
+    others = [p for p in file_paths if p not in routes and p not in components]
+
+    lines = [f"Branch: {branch}"]
+    if routes:
+        lines.append("Routes:")
+        for route_path in sorted(routes):
+            lines.append(f"  - {route_path}")
+    if components:
+        lines.append("Components:")
+        for component_path in sorted(components):
+            lines.append(f"  - {component_path}")
+    if others:
+        lines.append("Other Files:")
+        for other_path in sorted(others)[:10]:
+            lines.append(f"  - {other_path}")
+    return "\n".join(lines)
+
+
+def format_candidate_sources(candidate_contents: dict[str, str]) -> str:
+    """Formats candidate source code bodies for LLM system prompt."""
+    if not candidate_contents:
+        return "(No candidate component source files matched the prompt keywords)"
+
+    chunks = []
+    for path, content in candidate_contents.items():
+        ext = Path(path).suffix.lstrip(".") or "tsx"
+        chunks.append(f"#### File: `{path}`\n```{ext}\n{content}\n```")
+    return "\n\n".join(chunks)
+
+
 class GrillingAssistant:
     """Conversational reasoning assistant for Factory Studio developer interviewing."""
 
@@ -308,17 +467,46 @@ class GrillingAssistant:
                 pass
         return CONTEXT_TEMPLATE
 
+    def _resolve_repo_coords(self, repo: str) -> tuple[str, str]:
+        """Resolves GitHub owner and clean repo slug, supporting both <repo> and <owner>/<repo>."""
+        trimmed = repo.strip()
+        if "/" in trimmed:
+            parts = trimmed.split("/", 1)
+            return parts[0], parts[1]
+        return DEFAULT_TEST_ORG, strip_repo_owner(trimmed)
+
+    def _github_headers(self, token: str, raw: bool = False) -> dict[str, str]:
+        accept = "application/vnd.github.raw+json" if raw else "application/vnd.github+json"
+        return {
+            "Authorization": f"Bearer {token}",
+            "Accept": accept,
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "SoftwareFactory-Studio/1.0",
+        }
+
+    async def get_repo_context(self, repo: str) -> str:
+        """Loads target repository CONTEXT.md content via GitHub or fallback template."""
+        token = get_test_org_token(repo_root=self.repo_root)
+        owner, clean_repo = self._resolve_repo_coords(repo)
+        if token:
+            url = f"https://api.github.com/repos/{owner}/{clean_repo}/contents/CONTEXT.md"
+            headers = self._github_headers(token, raw=True)
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        return resp.text
+            except Exception:
+                pass
+        return CONTEXT_TEMPLATE
+
     async def get_repo_existing_adrs(self, repo: str) -> list[str]:
         """Discovers existing ADRs in the repository."""
         token = get_test_org_token(repo_root=self.repo_root)
-        clean_repo = strip_repo_owner(repo)
+        owner, clean_repo = self._resolve_repo_coords(repo)
         if token:
-            url = f"https://api.github.com/repos/{DEFAULT_TEST_ORG}/{clean_repo}/contents/docs/adr"
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            }
+            url = f"https://api.github.com/repos/{owner}/{clean_repo}/contents/docs/adr"
+            headers = self._github_headers(token)
             try:
                 async with httpx.AsyncClient(timeout=4.0) as client:
                     resp = await client.get(url, headers=headers)
@@ -330,16 +518,189 @@ class GrillingAssistant:
                 pass
         return ["0001-tanstack-start-spa-architecture.md"]
 
+    async def resolve_active_branch(
+        self,
+        repo: str,
+        milestone_slug: str | None = None,
+    ) -> str:
+        """Determines target branch, checking for active milestone branches (factory/<milestone>) on GitHub before falling back to main."""
+        token = get_test_org_token(repo_root=self.repo_root)
+        owner, clean_repo = self._resolve_repo_coords(repo)
+        if not token:
+            return "main"
+
+        headers = self._github_headers(token)
+        url = f"https://api.github.com/repos/{owner}/{clean_repo}/branches?per_page=100"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    branch_items = resp.json()
+                    if isinstance(branch_items, list):
+                        branch_names = [b.get("name") for b in branch_items if isinstance(b, dict) and b.get("name")]
+                        if milestone_slug:
+                            target = f"factory/{milestone_slug}"
+                            if target in branch_names:
+                                return target
+                            return "main" if "main" in branch_names else ("master" if "master" in branch_names else "main")
+                        factory_branches = [b for b in branch_names if b.startswith("factory/")]
+                        if factory_branches:
+                            return factory_branches[0]
+                        if "main" in branch_names:
+                            return "main"
+                        if "master" in branch_names:
+                            return "master"
+        except Exception:
+            pass
+        return "main"
+
+    async def get_repo_file_tree(
+        self,
+        repo: str,
+        branch: str = "main",
+    ) -> list[str]:
+        """Queries the recursive Git Tree via GitHub API and returns all blob file paths."""
+        token = get_test_org_token(repo_root=self.repo_root)
+        owner, clean_repo = self._resolve_repo_coords(repo)
+        if not token:
+            return FALLBACK_REPO_TREE.copy()
+
+        headers = self._github_headers(token)
+        url = f"https://api.github.com/repos/{owner}/{clean_repo}/git/trees/{branch}?recursive=1"
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    tree_items = data.get("tree", [])
+                    paths = [
+                        item["path"]
+                        for item in tree_items
+                        if isinstance(item, dict) and item.get("type") == "blob" and "path" in item
+                    ]
+                    if paths:
+                        return paths
+        except Exception:
+            pass
+        return FALLBACK_REPO_TREE.copy()
+
+    def score_candidate_files(
+        self,
+        file_paths: list[str],
+        prompt: str,
+    ) -> list[str]:
+        """Scores repository file paths against keywords and associations extracted from the developer's prompt."""
+        clean = prompt.strip().lower()
+        raw_tokens = set(re.findall(r"[a-z0-9]+", clean))
+        direct_keywords = {k for k in raw_tokens if k not in PROMPT_STOPWORDS and len(k) > 1}
+
+        keyword_weights: dict[str, int] = {}
+        for k in direct_keywords:
+            if k in KEYWORD_EXPANSIONS:
+                for term, weight in KEYWORD_EXPANSIONS[k].items():
+                    keyword_weights[term] = keyword_weights.get(term, 0) + weight
+
+        scored: list[tuple[int, str]] = []
+        for path in file_paths:
+            score = score_path_against_keywords(
+                path,
+                direct_keywords=direct_keywords,
+                keyword_weights=keyword_weights,
+            )
+            if score > 0:
+                scored.append((score, path))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [path for _, path in scored]
+
+    async def fetch_candidate_file_contents(
+        self,
+        repo: str,
+        file_paths: list[str],
+        branch: str = "main",
+        max_total_bytes: int = 25000,
+    ) -> dict[str, str]:
+        """Retrieves raw source code for candidate files from GitHub, respecting count (max 3) and total size budget."""
+        token = get_test_org_token(repo_root=self.repo_root)
+        owner, clean_repo = self._resolve_repo_coords(repo)
+        results: dict[str, str] = {}
+        current_bytes = 0
+
+        candidates = file_paths[:3]
+
+        if not token:
+            for path in candidates:
+                if current_bytes >= max_total_bytes:
+                    break
+                content = FALLBACK_FILE_CONTENTS.get(path)
+                if content is not None:
+                    encoded_len = len(content.encode("utf-8"))
+                    if current_bytes + encoded_len <= max_total_bytes:
+                        results[path] = content
+                        current_bytes += encoded_len
+            return results
+
+        headers = self._github_headers(token, raw=True)
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for path in candidates:
+                if current_bytes >= max_total_bytes:
+                    break
+                url = f"https://api.github.com/repos/{owner}/{clean_repo}/contents/{path}?ref={branch}"
+                try:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        raw_text = resp.text
+                        file_bytes = len(raw_text.encode("utf-8"))
+                        remaining_budget = max_total_bytes - current_bytes
+                        if file_bytes <= remaining_budget:
+                            results[path] = raw_text
+                            current_bytes += file_bytes
+                        else:
+                            if remaining_budget > 200:
+                                truncated_slice = raw_text[: remaining_budget - 80]
+                                truncated_text = f"{truncated_slice}\n\n// ... [truncated to fit 25KB budget]"
+                                results[path] = truncated_text
+                                current_bytes = max_total_bytes
+                            break
+                except Exception:
+                    pass
+
+        return results
+
     async def handle_turn(
         self,
         repo: str,
         prompt: str,
         history: list[dict[str, Any]] | None = None,
         model: str = OPENCODE_GO_DEFAULT_MODEL,
+        milestone_slug: str | None = None,
+        branch: str | None = None,
     ) -> GrillTurnResult:
         """Processes a chat turn against the requirement frontier."""
         chat_history = history or []
         clean_prompt = prompt.strip()
+
+        # In explicit mock mode, proceed immediately without remote network calls
+        if self.is_mock_mode:
+            sharpened_terms_raw = sharpen_domain_terms(clean_prompt, CONTEXT_TEMPLATE)
+            sharpened_terms = [
+                DomainTermSharpening(
+                    fuzzy_term=s["fuzzy_term"],
+                    canonical_term=s["canonical_term"],
+                    explanation=s["explanation"],
+                )
+                for s in sharpened_terms_raw
+            ]
+            return self._handle_mock_turn(
+                repo=repo,
+                prompt=clean_prompt,
+                history=chat_history,
+                context_content=CONTEXT_TEMPLATE,
+                existing_adrs=["0001-tanstack-start-spa-architecture.md"],
+                sharpened_terms=sharpened_terms,
+            )
+
         context_content = await self.get_repo_context(repo)
         existing_adrs = await self.get_repo_existing_adrs(repo)
 
@@ -353,15 +714,25 @@ class GrillingAssistant:
             for s in sharpened_terms_raw
         ]
 
-        if self.is_mock_mode:
-            return self._handle_mock_turn(
-                repo=repo,
-                prompt=clean_prompt,
-                history=chat_history,
-                context_content=context_content,
-                existing_adrs=existing_adrs,
-                sharpened_terms=sharpened_terms,
-            )
+        # Autonomous codebase grounding and fact-finding for live turns
+        history_user_text = " ".join(
+            m.get("text") or m.get("content") or ""
+            for m in chat_history
+            if m.get("role") == "user"
+        )
+        scoring_prompt = f"{history_user_text} {clean_prompt}".strip() if history_user_text else clean_prompt
+
+        target_branch = branch or await self.resolve_active_branch(repo, milestone_slug=milestone_slug)
+        file_tree = await self.get_repo_file_tree(repo, branch=target_branch)
+        candidate_paths = self.score_candidate_files(file_tree, prompt=scoring_prompt)
+        candidate_contents = await self.fetch_candidate_file_contents(
+            repo, file_paths=candidate_paths, branch=target_branch
+        )
+        grounding = CodebaseGroundingContext(
+            branch=target_branch,
+            file_tree=file_tree,
+            candidate_contents=candidate_contents,
+        )
 
         # Ignore prior error turns when calculating current interview round
         def _is_error_history(msg: dict[str, Any]) -> bool:
@@ -397,6 +768,7 @@ class GrillingAssistant:
                 existing_adrs=existing_adrs,
                 sharpened_terms=sharpened_terms,
                 model=model,
+                grounding=grounding,
             )
         except Exception as exc:
             error_details = f"Provider: OpenCode Go ({self.base_url})\nError: {type(exc).__name__}: {str(exc)}"
@@ -550,8 +922,24 @@ To implement {prompt} within {repo}, we decided to adopt type-safe file routing 
         existing_adrs: list[str],
         sharpened_terms: list[DomainTermSharpening],
         model: str,
+        grounding: CodebaseGroundingContext | None = None,
+        branch: str | None = None,
+        file_tree: list[str] | None = None,
+        candidate_contents: dict[str, str] | None = None,
     ) -> GrillTurnResult:
         """Executes conversational turn against OpenCode Go inference API."""
+        if grounding is not None:
+            active_branch = grounding.branch
+            tree_paths = grounding.file_tree
+            contents = grounding.candidate_contents
+        else:
+            active_branch = branch or "main"
+            tree_paths = file_tree or []
+            contents = candidate_contents or {}
+
+        formatted_structure = format_repo_structure_summary(tree_paths, active_branch)
+        formatted_sources = format_candidate_sources(contents)
+
         system_instruction = f"""You are the Factory Studio Grilling Assistant for the repository '{repo}'.
 You follow Matt Pocock's grilling and domain-modeling protocols.
 
@@ -563,18 +951,29 @@ Target Application CONTEXT.md:
 Existing ADRs in docs/adr/:
 {json.dumps(existing_adrs)}
 
+### Repository Codebase Structure:
+{formatted_structure}
+
+### Relevant Candidate Component Source Code:
+{formatted_sources}
+
 Rules:
-1. Interview the developer relentlessly in rounds using the design tree.
-2. Identify unsettled prerequisites on the requirement frontier.
-3. Every question MUST have an id ('Q1', 'Q2', etc.), title, question body, and RECOMMENDED answer:
+1. Codebase Grounding & Fact-Finding: Finding facts is YOUR job as the agent, not the developer's job. Inspect the provided Repository Codebase Structure and Relevant Candidate Component Source Code.
+2. Ground all questions directly in existing components and files whenever possible.
+3. Component Modifications and Deletions: If the user prompt modifies, styles, refactors, or deletes elements in existing UI components (such as removing social media links, updating headers, changing footer text, or styling cards):
+   - You MUST formulate questions focused on the existing components (e.g. `Footer.tsx` or `Header.tsx`).
+   - You MUST forbid proposing new route files (e.g. `app/routes/<action-slug>.tsx`) or asking where in the route tree to mount the modification, unless the developer explicitly asks for a new page, screen, or route.
+4. Interview the developer relentlessly in rounds using the design tree.
+5. Identify unsettled prerequisites on the requirement frontier.
+6. Every question MUST have an id ('Q1', 'Q2', etc.), title, question body, and RECOMMENDED answer:
    Format each question as:
    ❓ **Q1** - **<title>**: <question>
    ➡️ <recommended answer>
-4. Sharpen domain terms against CONTEXT.md glossary. Never silently violate glossary language.
-5. When the frontier is resolved (or when user accepts defaults/replies to questions), transition to 'ready_for_approval':
-   - Synthesize a concise implementation plan
+7. Sharpen domain terms against CONTEXT.md glossary. Never silently violate glossary language.
+8. When the frontier is resolved (or when user accepts defaults/replies to questions), transition to 'ready_for_approval':
+   - Synthesize a concise implementation plan referencing target components to modify
    - Draft an Architectural Decision Record in markdown (Status: Proposed) with title, filename (docs/adr/NNNN-<slug>.md), and content.
-6. Output MUST be valid JSON adhering strictly to one of these two structures:
+9. Output MUST be valid JSON adhering strictly to one of these two structures:
 
 For interview round:
 {{

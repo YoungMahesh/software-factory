@@ -4,11 +4,11 @@
 
 **Blocked by:** 01 (OpenCode Go Endpoint Configuration and Transparent Error Turns)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Grilling service checks for active milestone branches (`factory/<milestone>`) on GitHub, falling back to `main`.
-- [ ] Grilling service retrieves the recursive git tree via GitHub API and extracts route and component file paths.
-- [ ] File paths are scored against keywords extracted from the prompt to locate relevant candidate source files.
-- [ ] Raw source code for the top matching candidate files (up to three files, max 25KB total) is retrieved from GitHub.
-- [ ] Repository tree summary and candidate source code bodies are injected into the LLM system prompt under structured sections.
-- [ ] Prompts modifying or removing elements in existing components generate questions focused on those components rather than proposing new route files.
+- [x] Grilling service checks for active milestone branches (`factory/<milestone>`) on GitHub, falling back to `main`.
+- [x] Grilling service retrieves the recursive git tree via GitHub API and extracts route and component file paths.
+- [x] File paths are scored against keywords extracted from the prompt to locate relevant candidate source files.
+- [x] Raw source code for the top matching candidate files (up to three files, max 25KB total) is retrieved from GitHub.
+- [x] Repository tree summary and candidate source code bodies are injected into the LLM system prompt under structured sections.
+- [x] Prompts modifying or removing elements in existing components generate questions focused on those components rather than proposing new route files.

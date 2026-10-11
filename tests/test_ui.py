@@ -2133,6 +2133,91 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
             self.assertEqual(messages[1]["turn_data"]["type"], "error")
             self.assertEqual(messages[1]["turn_data"]["error_message"], turn["error_message"])
 
+    def test_prompt_endpoint_grill_mode_conducts_codebase_grounding_and_passes_milestone_slug(self):
+        remote_resp = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "type": "grill_round",
+                            "round": 1,
+                            "summary": "Clarifying social link removal in Footer",
+                            "questions": [
+                                {
+                                    "id": "Q1",
+                                    "title": "Social Links Scope",
+                                    "question": "Should all social links in Footer.tsx be removed?",
+                                    "recommended": "Remove GitHub, X, and Discord from Footer.tsx.",
+                                    "options": ["Remove all links (Recommended)"],
+                                }
+                            ],
+                        })
+                    }
+                }
+            ]
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = remote_resp
+        mock_resp.raise_for_status = MagicMock()
+
+        fake_branches = MagicMock()
+        fake_branches.status_code = 200
+        fake_branches.json.return_value = [{"name": "factory/v1-initial-app"}]
+
+        fake_tree = MagicMock()
+        fake_tree.status_code = 200
+        fake_tree.json.return_value = {
+            "tree": [
+                {"path": "app/routes/index.tsx", "type": "blob"},
+                {"path": "app/components/Footer.tsx", "type": "blob"},
+            ]
+        }
+
+        fake_footer = MagicMock()
+        fake_footer.status_code = 200
+        fake_footer.text = "export function Footer() { return <div><a href='https://x.com'>X</a></div>; }"
+
+        def fake_async_get(url, headers=None):
+            if "branches" in url:
+                return fake_branches
+            if "git/trees" in url:
+                return fake_tree
+            return fake_footer
+
+        with patch("factory.ui.grill.get_test_org_token", return_value="gh-token-123"), \
+             patch("httpx.AsyncClient.get", new_callable=AsyncMock, side_effect=fake_async_get), \
+             patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+
+            resp = self.client.post(
+                "/api/studio/prompt",
+                json={
+                    "repo": "test3",
+                    "prompt": "remove social media links like github, x.com, etc",
+                    "milestone_title": "v1: Initial App",
+                    "grill": True,
+                    "mock": False,
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            turn = data["turn"]
+            self.assertIsNotNone(turn)
+            self.assertEqual(turn["type"], "grill_round")
+
+            # Check that OpenCode Go received grounded prompt
+            mock_post.assert_called_once()
+            called_payload = mock_post.call_args[1]["json"]
+            system_instruction = called_payload["messages"][0]["content"]
+
+            self.assertIn("Repository Codebase Structure", system_instruction)
+            self.assertIn("factory/v1-initial-app", system_instruction)
+            self.assertIn("app/components/Footer.tsx", system_instruction)
+            self.assertIn("Relevant Candidate Component Source Code", system_instruction)
+            self.assertIn("https://x.com", system_instruction)
+            self.assertIn("forbid proposing new route", system_instruction.lower())
+
     def test_prompt_endpoint_grill_mode_rejects_intent_guard_violations(self):
         resp = self.client.post(
             "/api/studio/prompt",
