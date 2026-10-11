@@ -214,3 +214,19 @@ _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into the Factory Testing Console and Factory Studio.
 _Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
 
+**Grilling Assistant**:
+A conversational reasoning service in Factory Studio that executes the `grilling` and `domain-modeling` protocols, interviewing the developer with structured question frontiers and drafting Architectural Decision Records (ADRs) before code changes are executed.
+_Avoid_: Chat bot, prompt helper, grilling bot, interview agent
+
+**Grill-Before-Change Protocol**:
+An interactive requirement alignment workflow where user chat prompts in Factory Studio undergo interview rounds and domain terminology sharpening before synthesizing issues and dispatching the Assembly Line Pipeline.
+_Avoid_: Manual interview, prompt delay, question loop
+
+**Target Project Skills**:
+The suite of Matt Pocock engineering skills (`.agents/skills/`), domain glossary (`CONTEXT.md`), architectural records (`docs/adr/`), and agent configurations (`docs/agents/`) scaffolded into every application developed on the Software Factory.
+_Avoid_: Target skills, repo configs, agent templates
+
+**ADR Quality Gate**:
+A mandatory verification check during the Pre-flight Guard and Reviewer Agent stage ensuring that `docs/adr/` exists and that implementation diffs strictly adhere to all accepted architectural decisions.
+_Avoid_: ADR check, architecture test
+
