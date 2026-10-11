@@ -45,6 +45,24 @@ export interface VerifyWorkspaceOptions extends StreamOptions {
   logPath?: string;
   telemetryStream?: { write: (chunk: string) => any };
   emitTelemetry?: boolean;
+  studioMode?: boolean;
+}
+
+/**
+ * Checks whether a command triggers a production build that would collide
+ * with the active Vite development server in Studio mode.
+ */
+export function isBuildCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (/\b(test|jest|vitest|pytest|mocha|playwright|cypress)\b/i.test(trimmed)) {
+    return false;
+  }
+  return (
+    /\b(pnpm|npm|yarn|bun)\s+(run\s+)?build(:[a-zA-Z0-9_-]+)?\b/i.test(trimmed) ||
+    /\b(npx\s+)?(vite|next|astro|webpack|turbo|rollup|esbuild)\s+build\b/i.test(trimmed) ||
+    /\b(tsc\s+-[bB]|tsc\s+--build)\b/i.test(trimmed) ||
+    /^\s*build\s*$/i.test(trimmed)
+  );
 }
 
 export interface VerificationResult {
@@ -323,14 +341,13 @@ export function formatVerificationSummary(
 export async function verifyWorkspace(options: VerifyWorkspaceOptions): Promise<VerificationResult> {
   const startTime = Date.now();
   const failFast = options.failFast ?? true;
+  const isStudioMode = options.studioMode ?? (process.env.STUDIO_MODE === "1");
 
   // Determine commands: respect explicit commands array if provided, otherwise discover
-  let commands: string[];
-  if (options.commands !== undefined) {
-    commands = options.commands;
-  } else {
-    const discovered = discoverCommands(options.workspacePath);
-    commands = discovered.all;
+  const baseCommands = options.commands !== undefined ? options.commands : discoverCommands(options.workspacePath).all;
+  let commands = isStudioMode ? baseCommands.filter((cmd) => !isBuildCommand(cmd)) : baseCommands;
+  if (isStudioMode && options.commands !== undefined && commands.length === 0) {
+    commands = discoverCommands(options.workspacePath).all.filter((cmd) => !isBuildCommand(cmd));
   }
 
   if (commands.length === 0) {

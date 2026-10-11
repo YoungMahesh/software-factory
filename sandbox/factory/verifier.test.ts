@@ -384,3 +384,78 @@ test("verifyWorkspace: emits matching tool_start and tool_result events with com
   }
 });
 
+test("isBuildCommand: correctly detects production build commands", async () => {
+  const { isBuildCommand } = await import("./verifier.ts");
+  assert.strictEqual(isBuildCommand("pnpm run build"), true);
+  assert.strictEqual(isBuildCommand("pnpm build"), true);
+  assert.strictEqual(isBuildCommand("npm run build"), true);
+  assert.strictEqual(isBuildCommand("yarn build"), true);
+  assert.strictEqual(isBuildCommand("vite build"), true);
+  assert.strictEqual(isBuildCommand("npx vite build"), true);
+  assert.strictEqual(isBuildCommand("tsc -b"), true);
+  assert.strictEqual(isBuildCommand("tsc --build"), true);
+
+  assert.strictEqual(isBuildCommand("pnpm test"), false);
+  assert.strictEqual(isBuildCommand("pnpm run typecheck"), false);
+  assert.strictEqual(isBuildCommand("tsc --noEmit"), false);
+  assert.strictEqual(isBuildCommand("npm run lint"), false);
+});
+
+test("verifyWorkspace: in Studio mode, filters out full production builds that collide with active dev server", async () => {
+  const dir = createTempDir();
+  try {
+    const executedCommands: string[] = [];
+    const result = await verifyWorkspace({
+      workspacePath: dir,
+      studioMode: true,
+      commands: [
+        "echo 'running typecheck'",
+        "echo 'running tests'",
+        "pnpm run build", // build command that would fail or collide
+      ],
+      onStream: (chunk, stream) => {
+        // capture stream
+      },
+    });
+
+    assert.strictEqual(result.passed, true);
+    assert.strictEqual(result.totalCommands, 2);
+    assert.strictEqual(result.passedCommands, 2);
+    const cmdList = result.results.map((r) => r.command);
+    assert.ok(cmdList.includes("echo 'running typecheck'"));
+    assert.ok(cmdList.includes("echo 'running tests'"));
+    assert.ok(!cmdList.some((c) => c.includes("build")));
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+
+test("verifyWorkspace: in Studio mode, runs discovered test and typecheck if commands only contains build", async () => {
+  const dir = createTempDir();
+  try {
+    const pkgJson = {
+      scripts: {
+        build: "echo 'should not run build' && exit 1",
+        test: "echo 'discovered test ok'",
+        typecheck: "echo 'discovered typecheck ok'",
+      },
+    };
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkgJson, null, 2));
+
+    const result = await verifyWorkspace({
+      workspacePath: dir,
+      studioMode: true,
+      commands: ["pnpm run build"],
+    });
+
+    assert.strictEqual(result.passed, true);
+    assert.ok(result.totalCommands >= 2);
+    const cmdList = result.results.map((r) => r.command);
+    assert.ok(!cmdList.some((c) => c.includes("build")));
+    assert.ok(cmdList.some((c) => c.includes("typecheck")));
+    assert.ok(cmdList.some((c) => c.includes("test")));
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+

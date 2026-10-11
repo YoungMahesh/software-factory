@@ -5,6 +5,7 @@ streaming stdout/stderr logs into a ring buffer, detects pipeline milestones
 via regular expressions, and provides sandbox termination control.
 """
 
+import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 import inspect
@@ -447,11 +448,18 @@ class JobRegistry:
                     workspace_dir,
                     "--feature",
                     job.feature,
+                    "--studio",
                 ]
                 if job.issue:
                     cmd_args.extend(["--issue", str(job.issue)])
                 if job.model:
                     cmd_args.extend(["--model", job.model])
+
+                # Update preview branch tracking in-place
+                p_reg = self._get_effective_preview_registry()
+                if p_reg is not None and hasattr(p_reg, "update_branch"):
+                    target_branch = f"factory/{job.feature}" if not job.feature.startswith("factory/") else job.feature
+                    p_reg.update_branch(job.repo, target_branch)
 
                 pipeline_cmd = " ".join(shlex.quote(a) for a in cmd_args)
                 exec_cmd = (
@@ -460,6 +468,7 @@ class JobRegistry:
                     "fi; "
                     "set -a; source /root/.factory.env; set +a; "
                     f"export PYTHONUNBUFFERED=1; "
+                    f"export STUDIO_MODE=1; "
                     f"exec {pipeline_cmd}"
                 )
 
@@ -796,6 +805,31 @@ class PreviewRegistry:
                 ):
                     return preview.sandbox, preview.preview_url
         return None, None
+
+    async def wait_for_serving(
+        self,
+        repo: str,
+        timeout: float = 60.0,
+        poll_interval: float = 0.05,
+    ) -> tuple[modal.Sandbox | None, str | None]:
+        """Waits asynchronously for the repository's preview sandbox to reach SERVING status."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            sandbox, preview_url = self.get_active_sandbox(repo)
+            if sandbox is not None:
+                return sandbox, preview_url
+            preview = self.get_preview(repo)
+            if preview and preview.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED):
+                break
+            await asyncio.sleep(poll_interval)
+        return self.get_active_sandbox(repo)
+
+    def update_branch(self, repo: str, branch: str) -> None:
+        """Updates the active branch tracking for a repository preview."""
+        with self._lock:
+            preview = self._previews.get(repo.strip())
+            if preview:
+                preview.branch = branch
 
     def broadcast_refresh(self, repo: str) -> None:
         """Broadcasts a preview_refresh event to all preview listeners for the repository."""

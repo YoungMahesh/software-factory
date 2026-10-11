@@ -31,7 +31,14 @@ from factory.ui.github import (
     validate_github_repo_name,
 )
 from factory.ui.guard import evaluate_prompt_intent
-from factory.ui.registry import JobRegistry, job_registry, PreviewRegistry, preview_registry, PreviewState
+from factory.ui.registry import (
+    JobRegistry,
+    job_registry,
+    PreviewRegistry,
+    preview_registry,
+    PreviewState,
+    PreviewStatus,
+)
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
@@ -191,6 +198,8 @@ def create_app(
                 "issue": None,
                 "milestone": None,
                 "stage": None,
+                "preview_url": None,
+                "preview": None,
             }
 
         # 2. Resolve or Create Active Milestone
@@ -198,27 +207,57 @@ def create_app(
             repo_name=repo,
             title=req.milestone_title,
         )
+        milestone_slug = milestone["slug"]
+        target_branch = f"factory/{milestone_slug}"
 
         # 3. Synthesize sequential GitHub Issue with acceptance criteria
         issue = synthesize_and_create_issue(
             repo_name=repo,
             prompt=prompt,
             milestone_number=milestone["number"],
-            milestone_slug=milestone["slug"],
+            milestone_slug=milestone_slug,
         )
 
-        # 4. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
+        # 4. Check for active Unified Studio Sandbox or auto-provision if inactive
+        active_sandbox, preview_url = preview_reg.get_active_sandbox(repo)
+        preview_state = preview_reg.get_preview(repo)
+
+        if active_sandbox is None:
+            # Submitting a prompt for a repository with no active sandbox automatically
+            # provisions a Unified Studio Sandbox, waits for the dev server to start serving
+            # on port 3000, and executes the prompt within that sandbox.
+            if not preview_state or preview_state.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED, PreviewStatus.IDLE):
+                preview_state = preview_reg.launch_preview(repo, branch=target_branch)
+
+            active_sandbox, preview_url = await preview_reg.wait_for_serving(repo)
+            preview_state = preview_reg.get_preview(repo)
+            if active_sandbox is None and preview_state and preview_state.status == PreviewStatus.FAILED:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Unified Studio Sandbox failed to start: {preview_state.error_message or 'Unknown error'}",
+                )
+
+        if preview_state:
+            # Update target branch tracking on preview state for in-place branch transition
+            preview_reg.update_branch(repo, target_branch)
+            if not preview_url and preview_state.preview_url:
+                preview_url = preview_state.preview_url
+
+        effective_preview_url = preview_url or (preview_state.preview_url if preview_state else None)
+
+        # 5. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
         job = registry.create_job(
             repo=repo,
-            feature=milestone["slug"],
+            feature=milestone_slug,
             issue=str(issue["number"]),
             model=req.model,
             vm=req.vm,
             dev=True,
         )
+        job.preview_url = effective_preview_url
         registry.start_job(job.id)
 
-        # 5. Return job metadata, synthesized issue reference, and stage tracking
+        # 6. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
         return {
             "accepted": True,
             "refusal": None,
@@ -227,7 +266,8 @@ def create_app(
             "issue": issue,
             "milestone": milestone,
             "stage": job.stage.value,
-            "preview_url": job.preview_url,
+            "preview_url": effective_preview_url,
+            "preview": preview_state.to_dict() if preview_state else None,
         }
 
     @app.post("/api/studio/repos/{repo}/preview", status_code=201)

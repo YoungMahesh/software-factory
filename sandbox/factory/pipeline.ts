@@ -37,6 +37,7 @@ export interface PipelineOptions {
   coderRunner?: typeof runCoderAgent;
   verifierRunner?: typeof verifyWorkspace;
   reviewerRunner?: typeof runReviewerAgent;
+  studio?: boolean;
 }
 
 export interface PipelineResult {
@@ -171,6 +172,7 @@ export async function runAssemblyLinePipeline(
       coderRunner: options.coderRunner,
       verifierRunner: options.verifierRunner,
       reviewerRunner: options.reviewerRunner,
+      studio: options.studio,
     });
 
     executedTickets.push(lifecycleResult);
@@ -222,6 +224,7 @@ export async function runAssemblyLinePipeline(
         coderRunner: options.coderRunner,
         verifierRunner: options.verifierRunner,
         reviewerRunner: options.reviewerRunner,
+        studio: options.studio,
       });
 
       executedTickets.push(lifecycleResult);
@@ -322,6 +325,7 @@ function parseCliArgs(): {
   model?: string;
   tracker?: string;
   push: boolean;
+  studio: boolean;
 } {
   const args = process.argv.slice(2);
   let workspace = process.cwd();
@@ -330,6 +334,7 @@ function parseCliArgs(): {
   let model: string | undefined;
   let tracker: string | undefined;
   let push = true;
+  let studio = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -343,6 +348,8 @@ function parseCliArgs(): {
       model = args[++i];
     } else if (arg === "--tracker" || arg === "-t") {
       tracker = args[++i];
+    } else if (arg === "--studio") {
+      studio = true;
     } else if (arg === "--no-push") {
       push = false;
     }
@@ -353,11 +360,11 @@ function parseCliArgs(): {
   }
 
   if (!feature) {
-    console.error("Usage: node pipeline.ts --feature <slug> [--workspace <dir>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--no-push]");
+    console.error("Usage: node pipeline.ts --feature <slug> [--workspace <dir>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--studio] [--no-push]");
     process.exit(1);
   }
 
-  return { workspace, feature, issue, model, tracker, push };
+  return { workspace, feature, issue, model, tracker, push, studio };
 }
 
 const isDirectRun =
@@ -367,7 +374,7 @@ const isDirectRun =
     path.basename(process.argv[1]) === "pipeline.js");
 
 if (isDirectRun) {
-  const { workspace, feature, issue, model, tracker, push } = parseCliArgs();
+  const { workspace, feature, issue, model, tracker, push, studio } = parseCliArgs();
   console.log(`🚀 Launching Assembly Line Pipeline for feature "${feature}" in ${workspace}...`);
 
   runAssemblyLinePipeline({
@@ -377,6 +384,7 @@ if (isDirectRun) {
     modelId: model,
     trackerType: (tracker as TrackerType) || undefined,
     push,
+    studio,
   })
     .then((result) => {
       console.log("\n" + result.summary);

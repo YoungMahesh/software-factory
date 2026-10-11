@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Container Entrypoint Supervisor & In-Sandbox Registry Execution
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Submitting a prompt via the Factory Studio prompt endpoint for a repository with an active running sandbox reuses that container, delegating execution via in-sandbox process execution.
-- [ ] Submitting a prompt for a repository with no active container automatically provisions a Unified Studio Sandbox, waits for the dev server to start serving on port 3000, and executes the prompt within that container.
-- [ ] When starting a prompt on a newly synthesized feature or milestone, in-sandbox execution checks out or creates the target branch (`factory/<feature>`) in place within the working directory without container restarts.
-- [ ] The prompt response payload returns the unified sandbox state and live preview tunnel URL (`https://<sandbox-id>-3000.modal.host`).
-- [ ] In Studio mode, the Deterministic Verifier runs tests and typechecks without triggering full production builds that collide with the active dev server.
-- [ ] Integration tests verify prompt dispatch against active containers, implicit auto-provisioning when inactive, and in-place branch transition behavior.
+- [x] Submitting a prompt via the Factory Studio prompt endpoint for a repository with an active running sandbox reuses that container, delegating execution via in-sandbox process execution.
+- [x] Submitting a prompt for a repository with no active container automatically provisions a Unified Studio Sandbox, waits for the dev server to start serving on port 3000, and executes the prompt within that container.
+- [x] When starting a prompt on a newly synthesized feature or milestone, in-sandbox execution checks out or creates the target branch (`factory/<feature>`) in place within the working directory without container restarts.
+- [x] The prompt response payload returns the unified sandbox state and live preview tunnel URL (`https://<sandbox-id>-3000.modal.host`).
+- [x] In Studio mode, the Deterministic Verifier runs tests and typechecks without triggering full production builds that collide with the active dev server.
+- [x] Integration tests verify prompt dispatch against active containers, implicit auto-provisioning when inactive, and in-place branch transition behavior.

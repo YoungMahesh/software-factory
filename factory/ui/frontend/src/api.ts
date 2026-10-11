@@ -10,6 +10,7 @@ export interface StudioPromptResponse {
   milestone?: any | null;
   stage?: string | null;
   preview_url?: string | null;
+  preview?: PreviewState | null;
 }
 
 export async function fetchRepos(): Promise<{ org: string; repos: Repo[] }> {

@@ -36,6 +36,7 @@ export interface TicketLifecycleOptions {
   coderRunner?: typeof runCoderAgent;
   verifierRunner?: typeof verifyWorkspace;
   reviewerRunner?: typeof runReviewerAgent;
+  studio?: boolean;
 }
 
 export interface TicketLifecycleResult {
@@ -230,6 +231,7 @@ export async function runTicketLifecycle(
       workspacePath: workspaceDir,
       commands: plan.testCommands && plan.testCommands.length > 0 ? plan.testCommands : undefined,
       logPath: verifierLogPath,
+      studioMode: options.studio ?? (process.env.STUDIO_MODE === "1"),
     });
     lastVerification = verification;
 

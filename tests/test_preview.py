@@ -338,6 +338,11 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         self.assertIn("--workspace /root/test3", exec_cmd)
         self.assertIn("--feature feature-unified", exec_cmd)
         self.assertIn("--issue 42", exec_cmd)
+        self.assertIn("--studio", exec_cmd)
+        self.assertIn("STUDIO_MODE=1", exec_cmd)
+
+        # Verify preview branch was updated in-place without restart
+        self.assertEqual(preview.branch, "factory/feature-unified")
 
         # Collect job events
         job_events = []
