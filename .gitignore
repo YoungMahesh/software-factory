@@ -11,3 +11,5 @@ llm-response.md
 
 node_modules/
 .pytest_cache/
+*.db
+factory/ui/data/

@@ -230,3 +230,16 @@ _Avoid_: Target skills, repo configs, agent templates
 A mandatory verification check during the Pre-flight Guard and Reviewer Agent stage ensuring that `docs/adr/` exists and that implementation diffs strictly adhere to all accepted architectural decisions.
 _Avoid_: ADR check, architecture test
 
+**Studio Database**:
+An embedded persistent SQLite database (`factory/ui/data/factory_studio.db`) operating with Write-Ahead Logging (WAL) that stores Factory Studio Chat History, Job records, and Agent Telemetry Logs.
+_Avoid_: Local DB, chat database, studio cache
+
+**Studio Chat History**:
+The durable chronological sequence of user prompts, Grilling Assistant question frontiers, developer responses, and approved plan cards associated with a target repository.
+_Avoid_: Prompt log, conversation memory, message cache
+
+**Agent Telemetry Log**:
+A durable database record capturing structured events (stage transitions, tool invocations, model reasoning deltas) and standard output console streams emitted during Assembly Line Pipeline execution, indexed by Job ID.
+_Avoid_: Run log, container output, worker debug
+
+
