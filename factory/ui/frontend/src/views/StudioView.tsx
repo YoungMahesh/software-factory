@@ -8,6 +8,7 @@ import {
   Box,
   Play,
   Square,
+  Check,
 } from "lucide-react";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
@@ -46,6 +47,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onReconnectPreview,
     refreshKey,
     isLaunchingPreview = false,
+    onClearChat,
+    isClearingChat = false,
+    isChatCleared = false,
   } = useStudio();
 
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
@@ -229,6 +233,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             id="studio-chat-history"
             className="flex-1 overflow-y-auto p-4 space-y-4"
           >
+            {isChatCleared && (
+              <div
+                data-testid="chat-cleared-banner"
+                className="flex items-center space-x-2 p-3 rounded-lg bg-emerald-950/40 border border-emerald-900/50 text-emerald-300 text-xs"
+              >
+                <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>Chat history cleared for {selectedRepo}.</span>
+              </div>
+            )}
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-6 text-slate-500">
                 <Box className="w-8 h-8 mb-2 text-slate-600" />
@@ -409,6 +422,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             isDisconnected={isDisconnected}
             activeStage={activeJob?.stage}
             onSendPrompt={onSendPrompt}
+            onClearChat={onClearChat}
+            isClearingChat={isClearingChat}
+            isChatCleared={isChatCleared}
           />
         </div>
 

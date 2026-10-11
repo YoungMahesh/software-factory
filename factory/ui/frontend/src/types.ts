@@ -157,5 +157,17 @@ export interface ChatMessage {
   grillTurn?: GrillTurnResult;
 }
 
+export interface DbChatMessage {
+  id: string;
+  repo: string;
+  milestone_slug?: string | null;
+  issue_number?: number | null;
+  role: "user" | "assistant";
+  content: string;
+  turn_data?: any;
+  draft_adr?: DraftADR | null;
+  created_at: number;
+}
+
 export type ViewportMode = "desktop" | "tablet" | "mobile";
 

@@ -5,8 +5,8 @@ import {
   Terminal,
   GitBranch,
 } from "lucide-react";
-import { Job, ChatMessage, LaunchJobParams, PreviewState, GrillTurnResult } from "./types";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Job, ChatMessage, LaunchJobParams, PreviewState, GrillTurnResult, DbChatMessage } from "./types";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
@@ -21,8 +21,12 @@ import {
   useStopPreviewMutation,
   useSendStudioPromptMutation,
   useApprovePlanMutation,
+  useChatMessagesQuery,
+  useClearChatMessagesMutation,
+  studioQueryKeys,
   createStoppedPreviewState,
 } from "./hooks/useStudioQueries";
+import { convertDbMessageToChatMessage } from "./utils";
 import * as api from "./api";
 
 const getInitialTab = (): "studio" | "console" => {
@@ -42,22 +46,43 @@ export const AppContent: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
+  const [isChatCleared, setIsChatCleared] = useState<boolean>(false);
 
   // Queries & Mutations
+  const queryClient = useQueryClient();
   const reposQuery = useStudioRepos();
   const repos = reposQuery.data?.repos || [];
 
   const previewQuery = usePreviewQuery(selectedRepo);
+  const messagesQuery = useChatMessagesQuery(selectedRepo);
 
   const createRepoMutation = useCreateRepoMutation();
   const launchPreviewMutation = useLaunchPreviewMutation();
   const stopPreviewMutation = useStopPreviewMutation();
   const sendPromptMutation = useSendStudioPromptMutation();
   const approvePlanMutation = useApprovePlanMutation();
+  const clearChatMutation = useClearChatMessagesMutation();
 
   const isLaunchingPreview = launchPreviewMutation.isPending;
   const isSendingPrompt = sendPromptMutation.isPending;
   const isApproving = approvePlanMutation.isPending;
+
+  // Reset chat cleared state when selected repo changes
+  useEffect(() => {
+    setIsChatCleared(false);
+  }, [selectedRepo]);
+
+  // Rehydrate chat messages from the database when query data arrives
+  useEffect(() => {
+    if (messagesQuery.data?.messages) {
+      setMessages(messagesQuery.data.messages.map(convertDbMessageToChatMessage));
+      if (messagesQuery.data.messages.length > 0) {
+        setIsChatCleared(false);
+      }
+    } else {
+      setMessages([]);
+    }
+  }, [messagesQuery.data]);
 
   // Select initial repo when repos load
   useEffect(() => {
@@ -342,6 +367,24 @@ export const AppContent: React.FC = () => {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
+        queryClient.setQueryData<{ repo: string; messages: DbChatMessage[] }>(
+          studioQueryKeys.messages(selectedRepo),
+          (old) => ({
+            repo: selectedRepo,
+            messages: [
+              ...(old?.messages || []),
+              {
+                id: assistantMessage.id,
+                repo: selectedRepo,
+                role: "assistant",
+                content: assistantMessage.text || "",
+                turn_data: { status: "approved", job_id: res.job!.id, draft_adr: turn.draft_adr },
+                created_at: assistantMessage.timestamp / 1000,
+              },
+            ],
+          })
+        );
+
         if (res.preview) {
           setPreviewState(res.preview);
         }
@@ -355,6 +398,18 @@ export const AppContent: React.FC = () => {
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  // Handle Clear Chat
+  const handleClearChat = async () => {
+    if (!selectedRepo || clearChatMutation.isPending) return;
+    try {
+      await clearChatMutation.mutateAsync(selectedRepo);
+      setMessages([]);
+      setIsChatCleared(true);
+    } catch (err) {
+      console.error("Failed to clear chat:", err);
     }
   };
 
@@ -387,7 +442,7 @@ export const AppContent: React.FC = () => {
       }
     }
 
-    // 1. Append user prompt
+    // 1. Append user prompt optimistically
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -396,6 +451,26 @@ export const AppContent: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    setIsChatCleared(false);
+
+    // Sync query cache optimistically
+    queryClient.setQueryData<{ repo: string; messages: DbChatMessage[] }>(
+      studioQueryKeys.messages(selectedRepo),
+      (old) => {
+        const oldMsgs = old?.messages || [];
+        const newDbMsg: DbChatMessage = {
+          id: userMessage.id,
+          repo: selectedRepo,
+          role: "user",
+          content: promptText,
+          created_at: userMessage.timestamp / 1000,
+        };
+        return {
+          repo: selectedRepo,
+          messages: [...oldMsgs, newDbMsg],
+        };
+      }
+    );
 
     try {
       const history = messages.map((m) => ({
@@ -425,6 +500,23 @@ export const AppContent: React.FC = () => {
           },
         };
         setMessages((prev) => [...prev, refusalMessage]);
+        queryClient.setQueryData<{ repo: string; messages: DbChatMessage[] }>(
+          studioQueryKeys.messages(selectedRepo),
+          (old) => ({
+            repo: selectedRepo,
+            messages: [
+              ...(old?.messages || []),
+              {
+                id: refusalMessage.id,
+                repo: selectedRepo,
+                role: "assistant",
+                content: refusalMessage.refusal!.message,
+                turn_data: { refusal: true, reason: res.reason, category: res.category },
+                created_at: refusalMessage.timestamp / 1000,
+              },
+            ],
+          })
+        );
       } else if (res.turn) {
         // Conversational Grilling Turn
         const assistantMessage: ChatMessage = {
@@ -435,6 +527,23 @@ export const AppContent: React.FC = () => {
           grillTurn: res.turn,
         };
         setMessages((prev) => [...prev, assistantMessage]);
+        queryClient.setQueryData<{ repo: string; messages: DbChatMessage[] }>(
+          studioQueryKeys.messages(selectedRepo),
+          (old) => ({
+            repo: selectedRepo,
+            messages: [
+              ...(old?.messages || []),
+              {
+                id: assistantMessage.id,
+                repo: selectedRepo,
+                role: "assistant",
+                content: assistantMessage.text || "",
+                turn_data: res.turn,
+                created_at: assistantMessage.timestamp / 1000,
+              },
+            ],
+          })
+        );
       } else if (res.job) {
         // Accepted & job created (fast build mode)
         clearLogs();
@@ -456,6 +565,23 @@ export const AppContent: React.FC = () => {
           stepChips: [],
         };
         setMessages((prev) => [...prev, assistantMessage]);
+        queryClient.setQueryData<{ repo: string; messages: DbChatMessage[] }>(
+          studioQueryKeys.messages(selectedRepo),
+          (old) => ({
+            repo: selectedRepo,
+            messages: [
+              ...(old?.messages || []),
+              {
+                id: assistantMessage.id,
+                repo: selectedRepo,
+                role: "assistant",
+                content: assistantMessage.text || "",
+                turn_data: { job_id: res.job!.id },
+                created_at: assistantMessage.timestamp / 1000,
+              },
+            ],
+          })
+        );
 
         if (res.preview) {
           setPreviewState(res.preview);
@@ -494,6 +620,9 @@ export const AppContent: React.FC = () => {
     onReconnectPreview: handleReconnectPreview,
     refreshKey: previewRefreshKey,
     isLaunchingPreview,
+    onClearChat: handleClearChat,
+    isClearingChat: clearChatMutation.isPending,
+    isChatCleared,
   };
 
   return (

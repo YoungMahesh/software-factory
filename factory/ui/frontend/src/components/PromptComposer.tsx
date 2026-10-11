@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Trash2, Check } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Textarea } from "./ui/Textarea";
 
@@ -10,6 +10,9 @@ export interface PromptComposerProps {
   activeStage?: string;
   onSendPrompt: (prompt: string, grill?: boolean) => void;
   defaultGrillMode?: boolean;
+  onClearChat?: () => void;
+  isClearingChat?: boolean;
+  isChatCleared?: boolean;
 }
 
 export const PromptComposer: React.FC<PromptComposerProps> = ({
@@ -19,6 +22,9 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
   activeStage,
   onSendPrompt,
   defaultGrillMode = true,
+  onClearChat,
+  isClearingChat = false,
+  isChatCleared = false,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
   const [grillMode, setGrillMode] = useState<boolean>(defaultGrillMode);
@@ -101,6 +107,34 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 Grill &amp; Align <span className="text-[10px] text-indigo-400/80 font-normal">(Recommended)</span>
               </span>
             </label>
+
+            {onClearChat && (
+              <Button
+                id="btn-studio-clear-chat"
+                data-testid="clear-chat-btn"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onClearChat}
+                disabled={!selectedRepo || isExecutingTurn || isClearingChat}
+                isLoading={isClearingChat}
+                icon={<Trash2 className="w-3.5 h-3.5 text-slate-400" />}
+                className="text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 px-2 py-1"
+                title="Clear chat history for this repository"
+              >
+                Clear Chat
+              </Button>
+            )}
+
+            {isChatCleared && (
+              <span
+                data-testid="clear-chat-confirmation"
+                className="inline-flex items-center space-x-1 text-[11px] text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-900/50 px-2 py-0.5 rounded"
+              >
+                <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Chat cleared</span>
+              </span>
+            )}
           </div>
 
           <Button

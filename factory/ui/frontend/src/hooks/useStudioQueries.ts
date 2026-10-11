@@ -7,6 +7,7 @@ export const studioQueryKeys = {
   preview: (repo: string) => ["studio", "preview", repo] as const,
   scratch: (repo: string) => ["studio", "scratch", repo] as const,
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
+  messages: (repo: string) => ["studio", "messages", repo] as const,
 };
 
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {
@@ -99,3 +100,23 @@ export function useApprovePlanMutation() {
       api.approvePlan(params),
   });
 }
+
+export function useChatMessagesQuery(repo: string) {
+  return useQuery({
+    queryKey: studioQueryKeys.messages(repo),
+    queryFn: () => api.fetchChatMessages(repo),
+    enabled: Boolean(repo),
+  });
+}
+
+export function useClearChatMessagesMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (repo: string) => api.clearChatMessages(repo),
+    onSuccess: (_, repo) => {
+      queryClient.setQueryData(studioQueryKeys.messages(repo), { repo, messages: [] });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.messages(repo) });
+    },
+  });
+}
+

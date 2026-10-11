@@ -32,6 +32,9 @@ export const createDefaultStudioContext = (
   onReconnectPreview: vi.fn(),
   refreshKey: 0,
   isLaunchingPreview: false,
+  onClearChat: vi.fn().mockResolvedValue(undefined),
+  isClearingChat: false,
+  isChatCleared: false,
   ...overrides,
 });
 

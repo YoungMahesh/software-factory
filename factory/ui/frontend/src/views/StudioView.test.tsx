@@ -398,4 +398,16 @@ describe("StudioView", () => {
     expect(handleApprove).toHaveBeenCalledTimes(1);
     expect(handleApprove).toHaveBeenCalledWith(readyTurn);
   });
+
+  it("renders visual confirmation banner in timeline when isChatCleared is true", () => {
+    renderStudio({
+      selectedRepo: "cool-app",
+      messages: [],
+      isChatCleared: true,
+    });
+
+    expect(screen.getByTestId("chat-cleared-banner")).toBeInTheDocument();
+    expect(screen.getByText("Chat history cleared for cool-app.")).toBeInTheDocument();
+  });
 });
+

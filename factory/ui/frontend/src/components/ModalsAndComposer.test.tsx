@@ -197,5 +197,67 @@ describe("Decoupled Modals and PromptComposer", () => {
       expect(screen.getByTestId("studio-prompt-input")).toBeDisabled();
       expect(screen.getByPlaceholderText(/Sandbox disconnected/i)).toBeInTheDocument();
     });
+
+    it("renders 'Clear Chat' button in toolbar and triggers onClearChat", () => {
+      const handleClear = vi.fn();
+      render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          onSendPrompt={vi.fn()}
+          onClearChat={handleClear}
+        />
+      );
+
+      const clearBtn = screen.getByRole("button", { name: /Clear Chat/i });
+      expect(clearBtn).toBeInTheDocument();
+      fireEvent.click(clearBtn);
+      expect(handleClear).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables 'Clear Chat' when isExecutingTurn is true or isClearingChat is true", () => {
+      const { rerender } = render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={true}
+          isDisconnected={false}
+          onSendPrompt={vi.fn()}
+          onClearChat={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole("button", { name: /Clear Chat/i })).toBeDisabled();
+
+      rerender(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          isClearingChat={true}
+          onSendPrompt={vi.fn()}
+          onClearChat={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole("button", { name: /Clear Chat/i })).toBeDisabled();
+    });
+
+    it("displays visual confirmation when isChatCleared is true", () => {
+      render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          onSendPrompt={vi.fn()}
+          onClearChat={vi.fn()}
+          isChatCleared={true}
+        />
+      );
+
+      expect(screen.getByTestId("clear-chat-confirmation")).toBeInTheDocument();
+      expect(screen.getByText(/Chat cleared/i)).toBeInTheDocument();
+    });
   });
 });
+

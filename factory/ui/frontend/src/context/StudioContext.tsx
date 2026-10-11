@@ -22,6 +22,9 @@ export interface StudioContextValue {
   onReconnectPreview?: () => void;
   refreshKey?: number;
   isLaunchingPreview?: boolean;
+  onClearChat?: () => Promise<void> | void;
+  isClearingChat?: boolean;
+  isChatCleared?: boolean;
 }
 
 const StudioContext = createContext<StudioContextValue | undefined>(undefined);

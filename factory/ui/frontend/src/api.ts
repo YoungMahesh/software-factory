@@ -8,6 +8,7 @@ import {
   PreviewState,
   GrillTurnResult,
   DraftADR,
+  DbChatMessage,
 } from "./types";
 
 export interface StudioPromptResponse {
@@ -216,5 +217,26 @@ export async function stopPreview(
 
 export function getPreviewStreamUrl(repo: string): string {
   return `/api/studio/repos/${encodeURIComponent(repo)}/preview/stream`;
+}
+
+export async function fetchChatMessages(
+  repo: string
+): Promise<{ repo: string; messages: DbChatMessage[] }> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/messages`);
+  if (!res.ok) throw new Error(`Failed to fetch chat messages: ${res.statusText}`);
+  return res.json();
+}
+
+export async function clearChatMessages(
+  repo: string
+): Promise<{ repo: string; deleted: number; success: boolean }> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/messages`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to clear chat messages: ${res.statusText}`);
+  }
+  return res.json();
 }
 
