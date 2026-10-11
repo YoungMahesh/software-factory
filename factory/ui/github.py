@@ -525,6 +525,17 @@ def _normalize_github_issue(item: dict[str, Any]) -> dict[str, Any]:
     body = item.get("body")
     blocked_by = parse_github_blocked_by(body)
     status = map_github_issue_status(item)
+
+    milestone_obj = None
+    raw_milestone = item.get("milestone")
+    if isinstance(raw_milestone, dict):
+        m_title = raw_milestone.get("title") or ""
+        milestone_obj = {
+            "number": raw_milestone.get("number"),
+            "title": m_title,
+            "slug": raw_milestone.get("slug") or normalize_milestone_slug(m_title),
+        }
+
     return {
         "id": item.get("id"),
         "number": item.get("number"),
@@ -534,6 +545,7 @@ def _normalize_github_issue(item: dict[str, Any]) -> dict[str, Any]:
         "labels": labels,
         "blocked_by": blocked_by,
         "status": status,
+        "milestone": milestone_obj,
         "html_url": item.get("html_url"),
     }
 

@@ -30,6 +30,7 @@ from factory.ui.github import (
     resolve_or_create_milestone,
     synthesize_and_create_issue,
     validate_github_repo_name,
+    normalize_milestone_slug,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
@@ -81,6 +82,17 @@ class ApprovePlanRequest(BaseModel):
     milestone_title: str | None = Field(None, description="Optional custom milestone title")
     draft_adr: dict[str, Any] | None = Field(None, description="Draft ADR details {filename, content, title}")
     context_update: str | None = Field(None, description="Optional updated CONTEXT.md content")
+    model: str = Field("deepseek-v4.1-flash", description="Model identifier")
+    vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
+
+
+class StudioDispatchRequest(BaseModel):
+    repo: str = Field(..., description="Target repository name in Test Organization (e.g. 'inventory-tracker')")
+    issue: int | str | None = Field(None, description="Optional ticket number or ID (e.g. 42 or '42')")
+    issue_number: int | None = Field(None, description="Optional ticket number")
+    milestone: str | None = Field(None, description="Optional milestone slug or title")
+    milestone_slug: str | None = Field(None, description="Optional milestone slug")
+    milestone_title: str | None = Field(None, description="Optional milestone title")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
 
@@ -196,8 +208,8 @@ def create_app(
 
     async def _ensure_sandbox_and_dispatch_job(
         repo: str,
-        milestone_slug: str,
-        issue_number: int | str,
+        feature: str,
+        issue_number: int | str | None,
         model: str,
         vm: bool,
         target_branch: str,
@@ -224,10 +236,11 @@ def create_app(
 
         effective_preview_url = preview_url or (preview_state.preview_url if preview_state else None)
 
+        issue_param = str(issue_number) if issue_number is not None else None
         job = registry.create_job(
             repo=repo,
-            feature=milestone_slug,
-            issue=str(issue_number),
+            feature=feature,
+            issue=issue_param,
             model=model,
             vm=vm,
             dev=True,
@@ -330,7 +343,7 @@ def create_app(
         # 5. Ensure Unified Studio Sandbox is active and dispatch Assembly Line job
         job, preview_state, effective_preview_url = await _ensure_sandbox_and_dispatch_job(
             repo=repo,
-            milestone_slug=milestone_slug,
+            feature=milestone_slug,
             issue_number=issue["number"],
             model=req.model,
             vm=req.vm,
@@ -401,7 +414,7 @@ def create_app(
         # 4. Ensure Unified Studio Sandbox is active and dispatch Assembly Line job
         job, preview_state, effective_preview_url = await _ensure_sandbox_and_dispatch_job(
             repo=repo,
-            milestone_slug=milestone_slug,
+            feature=milestone_slug,
             issue_number=issue["number"],
             model=req.model,
             vm=req.vm,
@@ -436,6 +449,99 @@ def create_app(
             "preview": preview_state.to_dict() if preview_state else None,
             "branch": target_branch,
             "draft_adr": req.draft_adr,
+        }
+
+    @app.post("/api/studio/dispatch")
+    async def studio_dispatch_endpoint(req: StudioDispatchRequest):
+        repo = req.repo.strip() if req.repo else ""
+        if not repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        # Resolve issue identifier
+        issue_val = None
+        if req.issue_number is not None:
+            issue_val = req.issue_number
+        elif req.issue is not None:
+            try:
+                issue_val = int(str(req.issue).strip())
+            except (ValueError, TypeError):
+                issue_val = str(req.issue).strip() or None
+
+        # Resolve milestone identifier
+        milestone_raw = req.milestone_slug or req.milestone or req.milestone_title
+        milestone_str = milestone_raw.strip() if milestone_raw and isinstance(milestone_raw, str) else None
+
+        if issue_val is None and not milestone_str:
+            raise HTTPException(
+                status_code=400,
+                detail="Either milestone or issue number must be provided for dispatch.",
+            )
+
+        # If issue is specified without an explicit milestone, attempt lookup via GitHub
+        if issue_val is not None and not milestone_str:
+            try:
+                issue_int = int(issue_val)
+                fetched_issue = fetch_repo_issue(repo, issue_int)
+                if fetched_issue and fetched_issue.get("milestone"):
+                    m_data = fetched_issue["milestone"]
+                    milestone_str = m_data.get("slug") or m_data.get("title")
+            except Exception:
+                pass
+
+        if milestone_str:
+            milestone_slug = normalize_milestone_slug(milestone_str)
+            target_branch = f"factory/{milestone_slug}"
+            feature_name = milestone_slug
+        else:
+            milestone_slug = None
+            target_branch = f"factory/issue-{issue_val}"
+            feature_name = f"issue-{issue_val}"
+
+        job, preview_state, effective_preview_url = await _ensure_sandbox_and_dispatch_job(
+            repo=repo,
+            feature=feature_name,
+            issue_number=issue_val,
+            model=req.model,
+            vm=req.vm,
+            target_branch=target_branch,
+        )
+
+        # Structured execution card persisted to SQLite chat_messages
+        if issue_val is not None and milestone_slug:
+            card_content = f"Dispatched issue #{issue_val} for milestone '{milestone_slug}' on branch '{target_branch}'."
+        elif issue_val is not None:
+            card_content = f"Dispatched standalone issue #{issue_val} on branch '{target_branch}'."
+        else:
+            card_content = f"Dispatched milestone batch for '{milestone_slug}' on branch '{target_branch}'."
+
+        turn_data = {
+            "type": "dispatch_card",
+            "job_id": job.id,
+            "issue_number": issue_val,
+            "milestone_slug": milestone_slug,
+            "target_branch": target_branch,
+            "preview_url": effective_preview_url,
+        }
+
+        db.save_chat_message(
+            repo=repo,
+            role="assistant",
+            content=card_content,
+            milestone_slug=milestone_slug,
+            issue_number=issue_val if isinstance(issue_val, int) else None,
+            turn_data=turn_data,
+        )
+
+        return {
+            "accepted": True,
+            "job": job.to_dict(),
+            "issue_number": issue_val,
+            "milestone_slug": milestone_slug,
+            "branch": target_branch,
+            "target_branch": target_branch,
+            "preview_url": effective_preview_url,
+            "preview": preview_state.to_dict() if preview_state else None,
+            "stage": job.stage.value,
         }
 
     @app.get("/api/studio/repos/{repo}/messages")
