@@ -12,6 +12,7 @@ import {
   Loader2,
   Terminal,
   ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
 import { PreviewProgressStepper } from "./PreviewProgressStepper";
@@ -27,6 +28,9 @@ interface LivePreviewProps {
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
   onRetryPreview?: () => void;
+  onReconnectPreview?: () => void;
+  onRefresh?: () => void;
+  refreshKey?: number;
   isLaunching?: boolean;
 }
 
@@ -40,6 +44,9 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   onLaunchPreview,
   onStopPreview,
   onRetryPreview,
+  onReconnectPreview,
+  onRefresh,
+  refreshKey,
   isLaunching = false,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
@@ -53,8 +60,18 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
     }
   }, [status]);
 
+  // Synchronize external refreshKey signal (e.g. from SSE preview_refresh)
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      setReloadKey((prev) => prev + 1);
+    }
+  }, [refreshKey]);
+
   const handleReload = () => {
     setReloadKey((prev) => prev + 1);
+    if (onRefresh) {
+      onRefresh();
+    }
   };
 
   const handleRetry = () => {
@@ -176,10 +193,12 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
             type="button"
             onClick={handleReload}
             disabled={!previewUrl}
-            className="p-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            title="Reload preview"
+            className="flex items-center space-x-1 px-2 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            title="Refresh preview"
+            aria-label="Refresh"
           >
             <RotateCw className="w-3.5 h-3.5" />
+            <span data-testid="refresh-preview-btn" className="font-medium">Refresh</span>
           </button>
 
           {previewUrl && (
@@ -216,7 +235,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
         id="preview-frame-wrapper"
         className="flex-1 flex flex-col items-center justify-center bg-slate-950 p-4 overflow-auto min-h-0"
       >
-        {previewUrl && status !== "PROVISIONING" && status !== "FAILED" ? (
+        {previewUrl && status !== "PROVISIONING" && status !== "FAILED" && status !== "STOPPED" ? (
           <div
             className="preview-viewport-wrapper h-full w-full transition-all duration-300 rounded-lg border border-slate-800 shadow-2xl bg-white overflow-hidden flex flex-col mx-auto"
             style={{ width: getViewportWidth() }}
@@ -271,6 +290,30 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
                 <span>Retry Startup</span>
               </button>
             </div>
+          </div>
+        ) : status === "STOPPED" ? (
+          <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
+            <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400 mb-4">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-200 mb-1">
+              Sandbox Disconnected
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed mb-4">
+              The Unified Studio Sandbox stopped or reached its 30-minute idle timeout.
+            </p>
+            {(onReconnectPreview || onLaunchPreview) && (
+              <button
+                data-testid="reconnect-preview-btn"
+                id="btn-reconnect-preview"
+                type="button"
+                onClick={onReconnectPreview || onLaunchPreview}
+                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Reconnect Environment</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">

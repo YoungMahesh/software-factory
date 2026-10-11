@@ -11,6 +11,9 @@ import {
   X,
   Play,
   Square,
+  AlertTriangle,
+  RotateCw,
+  GitBranch,
 } from "lucide-react";
 import { Repo, Job, ChatMessage, PreviewState } from "../types";
 import { LivePreview } from "../components/LivePreview";
@@ -33,6 +36,8 @@ interface StudioViewProps {
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
   onRetryPreview?: () => void;
+  onReconnectPreview?: () => void;
+  refreshKey?: number;
   isLaunchingPreview?: boolean;
 }
 
@@ -52,6 +57,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
   onLaunchPreview,
   onStopPreview,
   onRetryPreview,
+  onReconnectPreview,
+  refreshKey,
   isLaunchingPreview = false,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
@@ -61,9 +68,25 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [newAppError, setNewAppError] = useState<string | null>(null);
   const [isCreatingApp, setIsCreatingApp] = useState<boolean>(false);
 
+  const isDisconnected = previewState?.status === "STOPPED";
+
+  const isExecutingTurn = Boolean(
+    isSending || (activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))
+  );
+
+  const isInputLocked = !selectedRepo || isExecutingTurn || isDisconnected;
+
+  const handleReconnect = () => {
+    if (onReconnectPreview) {
+      onReconnectPreview();
+    } else if (onLaunchPreview) {
+      onLaunchPreview();
+    }
+  };
+
   const handlePromptSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || !selectedRepo || isSending) return;
+    if (!prompt.trim() || isInputLocked) return;
     onSendPrompt(prompt.trim());
     setPrompt("");
   };
@@ -71,7 +94,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!prompt.trim() || !selectedRepo || isSending) return;
+      if (!prompt.trim() || isInputLocked) return;
       onSendPrompt(prompt.trim());
       setPrompt("");
     }
@@ -345,16 +368,36 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           {/* Prompt Composer */}
-          <div className="p-3.5 bg-slate-900/80 border-t border-slate-800">
+          <div className="p-3.5 bg-slate-900/80 border-t border-slate-800 space-y-2">
+            {isExecutingTurn && (
+              <div
+                data-testid="in-flight-indicator"
+                id="studio-in-flight-indicator"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-xs text-indigo-300 font-medium animate-pulse"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400 shrink-0" />
+                <span>
+                  Assembly line turn in progress ({activeJob?.stage || "DISPATCHING"})...
+                </span>
+              </div>
+            )}
+
             <form id="studio-prompt-form" onSubmit={handlePromptSubmit} className="space-y-2">
               <div className="relative">
                 <textarea
                   id="studio-prompt-input"
+                  data-testid="studio-prompt-input"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Describe what you want to build... (Enter to send)"
-                  disabled={!selectedRepo || isSending}
+                  placeholder={
+                    isDisconnected
+                      ? "Sandbox disconnected. Click 'Reconnect Environment' to resume chatting."
+                      : isExecutingTurn
+                      ? "Assembly line turn in progress..."
+                      : "Describe what you want to build... (Enter to send)"
+                  }
+                  disabled={isInputLocked}
                   rows={3}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-50"
                 />
@@ -368,10 +411,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 <button
                   id="btn-studio-send"
                   type="submit"
-                  disabled={!prompt.trim() || !selectedRepo || isSending}
+                  disabled={!prompt.trim() || isInputLocked}
                   className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-semibold shadow-sm transition-colors"
                 >
-                  {isSending ? (
+                  {isExecutingTurn ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <Send className="w-3.5 h-3.5" />
@@ -395,6 +438,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
             onLaunchPreview={onLaunchPreview}
             onStopPreview={onStopPreview}
             onRetryPreview={onRetryPreview || onLaunchPreview}
+            onReconnectPreview={handleReconnect}
+            refreshKey={refreshKey}
             isLaunching={isLaunchingPreview}
           />
         </div>
@@ -477,6 +522,58 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sandbox Disconnected Dialog */}
+      {isDisconnected && (
+        <div
+          id="modal-sandbox-disconnected"
+          data-testid="sandbox-disconnected-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="disconnected-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
+        >
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3
+                id="disconnected-dialog-title"
+                data-testid="sandbox-disconnected-title"
+                className="text-base font-semibold text-slate-100"
+              >
+                Sandbox Disconnected
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              The Unified Studio Sandbox reached its 30-minute idle timeout or entered a stopped state.
+              Your chat conversation history has been preserved. Reconnect to rehydrate the environment tracked to the active remote branch and resume live preview.
+            </p>
+            {previewState?.branch && (
+              <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono">
+                <GitBranch className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span>Active branch: <strong className="text-indigo-300">{previewState.branch}</strong></span>
+              </div>
+            )}
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                id="btn-reconnect-environment"
+                data-testid="reconnect-environment-btn"
+                type="button"
+                onClick={handleReconnect}
+                disabled={isLaunchingPreview}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+              >
+                {isLaunchingPreview ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RotateCw className="w-3.5 h-3.5" />
+                )}
+                <span>Reconnect Environment</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -34,11 +34,49 @@ describe("LivePreview", () => {
     expect(frameWrapper).toHaveStyle({ width: "100%" });
   });
 
-  it("renders reload button", () => {
-    render(<LivePreview previewUrl="https://3000.mahesh0.dev" />);
-    const reloadBtn = screen.getByTestId("reload-preview-btn");
-    expect(reloadBtn).toBeInTheDocument();
-    fireEvent.click(reloadBtn);
+  it("renders explicit 'Refresh' button in toolbar that reloads iframe DOM", () => {
+    const handleRefresh = vi.fn();
+    render(
+      <LivePreview
+        previewUrl="https://3000.mahesh0.dev"
+        onRefresh={handleRefresh}
+      />
+    );
+    const refreshBtn = screen.getByRole("button", { name: /Refresh/i });
+    expect(refreshBtn).toBeInTheDocument();
+    expect(refreshBtn).toHaveTextContent("Refresh");
+
+    const iframeBefore = screen.getByTitle("Live Application Preview");
+    expect(iframeBefore).toBeInTheDocument();
+
+    fireEvent.click(refreshBtn);
+    expect(handleRefresh).toHaveBeenCalledTimes(1);
+
+    const iframeAfter = screen.getByTitle("Live Application Preview");
+    expect(iframeAfter).toBeInTheDocument();
+  });
+
+  it("automatically reloads iframe DOM when refreshKey prop updates", () => {
+    const { rerender } = render(
+      <LivePreview
+        previewUrl="https://3000.mahesh0.dev"
+        refreshKey={0}
+      />
+    );
+
+    const iframeBefore = screen.getByTitle("Live Application Preview");
+    expect(iframeBefore).toBeInTheDocument();
+
+    // Trigger event-driven reload by updating refreshKey prop
+    rerender(
+      <LivePreview
+        previewUrl="https://3000.mahesh0.dev"
+        refreshKey={1}
+      />
+    );
+
+    const iframeAfter = screen.getByTitle("Live Application Preview");
+    expect(iframeAfter).toBeInTheDocument();
   });
 
   it("renders 'Launch Live Preview' CTA when no preview is active and triggers onLaunchPreview", () => {
@@ -97,6 +135,28 @@ describe("LivePreview", () => {
     );
 
     expect(screen.queryByTestId("stop-preview-btn")).toBeNull();
+  });
+
+  it("renders disconnected state and Reconnect button when status is STOPPED", () => {
+    const handleReconnect = vi.fn();
+    render(
+      <LivePreview
+        previewUrl="https://sandbox-3000.modal.host"
+        status="STOPPED"
+        branch="factory/nav-tabs"
+        onReconnectPreview={handleReconnect}
+      />
+    );
+
+    expect(screen.getByText("Sandbox Disconnected")).toBeInTheDocument();
+    expect(screen.getByText(/30-minute idle timeout/i)).toBeInTheDocument();
+
+    const reconnectBtn = screen.getByTestId("reconnect-preview-btn");
+    expect(reconnectBtn).toBeInTheDocument();
+    expect(reconnectBtn).toHaveTextContent(/Reconnect Environment/i);
+
+    fireEvent.click(reconnectBtn);
+    expect(handleReconnect).toHaveBeenCalledTimes(1);
   });
 
   it("renders 3-stage progress stepper when status is PROVISIONING", () => {

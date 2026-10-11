@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { StudioView } from "./StudioView";
 
@@ -239,5 +239,185 @@ describe("StudioView", () => {
     fireEvent.click(retryButtons[0]);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
+
+  it("locks prompt input and displays in-flight status indicator while assembly line turn is executing", () => {
+    const handleSend = vi.fn();
+    const runningJob = {
+      id: "job-turn-1",
+      repo: "cool-app",
+      feature: "auth",
+      issue: "1",
+      model: "deepseek-v4.1-flash",
+      vm: false,
+      dev: true,
+      status: "RUNNING" as const,
+      stage: "CODER" as const,
+      created_at: Date.now(),
+      started_at: Date.now(),
+      ended_at: null,
+      exit_code: null,
+      error_message: null,
+      logs_count: 10,
+    };
+
+    render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={runningJob}
+        messages={[]}
+        onSendPrompt={handleSend}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+      />
+    );
+
+    // Verify in-flight status indicator is visible
+    const inFlightIndicator = screen.getByTestId("in-flight-indicator");
+    expect(inFlightIndicator).toBeInTheDocument();
+    expect(inFlightIndicator).toHaveTextContent(/in progress|CODER/i);
+
+    // Verify prompt textarea and send button are disabled
+    const textarea = screen.getByTestId("studio-prompt-input");
+    expect(textarea).toBeDisabled();
+
+    const sendBtn = screen.getByRole("button", { name: /Send/i });
+    expect(sendBtn).toBeDisabled();
+
+    // Verify prompt submission is prevented
+    fireEvent.change(textarea, { target: { value: "Concurrent prompt" } });
+    fireEvent.click(sendBtn);
+    expect(handleSend).not.toHaveBeenCalled();
+  });
+
+  it("displays explicit 'Sandbox Disconnected' dialog on STOPPED status, preserves chat history, and triggers onReconnectPreview", () => {
+    const handleReconnect = vi.fn();
+    const handleSend = vi.fn();
+
+    const initialMessages = [
+      {
+        id: "m-user-1",
+        role: "user" as const,
+        text: "Please add a dashboard overview component",
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: "m-assistant-1",
+        role: "assistant" as const,
+        text: "Generated dashboard overview component in src/components/Dashboard.tsx",
+        timestamp: Date.now() - 30000,
+      },
+    ];
+
+    render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={initialMessages}
+        onSendPrompt={handleSend}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "STOPPED",
+          branch: "factory/dashboard-overview",
+          preview_url: "https://sandbox-3000.modal.host",
+        }}
+        onReconnectPreview={handleReconnect}
+      />
+    );
+
+    // 1. Verify "Sandbox Disconnected" dialog is displayed
+    const dialog = screen.getByTestId("sandbox-disconnected-dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("Sandbox Disconnected")).toBeInTheDocument();
+    expect(within(dialog).getByText(/30-minute idle timeout|stopped state/i)).toBeInTheDocument();
+
+    // 2. Verify chat history is fully preserved across disconnection
+    expect(screen.getByText("Please add a dashboard overview component")).toBeInTheDocument();
+    expect(screen.getByText("Generated dashboard overview component in src/components/Dashboard.tsx")).toBeInTheDocument();
+
+    // 3. Verify prompt input and send button are disabled in disconnected state
+    const textarea = screen.getByTestId("studio-prompt-input");
+    expect(textarea).toBeDisabled();
+    const sendBtn = screen.getByRole("button", { name: /Send/i });
+    expect(sendBtn).toBeDisabled();
+
+    // 4. Verify clicking "Reconnect Environment" triggers onReconnectPreview
+    const reconnectBtn = within(dialog).getByTestId("reconnect-environment-btn");
+    expect(reconnectBtn).toBeInTheDocument();
+    expect(reconnectBtn).toHaveTextContent(/Reconnect Environment/i);
+
+    fireEvent.click(reconnectBtn);
+    expect(handleReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads preview iframe when manual Refresh button is clicked or refreshKey prop changes", () => {
+    const { rerender } = render(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "SERVING",
+          stage: "SERVING",
+          branch: "factory/feature-1",
+          preview_url: "https://sandbox-3000.modal.host",
+        }}
+        refreshKey={0}
+      />
+    );
+
+    const initialIframe = screen.getByTitle("Live Application Preview");
+    expect(initialIframe).toBeInTheDocument();
+
+    // Click explicit toolbar Refresh button
+    const refreshBtn = screen.getByTestId("reload-preview-btn");
+    fireEvent.click(refreshBtn);
+
+    const reloadedIframe = screen.getByTitle("Live Application Preview");
+    expect(reloadedIframe).toBeInTheDocument();
+    expect(reloadedIframe).not.toBe(initialIframe);
+
+    // Update refreshKey prop (simulating telemetry preview_refresh event)
+    rerender(
+      <StudioView
+        repos={mockRepos}
+        selectedRepo="cool-app"
+        onSelectRepo={vi.fn()}
+        onCreateRepo={vi.fn()}
+        activeJob={null}
+        messages={[]}
+        onSendPrompt={vi.fn()}
+        onCancelJob={vi.fn()}
+        onSwitchToConsole={vi.fn()}
+        previewState={{
+          repo: "cool-app",
+          status: "SERVING",
+          stage: "SERVING",
+          branch: "factory/feature-1",
+          preview_url: "https://sandbox-3000.modal.host",
+        }}
+        refreshKey={1}
+      />
+    );
+
+    const streamReloadedIframe = screen.getByTitle("Live Application Preview");
+    expect(streamReloadedIframe).toBeInTheDocument();
+    expect(streamReloadedIframe).not.toBe(reloadedIframe);
+  });
 });
+
 

@@ -7,6 +7,7 @@ export interface UseJobStreamResult {
   events: AgentEvent[];
   isConnected: boolean;
   clearLogs: () => void;
+  previewRefreshCount: number;
 }
 
 export function useJobStream(jobId: string | null): UseJobStreamResult {
@@ -14,6 +15,7 @@ export function useJobStream(jobId: string | null): UseJobStreamResult {
   const [logs, setLogs] = useState<string[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [previewRefreshCount, setPreviewRefreshCount] = useState<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -22,6 +24,7 @@ export function useJobStream(jobId: string | null): UseJobStreamResult {
       setLogs([]);
       setEvents([]);
       setIsConnected(false);
+      setPreviewRefreshCount(0);
       return;
     }
 
@@ -69,6 +72,12 @@ export function useJobStream(jobId: string | null): UseJobStreamResult {
           setJob((prev) => (prev ? { ...prev, status: newStatus } : null));
           return;
         }
+
+        // 6. Preview Refresh trigger from finished agent turn
+        if (payload.event === "preview_refresh") {
+          setPreviewRefreshCount((prev) => prev + 1);
+          return;
+        }
       } catch (err) {
         console.error("Failed to parse SSE payload:", err, e.data);
       }
@@ -89,5 +98,5 @@ export function useJobStream(jobId: string | null): UseJobStreamResult {
     setLogs([]);
   };
 
-  return { job, logs, events, isConnected, clearLogs };
+  return { job, logs, events, isConnected, clearLogs, previewRefreshCount };
 }

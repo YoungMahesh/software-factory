@@ -32,6 +32,7 @@ export const App: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [isLaunchingPreview, setIsLaunchingPreview] = useState<boolean>(false);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
 
   // Synchronize activeTab with URL history
   const switchTab = (tab: "studio" | "console") => {
@@ -53,7 +54,13 @@ export const App: React.FC = () => {
   }, []);
 
   // Real-time telemetry & logs stream
-  const { job: streamedJob, logs, events, clearLogs } = useJobStream(activeJobId);
+  const { job: streamedJob, logs, events, clearLogs, previewRefreshCount } = useJobStream(activeJobId);
+
+  useEffect(() => {
+    if (previewRefreshCount > 0) {
+      setPreviewRefreshKey((prev) => prev + 1);
+    }
+  }, [previewRefreshCount]);
 
   // Sync streamed job state to activeJob and jobs list
   useEffect(() => {
@@ -246,6 +253,8 @@ export const App: React.FC = () => {
           if (payload.status === "STOPPED" || payload.status === "FAILED") {
             es?.close();
           }
+        } else if (payload.event === "preview_refresh") {
+          setPreviewRefreshKey((prev) => prev + 1);
         }
       } catch (e) {
         // ignore parse error or ping
@@ -272,6 +281,12 @@ export const App: React.FC = () => {
     } finally {
       setIsLaunchingPreview(false);
     }
+  };
+
+  const handleReconnectPreview = async () => {
+    if (!selectedRepo || isLaunchingPreview) return;
+    const targetBranch = previewState?.branch || (activeJob?.feature ? `factory/${activeJob.feature}` : undefined);
+    await handleLaunchPreview(targetBranch);
   };
 
   const handleStopPreview = async () => {
@@ -478,6 +493,8 @@ export const App: React.FC = () => {
             onLaunchPreview={handleLaunchPreview}
             onStopPreview={handleStopPreview}
             onRetryPreview={handleLaunchPreview}
+            onReconnectPreview={handleReconnectPreview}
+            refreshKey={previewRefreshKey}
             isLaunchingPreview={isLaunchingPreview}
           />
         ) : (
