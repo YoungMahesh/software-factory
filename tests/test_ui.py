@@ -2403,13 +2403,212 @@ class TestSyncTargetRepoSkills(unittest.TestCase):
             mock_scaffold.assert_called_once()
 
 
+class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
+    def setUp(self):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import JobRegistry, PreviewRegistry
 
+        self.db = StudioDatabase(":memory:")
+        self.registry = JobRegistry(db=self.db)
+        self.preview_registry = PreviewRegistry(db=self.db)
+        self.app = create_app(
+            registry=self.registry,
+            preview_reg=self.preview_registry,
+            db=self.db,
+        )
+        self.client = TestClient(self.app)
+        self.client.auth = ("admin", "admin")
 
+    def tearDown(self):
+        self.db.close()
 
+    def test_get_chat_messages_empty(self):
+        resp = self.client.get("/api/studio/repos/empty-repo/messages")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "empty-repo")
+        self.assertEqual(data["messages"], [])
 
+    def test_prompt_submission_fast_guard_rejection_recorded(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test-repo",
+                "prompt": "Set up a PostgreSQL database with schema migrations",
+                "grill": True,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["accepted"])
+        self.assertIsNotNone(data["refusal"])
 
+        # Check recorded messages in DB via endpoint
+        get_resp = self.client.get("/api/studio/repos/test-repo/messages")
+        self.assertEqual(get_resp.status_code, 200)
+        messages = get_resp.json()["messages"]
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[0]["content"], "Set up a PostgreSQL database with schema migrations")
+        self.assertEqual(messages[1]["role"], "assistant")
+        self.assertEqual(messages[1]["content"], data["refusal"])
+        self.assertIsNotNone(messages[1]["turn_data"])
+        self.assertTrue(messages[1]["turn_data"]["refusal"])
 
+    def test_prompt_submission_grill_turn_recorded(self):
+        history = [
+            {"role": "user", "text": "Build an interactive analytics chart dashboard"},
+            {
+                "role": "assistant",
+                "text": "❓ **Q1** - **Route Placement**: Where should this route go?\n➡️ app/routes/analytics.tsx",
+            },
+        ]
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "auth-app",
+                "prompt": "Accept recommended defaults and build the feature",
+                "grill": True,
+                "history": history,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["accepted"])
+        self.assertIsNotNone(data["turn"])
 
+        # Check recorded messages
+        get_resp = self.client.get("/api/studio/repos/auth-app/messages")
+        self.assertEqual(get_resp.status_code, 200)
+        messages = get_resp.json()["messages"]
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[0]["content"], "Accept recommended defaults and build the feature")
+        self.assertEqual(messages[1]["role"], "assistant")
+        self.assertEqual(messages[1]["turn_data"]["type"], "ready_for_approval")
+        self.assertIsNotNone(messages[1]["draft_adr"])
+        self.assertIn("docs/adr/", messages[1]["draft_adr"]["filename"])
 
+    def test_approve_plan_records_messages_and_job(self):
+        fake_milestone = {"number": 1, "slug": "auth-v1", "title": "Auth"}
+        fake_issue = {"number": 42, "title": "Implement OAuth"}
 
+        mock_sandbox = MagicMock()
+        mock_sandbox.poll.return_value = None
+        self.preview_registry._previews["auth-app"] = PreviewState(
+            repo="auth-app",
+            status=PreviewStatus.SERVING,
+            preview_url="https://sb-3000.modal.host",
+            sandbox=mock_sandbox,
+            sandbox_id="sb-3000",
+        )
+
+        with patch("factory.ui.app.resolve_or_create_milestone", return_value=fake_milestone), \
+             patch("factory.ui.app.commit_approved_adr_to_branch") as mock_commit_adr, \
+             patch("factory.ui.app.synthesize_and_create_issue", return_value=fake_issue), \
+             patch.object(self.registry, "start_job"):
+
+            mock_commit_adr.return_value = {
+                "status": "committed",
+                "branch": "factory/auth-v1",
+                "commit_sha": "abc1234",
+                "files": ["docs/adr/0001-auth.md"],
+            }
+
+            resp = self.client.post(
+                "/api/studio/approve",
+                json={
+                    "repo": "auth-app",
+                    "prompt": "Approved OAuth 2.0 architecture",
+                    "milestone_title": "Auth",
+                    "draft_adr": {"title": "ADR 01", "content": "ADR body"},
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            job_id = data["job"]["id"]
+
+            # Check recorded message
+            get_resp = self.client.get("/api/studio/repos/auth-app/messages")
+            self.assertEqual(get_resp.status_code, 200)
+            messages = get_resp.json()["messages"]
+            self.assertGreaterEqual(len(messages), 1)
+            last_msg = messages[-1]
+            self.assertEqual(last_msg["role"], "assistant")
+            self.assertEqual(last_msg["milestone_slug"], "auth-v1")
+            self.assertEqual(last_msg["issue_number"], 42)
+            self.assertEqual(last_msg["turn_data"]["status"], "approved")
+
+            # Check job in database
+            db_job = self.db.get_job(job_id)
+            self.assertIsNotNone(db_job)
+            self.assertEqual(db_job["repo"], "auth-app")
+            self.assertEqual(db_job["issue"], "42")
+
+    def test_delete_chat_messages_endpoint(self):
+        # Seed message
+        self.db.save_chat_message(
+            repo="clean-repo",
+            role="user",
+            content="Hello world",
+        )
+        self.db.save_chat_message(
+            repo="other-repo",
+            role="user",
+            content="Keep this",
+        )
+
+        resp = self.client.delete("/api/studio/repos/clean-repo/messages")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "clean-repo")
+        self.assertEqual(data["deleted"], 1)
+        self.assertTrue(data["success"])
+
+        # Verify clean-repo messages are gone
+        get_resp = self.client.get("/api/studio/repos/clean-repo/messages")
+        self.assertEqual(len(get_resp.json()["messages"]), 0)
+
+        # Verify other-repo messages remain
+        other_resp = self.client.get("/api/studio/repos/other-repo/messages")
+        self.assertEqual(len(other_resp.json()["messages"]), 1)
+
+    def test_rehydration_after_simulated_server_restart(self):
+        # Save chat messages and job
+        self.db.save_chat_message(
+            repo="persist-repo",
+            role="user",
+            content="Persisted prompt",
+        )
+        job = self.registry.create_job(
+            repo="persist-repo",
+            feature="feature-x",
+            issue="1",
+        )
+
+        # Simulate restart: create new registry and app sharing the same db
+        from factory.ui.registry import JobRegistry, PreviewRegistry
+        new_registry = JobRegistry(db=self.db)
+        new_preview_reg = PreviewRegistry(db=self.db)
+        new_app = create_app(
+            registry=new_registry,
+            preview_reg=new_preview_reg,
+            db=self.db,
+        )
+        new_client = TestClient(new_app)
+        new_client.auth = ("admin", "admin")
+
+        # Chat history is retained
+        chat_resp = new_client.get("/api/studio/repos/persist-repo/messages")
+        self.assertEqual(chat_resp.status_code, 200)
+        messages = chat_resp.json()["messages"]
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["content"], "Persisted prompt")
+
+        # Jobs are retained
+        jobs_resp = new_client.get("/api/jobs")
+        self.assertEqual(jobs_resp.status_code, 200)
+        jobs = jobs_resp.json()["jobs"]
+        self.assertIn(job.id, [j["id"] for j in jobs])
 

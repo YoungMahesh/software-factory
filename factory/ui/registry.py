@@ -91,6 +91,8 @@ class FactoryJob:
     is_in_sandbox_exec: bool = False
     _cancelled: bool = False
     _line_buffer: str = ""
+    _next_log_line: int = 1
+    _next_event_seq: int = 1
 
     def add_log(self, line: str, max_lines: int) -> None:
         """Appends a log line to the logs ring buffer."""
@@ -141,12 +143,73 @@ class JobRegistry:
         max_log_lines: int = 10000,
         max_events: int = 10000,
         preview_registry: Any = None,
+        db: Any = None,
     ):
         self._jobs: dict[str, FactoryJob] = {}
         self._lock = threading.RLock()
         self.max_log_lines = max_log_lines
         self.max_events = max_events
         self.preview_registry = preview_registry
+        self.db = db
+
+    def _persist_job(self, job: FactoryJob) -> None:
+        """Persists the job record through to the database if available."""
+        if self.db is not None:
+            try:
+                self.db.save_job(job.to_dict())
+            except Exception:
+                pass
+
+    def rehydrate(self) -> None:
+        """Rehydrates recent jobs from the database on startup."""
+        if self.db is None:
+            return
+        recent_jobs = self.db.get_recent_jobs(limit=50)
+        with self._lock:
+            for j_dict in recent_jobs:
+                j_id = j_dict["id"]
+                if j_id not in self._jobs:
+                    status_val = j_dict.get("status", "QUEUED")
+                    try:
+                        status = JobStatus(status_val)
+                    except ValueError:
+                        status = JobStatus.QUEUED
+
+                    stage_val = j_dict.get("stage", "IDLE")
+                    try:
+                        stage = JobStage(stage_val)
+                    except ValueError:
+                        stage = JobStage.IDLE
+
+                    job = FactoryJob(
+                        id=j_dict["id"],
+                        repo=j_dict["repo"],
+                        feature=j_dict["feature"],
+                        issue=j_dict["issue"],
+                        model=j_dict["model"],
+                        vm=j_dict["vm"],
+                        dev=j_dict["dev"],
+                        preview_url=j_dict.get("preview_url"),
+                        status=status,
+                        stage=stage,
+                        created_at=j_dict.get("created_at", time.time()),
+                        started_at=j_dict.get("started_at"),
+                        ended_at=j_dict.get("ended_at"),
+                        exit_code=j_dict.get("exit_code"),
+                        error_message=j_dict.get("error_message"),
+                    )
+
+                    # Rehydrate logs
+                    logs = self.db.get_console_logs(job.id)
+                    job.logs = [l["text"] for l in logs]
+                    job._next_log_line = len(job.logs) + 1
+
+                    # Rehydrate telemetry events
+                    events = self.db.get_telemetry_events(job.id)
+                    job.events = events
+                    job._next_event_seq = len(job.events) + 1
+
+                    self._jobs[job.id] = job
 
     def _get_effective_preview_registry(self) -> Any:
         if self.preview_registry is not None:
@@ -184,6 +247,7 @@ class JobRegistry:
         )
         with self._lock:
             self._jobs[job_id] = job
+        self._persist_job(job)
         return job
 
     def get_job(self, job_id: str) -> FactoryJob | None:
@@ -219,8 +283,15 @@ class JobRegistry:
         if job.stage != stage:
             job.stage = stage
             self._broadcast(job, {"event": "stage", "stage": stage.value})
+            self._persist_job(job)
 
-    def append_log(self, job_id: str, line: str, flush: bool = False) -> None:
+    def append_log(
+        self,
+        job_id: str,
+        line: str,
+        flush: bool = False,
+        stream_type: str = "stdout",
+    ) -> None:
         """Appends log text or structured telemetry, detects stages, and notifies listeners.
 
         Reassembles fragmented chunks, detects single-line JSON telemetry envelopes prefixed
@@ -269,6 +340,13 @@ class JobRegistry:
                         continue
 
                     job.add_event(event_obj, self.max_events)
+                    seq = getattr(job, "_next_event_seq", len(job.events))
+                    job._next_event_seq = seq + 1
+                    if self.db is not None:
+                        try:
+                            self.db.enqueue_event(job.id, seq, event_obj)
+                        except Exception:
+                            pass
 
                     # Stage transition detection from structured telemetry
                     if event_obj.get("type") == "stage":
@@ -293,6 +371,14 @@ class JobRegistry:
                             break
 
                     job.add_log(raw_line, self.max_log_lines)
+                    line_num = getattr(job, "_next_log_line", len(job.logs))
+                    job._next_log_line = line_num + 1
+                    if self.db is not None:
+                        try:
+                            self.db.enqueue_log(job.id, line_num, raw_line, stream_type=stream_type)
+                        except Exception:
+                            pass
+
                     payload = {"event": "log", "data": raw_line}
                     self._broadcast(job, payload)
 
@@ -328,6 +414,7 @@ class JobRegistry:
             job.status = JobStatus.CANCELLED
             job.ended_at = time.time()
             sandbox_to_terminate = job.sandbox if not job.is_in_sandbox_exec else None
+            self._persist_job(job)
 
         if sandbox_to_terminate is not None:
             try:
@@ -353,19 +440,19 @@ class JobRegistry:
     def _stream_and_wait(self, job: FactoryJob, stream_src: Any) -> int:
         import concurrent.futures
 
-        def stream_pipe(reader):
+        def stream_pipe(reader, stream_type="stdout"):
             try:
                 for chunk in reader:
                     if job._cancelled:
                         break
                     text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
-                    self.append_log(job.id, text)
+                    self.append_log(job.id, text, stream_type=stream_type)
             except Exception:
                 pass
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            f_out = executor.submit(stream_pipe, stream_src.stdout)
-            f_err = executor.submit(stream_pipe, stream_src.stderr)
+            f_out = executor.submit(stream_pipe, stream_src.stdout, "stdout")
+            f_err = executor.submit(stream_pipe, stream_src.stderr, "stderr")
             concurrent.futures.wait([f_out, f_err])
 
         if hasattr(stream_src, "wait"):
@@ -392,6 +479,7 @@ class JobRegistry:
                     job.status = JobStatus.FAILED
                 self._broadcast(job, {"event": "status", "status": job.status.value})
                 self._broadcast(job, {"event": "stage", "stage": job.stage.value})
+                self._persist_job(job)
 
                 if exit_code == 0 and is_in_sandbox:
                     refresh_payload = {
@@ -415,6 +503,7 @@ class JobRegistry:
                 return
             job.status = JobStatus.RUNNING
             job.started_at = time.time()
+            self._persist_job(job)
 
         active_sandbox, preview_url = self.get_active_sandbox(job.repo)
 
@@ -483,6 +572,7 @@ class JobRegistry:
                         job.error_message = str(e)
                         job.ended_at = time.time()
                         self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
+                        self._persist_job(job)
                         self.append_log(job_id, f"\n❌ [ERROR] In-sandbox execution failed: {e}\n")
             return
 
@@ -532,6 +622,7 @@ class JobRegistry:
                     job.error_message = str(e)
                     job.ended_at = time.time()
                     self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
+                    self._persist_job(job)
                     self.append_log(job_id, f"\n❌ [ERROR] Execution failed: {e}\n")
 
 
@@ -691,10 +782,50 @@ def resolve_active_preview_branch(repo_name: str) -> str:
 class PreviewRegistry:
     """Thread-safe manager for Dedicated Preview Sandboxes keyed by repository."""
 
-    def __init__(self, max_log_lines: int = 5000):
+    def __init__(self, max_log_lines: int = 5000, db: Any = None):
         self._previews: dict[str, PreviewState] = {}
         self._lock = threading.RLock()
         self.max_log_lines = max_log_lines
+        self.db = db
+
+    def _persist_preview(self, preview: PreviewState) -> None:
+        """Persists the preview state through to the database if available."""
+        if self.db is not None:
+            try:
+                self.db.save_preview(preview.to_dict())
+            except Exception:
+                pass
+
+    def rehydrate(self) -> None:
+        """Rehydrates active and previous preview states from the database."""
+        if self.db is None:
+            return
+        all_previews = self.db.get_all_previews()
+        with self._lock:
+            for p_dict in all_previews:
+                repo = p_dict["repo"]
+                if repo not in self._previews:
+                    status_val = p_dict.get("status", "IDLE")
+                    try:
+                        status = PreviewStatus(status_val)
+                    except ValueError:
+                        status = PreviewStatus.IDLE
+
+                    stage_val = p_dict.get("stage", "IDLE")
+                    try:
+                        stage = PreviewStage(stage_val)
+                    except ValueError:
+                        stage = PreviewStage.IDLE
+
+                    state = PreviewState(
+                        repo=repo,
+                        branch=p_dict.get("branch", "main"),
+                        preview_url=p_dict.get("preview_url"),
+                        status=status,
+                        stage=stage,
+                        created_at=p_dict.get("updated_at", time.time()),
+                    )
+                    self._previews[repo] = state
 
     def get_preview(self, repo: str) -> PreviewState | None:
         """Retrieves current preview state for a repository."""
@@ -718,6 +849,7 @@ class PreviewRegistry:
                 started_at=time.time(),
             )
             self._previews[clean_repo] = preview
+        self._persist_preview(preview)
 
         thread = threading.Thread(
             target=self._run_preview_worker,
@@ -742,6 +874,7 @@ class PreviewRegistry:
             preview.status = PreviewStatus.STOPPED
             preview.ended_at = time.time()
             sandbox_to_terminate = preview.sandbox
+            self._persist_preview(preview)
             self._broadcast(preview, {"event": "status", "status": PreviewStatus.STOPPED.value})
 
         if sandbox_to_terminate is not None:
@@ -830,6 +963,7 @@ class PreviewRegistry:
             preview = self._previews.get(repo.strip())
             if preview:
                 preview.branch = branch
+                self._persist_preview(preview)
 
     def broadcast_refresh(self, repo: str) -> None:
         """Broadcasts a preview_refresh event to all preview listeners for the repository."""
@@ -857,6 +991,7 @@ class PreviewRegistry:
                     "status": PreviewStatus.SERVING.value,
                     "preview_url": preview.preview_url,
                 })
+            self._persist_preview(preview)
 
     def append_log(self, repo: str, line: str, flush: bool = False) -> None:
         """Appends log line to preview ring buffer, checks stage transitions, and broadcasts."""

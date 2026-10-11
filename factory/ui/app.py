@@ -31,6 +31,7 @@ from factory.ui.github import (
     synthesize_and_create_issue,
     validate_github_repo_name,
 )
+from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
 from factory.ui.guard import evaluate_prompt_intent
 from factory.ui.registry import (
@@ -87,8 +88,21 @@ class ApprovePlanRequest(BaseModel):
 def create_app(
     registry: JobRegistry = job_registry,
     preview_reg: PreviewRegistry = preview_registry,
+    db: StudioDatabase | None = None,
 ) -> FastAPI:
     """Creates and configures the FastAPI application."""
+    if db is None:
+        if getattr(registry, "db", None) is not None:
+            db = registry.db
+        elif registry is job_registry:
+            db = StudioDatabase()
+        else:
+            db = StudioDatabase(":memory:")
+    registry.db = db
+    preview_reg.db = db
+    registry.rehydrate()
+    preview_reg.rehydrate()
+
     app = FastAPI(
         title="Factory Studio",
         description="Interactive testing interface for Software Factory on software-factory-09-test",
@@ -233,9 +247,26 @@ def create_app(
         if not prompt:
             raise HTTPException(status_code=400, detail="Prompt is required.")
 
+        # Persist User Prompt
+        db.save_chat_message(
+            repo=repo,
+            role="user",
+            content=prompt,
+        )
+
         # 1. Fast Intent Classification Guard
         guard_result = evaluate_prompt_intent(prompt)
         if not guard_result.allowed:
+            db.save_chat_message(
+                repo=repo,
+                role="assistant",
+                content=guard_result.refusal_message or "Prompt rejected by intent guard.",
+                turn_data={
+                    "refusal": True,
+                    "reason": guard_result.reason,
+                    "category": guard_result.category,
+                },
+            )
             return {
                 "accepted": False,
                 "refusal": guard_result.refusal_message,
@@ -259,12 +290,19 @@ def create_app(
                 history=req.history,
                 model=req.model,
             )
+            turn_dict = turn.to_dict()
+            db.save_chat_message(
+                repo=repo,
+                role="assistant",
+                content=turn.summary or "Grilling turn response",
+                turn_data=turn_dict,
+            )
             return {
                 "accepted": True,
                 "refusal": None,
                 "reason": None,
                 "category": None,
-                "turn": turn.to_dict(),
+                "turn": turn_dict,
                 "job": None,
                 "issue": None,
                 "milestone": None,
@@ -297,6 +335,20 @@ def create_app(
             model=req.model,
             vm=req.vm,
             target_branch=target_branch,
+        )
+
+        db.save_chat_message(
+            repo=repo,
+            role="assistant",
+            content=f"Dispatched assembly line job for {milestone_slug} (Issue #{issue['number']})",
+            milestone_slug=milestone_slug,
+            issue_number=issue["number"],
+            turn_data={
+                "job_id": job.id,
+                "issue": issue,
+                "milestone": milestone,
+                "preview_url": effective_preview_url,
+            },
         )
 
         # 6. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
@@ -356,7 +408,24 @@ def create_app(
             target_branch=target_branch,
         )
 
-        # 5. Return response
+        # 5. Persist approved plan record to chat_messages
+        db.save_chat_message(
+            repo=repo,
+            role="assistant",
+            content=f"Plan approved for {milestone_slug} (Issue #{issue['number']}). Dispatched assembly line pipeline.",
+            milestone_slug=milestone_slug,
+            issue_number=issue["number"],
+            turn_data={
+                "status": "approved",
+                "job_id": job.id,
+                "branch": target_branch,
+                "draft_adr": req.draft_adr,
+                "issue": issue,
+                "milestone": milestone,
+            },
+        )
+
+        # 6. Return response
         return {
             "accepted": True,
             "job": job.to_dict(),
@@ -368,6 +437,22 @@ def create_app(
             "branch": target_branch,
             "draft_adr": req.draft_adr,
         }
+
+    @app.get("/api/studio/repos/{repo}/messages")
+    async def get_studio_messages(repo: str):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        messages = db.get_chat_messages(clean_repo)
+        return {"repo": clean_repo, "messages": messages}
+
+    @app.delete("/api/studio/repos/{repo}/messages")
+    async def delete_studio_messages(repo: str):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        deleted = db.delete_chat_messages(clean_repo)
+        return {"repo": clean_repo, "deleted": deleted, "success": True}
 
     @app.post("/api/studio/repos/{repo}/preview", status_code=201)
     async def launch_preview_endpoint(repo: str, req: LaunchPreviewRequest | None = None):
