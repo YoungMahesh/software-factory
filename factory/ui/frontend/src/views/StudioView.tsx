@@ -10,11 +10,10 @@ import {
   Play,
   Square,
 } from "lucide-react";
-import { Repo, Job, ChatMessage, PreviewState } from "../types";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
 import { ToolChip } from "../components/ToolChip";
-import { useStudioOptional } from "../context/StudioContext";
+import { useStudio } from "../context/StudioContext";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { NewAppModal } from "../components/NewAppModal";
@@ -22,49 +21,34 @@ import { DisconnectedModal } from "../components/DisconnectedModal";
 import { PromptComposer } from "../components/PromptComposer";
 
 export interface StudioViewProps {
-  repos?: Repo[];
-  selectedRepo?: string;
-  onSelectRepo?: (repo: string) => void;
-  onCreateRepo?: (params: { name: string; description?: string }) => Promise<void>;
-  activeJob?: Job | null;
-  messages?: ChatMessage[];
-  onSendPrompt?: (prompt: string) => void;
-  onCancelJob?: (jobId: string) => void;
-  onSwitchToConsole?: () => void;
-  onOpenDrawer?: (targetToolCallId?: string) => void;
-  isSending?: boolean;
-  previewState?: PreviewState | null;
-  onLaunchPreview?: () => void;
-  onStopPreview?: () => void;
-  onRetryPreview?: () => void;
-  onReconnectPreview?: () => void;
-  refreshKey?: number;
-  isLaunchingPreview?: boolean;
+  className?: string;
 }
 
-export const StudioView: React.FC<StudioViewProps> = (props) => {
-  const ctx = useStudioOptional();
-
-  const repos = props.repos ?? ctx?.repos ?? [];
-  const selectedRepo = props.selectedRepo ?? ctx?.selectedRepo ?? "";
-  const onSelectRepo = props.onSelectRepo ?? ctx?.onSelectRepo ?? (() => {});
-  const onCreateRepo = props.onCreateRepo ?? ctx?.onCreateRepo ?? (async () => {});
-  const activeJob = props.activeJob !== undefined ? props.activeJob : (ctx?.activeJob ?? null);
-  const messages = props.messages ?? ctx?.messages ?? [];
-  const onSendPrompt = props.onSendPrompt ?? ctx?.onSendPrompt ?? (() => {});
-  const onCancelJob = props.onCancelJob ?? ctx?.onCancelJob ?? (() => {});
-  const onSwitchToConsole = props.onSwitchToConsole ?? ctx?.onSwitchToConsole ?? (() => {});
-  const onOpenDrawer = props.onOpenDrawer ?? ctx?.onOpenDrawer;
-  const isSending = props.isSending ?? ctx?.isSending ?? false;
-  const previewState = props.previewState !== undefined ? props.previewState : (ctx?.previewState ?? null);
-  const onLaunchPreview = props.onLaunchPreview ?? ctx?.onLaunchPreview;
-  const onStopPreview = props.onStopPreview ?? ctx?.onStopPreview;
-  const onRetryPreview = props.onRetryPreview ?? ctx?.onRetryPreview;
-  const onReconnectPreview = props.onReconnectPreview ?? ctx?.onReconnectPreview;
-  const refreshKey = props.refreshKey ?? ctx?.refreshKey;
-  const isLaunchingPreview = props.isLaunchingPreview ?? ctx?.isLaunchingPreview ?? false;
+export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
+  const {
+    repos,
+    selectedRepo,
+    onSelectRepo,
+    onCreateRepo,
+    activeJob,
+    messages,
+    onSendPrompt,
+    onCancelJob,
+    onSwitchToConsole,
+    onOpenDrawer,
+    isSending = false,
+    previewState = null,
+    onLaunchPreview,
+    onStopPreview,
+    onRetryPreview,
+    onReconnectPreview,
+    refreshKey,
+    isLaunchingPreview = false,
+  } = useStudio();
 
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
+
+  const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
 
   const isDisconnected = previewState?.status === "STOPPED";
   const isExecutingTurn = Boolean(
@@ -80,7 +64,7 @@ export const StudioView: React.FC<StudioViewProps> = (props) => {
   };
 
   return (
-    <div id="studio-view" className="flex flex-col h-[calc(100vh-4.25rem)] overflow-hidden">
+    <div id="studio-view" className={`flex flex-col h-[calc(100vh-4.25rem)] overflow-hidden ${className}`}>
       {/* Studio Top Control Bar */}
       <div className="flex items-center justify-between px-6 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
         <div className="flex items-center space-x-3">
@@ -336,7 +320,7 @@ export const StudioView: React.FC<StudioViewProps> = (props) => {
           <LivePreview
             previewUrl={previewState?.preview_url || null}
             status={previewState?.status || "IDLE"}
-            stage={previewState?.stage || "IDLE"}
+            stage={previewState?.status === "PROVISIONING" ? previewState.stage : "IDLE"}
             branch={previewState?.branch || null}
             logs={previewState?.logs || []}
             errorMessage={previewState?.error_message || null}
@@ -359,9 +343,10 @@ export const StudioView: React.FC<StudioViewProps> = (props) => {
 
       {/* Sandbox Disconnected Dialog */}
       <DisconnectedModal
-        isOpen={isDisconnected}
+        isOpen={isDisconnected && !isDismissedDisconnected}
         branch={previewState?.branch}
         onReconnect={handleReconnect}
+        onDismiss={() => setIsDismissedDisconnected(true)}
         isReconnecting={isLaunchingPreview}
       />
     </div>

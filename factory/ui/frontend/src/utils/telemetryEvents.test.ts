@@ -59,14 +59,11 @@ describe("foldTelemetryEvents", () => {
         jobId: "job-1",
         timestamp: 1000,
         text: "Executing job",
-        thinking: {
-          text: "Step 1: Inspect. ",
-          done: false,
-        },
       },
     ];
 
     const events: AgentEvent[] = [
+      { type: "thinking", data: { delta: "Step 1: Inspect. " } },
       { type: "thinking", data: { delta: "Step 2: Plan. " } },
       { type: "thinking", data: { delta: "Step 3: Implement.", durationMs: 1250, done: true } },
     ];
@@ -76,6 +73,22 @@ describe("foldTelemetryEvents", () => {
     expect(result[0].thinking?.text).toBe("Step 1: Inspect. Step 2: Plan. Step 3: Implement.");
     expect(result[0].thinking?.durationMs).toBe(1250);
     expect(result[0].thinking?.done).toBe(true);
+  });
+
+  it("does not duplicate thinking text when called repeatedly with cumulative events", () => {
+    let messages: ChatMessage[] = [];
+    const eventsBatch1: AgentEvent[] = [
+      { type: "thinking", data: { delta: "A" } },
+    ];
+    messages = foldTelemetryEvents(messages, eventsBatch1, "job-1");
+    expect(messages[0].thinking?.text).toBe("A");
+
+    const eventsBatch2: AgentEvent[] = [
+      { type: "thinking", data: { delta: "A" } },
+      { type: "thinking", data: { delta: "B" } },
+    ];
+    messages = foldTelemetryEvents(messages, eventsBatch2, "job-1");
+    expect(messages[0].thinking?.text).toBe("AB");
   });
 
   it("folds tool_result events into stepChips with formatted labels", () => {

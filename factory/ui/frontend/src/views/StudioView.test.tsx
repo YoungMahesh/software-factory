@@ -1,28 +1,46 @@
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { StudioView } from "./StudioView";
-import { StudioProvider } from "../context/StudioContext";
+import { StudioProvider, StudioContextValue } from "../context/StudioContext";
 
 const mockRepos = [
   { name: "cool-app", is_tanstack_compatible: true },
   { name: "test-app", is_tanstack_compatible: false },
 ];
 
+const renderStudio = (overrides: Partial<StudioContextValue> = {}) => {
+  const defaultValue: StudioContextValue = {
+    repos: mockRepos,
+    selectedRepo: "cool-app",
+    onSelectRepo: vi.fn(),
+    onCreateRepo: vi.fn(),
+    activeJob: null,
+    messages: [],
+    onSendPrompt: vi.fn(),
+    onCancelJob: vi.fn(),
+    onSwitchToConsole: vi.fn(),
+    previewState: null,
+  };
+  const value = { ...defaultValue, ...overrides };
+  const utils = render(
+    <StudioProvider value={value}>
+      <StudioView />
+    </StudioProvider>
+  );
+  return {
+    ...utils,
+    rerenderWithContext: (newOverrides: Partial<StudioContextValue>) =>
+      utils.rerender(
+        <StudioProvider value={{ ...value, ...newOverrides }}>
+          <StudioView />
+        </StudioProvider>
+      ),
+  };
+};
+
 describe("StudioView", () => {
   it("renders repo select, prompt input, send button and live preview", () => {
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-      />
-    );
+    renderStudio();
 
     expect(screen.getByPlaceholderText(/Describe what you want to build/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Send/i })).toBeInTheDocument();
@@ -31,19 +49,7 @@ describe("StudioView", () => {
 
   it("handles prompt submission", () => {
     const handleSend = vi.fn();
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={handleSend}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-      />
-    );
+    renderStudio({ onSendPrompt: handleSend });
 
     const input = screen.getByPlaceholderText(/Describe what you want to build/i);
     fireEvent.change(input, { target: { value: "Add a dark mode toggle" } });
@@ -68,19 +74,7 @@ describe("StudioView", () => {
       },
     ];
 
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={messages}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-      />
-    );
+    renderStudio({ messages });
 
     expect(screen.getByText(/Request cannot be processed/i)).toBeInTheDocument();
     expect(screen.getByText(/Out-of-scope backend infrastructure modification/i)).toBeInTheDocument();
@@ -88,20 +82,7 @@ describe("StudioView", () => {
 
   it("renders 'Preview App' button in top control bar next to repo selector and triggers onLaunchPreview", () => {
     const handleLaunch = vi.fn();
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        onLaunchPreview={handleLaunch}
-      />
-    );
+    renderStudio({ onLaunchPreview: handleLaunch });
 
     const previewBtn = screen.getByTestId("preview-app-btn");
     expect(previewBtn).toBeInTheDocument();
@@ -113,32 +94,17 @@ describe("StudioView", () => {
 
   it("renders red 'Stop' button in top control bar when preview is active and triggers onStopPreview", () => {
     const handleStop = vi.fn();
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "SERVING",
-          branch: "factory/feature-x",
-          preview_url: "https://sandbox-3000.modal.host",
-          sandbox_id: "sb-123",
-          created_at: Date.now(),
-          started_at: Date.now(),
-          ended_at: null,
-          error_message: null,
-          log_count: 5,
-        }}
-        onStopPreview={handleStop}
-      />
-    );
+    renderStudio({
+      previewState: {
+        repo: "cool-app",
+        status: "SERVING",
+        branch: "factory/feature-x",
+        preview_url: "https://sandbox-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      onStopPreview: handleStop,
+    });
 
     const stopBtn = screen.getByTestId("studio-stop-preview-btn");
     expect(stopBtn).toBeInTheDocument();
@@ -150,26 +116,18 @@ describe("StudioView", () => {
 
   it("dynamically updates preview pane when switching repositories without losing running state", () => {
     const handleSelect = vi.fn();
-    const { rerender } = render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={handleSelect}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "SERVING",
-          stage: "SERVING",
-          branch: "factory/cool-feat",
-          preview_url: "https://cool-app-3000.modal.host",
-        }}
-      />
-    );
+    const { rerenderWithContext } = renderStudio({
+      selectedRepo: "cool-app",
+      onSelectRepo: handleSelect,
+      previewState: {
+        repo: "cool-app",
+        status: "SERVING",
+        branch: "factory/cool-feat",
+        preview_url: "https://cool-app-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+    });
 
     // Initial repo preview
     expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/cool-feat");
@@ -181,27 +139,18 @@ describe("StudioView", () => {
     expect(handleSelect).toHaveBeenCalledWith("test-app");
 
     // Rerender with test-app active preview
-    rerender(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="test-app"
-        onSelectRepo={handleSelect}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "test-app",
-          status: "PROVISIONING",
-          stage: "INSTALLING_DEPS",
-          branch: "factory/test-feat",
-          preview_url: null,
-          logs: ["Installing dependencies..."],
-        }}
-      />
-    );
+    rerenderWithContext({
+      selectedRepo: "test-app",
+      previewState: {
+        repo: "test-app",
+        status: "PROVISIONING",
+        stage: "INSTALLING_DEPS",
+        branch: "factory/test-feat",
+        preview_url: null,
+        logs: ["Installing dependencies..."],
+        error_message: null,
+      },
+    });
 
     // Preview pane updates dynamically to test-app
     expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/test-feat");
@@ -211,28 +160,17 @@ describe("StudioView", () => {
 
   it("triggers onRetryPreview when retry is clicked in failed preview", () => {
     const handleRetry = vi.fn();
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "FAILED",
-          stage: "INSTALLING_DEPS",
-          branch: "main",
-          error_message: "Compilation error: module not found",
-          logs: ["pnpm install failed"],
-        }}
-        onRetryPreview={handleRetry}
-      />
-    );
+    renderStudio({
+      previewState: {
+        repo: "cool-app",
+        status: "FAILED",
+        branch: "main",
+        preview_url: null,
+        error_message: "Compilation error: module not found",
+        logs: ["pnpm install failed"],
+      },
+      onRetryPreview: handleRetry,
+    });
 
     const retryButtons = screen.getAllByTestId("retry-preview-btn");
     expect(retryButtons.length).toBeGreaterThanOrEqual(1);
@@ -253,27 +191,15 @@ describe("StudioView", () => {
       dev: true,
       status: "RUNNING" as const,
       stage: "CODER" as const,
-      created_at: Date.now(),
-      started_at: Date.now(),
-      ended_at: null,
-      exit_code: null,
-      error_message: null,
-      logs_count: 10,
+      created_at: "2026-10-11T00:00:00Z",
+      log_count: 10,
+      event_count: 5,
     };
 
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={runningJob}
-        messages={[]}
-        onSendPrompt={handleSend}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-      />
-    );
+    renderStudio({
+      activeJob: runningJob,
+      onSendPrompt: handleSend,
+    });
 
     // Verify in-flight status indicator is visible
     const inFlightIndicator = screen.getByTestId("in-flight-indicator");
@@ -312,26 +238,19 @@ describe("StudioView", () => {
       },
     ];
 
-    render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={initialMessages}
-        onSendPrompt={handleSend}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "STOPPED",
-          branch: "factory/dashboard-overview",
-          preview_url: "https://sandbox-3000.modal.host",
-        }}
-        onReconnectPreview={handleReconnect}
-      />
-    );
+    renderStudio({
+      messages: initialMessages,
+      onSendPrompt: handleSend,
+      previewState: {
+        repo: "cool-app",
+        status: "STOPPED",
+        branch: "factory/dashboard-overview",
+        preview_url: null,
+        logs: [],
+        error_message: null,
+      },
+      onReconnectPreview: handleReconnect,
+    });
 
     // 1. Verify "Sandbox Disconnected" dialog is displayed
     const dialog = screen.getByTestId("sandbox-disconnected-dialog");
@@ -359,27 +278,17 @@ describe("StudioView", () => {
   });
 
   it("reloads preview iframe when manual Refresh button is clicked or refreshKey prop changes", () => {
-    const { rerender } = render(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "SERVING",
-          stage: "SERVING",
-          branch: "factory/feature-1",
-          preview_url: "https://sandbox-3000.modal.host",
-        }}
-        refreshKey={0}
-      />
-    );
+    const { rerenderWithContext } = renderStudio({
+      previewState: {
+        repo: "cool-app",
+        status: "SERVING",
+        branch: "factory/feature-1",
+        preview_url: "https://sandbox-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      refreshKey: 0,
+    });
 
     const initialIframe = screen.getByTitle("Live Application Preview");
     expect(initialIframe).toBeInTheDocument();
@@ -393,60 +302,20 @@ describe("StudioView", () => {
     expect(reloadedIframe).not.toBe(initialIframe);
 
     // Update refreshKey prop (simulating telemetry preview_refresh event)
-    rerender(
-      <StudioView
-        repos={mockRepos}
-        selectedRepo="cool-app"
-        onSelectRepo={vi.fn()}
-        onCreateRepo={vi.fn()}
-        activeJob={null}
-        messages={[]}
-        onSendPrompt={vi.fn()}
-        onCancelJob={vi.fn()}
-        onSwitchToConsole={vi.fn()}
-        previewState={{
-          repo: "cool-app",
-          status: "SERVING",
-          stage: "SERVING",
-          branch: "factory/feature-1",
-          preview_url: "https://sandbox-3000.modal.host",
-        }}
-        refreshKey={1}
-      />
-    );
+    rerenderWithContext({
+      previewState: {
+        repo: "cool-app",
+        status: "SERVING",
+        branch: "factory/feature-1",
+        preview_url: "https://sandbox-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      refreshKey: 1,
+    });
 
     const streamReloadedIframe = screen.getByTitle("Live Application Preview");
     expect(streamReloadedIframe).toBeInTheDocument();
     expect(streamReloadedIframe).not.toBe(reloadedIframe);
   });
-
-  it("consumes unified studio context when rendered inside StudioProvider with zero props", () => {
-    const handleSend = vi.fn();
-    render(
-      <StudioProvider
-        value={{
-          repos: mockRepos,
-          selectedRepo: "cool-app",
-          onSelectRepo: vi.fn(),
-          onCreateRepo: vi.fn(),
-          activeJob: null,
-          messages: [],
-          onSendPrompt: handleSend,
-          onCancelJob: vi.fn(),
-          onSwitchToConsole: vi.fn(),
-          previewState: null,
-        }}
-      >
-        <StudioView />
-      </StudioProvider>
-    );
-
-    const input = screen.getByPlaceholderText(/Describe what you want to build/i);
-    expect(input).toBeInTheDocument();
-    fireEvent.change(input, { target: { value: "Build navbar from context" } });
-    fireEvent.click(screen.getByRole("button", { name: /Send/i }));
-    expect(handleSend).toHaveBeenCalledWith("Build navbar from context");
-  });
 });
-
-

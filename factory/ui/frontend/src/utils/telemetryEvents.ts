@@ -38,17 +38,35 @@ export function foldTelemetryEvents(
     thinking: baseMsg.thinking ? { ...baseMsg.thinking } : undefined,
   };
 
+  let hasThinkingEvent = false;
+  let accumulatedThinkingText = "";
+  let durationMs = baseMsg.thinking?.durationMs;
+  let isDone = baseMsg.thinking?.done ?? false;
+
   events.forEach((evt) => {
     if (evt.type === "thinking") {
-      const delta = evt.data?.delta || "";
-      const prevText = updated.thinking?.text || "";
-      const newText = delta ? prevText + delta : prevText;
-      updated.thinking = {
-        text: newText,
-        durationMs: evt.data?.durationMs ?? updated.thinking?.durationMs,
-        done: Boolean(evt.data?.done) || Boolean(updated.thinking?.done),
-      };
+      hasThinkingEvent = true;
+      if (evt.data?.delta) {
+        accumulatedThinkingText += evt.data.delta;
+      }
+      if (evt.data?.durationMs !== undefined) {
+        durationMs = evt.data.durationMs;
+      }
+      if (evt.data?.done !== undefined) {
+        isDone = Boolean(evt.data.done);
+      }
     }
+  });
+
+  if (hasThinkingEvent) {
+    updated.thinking = {
+      text: accumulatedThinkingText,
+      durationMs,
+      done: isDone,
+    };
+  }
+
+  events.forEach((evt) => {
 
     if (evt.type === "tool_result") {
       const chipId = evt.data?.toolCallId || `chip-${evt.data?.toolName}-${evt.timestamp || Date.now()}`;

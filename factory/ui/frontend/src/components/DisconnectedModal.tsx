@@ -6,6 +6,7 @@ export interface DisconnectedModalProps {
   isOpen: boolean;
   branch?: string | null;
   onReconnect: () => void;
+  onDismiss?: () => void;
   isReconnecting?: boolean;
 }
 
@@ -13,6 +14,7 @@ export const DisconnectedModal: React.FC<DisconnectedModalProps> = ({
   isOpen,
   branch,
   onReconnect,
+  onDismiss,
   isReconnecting = false,
 }) => {
   if (!isOpen) return null;
@@ -50,6 +52,18 @@ export const DisconnectedModal: React.FC<DisconnectedModalProps> = ({
           </div>
         )}
         <div className="flex items-center justify-end space-x-3 pt-2">
+          {onDismiss && (
+            <Button
+              id="btn-dismiss-disconnected"
+              data-testid="dismiss-disconnected-btn"
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onDismiss}
+            >
+              Dismiss
+            </Button>
+          )}
           <Button
             id="btn-reconnect-environment"
             data-testid="reconnect-environment-btn"

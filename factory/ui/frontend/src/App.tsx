@@ -163,43 +163,77 @@ export const App: React.FC = () => {
               ...prev,
               ...payload.preview,
               status: payload.status || prev.status,
-              stage: payload.stage || prev.stage,
               preview_url: payload.preview_url !== undefined ? payload.preview_url : prev.preview_url,
               logs: payload.backlog || prev.logs || [],
-            };
+            } as PreviewState;
           });
         } else if (payload.event === "log") {
           setPreviewState((prev) => {
             if (!prev || prev.repo !== selectedRepo) return prev;
-            const currentLogs = prev.logs || [];
             return {
               ...prev,
-              logs: [...currentLogs, payload.data],
-              log_count: currentLogs.length + 1,
-            };
+              logs: [...(prev.logs || []), payload.data],
+            } as PreviewState;
           });
         } else if (payload.event === "stage") {
           setPreviewState((prev) => {
             if (!prev || prev.repo !== selectedRepo) return prev;
-            return {
-              ...prev,
-              stage: payload.stage,
-            };
+            if (prev.status === "PROVISIONING") {
+              return {
+                ...prev,
+                stage: payload.stage,
+              };
+            }
+            return prev;
           });
         } else if (payload.event === "status") {
           setPreviewState((prev) => {
             if (!prev || prev.repo !== selectedRepo) return prev;
-            return {
-              ...prev,
-              status: payload.status,
-              preview_url: payload.preview_url !== undefined ? payload.preview_url : prev.preview_url,
-              error_message: payload.error || prev.error_message,
-            };
+            if (payload.status === "SERVING") {
+              return {
+                status: "SERVING",
+                repo: prev.repo,
+                branch: prev.branch || "main",
+                preview_url: payload.preview_url || (prev.status === "SERVING" ? prev.preview_url : ""),
+                logs: prev.logs || [],
+                error_message: null,
+              };
+            } else if (payload.status === "STOPPED") {
+              return {
+                status: "STOPPED",
+                repo: prev.repo,
+                branch: prev.branch || "main",
+                preview_url: null,
+                logs: prev.logs || [],
+                error_message: null,
+              };
+            } else if (payload.status === "FAILED") {
+              return {
+                status: "FAILED",
+                repo: prev.repo,
+                branch: prev.branch,
+                preview_url: null,
+                logs: prev.logs || [],
+                error_message: payload.error || "Preview failed",
+              };
+            } else if (payload.status === "PROVISIONING") {
+              return {
+                status: "PROVISIONING",
+                stage: "PROVISIONING",
+                repo: prev.repo,
+                branch: prev.branch || "main",
+                preview_url: null,
+                logs: prev.logs || [],
+                error_message: null,
+              };
+            }
+            return prev;
           });
           if (payload.status === "STOPPED" || payload.status === "FAILED") {
             es?.close();
           }
-        } else if (payload.event === "preview_refresh") {
+        }
+ else if (payload.event === "preview_refresh") {
           setPreviewRefreshKey((prev) => prev + 1);
         }
       } catch (e) {

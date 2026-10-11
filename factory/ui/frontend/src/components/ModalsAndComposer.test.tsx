@@ -75,6 +75,23 @@ describe("Decoupled Modals and PromptComposer", () => {
       fireEvent.click(btn);
       expect(handleReconnect).toHaveBeenCalledTimes(1);
     });
+
+    it("renders dismiss control and triggers onDismiss callback", () => {
+      const handleDismiss = vi.fn();
+      render(
+        <DisconnectedModal
+          isOpen={true}
+          branch="factory/feature-x"
+          onReconnect={vi.fn()}
+          onDismiss={handleDismiss}
+        />
+      );
+
+      const dismissBtn = screen.getByTestId("dismiss-disconnected-btn");
+      expect(dismissBtn).toBeInTheDocument();
+      fireEvent.click(dismissBtn);
+      expect(handleDismiss).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("PromptComposer", () => {

@@ -1,14 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../api";
-import { LaunchJobParams, Repo, PreviewState } from "../types";
+import { Repo, PreviewState } from "../types";
 
 export const studioQueryKeys = {
   repos: ["studio", "repos"] as const,
   preview: (repo: string) => ["studio", "preview", repo] as const,
   scratch: (repo: string) => ["studio", "scratch", repo] as const,
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
-  jobs: ["studio", "jobs"] as const,
 };
+
+export function createStoppedPreviewState(prev: PreviewState): PreviewState {
+  return {
+    status: "STOPPED",
+    repo: prev.repo,
+    branch: prev.branch || "main",
+    preview_url: null,
+    logs: prev.logs || [],
+    error_message: null,
+  };
+}
 
 export function useStudioRepos() {
   return useQuery({
@@ -38,13 +48,6 @@ export function useMilestonesQuery(repo: string) {
     queryKey: studioQueryKeys.milestones(repo),
     queryFn: () => api.fetchMilestones(repo),
     enabled: Boolean(repo),
-  });
-}
-
-export function useJobsQuery() {
-  return useQuery({
-    queryKey: studioQueryKeys.jobs,
-    queryFn: () => api.listJobs(),
   });
 }
 
@@ -78,16 +81,7 @@ export function useStopPreviewMutation() {
     onSuccess: (_, repo) => {
       queryClient.setQueryData<PreviewState | null>(
         studioQueryKeys.preview(repo),
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                status: "STOPPED",
-                branch: prev.branch || "main",
-                preview_url: null,
-                error_message: null,
-              }
-            : null
+        (prev) => (prev ? createStoppedPreviewState(prev) : null)
       );
     },
   });
@@ -97,25 +91,5 @@ export function useSendStudioPromptMutation() {
   return useMutation({
     mutationFn: (params: { repo: string; prompt: string; model: string; vm: boolean }) =>
       api.sendStudioPrompt(params),
-  });
-}
-
-export function useLaunchJobMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (params: LaunchJobParams) => api.launchJob(params),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: studioQueryKeys.jobs });
-    },
-  });
-}
-
-export function useCancelJobMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (jobId: string) => api.cancelJob(jobId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: studioQueryKeys.jobs });
-    },
   });
 }
