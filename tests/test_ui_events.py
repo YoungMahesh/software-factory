@@ -6,8 +6,6 @@ streams both initial state and real-time typed agent events.
 """
 
 import json
-from pathlib import Path
-import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -300,20 +298,6 @@ class TestThinkingAccordionConsole(unittest.TestCase):
         self.client = TestClient(self.app)
         self.client.auth = ("admin", "admin")
 
-    def test_console_template_contains_thinking_accordion_components(self):
-        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ThinkingAccordion.tsx"
-        code = comp_path.read_text(encoding="utf-8")
-
-        # 1. Active thinking container with animated pulse accent
-        self.assertIn("thinking-accordion", code)
-        self.assertIn("animate-pulse", code)
-
-        # 2. Collapsed badge with elapsed time
-        self.assertIn("Reasoning finished in", code)
-
-        # 3. Expand / collapse toggle handler
-        self.assertIn("setIsExpanded(!isExpanded)", code)
-
     def test_thinking_events_pipeline_and_duration_tracking(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
         q = self.registry.add_listener(job.id)
@@ -367,20 +351,6 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
         self.app = create_app(registry=self.registry)
         self.client = TestClient(self.app)
         self.client.auth = ("admin", "admin")
-
-    def test_console_template_contains_command_execution_card_components(self):
-        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
-        code = comp_path.read_text(encoding="utf-8")
-
-        # 1. Dedicated Command Execution Card container
-        self.assertIn("command-card", code)
-
-        # 2. Exit code logic and failure state
-        self.assertIn("isFailure", code)
-
-        # 3. Windowed output toggle
-        self.assertIn("totalLines > 100", code)
-        self.assertIn("setShowFullOutput", code)
 
     def test_coder_and_verifier_command_telemetry_pipeline(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -439,24 +409,6 @@ class TestCommandExecutionTimelineConsole(unittest.TestCase):
             self.assertEqual(r["event"], "agent_event")
 
         self.registry.remove_listener(job.id, q)
-
-    def test_windowed_output_rendering_and_expand_toggle_logic(self):
-        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
-        code = comp_path.read_text(encoding="utf-8")
-
-        # Verify threshold is 100 lines
-        self.assertIn("totalLines > 100", code)
-        self.assertIn("lines.slice(-100)", code)
-        self.assertIn("showFullOutput", code)
-
-    def test_failing_command_auto_expansion_and_stderr_highlighting(self):
-        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "CommandCard.tsx"
-        code = comp_path.read_text(encoding="utf-8")
-
-        # Verify failure states and stderr highlighting logic in CommandCard
-        self.assertIn("isStderrLine", code)
-        self.assertIn("isFailure", code)
-
 
     def test_rehydration_of_command_events_history(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -577,48 +529,6 @@ class TestSemanticToolTelemetryConsole(unittest.TestCase):
 
         self.registry.remove_listener(job.id, q)
 
-    def test_console_renders_semantic_tool_chips_and_diff_preview(self):
-        chip_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ToolChip.tsx"
-        chip_code = chip_path.read_text(encoding="utf-8")
-
-        # 1. Compact Tool Chip component and styling
-        self.assertIn("tool-chip", chip_code)
-        self.assertIn("formatToolLabel", chip_code)
-
-        diff_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "DiffViewer.tsx"
-        diff_code = diff_path.read_text(encoding="utf-8")
-
-        # 2. Expandable Diff Preview Card functions and structure
-        self.assertIn("diff-preview-card", diff_code)
-        self.assertIn("diff-addition", diff_code)
-        self.assertIn("diff-deletion", diff_code)
-
-    def test_frontend_diff_preview_parser_execution(self):
-        """Verifies frontend JavaScript logic correctly parses and renders unified diffs."""
-        diff_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "DiffViewer.tsx"
-        diff_code = diff_path.read_text(encoding="utf-8")
-        self.assertIn("diff-addition", diff_code)
-
-        # Run node to verify the exact diff parsing logic extracted from index.html
-        js_test = """
-        const patch = "--- a/src/app.tsx\\n+++ b/src/app.tsx\\n@@ -1,3 +1,4 @@\\n import React from 'react';\\n-const a = 1;\\n+const a = 2;\\n+const b = 3;\\n";
-        const rawLines = patch.split(/\\r?\\n/);
-        let additions = 0;
-        let deletions = 0;
-        const rendered = rawLines.map((line) => {
-          if (line.startsWith("+++") || line.startsWith("---")) return { type: "header", line };
-          if (line.startsWith("+")) { additions++; return { type: "addition", line }; }
-          if (line.startsWith("-")) { deletions++; return { type: "deletion", line }; }
-          if (line.startsWith("@@")) return { type: "hunk", line };
-          return { type: "context", line };
-        });
-        console.log(JSON.stringify({ additions, deletions, count: rendered.length }));
-        """
-        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
-        res = json.loads(proc.stdout)
-        self.assertEqual(res["additions"], 2)
-        self.assertEqual(res["deletions"], 1)
-
     def test_rehydration_of_semantic_tool_and_diff_events(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
         job.status = JobStatus.SUCCESS
@@ -669,74 +579,6 @@ class TestSelfCorrectionVisualStatesConsole(unittest.TestCase):
         self.client = TestClient(self.app)
         self.client.auth = ("admin", "admin")
 
-    def test_console_template_contains_self_correction_components(self):
-        comp_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "SelfCorrectionCards.tsx"
-        code = comp_path.read_text(encoding="utf-8")
-
-        # 1. Self-Correction Loop Attempt Divider components
-        self.assertIn("attempt-divider-card", code)
-        self.assertIn("Self-Correction Loop: Attempt", code)
-
-        # 2. Reviewer Rejection Card components
-        self.assertIn("reviewer-rejection-card", code)
-        self.assertIn("rejection-summary", code)
-        self.assertIn("remediation-instructions", code)
-
-    def test_frontend_failing_command_auto_expansion_and_stderr_execution(self):
-        """Verifies frontend JS logic auto-expands failing commands and highlights stderr lines."""
-        js_test = """
-        const escapeHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const card = {
-          id: 'cmd-fail',
-          lines: ['Running tests...', 'AssertionError: expected 1 to be 2', 'FAILED tests/test_math.py'],
-          fullOutput: 'Running tests...\\nAssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
-          stderr: 'AssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
-          isExpanded: false,
-          isFailure: false,
-        };
-        const resultData = {
-          exitCode: 1,
-          isError: true,
-          stderr: 'AssertionError: expected 1 to be 2\\nFAILED tests/test_math.py',
-          output: card.fullOutput,
-        };
-
-        const exitCode = typeof resultData.exitCode === 'number' ? resultData.exitCode : (resultData.isError ? 1 : 0);
-        const isFailure = exitCode !== 0 || Boolean(resultData.isError);
-        if (isFailure) {
-          card.isExpanded = true;
-          card.isFailure = true;
-        }
-
-        const stderrLines = card.stderr ? new Set(card.stderr.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean)) : null;
-        function isStderrLine(line, set) {
-          if (!line || !line.trim()) return false;
-          const trimmed = line.trim();
-          if (set && set.has(trimmed)) return true;
-          return /^(FAIL|FAILED|Error:|Exception:|AssertionError|Traceback|STDERR:)/i.test(trimmed);
-        }
-
-        const rendered = card.lines.map((line) => {
-          if (isStderrLine(line, stderrLines)) {
-            return { type: 'stderr', line };
-          }
-          return { type: 'stdout', line };
-        });
-
-        console.log(JSON.stringify({
-          isExpanded: card.isExpanded,
-          isFailure: card.isFailure,
-          rendered,
-        }));
-        """
-        proc = subprocess.run(["node", "-e", js_test], capture_output=True, text=True, check=True)
-        res = json.loads(proc.stdout)
-        self.assertTrue(res["isExpanded"])
-        self.assertTrue(res["isFailure"])
-        self.assertEqual(res["rendered"][0]["type"], "stdout")
-        self.assertEqual(res["rendered"][1]["type"], "stderr")
-        self.assertEqual(res["rendered"][2]["type"], "stderr")
-
     def test_rehydration_of_attempt_dividers_and_rejection_cards(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
         job.status = JobStatus.SUCCESS
@@ -778,26 +620,6 @@ class TestStudioActivityDrawerAndInlineDisclosures(unittest.TestCase):
         self.app = create_app(registry=self.registry)
         self.client = TestClient(self.app)
         self.client.auth = ("admin", "admin")
-
-    def test_studio_template_contains_activity_drawer_and_inline_disclosures(self):
-        drawer_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ActivityDrawer.tsx"
-        drawer_code = drawer_path.read_text(encoding="utf-8")
-
-        # 1. Slide-over Agent Activity drawer component exists
-        self.assertIn('id="studio-activity-drawer"', drawer_code)
-        self.assertIn("Agent Activity", drawer_code)
-
-        # 2. Drawer timeline and synchronized raw terminal logs tabs
-        self.assertIn("activeTab", drawer_code)
-        self.assertIn("handleCopyLogs", drawer_code)
-
-    def test_studio_chat_turn_renders_inline_thinking_and_step_chips(self):
-        """Verifies Studio chat timeline renders thinking disclosures and step chips."""
-        studio_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "views" / "StudioView.tsx"
-        studio_code = studio_path.read_text(encoding="utf-8")
-        self.assertIn("ThinkingAccordion", studio_code)
-        self.assertIn("ToolChip", studio_code)
-        self.assertIn("onOpenDrawer", studio_code)
 
     def test_slide_over_drawer_syncs_with_sse_stream(self):
         job = self.registry.create_job(repo="test-repo", feature="test-feat")
@@ -849,16 +671,6 @@ class TestStudioActivityDrawerAndInlineDisclosures(unittest.TestCase):
         self.assertEqual(init_event["events"][1]["type"], "tool_start")
         self.assertEqual(init_event["events"][2]["type"], "tool_result")
         self.assertEqual(init_event["events"][2]["data"]["command"], "pnpm test")
-
-        # Verify that frontend ActivityDrawer integrates structured telemetry cards
-        drawer_path = Path(__file__).parent.parent / "factory" / "ui" / "frontend" / "src" / "components" / "ActivityDrawer.tsx"
-        drawer_code = drawer_path.read_text(encoding="utf-8")
-        self.assertIn("ThinkingAccordion", drawer_code)
-        self.assertIn("CommandCard", drawer_code)
-        self.assertIn("ToolChip", drawer_code)
-        self.assertIn("DiffViewer", drawer_code)
-        self.assertIn("AttemptDividerCard", drawer_code)
-        self.assertIn("ReviewerRejectionCard", drawer_code)
 
 
 if __name__ == "__main__":

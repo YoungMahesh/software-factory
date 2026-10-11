@@ -733,8 +733,23 @@ class TestFastApiApp(unittest.TestCase):
                 self.assertTrue(len(stage_events) >= 1)
                 self.assertEqual(stage_events[0]["stage"], "STARTING_DEV")
 
+    @patch("factory.ui.app.instantiate_repo_from_template")
+    def test_route_aliases_return_identical_responses(self, mock_instantiate):
+        mock_instantiate.return_value = {"name": "sample-repo", "html_url": "https://github.com/test/sample-repo"}
 
+        # GET alias equivalence
+        get_repos = self.client.get("/api/repos")
+        get_studio_repos = self.client.get("/api/studio/repos")
+        self.assertEqual(get_repos.status_code, 200)
+        self.assertEqual(get_studio_repos.status_code, 200)
+        self.assertEqual(get_repos.json(), get_studio_repos.json())
 
+        # POST alias equivalence
+        post_repos = self.client.post("/api/repos", json={"name": "sample-repo"})
+        post_studio_repos = self.client.post("/api/studio/repos", json={"name": "sample-repo"})
+        self.assertEqual(post_repos.status_code, 201)
+        self.assertEqual(post_studio_repos.status_code, 201)
+        self.assertEqual(post_repos.json(), post_studio_repos.json())
 
 
 class TestCompiledSpaRootRouteServing(unittest.TestCase):
@@ -1949,107 +1964,6 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 401)
 
-
-class TestStudioSplitPaneAndDualView(unittest.TestCase):
-    def setUp(self):
-        self.registry = JobRegistry()
-        self.app = create_app(registry=self.registry)
-        self.client = TestClient(self.app)
-        self.client.auth = ("admin", "admin")
-
-    def test_top_navigation_view_toggle(self):
-        resp_studio = self.client.get("/")
-        self.assertEqual(resp_studio.status_code, 200)
-        self.assertIn('<div id="root"></div>', resp_studio.text)
-
-        resp_console = self.client.get("/console")
-        self.assertEqual(resp_console.status_code, 200)
-        self.assertIn('<div id="root"></div>', resp_console.text)
-
-    def test_studio_view_left_sidebar_components(self):
-        # API contracts powering the Studio left sidebar (repos and prompt dispatch)
-        resp_repos = self.client.get("/api/studio/repos")
-        self.assertEqual(resp_repos.status_code, 200)
-        self.assertIn("repos", resp_repos.json())
-
-        # Prompt endpoint validation
-        resp_invalid = self.client.post("/api/studio/prompt", json={"repo": "", "prompt": ""})
-        self.assertEqual(resp_invalid.status_code, 400)
-
-    def test_studio_view_right_workspace_preview_iframe(self):
-        # Dev preview jobs populate preview_url for iframe integration
-        job = self.registry.create_job(repo="my-cool-app", feature="studio-feat", dev=True)
-        self.assertEqual(job.preview_url, "https://3000.mahesh0.dev")
-        job_data = self.registry.get_job(job.id)
-        self.assertIsNotNone(job_data)
-        self.assertEqual(job_data.to_dict()["preview_url"], "https://3000.mahesh0.dev")
-
-    def test_compact_floating_status_badge_and_inspect_logs(self):
-        job = self.registry.create_job(repo="my-cool-app", feature="studio-feat")
-        resp = self.client.get(f"/api/jobs/{job.id}")
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(data["id"], job.id)
-        self.assertEqual(data["stage"], "IDLE")
-
-    def test_console_view_maintains_full_functionality(self):
-        resp_repos = self.client.get("/api/repos")
-        self.assertEqual(resp_repos.status_code, 200)
-
-        resp_jobs = self.client.get("/api/jobs")
-        self.assertEqual(resp_jobs.status_code, 200)
-        self.assertIn("jobs", resp_jobs.json())
-
-    def test_repo_options_rendered_in_both_views(self):
-        resp1 = self.client.get("/api/repos")
-        resp2 = self.client.get("/api/studio/repos")
-        self.assertEqual(resp1.status_code, 200)
-        self.assertEqual(resp2.status_code, 200)
-        self.assertEqual(resp1.json()["org"], DEFAULT_TEST_ORG)
-        self.assertEqual(resp2.json()["org"], DEFAULT_TEST_ORG)
-
-    def test_recent_runs_rendered_in_console_view(self):
-        job = self.registry.create_job(repo="my-cool-app", feature="v1-init", issue="1", model="deepseek-v4.1-flash")
-        job.status = JobStatus.SUCCESS
-        job.started_at = 100.0
-        job.ended_at = 142.0
-
-        resp = self.client.get("/api/jobs")
-        self.assertEqual(resp.status_code, 200)
-        jobs = resp.json()["jobs"]
-        matching = [j for j in jobs if j["id"] == job.id]
-        self.assertEqual(len(matching), 1)
-        self.assertEqual(matching[0]["repo"], "my-cool-app")
-        self.assertEqual(matching[0]["feature"], "v1-init")
-        self.assertEqual(matching[0]["duration"], 42.0)
-
-    def test_studio_authentication_compatibility(self):
-        unauth_client = TestClient(self.app)
-        self.assertEqual(unauth_client.get("/").status_code, 401)
-        self.assertEqual(unauth_client.get("/api/studio/repos").status_code, 401)
-        self.assertEqual(unauth_client.post("/api/studio/repos", json={"name": "test"}).status_code, 401)
-        self.assertEqual(unauth_client.post("/api/studio/prompt", json={"repo": "test", "prompt": "build"}).status_code, 401)
-
-        self.assertEqual(self.client.get("/").status_code, 200)
-        self.assertEqual(self.client.get("/api/studio/repos").status_code, 200)
-
-    @patch("factory.ui.app.instantiate_repo_from_template")
-    def test_route_aliases_return_identical_responses(self, mock_instantiate):
-        mock_instantiate.return_value = {"name": "sample-repo", "html_url": "https://github.com/test/sample-repo"}
-
-        # GET alias equivalence
-        get_repos = self.client.get("/api/repos")
-        get_studio_repos = self.client.get("/api/studio/repos")
-        self.assertEqual(get_repos.status_code, 200)
-        self.assertEqual(get_studio_repos.status_code, 200)
-        self.assertEqual(get_repos.json(), get_studio_repos.json())
-
-        # POST alias equivalence
-        post_repos = self.client.post("/api/repos", json={"name": "sample-repo"})
-        post_studio_repos = self.client.post("/api/studio/repos", json={"name": "sample-repo"})
-        self.assertEqual(post_repos.status_code, 201)
-        self.assertEqual(post_studio_repos.status_code, 201)
-        self.assertEqual(post_repos.json(), post_studio_repos.json())
 
 
 

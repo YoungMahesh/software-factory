@@ -1,10 +1,11 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
 import { LivePreview } from "./LivePreview";
+import { renderWithProviders, userEvent } from "../test/test-utils";
 
 describe("LivePreview", () => {
   it("renders preview URL and iframe when previewUrl is present", () => {
-    render(
+    renderWithProviders(
       <LivePreview previewUrl="https://3000.mahesh0.dev" />
     );
 
@@ -14,29 +15,31 @@ describe("LivePreview", () => {
     expect(iframe).toHaveAttribute("src", "https://3000.mahesh0.dev");
   });
 
-  it("toggles responsive viewport modes", () => {
-    const { container } = render(
+  it("toggles responsive viewport modes", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(
       <LivePreview previewUrl="https://3000.mahesh0.dev" />
     );
 
     const mobileBtn = screen.getByTestId("viewport-mobile");
-    fireEvent.click(mobileBtn);
+    await user.click(mobileBtn);
 
     const frameWrapper = container.querySelector(".preview-viewport-wrapper");
     expect(frameWrapper).toHaveStyle({ width: "375px" });
 
     const tabletBtn = screen.getByTestId("viewport-tablet");
-    fireEvent.click(tabletBtn);
+    await user.click(tabletBtn);
     expect(frameWrapper).toHaveStyle({ width: "768px" });
 
     const desktopBtn = screen.getByTestId("viewport-desktop");
-    fireEvent.click(desktopBtn);
+    await user.click(desktopBtn);
     expect(frameWrapper).toHaveStyle({ width: "100%" });
   });
 
-  it("renders explicit 'Refresh' button in toolbar that reloads iframe DOM", () => {
+  it("renders explicit 'Refresh' button in toolbar that reloads iframe DOM", async () => {
+    const user = userEvent.setup();
     const handleRefresh = vi.fn();
-    render(
+    renderWithProviders(
       <LivePreview
         previewUrl="https://3000.mahesh0.dev"
         onRefresh={handleRefresh}
@@ -49,7 +52,7 @@ describe("LivePreview", () => {
     const iframeBefore = screen.getByTitle("Live Application Preview");
     expect(iframeBefore).toBeInTheDocument();
 
-    fireEvent.click(refreshBtn);
+    await user.click(refreshBtn);
     expect(handleRefresh).toHaveBeenCalledTimes(1);
 
     const iframeAfter = screen.getByTitle("Live Application Preview");
@@ -57,7 +60,7 @@ describe("LivePreview", () => {
   });
 
   it("automatically reloads iframe DOM when refreshKey prop updates", () => {
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <LivePreview
         previewUrl="https://3000.mahesh0.dev"
         refreshKey={0}
@@ -79,9 +82,10 @@ describe("LivePreview", () => {
     expect(iframeAfter).toBeInTheDocument();
   });
 
-  it("renders 'Launch Live Preview' CTA when no preview is active and triggers onLaunchPreview", () => {
+  it("renders 'Launch Live Preview' CTA when no preview is active and triggers onLaunchPreview", async () => {
+    const user = userEvent.setup();
     const handleLaunch = vi.fn();
-    render(
+    renderWithProviders(
       <LivePreview
         previewUrl={null}
         status="IDLE"
@@ -93,13 +97,14 @@ describe("LivePreview", () => {
     expect(ctaBtn).toBeInTheDocument();
     expect(ctaBtn).toHaveTextContent(/Launch Live Preview/i);
 
-    fireEvent.click(ctaBtn);
+    await user.click(ctaBtn);
     expect(handleLaunch).toHaveBeenCalledTimes(1);
   });
 
-  it("displays active branch badge and red Stop button when preview is active", () => {
+  it("displays active branch badge and red Stop button when preview is active", async () => {
+    const user = userEvent.setup();
     const handleStop = vi.fn();
-    render(
+    renderWithProviders(
       <LivePreview
         previewUrl="https://sandbox-3000.modal.host"
         status="SERVING"
@@ -120,12 +125,12 @@ describe("LivePreview", () => {
     expect(stopBtn).toBeInTheDocument();
     expect(stopBtn).toHaveTextContent(/Stop/i);
 
-    fireEvent.click(stopBtn);
+    await user.click(stopBtn);
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
 
   it("does not render Stop button when preview status is STOPPED even if previewUrl is set", () => {
-    render(
+    renderWithProviders(
       <LivePreview
         previewUrl="https://sandbox-3000.modal.host"
         status="STOPPED"
@@ -137,9 +142,10 @@ describe("LivePreview", () => {
     expect(screen.queryByTestId("stop-preview-btn")).toBeNull();
   });
 
-  it("renders disconnected state and Reconnect button when status is STOPPED", () => {
+  it("renders disconnected state and Reconnect button when status is STOPPED", async () => {
+    const user = userEvent.setup();
     const handleReconnect = vi.fn();
-    render(
+    renderWithProviders(
       <LivePreview
         previewUrl="https://sandbox-3000.modal.host"
         status="STOPPED"
@@ -155,12 +161,12 @@ describe("LivePreview", () => {
     expect(reconnectBtn).toBeInTheDocument();
     expect(reconnectBtn).toHaveTextContent(/Reconnect Environment/i);
 
-    fireEvent.click(reconnectBtn);
+    await user.click(reconnectBtn);
     expect(handleReconnect).toHaveBeenCalledTimes(1);
   });
 
   it("renders 3-stage progress stepper when status is PROVISIONING", () => {
-    render(
+    renderWithProviders(
       <LivePreview
         status="PROVISIONING"
         stage="INSTALLING_DEPS"
@@ -174,8 +180,9 @@ describe("LivePreview", () => {
     expect(screen.getByText("Starting dev server")).toBeInTheDocument();
   });
 
-  it("toggles dev server logs drawer with toolbar button", () => {
-    render(
+  it("toggles dev server logs drawer with toolbar button", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <LivePreview
         status="PROVISIONING"
         stage="PROVISIONING"
@@ -190,18 +197,19 @@ describe("LivePreview", () => {
     expect(screen.queryByTestId("dev-server-logs-drawer")).toBeNull();
 
     // Click to open
-    fireEvent.click(toggleBtn);
+    await user.click(toggleBtn);
     expect(screen.getByTestId("dev-server-logs-drawer")).toBeInTheDocument();
     expect(screen.getByText("Cloning repository...")).toBeInTheDocument();
 
     // Click again to close
-    fireEvent.click(toggleBtn);
+    await user.click(toggleBtn);
     expect(screen.queryByTestId("dev-server-logs-drawer")).toBeNull();
   });
 
-  it("auto-expands dev server logs drawer and displays Retry button on failure", () => {
+  it("auto-expands dev server logs drawer and displays Retry button on failure", async () => {
+    const user = userEvent.setup();
     const handleRetry = vi.fn();
-    render(
+    renderWithProviders(
       <LivePreview
         status="FAILED"
         stage="INSTALLING_DEPS"
@@ -219,7 +227,7 @@ describe("LivePreview", () => {
     const retryButtons = screen.getAllByTestId("retry-preview-btn");
     expect(retryButtons.length).toBeGreaterThanOrEqual(1);
 
-    fireEvent.click(retryButtons[0]);
+    await user.click(retryButtons[0]);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
 });

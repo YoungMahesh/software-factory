@@ -1,42 +1,11 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { StudioView } from "./StudioView";
-import { StudioProvider, StudioContextValue } from "../context/StudioContext";
+import { renderWithProviders } from "../test/test-utils";
+import { StudioContextValue } from "../context/StudioContext";
 
-const mockRepos = [
-  { name: "cool-app", is_tanstack_compatible: true },
-  { name: "test-app", is_tanstack_compatible: false },
-];
-
-const renderStudio = (overrides: Partial<StudioContextValue> = {}) => {
-  const defaultValue: StudioContextValue = {
-    repos: mockRepos,
-    selectedRepo: "cool-app",
-    onSelectRepo: vi.fn(),
-    onCreateRepo: vi.fn(),
-    activeJob: null,
-    messages: [],
-    onSendPrompt: vi.fn(),
-    onCancelJob: vi.fn(),
-    onSwitchToConsole: vi.fn(),
-    previewState: null,
-  };
-  const value = { ...defaultValue, ...overrides };
-  const utils = render(
-    <StudioProvider value={value}>
-      <StudioView />
-    </StudioProvider>
-  );
-  return {
-    ...utils,
-    rerenderWithContext: (newOverrides: Partial<StudioContextValue>) =>
-      utils.rerender(
-        <StudioProvider value={{ ...value, ...newOverrides }}>
-          <StudioView />
-        </StudioProvider>
-      ),
-  };
-};
+const renderStudio = (overrides: Partial<StudioContextValue> = {}) =>
+  renderWithProviders(<StudioView />, { contextOverrides: overrides });
 
 describe("StudioView", () => {
   it("renders repo select, prompt input, send button and live preview", () => {
@@ -47,15 +16,15 @@ describe("StudioView", () => {
     expect(screen.getByText("New App")).toBeInTheDocument();
   });
 
-  it("handles prompt submission", () => {
+  it("handles prompt submission", async () => {
     const handleSend = vi.fn();
-    renderStudio({ onSendPrompt: handleSend });
+    const { user } = renderStudio({ onSendPrompt: handleSend });
 
     const input = screen.getByPlaceholderText(/Describe what you want to build/i);
-    fireEvent.change(input, { target: { value: "Add a dark mode toggle" } });
+    await user.type(input, "Add a dark mode toggle");
 
     const sendBtn = screen.getByRole("button", { name: /Send/i });
-    fireEvent.click(sendBtn);
+    await user.click(sendBtn);
 
     expect(handleSend).toHaveBeenCalledWith("Add a dark mode toggle");
   });
@@ -80,21 +49,21 @@ describe("StudioView", () => {
     expect(screen.getByText(/Out-of-scope backend infrastructure modification/i)).toBeInTheDocument();
   });
 
-  it("renders 'Preview App' button in top control bar next to repo selector and triggers onLaunchPreview", () => {
+  it("renders 'Preview App' button in top control bar next to repo selector and triggers onLaunchPreview", async () => {
     const handleLaunch = vi.fn();
-    renderStudio({ onLaunchPreview: handleLaunch });
+    const { user } = renderStudio({ onLaunchPreview: handleLaunch });
 
     const previewBtn = screen.getByTestId("preview-app-btn");
     expect(previewBtn).toBeInTheDocument();
     expect(previewBtn).toHaveTextContent(/Preview App/i);
 
-    fireEvent.click(previewBtn);
+    await user.click(previewBtn);
     expect(handleLaunch).toHaveBeenCalledTimes(1);
   });
 
-  it("renders red 'Stop' button in top control bar when preview is active and triggers onStopPreview", () => {
+  it("renders red 'Stop' button in top control bar when preview is active and triggers onStopPreview", async () => {
     const handleStop = vi.fn();
-    renderStudio({
+    const { user } = renderStudio({
       previewState: {
         repo: "cool-app",
         status: "SERVING",
@@ -110,13 +79,13 @@ describe("StudioView", () => {
     expect(stopBtn).toBeInTheDocument();
     expect(stopBtn).toHaveTextContent(/Stop/i);
 
-    fireEvent.click(stopBtn);
+    await user.click(stopBtn);
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
 
-  it("dynamically updates preview pane when switching repositories without losing running state", () => {
+  it("dynamically updates preview pane when switching repositories without losing running state", async () => {
     const handleSelect = vi.fn();
-    const { rerenderWithContext } = renderStudio({
+    const { user, rerenderWithContext } = renderStudio({
       selectedRepo: "cool-app",
       onSelectRepo: handleSelect,
       previewState: {
@@ -135,7 +104,7 @@ describe("StudioView", () => {
 
     // Switch repo via dropdown
     const select = screen.getByRole("combobox");
-    fireEvent.change(select, { target: { value: "test-app" } });
+    await user.selectOptions(select, "test-app");
     expect(handleSelect).toHaveBeenCalledWith("test-app");
 
     // Rerender with test-app active preview
@@ -158,9 +127,9 @@ describe("StudioView", () => {
     expect(screen.getByTestId("preview-step-installing_deps")).toHaveAttribute("data-state", "active");
   });
 
-  it("triggers onRetryPreview when retry is clicked in failed preview", () => {
+  it("triggers onRetryPreview when retry is clicked in failed preview", async () => {
     const handleRetry = vi.fn();
-    renderStudio({
+    const { user } = renderStudio({
       previewState: {
         repo: "cool-app",
         status: "FAILED",
@@ -175,11 +144,11 @@ describe("StudioView", () => {
     const retryButtons = screen.getAllByTestId("retry-preview-btn");
     expect(retryButtons.length).toBeGreaterThanOrEqual(1);
 
-    fireEvent.click(retryButtons[0]);
+    await user.click(retryButtons[0]);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
 
-  it("locks prompt input and displays in-flight status indicator while assembly line turn is executing", () => {
+  it("locks prompt input and displays in-flight status indicator while assembly line turn is executing", async () => {
     const handleSend = vi.fn();
     const runningJob = {
       id: "job-turn-1",
@@ -196,7 +165,7 @@ describe("StudioView", () => {
       event_count: 5,
     };
 
-    renderStudio({
+    const { user } = renderStudio({
       activeJob: runningJob,
       onSendPrompt: handleSend,
     });
@@ -214,12 +183,11 @@ describe("StudioView", () => {
     expect(sendBtn).toBeDisabled();
 
     // Verify prompt submission is prevented
-    fireEvent.change(textarea, { target: { value: "Concurrent prompt" } });
-    fireEvent.click(sendBtn);
+    await user.click(sendBtn);
     expect(handleSend).not.toHaveBeenCalled();
   });
 
-  it("displays explicit 'Sandbox Disconnected' dialog on STOPPED status, preserves chat history, and triggers onReconnectPreview", () => {
+  it("displays explicit 'Sandbox Disconnected' dialog on STOPPED status, preserves chat history, and triggers onReconnectPreview", async () => {
     const handleReconnect = vi.fn();
     const handleSend = vi.fn();
 
@@ -238,7 +206,7 @@ describe("StudioView", () => {
       },
     ];
 
-    renderStudio({
+    const { user } = renderStudio({
       messages: initialMessages,
       onSendPrompt: handleSend,
       previewState: {
@@ -273,12 +241,12 @@ describe("StudioView", () => {
     expect(reconnectBtn).toBeInTheDocument();
     expect(reconnectBtn).toHaveTextContent(/Reconnect Environment/i);
 
-    fireEvent.click(reconnectBtn);
+    await user.click(reconnectBtn);
     expect(handleReconnect).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads preview iframe when manual Refresh button is clicked or refreshKey prop changes", () => {
-    const { rerenderWithContext } = renderStudio({
+  it("reloads preview iframe when manual Refresh button is clicked or refreshKey prop changes", async () => {
+    const { user, rerenderWithContext } = renderStudio({
       previewState: {
         repo: "cool-app",
         status: "SERVING",
@@ -295,7 +263,7 @@ describe("StudioView", () => {
 
     // Click explicit toolbar Refresh button
     const refreshBtn = screen.getByTestId("reload-preview-btn");
-    fireEvent.click(refreshBtn);
+    await user.click(refreshBtn);
 
     const reloadedIframe = screen.getByTitle("Live Application Preview");
     expect(reloadedIframe).toBeInTheDocument();
