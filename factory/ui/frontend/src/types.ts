@@ -33,13 +33,23 @@ export interface Repo {
   is_tanstack_compatible?: boolean;
 }
 
+export interface IssueMilestone {
+  number?: number;
+  title: string;
+  slug?: string;
+}
+
 export interface Issue {
+  id?: number | string;
   number: number | string;
   title: string;
   status: "ready-for-agent" | "claimed" | "ready-for-human" | "resolved" | string;
   blocked_by: string[];
   labels?: string[];
   body?: string;
+  state?: "open" | "closed" | string;
+  milestone?: IssueMilestone | null;
+  html_url?: string;
 }
 
 export interface Milestone {
@@ -47,6 +57,27 @@ export interface Milestone {
   title: string;
   description?: string;
   issues: Issue[];
+}
+
+export interface StudioDispatchParams {
+  repo: string;
+  issue_number?: number | string;
+  milestone_slug?: string;
+  milestone_title?: string;
+  model?: string;
+  vm?: boolean;
+}
+
+export interface StudioDispatchResponse {
+  accepted: boolean;
+  job: Job;
+  issue_number?: number | string | null;
+  milestone_slug?: string | null;
+  branch: string;
+  target_branch: string;
+  preview_url?: string | null;
+  preview?: PreviewState | null;
+  stage: string;
 }
 
 export interface ScratchFeature {

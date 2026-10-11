@@ -22,6 +22,7 @@ vi.mock("./api", () => ({
   getPreviewStreamUrl: vi.fn((repo: string) => `/api/studio/repos/${repo}/preview/stream`),
   fetchChatMessages: vi.fn(),
   clearChatMessages: vi.fn(),
+  dispatchStudio: vi.fn(),
 }));
 
 class MockEventSource {
@@ -649,6 +650,90 @@ describe("App Root Component", () => {
     expect(await screen.findByTestId("clear-chat-confirmation")).toBeInTheDocument();
     expect(screen.getByTestId("chat-cleared-banner")).toBeInTheDocument();
     expect(screen.queryByText("Message to be cleared")).not.toBeInTheDocument();
+  });
+
+  it("opens IssueDrawer, triggers Instant Dispatch, and updates active job and live preview", async () => {
+    vi.mocked(api.fetchIssues).mockResolvedValue({
+      repo: "my-app",
+      issues: [
+        {
+          number: 101,
+          title: "Build landing hero section",
+          state: "open",
+          status: "ready-for-agent",
+          labels: ["factory:ready"],
+          blocked_by: [],
+          milestone: {
+            number: 1,
+            title: "v1: Landing Page",
+            slug: "v1-landing-page",
+          },
+        },
+      ],
+    });
+
+    vi.mocked(api.dispatchStudio).mockResolvedValue({
+      accepted: true,
+      job: {
+        id: "job-landing-101",
+        repo: "my-app",
+        feature: "v1-landing-page",
+        issue: "101",
+        model: "deepseek-v4.1-flash",
+        vm: false,
+        dev: true,
+        preview_url: "https://landing-101-3000.modal.host",
+        status: "RUNNING",
+        stage: "CODER",
+        created_at: "2026-10-11T00:00:00Z",
+        log_count: 0,
+        event_count: 0,
+      },
+      issue_number: 101,
+      milestone_slug: "v1-landing-page",
+      branch: "factory/v1-landing-page",
+      target_branch: "factory/v1-landing-page",
+      preview_url: "https://landing-101-3000.modal.host",
+      preview: {
+        status: "SERVING",
+        branch: "factory/v1-landing-page",
+        preview_url: "https://landing-101-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      stage: "CODER",
+    });
+
+    render(<App />);
+
+    // 1. Open IssueDrawer
+    const issuesBtn = await screen.findByTestId("studio-issues-btn");
+    fireEvent.click(issuesBtn);
+
+    // 2. Drawer renders with issue 101
+    expect(await screen.findByText("Build landing hero section")).toBeInTheDocument();
+
+    // 3. Click Instant Dispatch
+    const dispatchBtn = screen.getByTestId("instant-dispatch-btn-101");
+    fireEvent.click(dispatchBtn);
+
+    // 4. Verify dispatch endpoint was called
+    await waitFor(() => {
+      expect(api.dispatchStudio).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repo: "my-app",
+          issue_number: 101,
+          milestone_slug: "v1-landing-page",
+        })
+      );
+    });
+
+    // 5. Active job badge in top control bar updates with job ID and stage
+    expect(await screen.findByText("job-landing-101")).toBeInTheDocument();
+    expect(screen.getAllByText("CODER").length).toBeGreaterThanOrEqual(1);
+
+    // 6. Live preview updates
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/v1-landing-page");
   });
 });
 

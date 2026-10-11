@@ -409,5 +409,61 @@ describe("StudioView", () => {
     expect(screen.getByTestId("chat-cleared-banner")).toBeInTheDocument();
     expect(screen.getByText("Chat history cleared for cool-app.")).toBeInTheDocument();
   });
+
+  it("renders 'Issues' trigger button in top control bar with live open issues count and opens IssueDrawer on click", async () => {
+    const handleOpenIssues = vi.fn();
+    const { user } = renderStudio({
+      selectedRepo: "cool-app",
+      onOpenIssueDrawer: handleOpenIssues,
+    });
+
+    const issuesBtn = screen.getByTestId("studio-issues-btn");
+    expect(issuesBtn).toBeInTheDocument();
+    expect(issuesBtn).toHaveTextContent(/Issues/i);
+
+    const badge = screen.getByTestId("studio-issues-badge");
+    expect(badge).toBeInTheDocument();
+
+    await user.click(issuesBtn);
+    expect(handleOpenIssues).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens IssueDrawer without interrupting live preview state or chat scroll history", async () => {
+    const { user } = renderStudio({
+      selectedRepo: "cool-app",
+      previewState: {
+        repo: "cool-app",
+        status: "SERVING",
+        branch: "factory/feature-live",
+        preview_url: "https://cool-app-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      messages: [
+        {
+          id: "m-user-persist",
+          role: "user",
+          text: "Persistent chat item before drawer open",
+          timestamp: Date.now(),
+        },
+      ],
+    });
+
+    // 1. Verify live preview and chat message are in the DOM
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/feature-live");
+    expect(screen.getByText("Persistent chat item before drawer open")).toBeInTheDocument();
+
+    // 2. Open drawer via top bar Issues button
+    const issuesBtn = screen.getByTestId("studio-issues-btn");
+    await user.click(issuesBtn);
+
+    // 3. Drawer is visible
+    expect(screen.getByTestId("studio-issue-drawer")).toBeInTheDocument();
+    expect(screen.getByText("GitHub Issues")).toBeInTheDocument();
+
+    // 4. Live preview and chat history remain intact and undisturbed
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/feature-live");
+    expect(screen.getByText("Persistent chat item before drawer open")).toBeInTheDocument();
+  });
 });
 

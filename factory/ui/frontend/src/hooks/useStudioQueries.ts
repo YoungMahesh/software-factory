@@ -7,6 +7,7 @@ export const studioQueryKeys = {
   preview: (repo: string) => ["studio", "preview", repo] as const,
   scratch: (repo: string) => ["studio", "scratch", repo] as const,
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
+  issues: (repo: string) => ["studio", "issues", repo] as const,
   messages: (repo: string) => ["studio", "messages", repo] as const,
 };
 
@@ -119,4 +120,28 @@ export function useClearChatMessagesMutation() {
     },
   });
 }
+
+export function useStudioIssuesQuery(repo: string, state: string = "all") {
+  return useQuery({
+    queryKey: studioQueryKeys.issues(repo),
+    queryFn: () => api.fetchIssues(repo, undefined, state),
+    enabled: Boolean(repo),
+    staleTime: 30_000,
+  });
+}
+
+export function useDispatchStudioMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: api.StudioDispatchParams) => api.dispatchStudio(params),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.messages(vars.repo) });
+      if (vars.repo) {
+        queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
+      }
+    },
+  });
+}
+
 

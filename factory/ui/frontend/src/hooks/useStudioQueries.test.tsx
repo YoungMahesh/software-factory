@@ -6,6 +6,8 @@ import {
   studioQueryKeys,
   useChatMessagesQuery,
   useClearChatMessagesMutation,
+  useStudioIssuesQuery,
+  useDispatchStudioMutation,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -15,6 +17,8 @@ vi.mock("../api", async (importOriginal) => {
     ...actual,
     fetchChatMessages: vi.fn(),
     clearChatMessages: vi.fn(),
+    fetchIssues: vi.fn(),
+    dispatchStudio: vi.fn(),
   };
 });
 
@@ -88,5 +92,81 @@ describe("useStudioQueries - Chat Messages", () => {
       repo: "my-app",
       messages: [],
     });
+  });
+
+  it("defines studioQueryKeys.issues(repo)", () => {
+    expect(studioQueryKeys.issues("my-app")).toEqual(["studio", "issues", "my-app"]);
+  });
+
+  it("fetches GitHub issues via useStudioIssuesQuery", async () => {
+    const mockData = {
+      repo: "my-app",
+      issues: [
+        {
+          number: 1,
+          title: "Setup auth",
+          status: "ready-for-agent",
+          state: "open",
+          blocked_by: [],
+          labels: ["factory:ready"],
+        },
+      ],
+    };
+    vi.mocked(api.fetchIssues).mockResolvedValue(mockData);
+
+    const { result } = renderHook(() => useStudioIssuesQuery("my-app"), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.fetchIssues).toHaveBeenCalledWith("my-app", undefined, "all");
+    expect(result.current.data).toEqual(mockData);
+  });
+
+  it("dispatches job and invalidates query caches via useDispatchStudioMutation", async () => {
+    const mockJob = {
+      id: "job-disp-1",
+      repo: "my-app",
+      status: "RUNNING" as const,
+      stage: "CODER" as const,
+      model: "deepseek-v4.1-flash",
+      vm: false,
+      dev: true,
+      created_at: "2026-10-11T00:00:00Z",
+      log_count: 0,
+      event_count: 0,
+    };
+    const mockDispatchRes = {
+      accepted: true,
+      job: mockJob,
+      issue_number: 1,
+      milestone_slug: "v1-app",
+      branch: "factory/v1-app",
+      target_branch: "factory/v1-app",
+      preview_url: "https://sandbox-preview.modal.host",
+      stage: "CODER",
+    };
+    vi.mocked(api.dispatchStudio).mockResolvedValue(mockDispatchRes);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useDispatchStudioMutation(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        repo: "my-app",
+        issue_number: 1,
+        milestone_slug: "v1-app",
+      });
+    });
+
+    expect(api.dispatchStudio).toHaveBeenCalledWith({
+      repo: "my-app",
+      issue_number: 1,
+      milestone_slug: "v1-app",
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.issues("my-app") });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.messages("my-app") });
   });
 });

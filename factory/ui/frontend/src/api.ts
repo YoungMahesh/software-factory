@@ -9,7 +9,11 @@ import {
   GrillTurnResult,
   DraftADR,
   DbChatMessage,
+  StudioDispatchParams,
+  StudioDispatchResponse,
 } from "./types";
+
+export type { StudioDispatchParams, StudioDispatchResponse } from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
@@ -72,13 +76,39 @@ export async function fetchMilestones(
 
 export async function fetchIssues(
   repo: string,
-  milestoneNumber?: number
-): Promise<{ repo: string; issues: Issue[] }> {
-  const url = milestoneNumber
-    ? `/api/repos/${encodeURIComponent(repo)}/issues?milestone=${milestoneNumber}`
-    : `/api/repos/${encodeURIComponent(repo)}/issues`;
-  const res = await fetch(url);
+  milestoneNumber?: number,
+  state: string = "all"
+): Promise<{ repo: string; org?: string; issues: Issue[] }> {
+  const params = new URLSearchParams();
+  if (milestoneNumber !== undefined) {
+    params.set("milestone", String(milestoneNumber));
+  }
+  if (state) {
+    params.set("state", state);
+  }
+  const queryStr = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/issues${queryStr}`);
   if (!res.ok) throw new Error(`Failed to fetch issues: ${res.statusText}`);
+  return res.json();
+}
+
+export async function dispatchStudio(
+  params: StudioDispatchParams
+): Promise<StudioDispatchResponse> {
+  const payload = {
+    model: "deepseek-v4.1-flash",
+    vm: false,
+    ...params,
+  };
+  const res = await fetch("/api/studio/dispatch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to dispatch: ${res.statusText}`);
+  }
   return res.json();
 }
 

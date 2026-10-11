@@ -9,17 +9,21 @@ import {
   Play,
   Square,
   Check,
+  GitPullRequest,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
 import { ToolChip } from "../components/ToolChip";
 import { useStudio } from "../context/StudioContext";
+import { useStudioIssuesQuery, studioQueryKeys } from "../hooks/useStudioQueries";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { NewAppModal } from "../components/NewAppModal";
 import { DisconnectedModal } from "../components/DisconnectedModal";
 import { PromptComposer } from "../components/PromptComposer";
 import { ApprovalCard } from "../components/ApprovalCard";
+import { IssueDrawer } from "../components/IssueDrawer";
 
 export interface StudioViewProps {
   className?: string;
@@ -50,11 +54,44 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onClearChat,
     isClearingChat = false,
     isChatCleared = false,
+    onOpenIssueDrawer,
+    onCloseIssueDrawer,
+    isIssueDrawerOpen: propIssueDrawerOpen,
   } = useStudio();
 
+  const queryClient = useQueryClient();
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
-
   const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
+  const [isLocalIssueDrawerOpen, setIsLocalIssueDrawerOpen] = useState<boolean>(false);
+
+  const isIssueDrawerOpen =
+    propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
+
+  const issuesQuery = useStudioIssuesQuery(selectedRepo);
+  const openIssuesCount = (issuesQuery.data?.issues || []).filter((i) => {
+    const isClosed = i.state && i.state.toLowerCase() === "closed";
+    const isResolved =
+      i.status?.toLowerCase() === "resolved" ||
+      i.labels?.some((l) => l.toLowerCase() === "factory:resolved");
+    return !isClosed && !isResolved;
+  }).length;
+
+  const handleOpenIssues = () => {
+    if (selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+    }
+    setIsLocalIssueDrawerOpen(true);
+    if (onOpenIssueDrawer) {
+      onOpenIssueDrawer();
+    }
+  };
+
+  const handleCloseIssues = () => {
+    setIsLocalIssueDrawerOpen(false);
+    if (onCloseIssueDrawer) {
+      onCloseIssueDrawer();
+    }
+  };
 
   useEffect(() => {
     if (previewState?.status !== "STOPPED") {
@@ -111,6 +148,26 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
 
           {selectedRepo && (
             <div className="flex items-center space-x-2">
+              <Button
+                id="btn-studio-issues"
+                data-testid="studio-issues-btn"
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleOpenIssues}
+                icon={<GitPullRequest className="w-3.5 h-3.5 text-indigo-400" />}
+                title="View GitHub Issues"
+                className="relative"
+              >
+                <span>Issues</span>
+                <span
+                  data-testid="studio-issues-badge"
+                  className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800"
+                >
+                  {openIssuesCount}
+                </span>
+              </Button>
+
               <Button
                 id="btn-studio-preview-app"
                 data-testid="preview-app-btn"
@@ -461,6 +518,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         onReconnect={handleReconnect}
         onDismiss={() => setIsDismissedDisconnected(true)}
         isReconnecting={isLaunchingPreview}
+      />
+
+      {/* GitHub Issue Drawer */}
+      <IssueDrawer
+        isOpen={isIssueDrawerOpen}
+        onClose={handleCloseIssues}
+        repo={selectedRepo}
       />
     </div>
   );

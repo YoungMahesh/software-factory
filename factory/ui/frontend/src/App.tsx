@@ -23,6 +23,7 @@ import {
   useApprovePlanMutation,
   useChatMessagesQuery,
   useClearChatMessagesMutation,
+  useDispatchStudioMutation,
   studioQueryKeys,
   createStoppedPreviewState,
 } from "./hooks/useStudioQueries";
@@ -44,6 +45,7 @@ export const AppContent: React.FC = () => {
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
   const [isChatCleared, setIsChatCleared] = useState<boolean>(false);
@@ -62,14 +64,25 @@ export const AppContent: React.FC = () => {
   const sendPromptMutation = useSendStudioPromptMutation();
   const approvePlanMutation = useApprovePlanMutation();
   const clearChatMutation = useClearChatMessagesMutation();
+  const dispatchStudioMutation = useDispatchStudioMutation();
 
   const isLaunchingPreview = launchPreviewMutation.isPending;
   const isSendingPrompt = sendPromptMutation.isPending;
   const isApproving = approvePlanMutation.isPending;
 
-  // Reset chat cleared state when selected repo changes
+  // Revalidate issues query on job completion
+  useEffect(() => {
+    if (activeJob?.status === "SUCCESS" && selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+    }
+  }, [activeJob?.status, selectedRepo]);
+
+  // Reset chat cleared state and revalidate issues query when selected repo changes
   useEffect(() => {
     setIsChatCleared(false);
+    if (selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+    }
   }, [selectedRepo]);
 
   // Rehydrate chat messages from the database when query data arrives
@@ -599,6 +612,52 @@ export const AppContent: React.FC = () => {
     }
   };
 
+  // Handle Instant Dispatch from Issue Drawer
+  const handleInstantDispatch = async (params: {
+    repo?: string;
+    issue_number?: number | string;
+    milestone_slug?: string;
+    milestone_title?: string;
+    milestone?: string;
+  }) => {
+    const repo = params.repo || selectedRepo;
+    if (!repo || dispatchStudioMutation.isPending) return;
+
+    try {
+      const res = await dispatchStudioMutation.mutateAsync({
+        repo,
+        issue_number: params.issue_number,
+        milestone_slug: params.milestone_slug,
+        milestone_title: params.milestone_title,
+        model: "deepseek-v4.1-flash",
+        vm: false,
+      });
+
+      if (res.job) {
+        clearLogs();
+        setActiveJobId(res.job.id);
+        setActiveJob(res.job);
+        setJobs((prev) => [res.job, ...prev]);
+
+        if (res.preview) {
+          setPreviewState(res.preview);
+        } else if (res.preview_url) {
+          setPreviewState((prev) => ({
+            status: "SERVING",
+            branch: res.target_branch || res.branch || "main",
+            preview_url: res.preview_url!,
+            logs: prev?.logs || [],
+            error_message: null,
+          }));
+        }
+      }
+      return res;
+    } catch (err: any) {
+      console.error("Failed to dispatch studio job:", err);
+      throw err;
+    }
+  };
+
   const studioContextValue: StudioContextValue = {
     repos,
     selectedRepo,
@@ -623,6 +682,11 @@ export const AppContent: React.FC = () => {
     onClearChat: handleClearChat,
     isClearingChat: clearChatMutation.isPending,
     isChatCleared,
+    onOpenIssueDrawer: () => setIsIssueDrawerOpen(true),
+    onCloseIssueDrawer: () => setIsIssueDrawerOpen(false),
+    isIssueDrawerOpen,
+    onInstantDispatch: handleInstantDispatch,
+    isDispatching: dispatchStudioMutation.isPending,
   };
 
   return (

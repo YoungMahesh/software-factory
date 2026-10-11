@@ -1,5 +1,13 @@
 import React, { createContext, useContext } from "react";
-import { Repo, Job, ChatMessage, PreviewState, GrillTurnResult } from "../types";
+import {
+  Repo,
+  Job,
+  ChatMessage,
+  PreviewState,
+  GrillTurnResult,
+  StudioDispatchParams,
+  StudioDispatchResponse,
+} from "../types";
 
 export interface StudioContextValue {
   repos: Repo[];
@@ -25,6 +33,11 @@ export interface StudioContextValue {
   onClearChat?: () => Promise<void> | void;
   isClearingChat?: boolean;
   isChatCleared?: boolean;
+  onOpenIssueDrawer?: () => void;
+  onCloseIssueDrawer?: () => void;
+  isIssueDrawerOpen?: boolean;
+  onInstantDispatch?: (params: StudioDispatchParams) => Promise<StudioDispatchResponse | void>;
+  isDispatching?: boolean;
 }
 
 const StudioContext = createContext<StudioContextValue | undefined>(undefined);

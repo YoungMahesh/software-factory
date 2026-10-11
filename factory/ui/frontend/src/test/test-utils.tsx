@@ -35,6 +35,10 @@ export const createDefaultStudioContext = (
   onClearChat: vi.fn().mockResolvedValue(undefined),
   isClearingChat: false,
   isChatCleared: false,
+  onOpenIssueDrawer: vi.fn(),
+  onCloseIssueDrawer: vi.fn(),
+  onInstantDispatch: vi.fn().mockResolvedValue(undefined),
+  isDispatching: false,
   ...overrides,
 });
 
