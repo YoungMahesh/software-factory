@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Activity,
@@ -49,10 +49,18 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
 
   const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (previewState?.status !== "STOPPED") {
+      setIsDismissedDisconnected(false);
+    }
+  }, [previewState?.status, selectedRepo]);
+
   const isDisconnected = previewState?.status === "STOPPED";
   const isExecutingTurn = Boolean(
     isSending || (activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))
   );
+  const isServing = previewState?.status === "SERVING";
+  const isProvisioning = previewState?.status === "PROVISIONING";
 
   const handleReconnect = () => {
     if (onReconnectPreview) {
@@ -103,30 +111,30 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  if (previewState?.status === "SERVING" && onStopPreview) {
+                  if (isServing && onStopPreview) {
                     onStopPreview();
                   } else if (onLaunchPreview) {
                     onLaunchPreview();
                   }
                 }}
-                disabled={isLaunchingPreview || previewState?.status === "PROVISIONING"}
-                isLoading={isLaunchingPreview || previewState?.status === "PROVISIONING"}
+                disabled={isLaunchingPreview || isProvisioning}
+                isLoading={isLaunchingPreview || isProvisioning}
                 icon={
-                  previewState?.status === "SERVING" ? (
+                  isServing ? (
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-0.5" />
                   ) : (
                     <Play className="w-3.5 h-3.5 text-indigo-400 fill-current" />
                   )
                 }
                 title={
-                  previewState?.status === "SERVING"
+                  isServing
                     ? "Preview active (click to stop)"
-                    : "Launch Dedicated Preview Sandbox"
+                    : "Launch Unified Studio Sandbox"
                 }
                 className={
-                  previewState?.status === "SERVING"
+                  isServing
                     ? "bg-emerald-950/80 border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
-                    : previewState?.status === "PROVISIONING" || isLaunchingPreview
+                    : isProvisioning || isLaunchingPreview
                     ? "bg-slate-800 text-slate-400 cursor-wait"
                     : ""
                 }
@@ -134,7 +142,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                 Preview App
               </Button>
 
-              {(previewState?.status === "SERVING" || previewState?.status === "PROVISIONING") && onStopPreview && (
+              {(isServing || isProvisioning) && onStopPreview && (
                 <Button
                   id="btn-studio-preview-stop"
                   data-testid="studio-stop-preview-btn"

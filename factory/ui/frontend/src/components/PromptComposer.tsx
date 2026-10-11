@@ -22,19 +22,21 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
 
   const isInputLocked = !selectedRepo || isExecutingTurn || isDisconnected;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitPrompt = () => {
     if (!prompt.trim() || isInputLocked) return;
     onSendPrompt(prompt.trim());
     setPrompt("");
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitPrompt();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!prompt.trim() || isInputLocked) return;
-      onSendPrompt(prompt.trim());
-      setPrompt("");
+      submitPrompt();
     }
   };
 

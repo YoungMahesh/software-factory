@@ -2033,6 +2033,24 @@ class TestStudioSplitPaneAndDualView(unittest.TestCase):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/api/studio/repos").status_code, 200)
 
+    @patch("factory.ui.app.instantiate_repo_from_template")
+    def test_route_aliases_return_identical_responses(self, mock_instantiate):
+        mock_instantiate.return_value = {"name": "sample-repo", "html_url": "https://github.com/test/sample-repo"}
+
+        # GET alias equivalence
+        get_repos = self.client.get("/api/repos")
+        get_studio_repos = self.client.get("/api/studio/repos")
+        self.assertEqual(get_repos.status_code, 200)
+        self.assertEqual(get_studio_repos.status_code, 200)
+        self.assertEqual(get_repos.json(), get_studio_repos.json())
+
+        # POST alias equivalence
+        post_repos = self.client.post("/api/repos", json={"name": "sample-repo"})
+        post_studio_repos = self.client.post("/api/studio/repos", json={"name": "sample-repo"})
+        self.assertEqual(post_repos.status_code, 201)
+        self.assertEqual(post_studio_repos.status_code, 201)
+        self.assertEqual(post_repos.json(), post_studio_repos.json())
+
 
 
 
