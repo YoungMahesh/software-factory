@@ -12,7 +12,6 @@ export const studioQueryKeys = {
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {
   return {
     status: "STOPPED",
-    repo: prev.repo,
     branch: prev.branch || "main",
     preview_url: null,
     logs: prev.logs || [],

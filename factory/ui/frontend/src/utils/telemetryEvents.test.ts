@@ -199,4 +199,50 @@ describe("foldTelemetryEvents", () => {
     expect(initialMsg.stepChips).toHaveLength(0);
     expect(initialMsg.thinking).toBeUndefined();
   });
+
+  it("updates stage when subsequent event specifies a new stage", () => {
+    const initial: ChatMessage[] = [
+      {
+        id: "assistant-job-1",
+        role: "assistant",
+        jobId: "job-1",
+        stage: "PLANNER",
+        timestamp: 1000,
+        text: "Assembly line execution",
+      },
+    ];
+
+    const events: AgentEvent[] = [
+      { type: "stage", stage: "CODER", data: {} },
+    ];
+
+    const result = foldTelemetryEvents(initial, events, "job-1");
+    expect(result[0].stage).toBe("CODER");
+  });
+
+  it("preserves existing thinking text when thinking event only updates done or durationMs without delta", () => {
+    const initial: ChatMessage[] = [
+      {
+        id: "assistant-job-1",
+        role: "assistant",
+        jobId: "job-1",
+        timestamp: 1000,
+        text: "Assembly line execution",
+        thinking: {
+          text: "Already formulated plan.",
+          durationMs: 500,
+          done: false,
+        },
+      },
+    ];
+
+    const events: AgentEvent[] = [
+      { type: "thinking", data: { done: true, durationMs: 1200 } },
+    ];
+
+    const result = foldTelemetryEvents(initial, events, "job-1");
+    expect(result[0].thinking?.text).toBe("Already formulated plan.");
+    expect(result[0].thinking?.done).toBe(true);
+    expect(result[0].thinking?.durationMs).toBe(1200);
+  });
 });

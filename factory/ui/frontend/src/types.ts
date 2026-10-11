@@ -10,11 +10,11 @@ export type PreviewStage =
   | "SERVING";
 
 export type PreviewState =
-  | { status: "IDLE"; branch: null; preview_url: null; logs: string[]; error_message: null; repo?: string }
-  | { status: "PROVISIONING"; stage: PreviewStage; branch: string; preview_url: null; logs: string[]; error_message: null; repo?: string }
-  | { status: "SERVING"; preview_url: string; branch: string; logs: string[]; error_message: null; repo?: string }
-  | { status: "STOPPED"; branch: string; preview_url: null; logs: string[]; error_message: null; repo?: string }
-  | { status: "FAILED"; branch: string | null; preview_url: null; logs: string[]; error_message: string; repo?: string };
+  | { status: "IDLE"; branch: null; preview_url: null; logs: string[]; error_message: null }
+  | { status: "PROVISIONING"; stage: PreviewStage; branch: string; preview_url: null; logs: string[]; error_message: null }
+  | { status: "SERVING"; preview_url: string; branch: string; logs: string[]; error_message: null }
+  | { status: "STOPPED"; branch: string; preview_url: null; logs: string[]; error_message: null }
+  | { status: "FAILED"; branch: string | null; preview_url: null; logs: string[]; error_message: string };
 
 export type JobStage =
   | "IDLE"

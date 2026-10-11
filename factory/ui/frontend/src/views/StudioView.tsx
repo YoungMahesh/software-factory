@@ -5,7 +5,6 @@ import {
   Terminal,
   XCircle,
   ShieldAlert,
-  Loader2,
   Box,
   Play,
   Square,
@@ -97,10 +96,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
 
           {selectedRepo && (
             <div className="flex items-center space-x-2">
-              <button
+              <Button
                 id="btn-studio-preview-app"
                 data-testid="preview-app-btn"
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   if (previewState?.status === "SERVING" && onStopPreview) {
                     onStopPreview();
@@ -109,41 +110,43 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                   }
                 }}
                 disabled={isLaunchingPreview || previewState?.status === "PROVISIONING"}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm cursor-pointer ${
-                  previewState?.status === "SERVING"
-                    ? "bg-emerald-950/80 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
-                    : previewState?.status === "PROVISIONING" || isLaunchingPreview
-                    ? "bg-slate-800 text-slate-400 cursor-wait"
-                    : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-                }`}
+                isLoading={isLaunchingPreview || previewState?.status === "PROVISIONING"}
+                icon={
+                  previewState?.status === "SERVING" ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-0.5" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 text-indigo-400 fill-current" />
+                  )
+                }
                 title={
                   previewState?.status === "SERVING"
                     ? "Preview active (click to stop)"
                     : "Launch Dedicated Preview Sandbox"
                 }
+                className={
+                  previewState?.status === "SERVING"
+                    ? "bg-emerald-950/80 border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
+                    : previewState?.status === "PROVISIONING" || isLaunchingPreview
+                    ? "bg-slate-800 text-slate-400 cursor-wait"
+                    : ""
+                }
               >
-                {isLaunchingPreview || previewState?.status === "PROVISIONING" ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                ) : previewState?.status === "SERVING" ? (
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-0.5" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 text-indigo-400 fill-current" />
-                )}
-                <span>Preview App</span>
-              </button>
+                Preview App
+              </Button>
 
               {(previewState?.status === "SERVING" || previewState?.status === "PROVISIONING") && onStopPreview && (
-                <button
+                <Button
                   id="btn-studio-preview-stop"
                   data-testid="studio-stop-preview-btn"
                   type="button"
+                  variant="danger"
+                  size="sm"
                   onClick={onStopPreview}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-colors cursor-pointer"
+                  icon={<Square className="w-3 h-3 fill-current" />}
                   title="Stop preview sandbox"
                 >
-                  <Square className="w-3 h-3 fill-current" />
-                  <span>Stop</span>
-                </button>
+                  Stop
+                </Button>
               )}
             </div>
           )}
@@ -163,39 +166,44 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             </span>
 
             {onOpenDrawer && (
-              <button
+              <Button
                 id="btn-studio-activity"
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => onOpenDrawer()}
-                className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-indigo-300 hover:text-white bg-indigo-900/40 hover:bg-indigo-800 transition-colors cursor-pointer"
+                icon={<Activity className="w-3 h-3" />}
+                className="px-2 py-0.5 text-[11px] text-indigo-300 hover:text-white bg-indigo-900/40 hover:bg-indigo-800"
                 title="Open Agent Activity Drawer"
               >
-                <Activity className="w-3 h-3" />
-                <span>Activity</span>
-              </button>
+                Activity
+              </Button>
             )}
 
-            <button
+            <Button
               id="btn-inspect-logs"
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={onSwitchToConsole}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+              icon={<Terminal className="w-3 h-3" />}
+              className="px-2 py-0.5 text-[11px] text-slate-400 hover:text-slate-200"
               title="Inspect terminal logs in Console"
             >
-              <Terminal className="w-3 h-3" />
-              <span>Logs</span>
-            </button>
+              Logs
+            </Button>
 
             {activeJob.status === "RUNNING" && (
-              <button
+              <Button
                 id="btn-studio-cancel"
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => onCancelJob(activeJob.id)}
-                className="p-1 rounded text-red-400 hover:text-red-200 hover:bg-red-950 transition-colors cursor-pointer"
+                icon={<XCircle className="w-3.5 h-3.5" />}
+                className="p-1 text-red-400 hover:text-red-200 hover:bg-red-950"
                 title="Cancel running assembly line"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-              </button>
+              />
             )}
           </div>
         )}

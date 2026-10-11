@@ -5,7 +5,7 @@ import {
   Terminal,
   GitBranch,
 } from "lucide-react";
-import { Repo, Job, ChatMessage, LaunchJobParams, PreviewState } from "./types";
+import { Job, ChatMessage, LaunchJobParams, PreviewState } from "./types";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
@@ -13,6 +13,15 @@ import { ActivityDrawer } from "./components/ActivityDrawer";
 import { useJobStream } from "./hooks/useJobStream";
 import { foldTelemetryEvents } from "./utils/telemetryEvents";
 import { StudioProvider, StudioContextValue } from "./context/StudioContext";
+import {
+  useStudioRepos,
+  usePreviewQuery,
+  useCreateRepoMutation,
+  useLaunchPreviewMutation,
+  useStopPreviewMutation,
+  useSendStudioPromptMutation,
+  createStoppedPreviewState,
+} from "./hooks/useStudioQueries";
 import * as api from "./api";
 
 const getInitialTab = (): "studio" | "console" => {
@@ -22,19 +31,44 @@ const getInitialTab = (): "studio" | "console" => {
   return "studio";
 };
 
-export const App: React.FC = () => {
+export const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"studio" | "console">(getInitialTab);
-  const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string>("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isSendingPrompt, setIsSendingPrompt] = useState<boolean>(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
-  const [isLaunchingPreview, setIsLaunchingPreview] = useState<boolean>(false);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
+
+  // Queries & Mutations
+  const reposQuery = useStudioRepos();
+  const repos = reposQuery.data?.repos || [];
+
+  const previewQuery = usePreviewQuery(selectedRepo);
+
+  const createRepoMutation = useCreateRepoMutation();
+  const launchPreviewMutation = useLaunchPreviewMutation();
+  const stopPreviewMutation = useStopPreviewMutation();
+  const sendPromptMutation = useSendStudioPromptMutation();
+
+  const isLaunchingPreview = launchPreviewMutation.isPending;
+  const isSendingPrompt = sendPromptMutation.isPending;
+
+  // Select initial repo when repos load
+  useEffect(() => {
+    if (!selectedRepo && repos.length > 0) {
+      setSelectedRepo(repos[0].name);
+    }
+  }, [repos, selectedRepo]);
+
+  // Sync preview query data into preview state
+  useEffect(() => {
+    if (previewQuery.data !== undefined) {
+      setPreviewState(previewQuery.data);
+    }
+  }, [previewQuery.data]);
 
   // Synchronize activeTab with URL history
   const switchTab = (tab: "studio" | "console") => {
@@ -86,19 +120,7 @@ export const App: React.FC = () => {
     setMessages((prev) => foldTelemetryEvents(prev, events, activeJobId, activeJob));
   }, [events, activeJobId, activeJob]);
 
-  // Load repositories & jobs on mount
-  const loadRepos = async () => {
-    try {
-      const data = await api.fetchStudioRepos();
-      setRepos(data.repos || []);
-      if (!selectedRepo && data.repos?.length > 0) {
-        setSelectedRepo(data.repos[0].name);
-      }
-    } catch (err) {
-      console.error("Failed to fetch repositories:", err);
-    }
-  };
-
+  // Load jobs on mount
   const loadJobs = async () => {
     try {
       const data = await api.listJobs();
@@ -109,31 +131,8 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    loadRepos();
     loadJobs();
   }, []);
-
-  // Load preview state when selectedRepo changes
-  const loadPreview = async (repo: string) => {
-    if (!repo) {
-      setPreviewState(null);
-      return;
-    }
-    try {
-      const data = await api.fetchPreview(repo);
-      setPreviewState(data);
-    } catch (err) {
-      console.error(`Failed to fetch preview for ${repo}:`, err);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedRepo) {
-      loadPreview(selectedRepo);
-    } else {
-      setPreviewState(null);
-    }
-  }, [selectedRepo]);
 
   // Live SSE stream for preview logs and stage transitions
   useEffect(() => {
@@ -158,7 +157,7 @@ export const App: React.FC = () => {
         const payload = JSON.parse(event.data);
         if (payload.event === "init") {
           setPreviewState((prev) => {
-            if (!prev || prev.repo !== selectedRepo) return prev;
+            if (!prev) return prev;
             return {
               ...prev,
               ...payload.preview,
@@ -169,7 +168,7 @@ export const App: React.FC = () => {
           });
         } else if (payload.event === "log") {
           setPreviewState((prev) => {
-            if (!prev || prev.repo !== selectedRepo) return prev;
+            if (!prev) return prev;
             return {
               ...prev,
               logs: [...(prev.logs || []), payload.data],
@@ -177,7 +176,7 @@ export const App: React.FC = () => {
           });
         } else if (payload.event === "stage") {
           setPreviewState((prev) => {
-            if (!prev || prev.repo !== selectedRepo) return prev;
+            if (!prev) return prev;
             if (prev.status === "PROVISIONING") {
               return {
                 ...prev,
@@ -188,29 +187,20 @@ export const App: React.FC = () => {
           });
         } else if (payload.event === "status") {
           setPreviewState((prev) => {
-            if (!prev || prev.repo !== selectedRepo) return prev;
+            if (!prev) return prev;
             if (payload.status === "SERVING") {
               return {
                 status: "SERVING",
-                repo: prev.repo,
                 branch: prev.branch || "main",
                 preview_url: payload.preview_url || (prev.status === "SERVING" ? prev.preview_url : ""),
                 logs: prev.logs || [],
                 error_message: null,
               };
             } else if (payload.status === "STOPPED") {
-              return {
-                status: "STOPPED",
-                repo: prev.repo,
-                branch: prev.branch || "main",
-                preview_url: null,
-                logs: prev.logs || [],
-                error_message: null,
-              };
+              return createStoppedPreviewState(prev);
             } else if (payload.status === "FAILED") {
               return {
                 status: "FAILED",
-                repo: prev.repo,
                 branch: prev.branch,
                 preview_url: null,
                 logs: prev.logs || [],
@@ -220,7 +210,6 @@ export const App: React.FC = () => {
               return {
                 status: "PROVISIONING",
                 stage: "PROVISIONING",
-                repo: prev.repo,
                 branch: prev.branch || "main",
                 preview_url: null,
                 logs: prev.logs || [],
@@ -232,8 +221,7 @@ export const App: React.FC = () => {
           if (payload.status === "STOPPED" || payload.status === "FAILED") {
             es?.close();
           }
-        }
- else if (payload.event === "preview_refresh") {
+        } else if (payload.event === "preview_refresh") {
           setPreviewRefreshKey((prev) => prev + 1);
         }
       } catch (e) {
@@ -252,14 +240,11 @@ export const App: React.FC = () => {
 
   const handleLaunchPreview = async (branch?: string) => {
     if (!selectedRepo || isLaunchingPreview) return;
-    setIsLaunchingPreview(true);
     try {
-      const data = await api.launchPreview(selectedRepo, branch);
+      const data = await launchPreviewMutation.mutateAsync({ repo: selectedRepo, branch });
       setPreviewState(data);
     } catch (err) {
       console.error("Failed to launch preview:", err);
-    } finally {
-      setIsLaunchingPreview(false);
     }
   };
 
@@ -270,20 +255,10 @@ export const App: React.FC = () => {
   };
 
   const handleStopPreview = async () => {
-    if (!selectedRepo) return;
+    if (!selectedRepo || stopPreviewMutation.isPending) return;
     try {
-      await api.stopPreview(selectedRepo);
-      setPreviewState((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "STOPPED",
-              branch: prev.branch || "main",
-              preview_url: null,
-              error_message: null,
-            }
-          : null
-      );
+      await stopPreviewMutation.mutateAsync(selectedRepo);
+      setPreviewState((prev) => (prev ? createStoppedPreviewState(prev) : null));
     } catch (err) {
       console.error("Failed to stop preview:", err);
     }
@@ -291,8 +266,7 @@ export const App: React.FC = () => {
 
   // Handle Create Repo
   const handleCreateRepo = async (params: { name: string; description?: string }) => {
-    const newRepo = await api.createRepo(params);
-    await loadRepos();
+    const newRepo = await createRepoMutation.mutateAsync(params);
     setSelectedRepo(newRepo.name);
   };
 
@@ -338,10 +312,9 @@ export const App: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setIsSendingPrompt(true);
 
     try {
-      const res = await api.sendStudioPrompt({
+      const res = await sendPromptMutation.mutateAsync({
         repo: selectedRepo,
         prompt: promptText,
         model: "deepseek-v4.1-flash",
@@ -383,32 +356,23 @@ export const App: React.FC = () => {
             stepChips: [],
           };
           setMessages((prev) => [...prev, assistantMessage]);
+
+          if (res.preview) {
+            setPreviewState(res.preview);
+          }
         }
       }
     } catch (err: any) {
+      console.error("Failed to send studio prompt:", err);
       const errorMessage: ChatMessage = {
-        id: `assistant-err-${Date.now()}`,
+        id: `assistant-error-${Date.now()}`,
         role: "assistant",
+        text: `Error dispatching turn: ${err.message || "Network request failed"}`,
         timestamp: Date.now(),
-        text: `Error submitting prompt: ${err.message}`,
       };
       setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsSendingPrompt(false);
     }
   };
-
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: false,
-            refetchOnWindowFocus: false,
-          },
-        },
-      })
-  );
 
   const studioContextValue: StudioContextValue = {
     repos,
@@ -432,105 +396,123 @@ export const App: React.FC = () => {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StudioProvider value={studioContextValue}>
-        <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans">
-          {/* Top Application Header */}
-          <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between z-30 shrink-0">
-            <div className="flex items-center space-x-6">
-              {/* Logo & Product Title */}
-              <div className="flex items-center space-x-2.5">
-                <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
-                  <Boxes className="w-4 h-4" />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-sm tracking-tight text-slate-100">
-                    Software Factory
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
-                    v2
-                  </span>
-                </div>
+    <StudioProvider value={studioContextValue}>
+      <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans">
+        {/* Top Application Header */}
+        <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between z-30 shrink-0">
+          <div className="flex items-center space-x-6">
+            {/* Logo & Product Title */}
+            <div className="flex items-center space-x-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
+                <Boxes className="w-4 h-4" />
               </div>
-
-              {/* Navigation View Switcher */}
-              <nav className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-                <button
-                  id="nav-tab-studio"
-                  type="button"
-                  onClick={() => switchTab("studio")}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    activeTab === "studio"
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Factory Studio</span>
-                </button>
-
-                <button
-                  id="nav-tab-console"
-                  type="button"
-                  onClick={() => switchTab("console")}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    activeTab === "console"
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                  }`}
-                >
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>Factory Testing Console</span>
-                </button>
-              </nav>
+              <div className="flex flex-col">
+                <span className="font-bold text-sm text-slate-100 tracking-tight leading-none">
+                  Software Factory
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">v0.9.0-modal</span>
+              </div>
             </div>
 
-            {/* Right Header Status / Links */}
-            <div className="flex items-center space-x-3 text-xs text-slate-400">
-              <a
-                href="https://github.com/software-factory-09-test"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-1.5 hover:text-slate-200 transition-colors"
+            {/* Navigation Switcher Tabs */}
+            <nav className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <button
+                id="nav-tab-studio"
+                onClick={() => switchTab("studio")}
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === "studio"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
               >
-                <GitBranch className="w-4 h-4" />
-                <span className="hidden sm:inline">software-factory-09-test</span>
-              </a>
-            </div>
-          </header>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Factory Studio</span>
+              </button>
+              <button
+                id="nav-tab-console"
+                onClick={() => switchTab("console")}
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === "console"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Factory Testing Console</span>
+              </button>
+            </nav>
+          </div>
 
-          {/* Main Active View */}
-          <main className="flex-1 overflow-auto">
-            {activeTab === "studio" ? (
-              <StudioView />
-            ) : (
-              <TestingConsoleView
-                repos={repos}
-                selectedRepo={selectedRepo}
-                onSelectRepo={setSelectedRepo}
-                onRefreshRepos={loadRepos}
-                activeJob={activeJob}
-                logs={logs}
-                jobs={jobs}
-                onLaunch={handleLaunchJob}
-                onCancel={handleCancelJob}
-                onSelectJob={handleSelectJob}
-                onClearLogs={clearLogs}
-              />
+          {/* Header Right Status Indicator */}
+          <div className="flex items-center space-x-3 text-xs">
+            {activeJob && (
+              <div className="flex items-center space-x-2 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-slate-300 font-mono text-[11px]">{activeJob.stage}</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-400 truncate max-w-[120px]">
+                  {activeJob.feature || activeJob.repo}
+                </span>
+              </div>
             )}
-          </main>
+            <div className="flex items-center space-x-1.5 text-slate-400 font-mono text-[11px] bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
+              <GitBranch className="w-3 h-3 text-indigo-400" />
+              <span>{selectedRepo || "no-repo"}</span>
+            </div>
+          </div>
+        </header>
 
-          {/* Slide-over Agent Activity Drawer */}
-          <ActivityDrawer
-            isOpen={isDrawerOpen}
-            onClose={() => setIsDrawerOpen(false)}
-            jobId={activeJob?.id}
-            stage={activeJob?.stage}
-            events={events}
-            logs={logs}
-          />
-        </div>
-      </StudioProvider>
+        {/* Main Active View */}
+        <main className="flex-1 overflow-auto">
+          {activeTab === "studio" ? (
+            <StudioView />
+          ) : (
+            <TestingConsoleView
+              repos={repos}
+              selectedRepo={selectedRepo}
+              onSelectRepo={setSelectedRepo}
+              onRefreshRepos={() => reposQuery.refetch()}
+              activeJob={activeJob}
+              logs={logs}
+              jobs={jobs}
+              onLaunch={handleLaunchJob}
+              onCancel={handleCancelJob}
+              onSelectJob={handleSelectJob}
+              onClearLogs={clearLogs}
+            />
+          )}
+        </main>
+
+        {/* Slide-over Agent Activity Drawer */}
+        <ActivityDrawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+          jobId={activeJob?.id}
+          stage={activeJob?.stage}
+          events={events}
+          logs={logs}
+        />
+      </div>
+    </StudioProvider>
+  );
+};
+
+export const App: React.FC = () => {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
     </QueryClientProvider>
   );
 };

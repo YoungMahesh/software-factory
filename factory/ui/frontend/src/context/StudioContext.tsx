@@ -43,7 +43,3 @@ export function useStudio(): StudioContextValue {
   }
   return context;
 }
-
-export function useStudioOptional(): StudioContextValue | undefined {
-  return useContext(StudioContext);
-}

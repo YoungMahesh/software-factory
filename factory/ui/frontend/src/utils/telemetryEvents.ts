@@ -39,6 +39,7 @@ export function foldTelemetryEvents(
   };
 
   let hasThinkingEvent = false;
+  let hasThinkingDelta = false;
   let accumulatedThinkingText = "";
   let durationMs = baseMsg.thinking?.durationMs;
   let isDone = baseMsg.thinking?.done ?? false;
@@ -47,6 +48,7 @@ export function foldTelemetryEvents(
     if (evt.type === "thinking") {
       hasThinkingEvent = true;
       if (evt.data?.delta) {
+        hasThinkingDelta = true;
         accumulatedThinkingText += evt.data.delta;
       }
       if (evt.data?.durationMs !== undefined) {
@@ -60,14 +62,13 @@ export function foldTelemetryEvents(
 
   if (hasThinkingEvent) {
     updated.thinking = {
-      text: accumulatedThinkingText,
+      text: hasThinkingDelta ? accumulatedThinkingText : (baseMsg.thinking?.text || ""),
       durationMs,
       done: isDone,
     };
   }
 
   events.forEach((evt) => {
-
     if (evt.type === "tool_result") {
       const chipId = evt.data?.toolCallId || `chip-${evt.data?.toolName}-${evt.timestamp || Date.now()}`;
       if (!updated.stepChips!.some((c) => c.id === chipId)) {
@@ -85,7 +86,7 @@ export function foldTelemetryEvents(
       }
     }
 
-    if (evt.stage && !updated.stage) {
+    if (evt.stage) {
       updated.stage = evt.stage;
     }
   });
