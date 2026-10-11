@@ -1720,8 +1720,10 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                     "prompt": "Build a responsive calculator app with arithmetic history and dark mode",
                     "model": "deepseek-v4.1-flash",
                     "vm": False,
+                    "grill": False,
                 },
             )
+
 
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
@@ -1788,8 +1790,10 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                     "repo": "test-inactive",
                     "prompt": "Build an auto-provisioned preview feature",
                     "model": "deepseek-v4.1-flash",
+                    "grill": False,
                 },
             )
+
 
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
@@ -1832,8 +1836,10 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                 "repo": "test-fail-provision",
                 "prompt": "Build a feature that fails sandbox provisioning",
                 "model": "deepseek-v4.1-flash",
+                "grill": False,
             },
         )
+
 
         self.assertEqual(resp.status_code, 500)
         self.assertIn("Unified Studio Sandbox failed to start", resp.json()["detail"])
@@ -1883,8 +1889,10 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                 "repo": "test-reuse",
                 "prompt": "Add navigation header",
                 "model": "deepseek-v4.1-flash",
+                "grill": False,
             },
         )
+
 
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -1952,8 +1960,10 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                 json={
                     "repo": "test3",
                     "prompt": "Build a simple weather dashboard",
+                    "grill": False,
                 },
             )
+
             self.assertEqual(resp.status_code, 200)
             self.assertTrue(resp.json()["accepted"])
             self.assertEqual(resp.json()["preview_url"], "https://sb-alias-3000.modal.host")
@@ -1965,6 +1975,109 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
             json={"repo": "test3", "prompt": "Build a calculator"},
         )
         self.assertEqual(resp.status_code, 401)
+
+    def test_prompt_endpoint_grill_mode_default_returns_grill_round_without_sandbox(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Build an interactive analytics chart dashboard",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["accepted"])
+        self.assertIsNone(data["refusal"])
+        self.assertIsNone(data["job"])
+        self.assertIsNone(data["issue"])
+        self.assertIsNone(data["milestone"])
+
+        # Turn payload structure
+        turn = data["turn"]
+        self.assertIsNotNone(turn)
+        self.assertEqual(turn["type"], "grill_round")
+        self.assertEqual(turn["round"], 1)
+        self.assertGreaterEqual(len(turn["questions"]), 2)
+        self.assertIn("❓ **Q1**", turn["formatted_text"])
+        self.assertIn("➡️", turn["formatted_text"])
+        self.assertIsNone(turn["draft_adr"])
+
+        # Verify no job dispatched in registry and no sandbox auto-provisioned
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+        self.assertIsNone(self.preview_registry.get_preview("test3"))
+
+
+    def test_prompt_endpoint_grill_mode_with_history_reaches_ready_for_approval(self):
+        history = [
+            {"role": "user", "text": "Build an interactive analytics chart dashboard"},
+            {
+                "role": "assistant",
+                "text": "❓ **Q1** - **Route Placement**: Where should this route go?\n➡️ app/routes/analytics.tsx",
+            },
+        ]
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Accept recommended defaults and build the feature",
+                "grill": True,
+                "history": history,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["accepted"])
+        self.assertIsNone(data["job"])
+
+        turn = data["turn"]
+        self.assertIsNotNone(turn)
+        self.assertEqual(turn["type"], "ready_for_approval")
+        self.assertEqual(turn["round"], 2)
+        self.assertIsNotNone(turn["plan"])
+        self.assertIn("Implementation Plan", turn["plan"])
+
+        draft_adr = turn["draft_adr"]
+        self.assertIsNotNone(draft_adr)
+        self.assertIn("docs/adr/", draft_adr["filename"])
+        self.assertTrue(draft_adr["filename"].endswith(".md"))
+        self.assertIn("Status**: Proposed", draft_adr["content"])
+
+        # No container or job dispatched yet
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+
+    def test_prompt_endpoint_grill_mode_sharpens_domain_terms(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Add a customer orders list with a redux store",
+                "grill": True,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["accepted"])
+        turn = data["turn"]
+        self.assertIsNotNone(turn)
+        self.assertTrue(any(s["canonical_term"] == "Client State" for s in turn["sharpened_terms"]))
+
+    def test_prompt_endpoint_grill_mode_rejects_intent_guard_violations(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "Create a backend PostgreSQL database with custom SQL tables",
+                "grill": True,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["accepted"])
+        self.assertIsNotNone(data["refusal"])
+        self.assertIsNone(data["turn"])
+        self.assertIsNone(data["job"])
+        self.assertEqual(len(self.registry.list_jobs()), 0)
+
 
 
 class TestTargetRepoScaffolding(unittest.TestCase):

@@ -5,11 +5,12 @@ A fast, stateless conversational grilling service in Factory Studio that interce
 
 **Blocked by:** 01: Target Repository Scaffolding and Assembly Line ADR Quality Gate
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Implement a conversational Grilling Assistant service using OpenCode Go with system prompts embedding `grilling` and `domain-modeling` protocols.
-- [ ] Provide structured question round generation (`❓ Q1 ... ➡️ recommended answer`) identifying unsettled prerequisites on the requirement frontier.
-- [ ] Implement domain term sharpening against `CONTEXT.md` and automated draft ADR synthesis when architectural trade-offs are identified.
-- [ ] Update `POST /api/studio/prompt` to accept client chat history and a grill mode parameter, returning structured interview turns or a `ready_for_approval` state without launching sandboxes.
-- [ ] Provide deterministic mock mode for offline execution and automated test suites when API keys are absent.
-- [ ] Automated tests verify interview round progression, domain term sharpening, and draft ADR generation.
+- [x] Implement a conversational Grilling Assistant service using OpenCode Go with system prompts embedding `grilling` and `domain-modeling` protocols.
+- [x] Provide structured question round generation (`❓ Q1 ... ➡️ recommended answer`) identifying unsettled prerequisites on the requirement frontier.
+- [x] Implement domain term sharpening against `CONTEXT.md` and automated draft ADR synthesis when architectural trade-offs are identified.
+- [x] Update `POST /api/studio/prompt` to accept client chat history and a grill mode parameter, returning structured interview turns or a `ready_for_approval` state without launching sandboxes.
+- [x] Provide deterministic mock mode for offline execution and automated test suites when API keys are absent.
+- [x] Automated tests verify interview round progression, domain term sharpening, and draft ADR generation.
+

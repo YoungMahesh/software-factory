@@ -30,6 +30,7 @@ from factory.ui.github import (
     synthesize_and_create_issue,
     validate_github_repo_name,
 )
+from factory.ui.grill import GrillingAssistant
 from factory.ui.guard import evaluate_prompt_intent
 from factory.ui.registry import (
     JobRegistry,
@@ -68,6 +69,8 @@ class StudioPromptRequest(BaseModel):
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
     milestone_title: str | None = Field(None, description="Optional custom milestone title")
+    grill: bool = Field(True, description="Whether to conduct conversational grilling before building")
+    history: list[dict[str, Any]] = Field(default_factory=list, description="Client chat history")
 
 
 def create_app(
@@ -185,6 +188,7 @@ def create_app(
                 "refusal": guard_result.refusal_message,
                 "reason": guard_result.reason,
                 "category": guard_result.category,
+                "turn": None,
                 "job": None,
                 "issue": None,
                 "milestone": None,
@@ -193,7 +197,30 @@ def create_app(
                 "preview": None,
             }
 
-        # 2. Resolve or Create Active Milestone
+        # 2. Conversational Grilling Assistant Turn (Grill Mode)
+        if req.grill:
+            assistant = GrillingAssistant()
+            turn = await assistant.handle_turn(
+                repo=repo,
+                prompt=prompt,
+                history=req.history,
+                model=req.model,
+            )
+            return {
+                "accepted": True,
+                "refusal": None,
+                "reason": None,
+                "category": None,
+                "turn": turn.to_dict(),
+                "job": None,
+                "issue": None,
+                "milestone": None,
+                "stage": None,
+                "preview_url": None,
+                "preview": None,
+            }
+
+        # 3. Resolve or Create Active Milestone (Fast-Build Bypass)
         milestone = resolve_or_create_milestone(
             repo_name=repo,
             title=req.milestone_title,
@@ -201,7 +228,7 @@ def create_app(
         milestone_slug = milestone["slug"]
         target_branch = f"factory/{milestone_slug}"
 
-        # 3. Synthesize sequential GitHub Issue with acceptance criteria
+        # 4. Synthesize sequential GitHub Issue with acceptance criteria
         issue = synthesize_and_create_issue(
             repo_name=repo,
             prompt=prompt,
@@ -209,7 +236,7 @@ def create_app(
             milestone_slug=milestone_slug,
         )
 
-        # 4. Check for active Unified Studio Sandbox or auto-provision if inactive
+        # 5. Check for active Unified Studio Sandbox or auto-provision if inactive
         active_sandbox, preview_url = preview_reg.get_active_sandbox(repo)
         preview_state = preview_reg.get_preview(repo)
 
@@ -236,7 +263,7 @@ def create_app(
 
         effective_preview_url = preview_url or (preview_state.preview_url if preview_state else None)
 
-        # 5. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
+        # 6. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
         job = registry.create_job(
             repo=repo,
             feature=milestone_slug,
@@ -248,11 +275,12 @@ def create_app(
         job.preview_url = effective_preview_url
         registry.start_job(job.id)
 
-        # 6. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
+        # 7. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
         return {
             "accepted": True,
             "refusal": None,
             "reason": None,
+            "turn": None,
             "job": job.to_dict(),
             "issue": issue,
             "milestone": milestone,
@@ -260,6 +288,7 @@ def create_app(
             "preview_url": effective_preview_url,
             "preview": preview_state.to_dict() if preview_state else None,
         }
+
 
     @app.post("/api/studio/repos/{repo}/preview", status_code=201)
     async def launch_preview_endpoint(repo: str, req: LaunchPreviewRequest | None = None):
