@@ -2218,6 +2218,55 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
             self.assertIn("https://x.com", system_instruction)
             self.assertIn("forbid proposing new route", system_instruction.lower())
 
+    def test_prompt_endpoint_mock_mode_archetype_aware_questions_and_conditional_adr(self):
+        # Round 1: Deletion prompt in mock mode
+        resp1 = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "remove social media links like github, x.com, etc",
+                "grill": True,
+                "mock": True,
+            },
+        )
+        self.assertEqual(resp1.status_code, 200)
+        data1 = resp1.json()
+        self.assertTrue(data1["accepted"])
+        turn1 = data1["turn"]
+        self.assertEqual(turn1["type"], "grill_round")
+        self.assertEqual(turn1["round"], 1)
+        self.assertGreaterEqual(len(turn1["questions"]), 2)
+
+        # Questions should be component-scoped, no new route proposed
+        q_titles = [q["title"].lower() for q in turn1["questions"]]
+        self.assertTrue(any("component" in t or "scope" in t for t in q_titles))
+        for q in turn1["questions"]:
+            self.assertNotIn("app/routes/", q["recommended"])
+
+        # Round 2: Accept recommended defaults / proceed
+        resp2 = self.client.post(
+            "/api/studio/prompt",
+            json={
+                "repo": "test3",
+                "prompt": "/proceed",
+                "history": [
+                    {"role": "user", "text": "remove social media links like github, x.com, etc"},
+                    {"role": "assistant", "text": "❓ **Q1** - Component Scope..."},
+                ],
+                "grill": True,
+                "mock": True,
+            },
+        )
+        self.assertEqual(resp2.status_code, 200)
+        data2 = resp2.json()
+        self.assertTrue(data2["accepted"])
+        turn2 = data2["turn"]
+        self.assertEqual(turn2["type"], "ready_for_approval")
+        self.assertIsNotNone(turn2["plan"])
+        # Conditional ADR: draft_adr is None for deletion
+        self.assertIsNone(turn2["draft_adr"])
+        self.assertNotIn("Draft ADR Ready", turn2["formatted_text"])
+
     def test_prompt_endpoint_grill_mode_rejects_intent_guard_violations(self):
         resp = self.client.post(
             "/api/studio/prompt",
@@ -2342,6 +2391,70 @@ class TestStudioApproveEndpoint(unittest.TestCase):
                 prompt="Build dark mode toggle with theme persistence",
                 milestone_number=12,
                 milestone_slug="dark-mode-toggle",
+            )
+            mock_start_job.assert_called_once()
+
+    def test_approve_endpoint_with_null_draft_adr_creates_issue_and_dispatches_job(self):
+        fake_milestone = {"number": 15, "title": "v1: Initial App", "slug": "v1-initial-app"}
+        fake_issue = {
+            "number": 43,
+            "title": "02: Remove social media links",
+            "body": "Acceptance criteria...",
+        }
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.poll.return_value = None
+        self.preview_registry._previews["test3"] = PreviewState(
+            repo="test3",
+            status=PreviewStatus.SERVING,
+            preview_url="https://sb-3000.modal.host",
+            sandbox=mock_sandbox,
+            sandbox_id="sb-3000",
+        )
+
+        with patch("factory.ui.app.resolve_or_create_milestone", return_value=fake_milestone) as mock_milestone, \
+             patch("factory.ui.app.commit_approved_adr_to_branch") as mock_commit_adr, \
+             patch("factory.ui.app.synthesize_and_create_issue", return_value=fake_issue) as mock_issue, \
+             patch.object(self.registry, "start_job") as mock_start_job:
+
+            mock_commit_adr.return_value = {
+                "status": "skipped",
+                "branch": "factory/v1-initial-app",
+                "files": [],
+            }
+
+            resp = self.client.post(
+                "/api/studio/approve",
+                json={
+                    "repo": "test3",
+                    "prompt": "Remove social media links from Footer.tsx",
+                    "milestone_title": None,
+                    "draft_adr": None,
+                    "context_update": None,
+                },
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            self.assertEqual(data["branch"], "factory/v1-initial-app")
+            self.assertEqual(data["issue"]["number"], 43)
+            self.assertEqual(data["milestone"]["slug"], "v1-initial-app")
+            self.assertIsNotNone(data["job"])
+            self.assertEqual(data["job"]["issue"], "43")
+
+            mock_milestone.assert_called_once_with(repo_name="test3", title=None)
+            mock_commit_adr.assert_called_once_with(
+                repo_name="test3",
+                branch="factory/v1-initial-app",
+                draft_adr=None,
+                context_update=None,
+            )
+            mock_issue.assert_called_once_with(
+                repo_name="test3",
+                prompt="Remove social media links from Footer.tsx",
+                milestone_number=15,
+                milestone_slug="v1-initial-app",
             )
             mock_start_job.assert_called_once()
 

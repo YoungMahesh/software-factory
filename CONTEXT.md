@@ -219,12 +219,28 @@ A real-time structured telemetry channel emitting fine-grained LLM reasoning del
 _Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
 
 **Grilling Assistant**:
-A conversational reasoning service in Factory Studio that executes the `grilling` and `domain-modeling` protocols, interviewing the developer with structured question frontiers and drafting Architectural Decision Records (ADRs) before code changes are executed.
+A conversational reasoning service in Factory Studio that executes the `grilling` and `domain-modeling` protocols, interviewing the developer with structured question frontiers grounded in repository code facts, and drafting Architectural Decision Records (ADRs) conditionally before code changes are executed.
 _Avoid_: Chat bot, prompt helper, grilling bot, interview agent
 
 **Grill-Before-Change Protocol**:
-An interactive requirement alignment workflow where user chat prompts in Factory Studio undergo interview rounds and domain terminology sharpening before synthesizing issues and dispatching the Assembly Line Pipeline.
+An interactive requirement alignment workflow where user chat prompts in Factory Studio undergo interview rounds, codebase grounding, and domain terminology sharpening before synthesizing issues and dispatching the Assembly Line Pipeline.
 _Avoid_: Manual interview, prompt delay, question loop
+
+**Repository Codebase Grounding**:
+The autonomous discovery and inspection of target repository file trees and candidate component source code by the Grilling Assistant before generating interview questions, grounding requirement alignment in verified code facts rather than speculative assumptions.
+_Avoid_: Static analysis, repo scanning, vector search
+
+**Conditional ADR Policy**:
+The requirement alignment principle ("Offer ADRs sparingly") where Architectural Decision Records (`docs/adr/`) are drafted strictly for changes introducing irreversible or fundamental architectural trade-offs, omitting draft ADRs (`draft_adr: null`) for localized component edits, deletions, bug fixes, and styling adjustments.
+_Avoid_: Universal ADR, mandatory ADR, indiscriminate ADR
+
+**Prompt Archetype**:
+A classification heuristic (`deletion`, `component_modification`, `styling`, `new_feature`) used by the Grilling Assistant to tailor interview questions to the developer's intent and prevent irrelevant routing or architectural proposals.
+_Avoid_: Prompt category, intent tag, prompt type
+
+**Inference Error Turn**:
+An explicit conversational turn emitted when remote LLM inference encounters a network, authentication, or provider failure, persisted to Studio Chat History and rendered with diagnostic details and a retry trigger instead of silently falling back to mock responses.
+_Avoid_: Silent fallback, mock error, failed message
 
 **Target Project Skills**:
 The suite of Matt Pocock engineering skills (`.agents/skills/`), domain glossary (`CONTEXT.md`), architectural records (`docs/adr/`), and agent configurations (`docs/agents/`) scaffolded into every application developed on the Software Factory.

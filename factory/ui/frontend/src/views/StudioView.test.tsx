@@ -399,6 +399,49 @@ describe("StudioView", () => {
     expect(handleApprove).toHaveBeenCalledWith(readyTurn);
   });
 
+  it("renders ApprovalCard cleanly without draft ADR preview when ready_for_approval has null draft_adr", async () => {
+    const handleApprove = vi.fn();
+    const readyTurnWithoutAdr: GrillTurnResult = {
+      type: "ready_for_approval",
+      round: 2,
+      summary: "Deletion scope confirmed and layout reflow requirements settled.",
+      plan: "### Implementation Plan: Remove Social Links\n1. Locate Footer.tsx\n2. Prune links",
+      draft_adr: null,
+      questions: [],
+    };
+
+    const messages = [
+      {
+        id: "m-user-del",
+        role: "user" as const,
+        text: "remove social media links like github, x.com, etc",
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: "m-assistant-approval-del",
+        role: "assistant" as const,
+        timestamp: Date.now() - 10000,
+        grillTurn: readyTurnWithoutAdr,
+      },
+    ];
+
+    const { user } = renderStudio({
+      messages,
+      onApprovePlan: handleApprove,
+    });
+
+    expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+    expect(screen.getByText("Plan Ready for Approval")).toBeInTheDocument();
+    expect(screen.getByTestId("plan-details")).toHaveTextContent(/Remove Social Links/i);
+    expect(screen.queryByTestId("draft-adr-preview")).not.toBeInTheDocument();
+
+    const approveBtn = screen.getByTestId("approve-plan-build-btn");
+    await user.click(approveBtn);
+
+    expect(handleApprove).toHaveBeenCalledTimes(1);
+    expect(handleApprove).toHaveBeenCalledWith(readyTurnWithoutAdr);
+  });
+
   it("renders visual confirmation banner in timeline when isChatCleared is true", () => {
     renderStudio({
       selectedRepo: "cool-app",

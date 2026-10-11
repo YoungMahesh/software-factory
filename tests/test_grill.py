@@ -11,6 +11,7 @@ from factory.ui.grill import (
     GrillQuestion,
     GrillTurnResult,
     GrillingAssistant,
+    classify_prompt_archetype,
     resolve_opencode_go_api_key,
     sharpen_domain_terms,
 )
@@ -76,6 +77,55 @@ _Avoid_: Next.js app, Remix app, Vue app
 """
         sharpened = sharpen_domain_terms("Migrate this into a Next.js app with server components", context_content=context)
         self.assertTrue(any(s["canonical_term"] == "TanStack Start SPA" for s in sharpened))
+
+
+class TestPromptArchetypeClassification(unittest.TestCase):
+    """Test classification of user prompts into archetypes."""
+
+    def test_classify_deletion_prompts(self):
+        prompts = [
+            "remove social media links like github, x.com, etc",
+            "Delete the footer copyright banner",
+            "strip out unused navigation items",
+            "clean up dead links in sidebar",
+            "prune external analytics script",
+        ]
+        for p in prompts:
+            with self.subTest(prompt=p):
+                self.assertEqual(classify_prompt_archetype(p), "deletion")
+
+    def test_classify_styling_prompts(self):
+        prompts = [
+            "adjust dark mode colors for header",
+            "update theme styling and padding",
+            "change tailwind spacing on product cards",
+            "fix mobile responsive layout",
+        ]
+        for p in prompts:
+            with self.subTest(prompt=p):
+                self.assertEqual(classify_prompt_archetype(p), "styling")
+
+    def test_classify_component_modification_prompts(self):
+        prompts = [
+            "update footer copyright text",
+            "modify Header title to Software Factory",
+            "tweak user avatar display size",
+            "replace search icon in navbar",
+        ]
+        for p in prompts:
+            with self.subTest(prompt=p):
+                self.assertEqual(classify_prompt_archetype(p), "component_modification")
+
+    def test_classify_new_feature_prompts(self):
+        prompts = [
+            "build an inventory analytics overview dashboard",
+            "create new route for checkout flow",
+            "add user management page",
+            "implement audit log table with pagination",
+        ]
+        for p in prompts:
+            with self.subTest(prompt=p):
+                self.assertEqual(classify_prompt_archetype(p), "new_feature")
 
 
 class TestGrillingAssistantTurnProgression(unittest.IsolatedAsyncioTestCase):
@@ -150,6 +200,77 @@ class TestGrillingAssistantTurnProgression(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(turn.type, "ready_for_approval")
         self.assertIsNotNone(turn.draft_adr)
         self.assertIsNotNone(turn.plan)
+
+    async def test_deletion_prompt_generates_component_scoped_questions_without_routes(self):
+        assistant = GrillingAssistant(mock=True)
+        turn = await assistant.handle_turn(
+            repo="inventory-tracker",
+            prompt="remove social media links like github, x.com, etc",
+            history=[],
+        )
+
+        self.assertEqual(turn.type, "grill_round")
+        self.assertEqual(turn.round, 1)
+        self.assertGreaterEqual(len(turn.questions), 2)
+        question_titles = [q.title.lower() for q in turn.questions]
+        self.assertTrue(any("component" in t or "scope" in t for t in question_titles))
+        self.assertTrue(any("layout" in t or "spacing" in t or "reflow" in t for t in question_titles))
+        for q in turn.questions:
+            self.assertNotIn("app/routes/", q.recommended)
+            self.assertNotIn("route tree", q.question.lower())
+
+    async def test_deletion_prompt_ready_for_approval_omits_draft_adr(self):
+        assistant = GrillingAssistant(mock=True)
+        history = [
+            {"role": "user", "text": "remove social media links like github, x.com, etc"},
+            {
+                "role": "assistant",
+                "text": "❓ **Q1** - **Component Scope**: Which component contains the links?\n➡️ Target existing component.",
+            },
+        ]
+        turn = await assistant.handle_turn(
+            repo="inventory-tracker",
+            prompt="Accept recommended defaults",
+            history=history,
+        )
+
+        self.assertEqual(turn.type, "ready_for_approval")
+        self.assertEqual(turn.round, 2)
+        self.assertIsNotNone(turn.plan)
+        self.assertIsNone(turn.draft_adr)
+        self.assertNotIn("Draft ADR Ready", turn.formatted_text)
+
+    async def test_component_modification_ready_for_approval_omits_draft_adr(self):
+        assistant = GrillingAssistant(mock=True)
+        history = [
+            {"role": "user", "text": "update footer copyright year and company name"},
+        ]
+        turn = await assistant.handle_turn(
+            repo="inventory-tracker",
+            prompt="/proceed",
+            history=history,
+        )
+
+        self.assertEqual(turn.type, "ready_for_approval")
+        self.assertIsNotNone(turn.plan)
+        self.assertIsNone(turn.draft_adr)
+        self.assertNotIn("Draft ADR Ready", turn.formatted_text)
+
+    async def test_styling_ready_for_approval_omits_draft_adr(self):
+        assistant = GrillingAssistant(mock=True)
+        history = [
+            {"role": "user", "text": "adjust header padding and dark mode colors"},
+        ]
+        turn = await assistant.handle_turn(
+            repo="inventory-tracker",
+            prompt="/proceed",
+            history=history,
+        )
+
+        self.assertEqual(turn.type, "ready_for_approval")
+        self.assertIsNotNone(turn.plan)
+        self.assertIsNone(turn.draft_adr)
+        self.assertNotIn("Draft ADR Ready", turn.formatted_text)
 
 
 class TestLiveOpenCodeGoInteraction(unittest.IsolatedAsyncioTestCase):
@@ -232,6 +353,84 @@ class TestLiveOpenCodeGoInteraction(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(turn.type, "ready_for_approval")
             self.assertIsNotNone(turn.draft_adr)
             self.assertEqual(turn.draft_adr.filename, "docs/adr/0002-in-memory-client-inventory-cache.md")
+
+    async def test_live_turn_supports_null_draft_adr_during_ready_for_approval(self):
+        remote_response_json = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "type": "ready_for_approval",
+                            "round": 2,
+                            "summary": "Plan ready for removing social media links",
+                            "plan": "# Final Plan\nRemove social links from Footer.tsx.",
+                            "draft_adr": None,
+                        })
+                    }
+                }
+            ]
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = remote_response_json
+        mock_resp.raise_for_status = MagicMock()
+
+        assistant = GrillingAssistant(api_key="live-opencode-key", mock=False)
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_resp
+            turn = await assistant.handle_turn(
+                repo="inventory-tracker",
+                prompt="Accept defaults",
+                history=[{"role": "user", "text": "remove social media links like github, x.com, etc"}],
+            )
+
+            self.assertEqual(turn.type, "ready_for_approval")
+            self.assertIsNotNone(turn.plan)
+            self.assertIsNone(turn.draft_adr)
+            self.assertNotIn("Draft ADR Ready", turn.formatted_text)
+            self.assertNotIn("docs/adr/", turn.formatted_text)
+            serialized = turn.to_dict()
+            self.assertIsNone(serialized["draft_adr"])
+
+    async def test_live_turn_system_instruction_enforces_conditional_adr_policy(self):
+        assistant = GrillingAssistant(api_key="live-opencode-key", mock=False)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "type": "grill_round",
+                            "round": 1,
+                            "summary": "Round 1",
+                            "questions": [],
+                        })
+                    }
+                }
+            ]
+        }
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_resp
+            await assistant.handle_turn(
+                repo="inventory-tracker",
+                prompt="remove social media links",
+                history=[],
+            )
+
+            mock_post.assert_called_once()
+            called_payload = mock_post.call_args[1]["json"]
+            system_instruction = called_payload["messages"][0]["content"]
+
+            # Must instruct conditional ADR policy
+            self.assertIn("Offer ADRs sparingly", system_instruction)
+            self.assertIn("draft_adr", system_instruction)
+            self.assertIn("null", system_instruction.lower())
 
     async def test_live_turn_targets_canonical_endpoint_and_headers(self):
         remote_response_json = {

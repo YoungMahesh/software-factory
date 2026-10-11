@@ -250,6 +250,31 @@ def format_questions_markdown(questions: list[GrillQuestion]) -> str:
     return "\n\n---\n\n".join(q.format_markdown() for q in questions)
 
 
+PromptArchetype = Literal["deletion", "component_modification", "styling", "new_feature"]
+
+
+def classify_prompt_archetype(prompt: str) -> PromptArchetype:
+    """Classifies user prompt into archetypes to govern grilling frontier and architectural impact."""
+    text = prompt.lower().strip()
+    if not text:
+        return "new_feature"
+
+    # 1. Deletion patterns
+    if re.search(r"\b(remove|delete|drop|strip|clean\s*up|clear|prune|eliminate|omit|retire|cut\s*out)\b", text):
+        return "deletion"
+
+    # 2. Styling patterns
+    if re.search(r"\b(style|styling|theme|dark\s*mode|color|colors|font|fonts|tailwind|padding|margin|spacing|responsive|layout)\b", text):
+        return "styling"
+
+    # 3. Component modification patterns
+    if re.search(r"\b(modify|update|edit|tweak|replace|fix|refactor|change|adjust|patch|revise|rename)\b", text):
+        return "component_modification"
+
+    # 4. Default to new feature
+    return "new_feature"
+
+
 def slugify(text: str) -> str:
     """Converts a phrase into a clean URL-friendly kebab-case slug."""
     text = text.lower().strip()
@@ -806,22 +831,69 @@ class GrillingAssistant:
         sharpened_terms: list[DomainTermSharpening],
     ) -> GrillTurnResult:
         """Deterministic mock interview progression for offline and testing execution."""
-        # Calculate interview depth from history
         assistant_turns = [m for m in history if m.get("role") == "assistant"]
         current_round = len(assistant_turns) + 1
 
         is_shortcut = prompt.lower() in {"/proceed", "proceed", "approve", "/approve", "yes", "accept defaults"}
 
-        # If user explicitly approves or we are in round 2+, settle the frontier and finalize draft ADR
-        if is_shortcut or current_round >= 2:
-            num, title, filename = compute_next_adr_metadata(repo, prompt, existing_adrs)
-            feature_slug = slugify(prompt)
+        # Identify effective prompt from history if current prompt is shortcut/affirmation/answer
+        effective_prompt = prompt
+        user_prompts = [
+            m.get("text") or m.get("content") or ""
+            for m in history
+            if m.get("role") == "user" and (m.get("text") or m.get("content"))
+        ]
+        if user_prompts and (is_shortcut or current_round >= 2):
+            effective_prompt = user_prompts[0].strip()
 
-            content = f"""# {title}
+        archetype = classify_prompt_archetype(effective_prompt)
+        clean_title = effective_prompt.strip().rstrip(".!?").capitalize()
+
+        # If user explicitly approves or we are in round 2+, settle the frontier
+        if is_shortcut or current_round >= 2:
+            draft_adr: DraftADR | None = None
+            if archetype == "deletion":
+                plan = f"""# Implementation Plan: {clean_title}
+
+1. **Target Component**: Locate and remove specified elements in existing component (e.g. `app/components/Footer.tsx`).
+2. **Layout Reflow**: Adjust flexbox/grid containers and padding to ensure clean visual flow without residual whitespace.
+3. **Asset Pruning**: Remove unused icon imports, attributes, and dead references.
+4. **Verification**: Verify component renders cleanly and tests pass.
+"""
+                summary = "Deletion scope confirmed and layout reflow requirements settled. Ready for build approval."
+                formatted_text = f"### Finalized Implementation Plan\n\n{plan}"
+
+            elif archetype == "component_modification":
+                plan = f"""# Implementation Plan: {clean_title}
+
+1. **Component Modification**: Update existing component logic and markup in `app/components/`.
+2. **Props & State**: Adjust localized component props and state cleanly.
+3. **Visual Alignment**: Maintain consistent layout, design tokens, and accessibility.
+4. **Verification**: Verify component behavior and test suite pass without regressions.
+"""
+                summary = "Component modification scope clarified and requirements aligned. Ready for build approval."
+                formatted_text = f"### Finalized Implementation Plan\n\n{plan}"
+
+            elif archetype == "styling":
+                plan = f"""# Implementation Plan: {clean_title}
+
+1. **Styling Adjustments**: Apply responsive Tailwind CSS utility classes to target elements.
+2. **Visual Consistency**: Verify color contrast, padding, and layout across breakpoints.
+3. **Accessibility**: Ensure interactive elements maintain accessible focus states and contrast ratios.
+4. **Verification**: Verify visual appearance and responsive layout in preview.
+"""
+                summary = "Styling requirements and design tokens aligned. Ready for build approval."
+                formatted_text = f"### Finalized Implementation Plan\n\n{plan}"
+
+            else:  # new_feature
+                num, title, filename = compute_next_adr_metadata(repo, effective_prompt, existing_adrs)
+                feature_slug = slugify(effective_prompt)
+
+                content = f"""# {title}
 
 **Status**: Proposed
 
-To implement {prompt} within {repo}, we decided to adopt type-safe file routing and client state caching conforming to the target application domain context.
+To implement {effective_prompt} within {repo}, we decided to adopt type-safe file routing and client state caching conforming to the target application domain context.
 
 ## Considered Options
 
@@ -834,21 +906,21 @@ To implement {prompt} within {repo}, we decided to adopt type-safe file routing 
 - State managed strictly through Client State primitives without external database dependencies.
 - Styled using responsive Tailwind CSS utility tokens.
 """
-            draft_adr = DraftADR(
-                title=title,
-                filename=filename,
-                content=content,
-            )
+                draft_adr = DraftADR(
+                    title=title,
+                    filename=filename,
+                    content=content,
+                )
 
-            plan = f"""# Implementation Plan: {title}
+                plan = f"""# Implementation Plan: {title}
 
 1. **Route Hierarchy**: Create new route `app/routes/{feature_slug}.tsx` with typed loader and params.
 2. **Client State**: Manage UI and domain state using React primitives and TanStack Query cache.
 3. **Responsive UI**: Construct clean, accessible components styled with Tailwind CSS tokens.
 4. **Architectural Verification**: Ensure code adheres strictly to `{filename}` and `CONTEXT.md`.
 """
-            summary = "Requirements clarified, domain terminology aligned with CONTEXT.md, and draft ADR synthesized. Ready for build approval."
-            formatted_text = f"### Finalized Implementation Plan\n\n{plan}\n\n**Draft ADR Ready**: [{filename}](#adr-preview)"
+                summary = "Requirements clarified, domain terminology aligned with CONTEXT.md, and draft ADR synthesized. Ready for build approval."
+                formatted_text = f"### Finalized Implementation Plan\n\n{plan}\n\n**Draft ADR Ready**: [{filename}](#adr-preview)"
 
             return GrillTurnResult(
                 type="ready_for_approval",
@@ -861,47 +933,153 @@ To implement {prompt} within {repo}, we decided to adopt type-safe file routing 
                 sharpened_terms=sharpened_terms,
             )
 
-        # Round 1: Generate frontier questions with recommended answers
-        feature_slug = slugify(prompt)
-        q1 = GrillQuestion(
-            id="Q1",
-            title="Route Placement",
-            question="Where in the application Route Tree should this feature be mounted?",
-            recommended=f"Add a dedicated typed route under `app/routes/{feature_slug}.tsx` adhering to TanStack Start conventions.",
-            options=[
-                f"Dedicated route at app/routes/{feature_slug}.tsx (Recommended)",
-                "Sub-route nested within existing view",
-                "Modal overlay on root dashboard",
-            ],
-        )
+        # Round 1: Generate frontier questions with recommended answers based on archetype
+        if archetype == "deletion":
+            questions = [
+                GrillQuestion(
+                    id="Q1",
+                    title="Component Scope",
+                    question="Which component contains the elements to be removed?",
+                    recommended="Target existing component (e.g. `app/components/Footer.tsx` or `Header.tsx`) where the elements reside.",
+                    options=[
+                        "Existing component in app/components/ (Recommended)",
+                        "All navigation and footer components",
+                        "Global layout component",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q2",
+                    title="Layout & Spacing Reflow",
+                    question="How should surrounding layout and spacing adjust after removing these elements?",
+                    recommended="Reflow the container cleanly without leaving residual gaps, empty wrappers, or awkward whitespace.",
+                    options=[
+                        "Clean reflow without residual whitespace (Recommended)",
+                        "Retain layout bounds with centered copyright text",
+                        "Collapse container height",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q3",
+                    title="Asset & Dependency Pruning",
+                    question="Should unused icons, external assets, or link definitions be pruned?",
+                    recommended="Remove unused icon imports and dead link configurations to keep component code clean.",
+                    options=[
+                        "Prune unused imports and assets (Recommended)",
+                        "Retain imports for future re-use",
+                    ],
+                ),
+            ]
+            summary = "Identified component scope and layout reflow decisions for deletion. Please review recommended defaults."
 
-        q2 = GrillQuestion(
-            id="Q2",
-            title="State Management & Persistence",
-            question="How should application state and filters for this feature be managed?",
-            recommended="Manage state using React primitives and TanStack Query in-memory cache, keeping the application a clean stateless client SPA.",
-            options=[
-                "TanStack Query in-memory cache and React state (Recommended)",
-                "Browser localStorage persistence",
-                "Session storage",
-            ],
-        )
+        elif archetype == "component_modification":
+            questions = [
+                GrillQuestion(
+                    id="Q1",
+                    title="Component Scope",
+                    question="Which existing component should be modified?",
+                    recommended="Update the relevant component in `app/components/` in place without creating new routes.",
+                    options=[
+                        "Update existing component in app/components/ (Recommended)",
+                        "Extract to a new sub-component",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q2",
+                    title="State & Props Behavior",
+                    question="How should component props or state react to this change?",
+                    recommended="Keep state updates localized to the component or existing TanStack Query cache.",
+                    options=[
+                        "Localized component state (Recommended)",
+                        "Lift state to parent component",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q3",
+                    title="Component Interface",
+                    question="Should existing component props and usages remain backward compatible?",
+                    recommended="Maintain backward compatibility for existing callers while adding the requested adjustments.",
+                    options=[
+                        "Maintain backward compatible props (Recommended)",
+                        "Refactor callers immediately",
+                    ],
+                ),
+            ]
+            summary = "Clarified component modification scope and state behavior. Please review recommended defaults."
 
-        q3 = GrillQuestion(
-            id="Q3",
-            title="Visual Design & Layout",
-            question="What layout structure and styling system should be applied?",
-            recommended="Construct responsive components styled with Tailwind CSS utility classes matching existing design tokens.",
-            options=[
-                "Responsive Tailwind CSS utility classes (Recommended)",
-                "Full-bleed data dashboard with dark mode accents",
-            ],
-        )
+        elif archetype == "styling":
+            questions = [
+                GrillQuestion(
+                    id="Q1",
+                    title="Design Tokens & Styling",
+                    question="Which styling approach and tokens should be applied?",
+                    recommended="Use responsive Tailwind CSS utility classes matching existing design tokens.",
+                    options=[
+                        "Responsive Tailwind CSS utility classes (Recommended)",
+                        "Custom CSS class overrides",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q2",
+                    title="Responsive & Theme Support",
+                    question="How should theme adjustments and responsive breakpoints be handled?",
+                    recommended="Ensure consistent contrast in light/dark themes and responsive behavior across mobile and desktop.",
+                    options=[
+                        "Consistent contrast across themes and mobile/desktop (Recommended)",
+                        "Desktop-only layout adjustment",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q3",
+                    title="Component Styling Scope",
+                    question="Are styling adjustments localized to specific components or global?",
+                    recommended="Apply styling adjustments directly to the target component without modifying global base stylesheets.",
+                    options=[
+                        "Target component only (Recommended)",
+                        "Global theme variables in CSS",
+                    ],
+                ),
+            ]
+            summary = "Aligned styling requirements and design tokens. Please review recommended defaults."
 
-        questions = [q1, q2, q3]
+        else:  # new_feature
+            feature_slug = slugify(effective_prompt)
+            questions = [
+                GrillQuestion(
+                    id="Q1",
+                    title="Route Placement",
+                    question="Where in the application Route Tree should this feature be mounted?",
+                    recommended=f"Add a dedicated typed route under `app/routes/{feature_slug}.tsx` adhering to TanStack Start conventions.",
+                    options=[
+                        f"Dedicated route at app/routes/{feature_slug}.tsx (Recommended)",
+                        "Sub-route nested within existing view",
+                        "Modal overlay on root dashboard",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q2",
+                    title="State Management & Persistence",
+                    question="How should application state and filters for this feature be managed?",
+                    recommended="Manage state using React primitives and TanStack Query in-memory cache, keeping the application a clean stateless client SPA.",
+                    options=[
+                        "TanStack Query in-memory cache and React state (Recommended)",
+                        "Browser localStorage persistence",
+                        "Session storage",
+                    ],
+                ),
+                GrillQuestion(
+                    id="Q3",
+                    title="Visual Design & Layout",
+                    question="What layout structure and styling system should be applied?",
+                    recommended="Construct responsive components styled with Tailwind CSS utility classes matching existing design tokens.",
+                    options=[
+                        "Responsive Tailwind CSS utility classes (Recommended)",
+                        "Full-bleed data dashboard with dark mode accents",
+                    ],
+                ),
+            ]
+            summary = "Identified unsettled decisions on the requirement frontier. Please review the recommended defaults or provide custom specifications."
+
         formatted_text = format_questions_markdown(questions)
-        summary = "Identified unsettled decisions on the requirement frontier. Please review the recommended defaults or provide custom specifications."
-
         return GrillTurnResult(
             type="grill_round",
             round=1,
@@ -972,7 +1150,8 @@ Rules:
 7. Sharpen domain terms against CONTEXT.md glossary. Never silently violate glossary language.
 8. When the frontier is resolved (or when user accepts defaults/replies to questions), transition to 'ready_for_approval':
    - Synthesize a concise implementation plan referencing target components to modify
-   - Draft an Architectural Decision Record in markdown (Status: Proposed) with title, filename (docs/adr/NNNN-<slug>.md), and content.
+   - Offer ADRs sparingly: Draft an Architectural Decision Record in markdown (Status: Proposed) ONLY when the change introduces irreversible, fundamental, or significant architectural trade-offs (e.g. introducing new routing paradigms, external storage/databases, state management libraries, third-party service architectures, or structural framework patterns).
+   - For localized component modifications, deletions, refactors, bug fixes, or styling changes, set `draft_adr` to null and synthesize only the implementation plan.
 9. Output MUST be valid JSON adhering strictly to one of these two structures:
 
 For interview round:
@@ -1001,7 +1180,7 @@ For ready for approval:
     "title": "<adr title>",
     "filename": "docs/adr/NNNN-<slug>.md",
     "content": "<adr markdown content>"
-  }}
+  }} | null
 }}
 """
         messages: list[dict[str, str]] = [{"role": "system", "content": system_instruction}]
@@ -1052,18 +1231,27 @@ For ready for approval:
             summary = parsed.get("summary", "")
 
             if turn_type == "ready_for_approval":
-                draft_adr_data = parsed.get("draft_adr") or {}
-                draft_adr = DraftADR(
-                    title=draft_adr_data.get("title", "Proposed ADR"),
-                    filename=draft_adr_data.get("filename", "docs/adr/0002-feature.md"),
-                    content=draft_adr_data.get("content", ""),
-                )
+                draft_adr_data = parsed.get("draft_adr")
+                draft_adr: DraftADR | None = None
+                if (
+                    isinstance(draft_adr_data, dict)
+                    and draft_adr_data.get("filename")
+                    and draft_adr_data.get("content")
+                ):
+                    draft_adr = DraftADR(
+                        title=draft_adr_data.get("title", "Proposed ADR"),
+                        filename=draft_adr_data.get("filename", "docs/adr/0002-feature.md"),
+                        content=draft_adr_data.get("content", ""),
+                    )
                 plan = parsed.get("plan", "")
+                formatted_text = f"### Finalized Implementation Plan\n\n{plan}"
+                if draft_adr:
+                    formatted_text += f"\n\n**Draft ADR Ready**: [{draft_adr.filename}](#adr-preview)"
                 return GrillTurnResult(
                     type="ready_for_approval",
                     round=turn_round,
                     questions=[],
-                    formatted_text=f"### Finalized Implementation Plan\n\n{plan}",
+                    formatted_text=formatted_text,
                     summary=summary,
                     plan=plan,
                     draft_adr=draft_adr,

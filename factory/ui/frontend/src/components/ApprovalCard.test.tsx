@@ -66,4 +66,29 @@ describe("ApprovalCard", () => {
     const approveBtn = screen.getByTestId("approve-plan-build-btn");
     expect(approveBtn).toBeDisabled();
   });
+
+  it("renders implementation plan cleanly without draft ADR preview block when draft_adr is null", () => {
+    const handleApprove = vi.fn();
+    const turnWithoutAdr: GrillTurnResult = {
+      type: "ready_for_approval",
+      round: 2,
+      questions: [],
+      summary: "Deletion scope confirmed and layout reflow requirements settled.",
+      plan: "### Implementation Plan: Remove Social Links\n1. Prune social links from Footer.tsx\n2. Reflow footer spacing",
+      draft_adr: null,
+    };
+
+    render(<ApprovalCard turn={turnWithoutAdr} onApprove={handleApprove} />);
+
+    expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+    expect(screen.getByTestId("plan-summary")).toHaveTextContent("Deletion scope confirmed and layout reflow requirements settled.");
+    expect(screen.getByTestId("plan-details")).toHaveTextContent(/Remove Social Links/i);
+    expect(screen.queryByTestId("draft-adr-preview")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("toggle-adr-content")).not.toBeInTheDocument();
+
+    const approveBtn = screen.getByTestId("approve-plan-build-btn");
+    fireEvent.click(approveBtn);
+    expect(handleApprove).toHaveBeenCalledTimes(1);
+    expect(handleApprove).toHaveBeenCalledWith(turnWithoutAdr);
+  });
 });

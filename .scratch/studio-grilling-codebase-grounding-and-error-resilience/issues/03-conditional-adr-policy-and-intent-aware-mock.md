@@ -4,11 +4,11 @@
 
 **Blocked by:** 02 (Repository Codebase Grounding and Source Context Ingestion)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] LLM system prompt instructs the assistant to draft an ADR only when the change introduces irreversible, significant architectural trade-offs, setting `draft_adr` to null for localized component edits and deletions.
-- [ ] Turn result model and parser support null `draft_adr` values during `ready_for_approval` turns.
-- [ ] Factory Studio plan approval card displays implementation plans and issue targets cleanly without broken ADR preview blocks when `draft_adr` is null.
-- [ ] Offline mock generator classifies prompt archetypes, generating component-scoped questions for deletions (e.g. removing links) without recommending new routes or ADRs.
-- [ ] Domain definition in `CONTEXT.md` is updated and `docs/adr/0043-factory-studio-grilling-codebase-grounding-and-error-resilience.md` is recorded.
-- [ ] Unit and endpoint test suites verify error turns, codebase grounding, conditional ADRs, and archetype-aware mock turns.
+- [x] LLM system prompt instructs the assistant to draft an ADR only when the change introduces irreversible, significant architectural trade-offs, setting `draft_adr` to null for localized component edits and deletions.
+- [x] Turn result model and parser support null `draft_adr` values during `ready_for_approval` turns.
+- [x] Factory Studio plan approval card displays implementation plans and issue targets cleanly without broken ADR preview blocks when `draft_adr` is null.
+- [x] Offline mock generator classifies prompt archetypes, generating component-scoped questions for deletions (e.g. removing links) without recommending new routes or ADRs.
+- [x] Domain definition in `CONTEXT.md` is updated and `docs/adr/0043-factory-studio-grilling-codebase-grounding-and-error-resilience.md` is recorded.
+- [x] Unit and endpoint test suites verify error turns, codebase grounding, conditional ADRs, and archetype-aware mock turns.

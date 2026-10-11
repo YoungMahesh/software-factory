@@ -63,7 +63,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
       )}
 
       {/* Proposed Architectural Decision Record (ADR) Preview */}
-      {turn.draft_adr && (
+      {turn.draft_adr && turn.draft_adr.filename && (
         <div
           data-testid="draft-adr-preview"
           className="rounded-lg border border-slate-800 bg-slate-950/50 overflow-hidden"
