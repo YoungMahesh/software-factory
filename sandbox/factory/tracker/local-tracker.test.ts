@@ -8,6 +8,12 @@ import { LocalScratchTracker } from "./local-tracker.ts";
 function createTempRepo(): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "local-tracker-test-"));
   fs.writeFileSync(path.join(tmpDir, "CONTEXT.md"), "# Domain Context\n");
+  const adrDir = path.join(tmpDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n"
+  );
   const docsAgents = path.join(tmpDir, "docs", "agents");
   fs.mkdirSync(docsAgents, { recursive: true });
   fs.writeFileSync(path.join(docsAgents, "issue-tracker.md"), "# Issue Tracker\n");

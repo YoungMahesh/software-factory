@@ -47,7 +47,7 @@ test("Integration: test1 (empty repo) is cleanly rejected by preflight guard", (
 
     const result = validatePreflight(tempDir, "test-feature");
     assert.strictEqual(result.valid, false, "Expected preflight to fail for empty repo");
-    assert.strictEqual(result.errors.length, 3, "Expected exactly 3 prerequisite errors");
+    assert.strictEqual(result.errors.length, 4, "Expected exactly 4 prerequisite errors");
 
     // 1. Missing spec
     assert.ok(
@@ -65,6 +65,12 @@ test("Integration: test1 (empty repo) is cleanly rejected by preflight guard", (
     assert.ok(
       result.errors.some((e) => e.includes("issue tracking configuration")),
       "Expected missing issue tracking error"
+    );
+
+    // 4. Missing architectural decision records (docs/adr/)
+    assert.ok(
+      result.errors.some((e) => e.includes("docs/adr/")),
+      "Expected missing ADR error"
     );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });

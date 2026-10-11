@@ -255,10 +255,10 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
       const parsed = JSON.parse(codeMatch[1]);
       if (typeof parsed === "object" && parsed !== null && parsed.verdict) {
         const rawVerdict = String(parsed.verdict).toLowerCase().trim();
-        const verdict = rawVerdict === "approved" ? "approved" : rawVerdict === "rejected" ? "rejected" : null;
-        if (!verdict) {
+        if (rawVerdict !== "approved" && rawVerdict !== "rejected") {
           throw new ReviewParseError(`Invalid review verdict: "${parsed.verdict}". Expected "approved" or "rejected".`);
         }
+        let verdict: "approved" | "rejected" = rawVerdict;
 
         const summary = String(parsed.summary || "");
         const specCompliance = {
@@ -269,6 +269,9 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
           passed: Boolean(parsed.standardsCompliance?.passed),
           details: String(parsed.standardsCompliance?.details || ""),
         };
+        if (!specCompliance.passed || !standardsCompliance.passed) {
+          verdict = "rejected";
+        }
         const issues: ReviewIssue[] = Array.isArray(parsed.issues)
           ? parsed.issues.map((i: any) => ({
               severity: i.severity === "blocker" || i.severity === "warning" || i.severity === "suggestion" ? i.severity : "warning",
@@ -304,7 +307,7 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
     throw new ReviewParseError('Could not determine review verdict. Must clearly state "APPROVED" or "REJECTED".');
   }
 
-  const verdict = verdictMatch[1].toLowerCase() as "approved" | "rejected";
+  let verdict = verdictMatch[1].toLowerCase() as "approved" | "rejected";
   const summaryMatch = trimmed.match(/##\s*Summary\s*([\s\S]*?)(?=##|$)/i);
   const summary = summaryMatch ? summaryMatch[1].trim() : "";
 
@@ -317,6 +320,10 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
   const standardsPassed = standardsMatch ? /status:\s*passed/i.test(standardsMatch[1]) : verdict === "approved";
   const standardsDetailsMatch = standardsMatch ? standardsMatch[1].match(/details:\s*([\s\S]*?)$/im) : null;
   const standardsDetails = standardsDetailsMatch ? standardsDetailsMatch[1].trim() : standardsMatch ? standardsMatch[1].trim() : "";
+
+  if (!specPassed || !standardsPassed) {
+    verdict = "rejected";
+  }
 
   const issuesMatch = trimmed.match(/##\s*Issues\s*([\s\S]*?)(?=##|$)/i);
   const issues: ReviewIssue[] = [];
@@ -359,7 +366,8 @@ export function parseReviewVerdict(content: string): ReviewVerdict {
 // System prompts per specialized role
 export const PLANNER_SYSTEM_PROMPT = `You are the Planner Agent in the Software Factory assembly line.
 Your role is strictly read-only: inspect the target repository workspace using file viewing, search, and directory navigation tools (read, grep, find, ls).
-You must analyze the work item, feature specification, and domain documentation (CONTEXT.md).
+You must analyze the work item, feature specification, domain documentation (CONTEXT.md), and accepted Architectural Decision Records (docs/adr/).
+You must ensure the planned implementation adheres strictly to all accepted ADRs and repo standards.
 You must generate a clear, structured implementation plan specifying:
 1. Affected files (explicit paths that must be created or modified)
 2. Test commands (explicit verification commands, e.g. "pnpm test", "pytest")
@@ -386,6 +394,7 @@ Execute tests via bash when verifying your work.`;
 export const REVIEWER_SYSTEM_PROMPT = `You are the Reviewer Agent in the Software Factory assembly line.
 Your role is strictly read-only: inspect git diffs, tickets, plans, and repository standards using read, grep, find, ls, and diff inspection tools.
 You MUST evaluate whether the changes satisfy the ticket specification and repo standards.
+Under standardsCompliance, you MUST verify that code changes adhere strictly to accepted Architectural Decision Records in docs/adr/. If any code change contradicts or violates an accepted ADR, you MUST mark standardsCompliance as failed and set verdict to "rejected".
 You must emit a structured review verdict in a JSON block:
 \`\`\`json
 {
@@ -397,7 +406,7 @@ You must emit a structured review verdict in a JSON block:
   },
   "standardsCompliance": {
     "passed": true | false,
-    "details": "<assessment against coding standards>"
+    "details": "<assessment against coding standards and accepted ADRs in docs/adr/>"
   },
   "issues": [
     {
@@ -465,6 +474,7 @@ export interface PlannerOptions extends StageAgentCommonOptions {
   ticket: TicketInput | string;
   specContent?: string;
   contextContent?: string;
+  adrsContent?: string;
 }
 
 export interface CoderOptions extends StageAgentCommonOptions {
@@ -477,6 +487,8 @@ export interface ReviewerOptions extends StageAgentCommonOptions {
   ticket: TicketInput | string;
   plan: ImplementationPlan | string;
   diff?: string;
+  contextContent?: string;
+  adrsContent?: string;
 }
 
 function resolveAgentContext(options: StageAgentCommonOptions) {
@@ -563,9 +575,12 @@ export async function runPlannerAgent(options: PlannerOptions): Promise<{
   if (options.contextContent) {
     promptParts.push("# Domain Context (CONTEXT.md)", options.contextContent);
   }
+  if (options.adrsContent) {
+    promptParts.push("# Architectural Decision Records (docs/adr/)", options.adrsContent);
+  }
 
   promptParts.push(
-    "Please inspect the repository and draft a structured implementation plan with affectedFiles and testCommands."
+    "Please inspect the repository and draft a structured implementation plan with affectedFiles and testCommands adhering strictly to all accepted ADRs."
   );
 
   await runAgentPromptWithTelemetry(agent, "PLANNER", promptParts.join("\n\n"), options);
@@ -666,13 +681,20 @@ export async function runReviewerAgent(options: ReviewerOptions): Promise<{
     planText,
   ];
 
+  if (options.contextContent) {
+    promptParts.push("# Domain Context (CONTEXT.md)", options.contextContent);
+  }
+  if (options.adrsContent) {
+    promptParts.push("# Architectural Decision Records (docs/adr/)", options.adrsContent);
+  }
+
   if (options.diff) {
     promptParts.push("# Git Diff", options.diff);
   } else {
     promptParts.push("Please inspect the git diff using your diff inspection tool.");
   }
 
-  promptParts.push("Review the implementation against the ticket and repo standards and emit your review verdict.");
+  promptParts.push("Review the implementation against the ticket, repo standards, and accepted ADRs in docs/adr/, and emit your review verdict.");
 
   await runAgentPromptWithTelemetry(agent, "REVIEWER", promptParts.join("\n\n"), options);
 

@@ -105,6 +105,101 @@ function checkIssueTrackingConfig(repoRoot: string): boolean {
 }
 
 /**
+ * Checks if an ADR file is in accepted status.
+ * ADRs without an explicit Status are considered accepted by default.
+ * ADRs with status starting with superseded, deprecated, rejected, or proposed are considered non-accepted.
+ */
+export function isAdrAccepted(content: string): boolean {
+  const statusMatch = content.match(/(?:^|\n)\s*\*{0,2}Status\*{0,2}\s*:\s*\*{0,2}([^\n\r]+)/i);
+  if (!statusMatch) {
+    return true;
+  }
+  const statusText = statusMatch[1].toLowerCase().trim();
+  if (
+    statusText.startsWith("superseded") ||
+    statusText.startsWith("deprecated") ||
+    statusText.startsWith("rejected") ||
+    statusText.startsWith("proposed") ||
+    statusText.startsWith("draft") ||
+    statusText.startsWith("withdrawn")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Validates that docs/adr/ exists and contains at least one accepted ADR.
+ */
+export function validateAdrPrerequisites(repoRoot: string): string[] {
+  const errors: string[] = [];
+  const adrDir = path.join(repoRoot, "docs", "adr");
+  if (!fs.existsSync(adrDir)) {
+    errors.push(
+      "Missing architectural decision records: 'docs/adr/' directory not found at repository root. Target repositories must contain architectural decision records in docs/adr/."
+    );
+  } else {
+    const acceptedAdrs = findAcceptedAdrFiles(repoRoot);
+    if (acceptedAdrs.length === 0) {
+      errors.push(
+        "Missing accepted architectural decision records: 'docs/adr/' exists but contains no accepted ADR files. Target repositories must contain at least one accepted ADR file."
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Discovers all accepted ADR files in docs/adr/.
+ */
+export function findAcceptedAdrFiles(repoRoot: string): string[] {
+  const adrDir = path.join(repoRoot, "docs", "adr");
+  if (!fs.existsSync(adrDir)) {
+    return [];
+  }
+  try {
+    const entries = fs.readdirSync(adrDir).filter((f) => f.endsWith(".md") && !f.toLowerCase().startsWith("readme"));
+    const accepted: string[] = [];
+    for (const entry of entries) {
+      const fullPath = path.join(adrDir, entry);
+      try {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        if (isAdrAccepted(content)) {
+          accepted.push(fullPath);
+        }
+      } catch {
+        // Ignore unreadable files
+      }
+    }
+    accepted.sort((a, b) => path.basename(a).localeCompare(path.basename(b), undefined, { numeric: true }));
+    return accepted;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Loads all accepted ADRs from docs/adr/ into a bundled markdown string.
+ */
+export function loadAcceptedAdrsBundle(repoRoot: string): string | undefined {
+  const adrPaths = findAcceptedAdrFiles(repoRoot);
+  if (adrPaths.length === 0) {
+    return undefined;
+  }
+  const sections: string[] = [];
+  for (const adrPath of adrPaths) {
+    try {
+      const filename = path.basename(adrPath);
+      const content = fs.readFileSync(adrPath, "utf-8");
+      sections.push(`### ${filename}\n\n${content}`);
+    } catch {
+      // Ignore
+    }
+  }
+  return sections.length > 0 ? sections.join("\n\n---\n\n") : undefined;
+}
+
+/**
  * Validates repository workspace against domain standard prerequisites.
  */
 export function validatePreflight(repoRoot: string, featureSlug: string): PreflightCheckResult {
@@ -132,6 +227,9 @@ export function validatePreflight(repoRoot: string, featureSlug: string): Prefli
       "Missing issue tracking configuration: expected 'docs/agents/issue-tracker.md' or '## Agent skills' section in 'AGENTS.md' / 'CLAUDE.md'. Please configure local markdown issue tracking via /setup-matt-pocock-skills."
     );
   }
+
+  // 4. Validate ADR presence and accepted status
+  errors.push(...validateAdrPrerequisites(repoRoot));
 
   return {
     valid: errors.length === 0,

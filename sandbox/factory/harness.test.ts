@@ -449,3 +449,156 @@ test("runCoderAgent: captures bash tool invocations and emits tool_start and too
   }
 });
 
+test("runPlannerAgent: receives adrsContent in prompt and ingests ADR context", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage(`
+\`\`\`json
+{
+  "ticketId": "05",
+  "summary": "Adheres to ADR 0001 SPA architecture",
+  "affectedFiles": ["app/routes/index.tsx"],
+  "testCommands": ["pnpm test"],
+  "steps": ["Create route"],
+  "rationale": "Complies strictly with ADR 0001"
+}
+\`\`\`
+`),
+  ]);
+
+  try {
+    const result = await runPlannerAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "05", content: "Implement route" },
+      adrsContent: "### 0001-tanstack-start-spa-architecture.md\n\nMust use TanStack Start file-based routing.",
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+    });
+
+    const userPrompt = result.messages.find((m: any) => m.role === "user");
+    assert.ok(userPrompt);
+    const userPromptText = JSON.stringify(userPrompt.content);
+    assert.ok(
+      userPromptText.includes("0001-tanstack-start-spa-architecture.md"),
+      "Planner prompt must include bundled ADR content"
+    );
+    assert.ok(
+      userPromptText.includes("Must use TanStack Start file-based routing"),
+      "Planner prompt must include ADR specifics"
+    );
+    assert.equal(result.plan.ticketId, "05");
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runReviewerAgent: receives adrsContent and rejects diff when standardsCompliance fails due to ADR violation", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage(`
+\`\`\`json
+{
+  "verdict": "rejected",
+  "summary": "Violates ADR 0001 by introducing prohibited Redux store",
+  "specCompliance": {
+    "passed": true,
+    "details": "Layout implemented"
+  },
+  "standardsCompliance": {
+    "passed": false,
+    "details": "Violates ADR 0001: Redux is prohibited in favor of React state primitives and TanStack Query"
+  },
+  "issues": [
+    {
+      "severity": "blocker",
+      "description": "Prohibited Redux store introduced in src/store.ts",
+      "file": "src/store.ts"
+    }
+  ],
+  "remediation": "Remove Redux store and replace with local component state and TanStack Query cache per ADR 0001."
+}
+\`\`\`
+`),
+  ]);
+
+  try {
+    const result = await runReviewerAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "05", content: "Implement state management" },
+      plan: "Plan for 05",
+      diff: "diff --git a/src/store.ts b/src/store.ts\n+import { createStore } from 'redux';",
+      adrsContent: "### 0001-tanstack-start-spa-architecture.md\n\nAvoid Redux store in favor of React state primitives.",
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+    });
+
+    const userPrompt = result.messages.find((m: any) => m.role === "user");
+    assert.ok(userPrompt);
+    const userPromptText = JSON.stringify(userPrompt.content);
+    assert.ok(
+      userPromptText.includes("0001-tanstack-start-spa-architecture.md"),
+      "Reviewer prompt must include bundled ADR content"
+    );
+
+    assert.equal(result.verdict.verdict, "rejected");
+    assert.equal(result.verdict.specCompliance.passed, true);
+    assert.equal(result.verdict.standardsCompliance.passed, false);
+    assert.ok(result.verdict.issues.some((i) => i.severity === "blocker" && i.description.includes("Redux")));
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("runReviewerAgent: enforces rejection if standardsCompliance failed even if model verdict claims approved", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "harness-test-"));
+  const faux = fauxProvider();
+
+  faux.setResponses([
+    fauxAssistantMessage(`
+\`\`\`json
+{
+  "verdict": "approved",
+  "summary": "Contradictory output test",
+  "specCompliance": {
+    "passed": true,
+    "details": "Pass"
+  },
+  "standardsCompliance": {
+    "passed": false,
+    "details": "Contradicts ADR 0001 architectural decisions"
+  },
+  "issues": [
+    {
+      "severity": "blocker",
+      "description": "ADR violation"
+    }
+  ]
+}
+\`\`\`
+`),
+  ]);
+
+  try {
+    const result = await runReviewerAgent({
+      workspaceDir: tmpDir,
+      ticket: { id: "05", content: "Review ticket" },
+      plan: "Plan for 05",
+      adrsContent: "### 0001-tanstack-start-spa-architecture.md\n\nBaseline ADR.",
+      model: faux.models[0],
+      streamFn: (m, ctx, opt) => faux.provider.streamSimple(m, ctx, opt),
+    });
+
+    assert.equal(
+      result.verdict.verdict,
+      "rejected",
+      "Review verdict must be forced to rejected when standardsCompliance fails"
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+

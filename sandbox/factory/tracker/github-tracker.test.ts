@@ -416,6 +416,12 @@ test("GitHubIssueTracker: ad-hoc single issue dispatch operates on factory/issue
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-single-issue-"));
   try {
     fs.writeFileSync(path.join(tmpDir, "CONTEXT.md"), "# Domain\n");
+    const adrDir = path.join(tmpDir, "docs", "adr");
+    fs.mkdirSync(adrDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(adrDir, "0001-init.md"),
+      "# 0001: Architecture\n\n**Status**: Accepted\n"
+    );
     const preflight = await tracker.validatePreflight(tmpDir, "issue-99", "99");
     assert.equal(preflight.valid, true);
 

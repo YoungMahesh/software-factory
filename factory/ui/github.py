@@ -5,12 +5,15 @@ and inspects organization repositories and .scratch/ issue tracking trees.
 """
 
 from collections import defaultdict
+import logging
 import os
 from pathlib import Path
 import re
 import subprocess
 from typing import Any
 import httpx
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TEST_ORG = "software-factory-09-test"
 FALLBACK_REPOS = ["test1", "test2", "test3"]
@@ -289,6 +292,22 @@ def instantiate_repo_from_template(
     if resp.status_code == 201:
         data = resp.json()
         _template_lineage_cache[clean_name] = True
+
+        try:
+            from factory.ui.scaffold import scaffold_target_repo
+            scaffold_result = scaffold_target_repo(
+                repo_name=clean_name,
+                token=auth_token,
+                org=org,
+                timeout_secs=timeout_secs,
+            )
+        except Exception as e:
+            logger.error("Failed to scaffold repository %s/%s: %s", org, clean_name, e)
+            raise RepoCreationError(
+                f"Repository '{clean_name}' was created from template but failed to scaffold skills and ADRs: {e}",
+                status_code=500,
+            ) from e
+
         return {
             "name": data.get("name", clean_name),
             "full_name": data.get("full_name", f"{org}/{clean_name}"),
@@ -297,6 +316,7 @@ def instantiate_repo_from_template(
             "private": data.get("private", private),
             "is_tanstack_compatible": True,
             "template_repository": f"{template_org}/{template_repo}",
+            "scaffolded": scaffold_result.get("status") == "scaffolded" if scaffold_result else False,
         }
 
     # Error handling

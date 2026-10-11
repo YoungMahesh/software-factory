@@ -19,6 +19,13 @@ function setupRepoWithPrereqs(featureSlug: string): string {
   fs.writeFileSync(path.join(tmpDir, "README.md"), "# Pipeline Test\n", "utf-8");
   fs.writeFileSync(path.join(tmpDir, "CONTEXT.md"), "# Domain Context\n\nGlossary here.\n", "utf-8");
   fs.writeFileSync(path.join(tmpDir, "AGENTS.md"), "# Agent Instructions\n\n## Agent skills\n\nSkills.\n", "utf-8");
+  const adrDir = path.join(tmpDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n\nInitial architecture.\n",
+    "utf-8"
+  );
 
   const featureDir = path.join(tmpDir, ".scratch", featureSlug);
   const issuesDir = path.join(featureDir, "issues");
@@ -252,7 +259,14 @@ test("runAssemblyLinePipeline: multi-ticket batch lifecycle with GitHub tracker 
   execSync('git config user.name "Pipeline Test"', { cwd: repoDir, stdio: "ignore" });
   execSync('git config user.email "pipe@example.com"', { cwd: repoDir, stdio: "ignore" });
   fs.writeFileSync(path.join(repoDir, "CONTEXT.md"), "# Domain Context\n", "utf-8");
-  execSync("git add CONTEXT.md && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
+  const adrDir = path.join(repoDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n",
+    "utf-8"
+  );
+  execSync("git add . && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
 
   const milestone = {
     id: 1,
@@ -455,7 +469,14 @@ test("runAssemblyLinePipeline: multi-ticket batch halts safely and alerts PR whe
   execSync('git config user.name "Pipeline Test"', { cwd: repoDir, stdio: "ignore" });
   execSync('git config user.email "pipe@example.com"', { cwd: repoDir, stdio: "ignore" });
   fs.writeFileSync(path.join(repoDir, "CONTEXT.md"), "# Domain Context\n", "utf-8");
-  execSync("git add CONTEXT.md && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
+  const adrDir = path.join(repoDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n",
+    "utf-8"
+  );
+  execSync("git add . && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
 
   const milestone = {
     id: 2,
@@ -653,7 +674,14 @@ test("runAssemblyLinePipeline: ad-hoc single issue dispatch operates on factory/
   execSync('git config user.name "Pipeline Test"', { cwd: repoDir, stdio: "ignore" });
   execSync('git config user.email "pipe@example.com"', { cwd: repoDir, stdio: "ignore" });
   fs.writeFileSync(path.join(repoDir, "CONTEXT.md"), "# Domain Context\n", "utf-8");
-  execSync("git add CONTEXT.md && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
+  const adrDir = path.join(repoDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n",
+    "utf-8"
+  );
+  execSync("git add . && git commit -m 'initial commit'", { cwd: repoDir, stdio: "ignore" });
 
   const issue = {
     id: 99,

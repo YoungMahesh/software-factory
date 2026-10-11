@@ -1,8 +1,11 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   type Ticket,
   type TicketStatus,
   type PreflightCheckResult,
   findContextFile,
+  validateAdrPrerequisites,
   getFrontierTickets,
 } from "../preflight.ts";
 import {
@@ -166,7 +169,10 @@ export class GitHubIssueTracker implements IssueTracker {
       );
     }
 
-    // 2. Validate token presence
+    // 2. Validate architectural decision records (docs/adr/)
+    errors.push(...validateAdrPrerequisites(workspaceDir));
+
+    // 3. Validate token presence
     if (!this.client.token) {
       errors.push("Missing GitHub token: GH_TOKEN or GITHUB_TOKEN environment variable is required.");
     }

@@ -27,12 +27,22 @@ function cleanupTempRepo(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function addValidAdr(repoDir: string): void {
+  const adrDir = path.join(repoDir, "docs", "adr");
+  fs.mkdirSync(adrDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(adrDir, "0001-init.md"),
+    "# 0001: Architecture\n\n**Status**: Accepted\n"
+  );
+}
+
 test("validatePreflight: reports error when spec.md is missing", () => {
   const repo = createTempRepo();
   try {
     // Has CONTEXT.md and AGENTS.md, but no .scratch/feat/spec.md
     fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context");
     fs.writeFileSync(path.join(repo, "AGENTS.md"), "# Agents\n\n## Agent skills\n");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, false);
@@ -49,6 +59,7 @@ test("validatePreflight: reports error when CONTEXT.md is missing", () => {
     fs.mkdirSync(featDir, { recursive: true });
     fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
     fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, false);
@@ -68,6 +79,7 @@ test("validatePreflight: accepts CONTEXT.md in domain path", () => {
     fs.mkdirSync(domainDir, { recursive: true });
     fs.writeFileSync(path.join(domainDir, "CONTEXT.md"), "# Domain Context");
     fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, true);
@@ -85,6 +97,7 @@ test("validatePreflight: accepts GLOSSARY.md at repository root", () => {
     fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
     fs.writeFileSync(path.join(repo, "GLOSSARY.md"), "# Domain Glossary");
     fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, true);
@@ -104,6 +117,7 @@ test("validatePreflight: accepts GLOSSARY.md in docs path", () => {
     fs.mkdirSync(docsDir, { recursive: true });
     fs.writeFileSync(path.join(docsDir, "GLOSSARY.md"), "# Domain Glossary");
     fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, true);
@@ -113,7 +127,6 @@ test("validatePreflight: accepts GLOSSARY.md in docs path", () => {
   }
 });
 
-
 test("validatePreflight: reports error when issue tracking config is missing", () => {
   const repo = createTempRepo();
   try {
@@ -121,6 +134,7 @@ test("validatePreflight: reports error when issue tracking config is missing", (
     fs.mkdirSync(featDir, { recursive: true });
     fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
     fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Context");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, false);
@@ -140,6 +154,7 @@ test("validatePreflight: accepts docs/agents/issue-tracker.md as issue tracking 
     const docsDir = path.join(repo, "docs", "agents");
     fs.mkdirSync(docsDir, { recursive: true });
     fs.writeFileSync(path.join(docsDir, "issue-tracker.md"), "# Issue tracker");
+    addValidAdr(repo);
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, true);
@@ -157,6 +172,76 @@ test("validatePreflight: accepts CLAUDE.md with ## Agent skills", () => {
     fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
     fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Context");
     fs.writeFileSync(path.join(repo, "CLAUDE.md"), "# Instructions\n\n## Agent skills\n");
+    addValidAdr(repo);
+
+    const result = validatePreflight(repo, "test-feature");
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.errors.length, 0);
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("validatePreflight: reports error when docs/adr directory is missing", () => {
+  const repo = createTempRepo();
+  try {
+    const featDir = path.join(repo, ".scratch", "test-feature");
+    fs.mkdirSync(featDir, { recursive: true });
+    fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Context");
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+
+    const result = validatePreflight(repo, "test-feature");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((err) => err.includes("docs/adr/")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("validatePreflight: reports error when docs/adr has no accepted ADRs", () => {
+  const repo = createTempRepo();
+  try {
+    const featDir = path.join(repo, ".scratch", "test-feature");
+    fs.mkdirSync(featDir, { recursive: true });
+    fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Context");
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+
+    const adrDir = path.join(repo, "docs", "adr");
+    fs.mkdirSync(adrDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(adrDir, "0001-old.md"),
+      "# 0001: Old Architecture\n\n**Status**: Superseded by 0002\n"
+    );
+    fs.writeFileSync(
+      path.join(adrDir, "0002-dep.md"),
+      "# 0002: Deprecated Architecture\n\n**Status**: Deprecated\n"
+    );
+
+    const result = validatePreflight(repo, "test-feature");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((err) => err.includes("Missing accepted architectural decision records")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("validatePreflight: passes when docs/adr contains accepted ADR", () => {
+  const repo = createTempRepo();
+  try {
+    const featDir = path.join(repo, ".scratch", "test-feature");
+    fs.mkdirSync(featDir, { recursive: true });
+    fs.writeFileSync(path.join(featDir, "spec.md"), "# Spec");
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Context");
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "## Agent skills\n");
+
+    const adrDir = path.join(repo, "docs", "adr");
+    fs.mkdirSync(adrDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(adrDir, "0001-active.md"),
+      "# 0001: Active Architecture\n\n**Status**: Accepted\n"
+    );
 
     const result = validatePreflight(repo, "test-feature");
     assert.strictEqual(result.valid, true);
@@ -423,8 +508,9 @@ test("GitHub Pre-flight: fails when remote milestone has no assigned issues", as
 test("GitHub Pre-flight: succeeds with CONTEXT.md and valid milestone issues without .scratch/ directory", async () => {
   const repo = createTempRepo();
   try {
-    // Only CONTEXT.md, NO .scratch/ directory
+    // Only CONTEXT.md and docs/adr/, NO .scratch/ directory
     fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+    addValidAdr(repo);
     assert.strictEqual(fs.existsSync(path.join(repo, ".scratch")), false);
 
     const client = new GitHubClient({
@@ -470,6 +556,67 @@ test("GitHub Pre-flight: succeeds with CONTEXT.md and valid milestone issues wit
     const result = await tracker.validatePreflight(repo, "feat-auth");
     assert.strictEqual(result.valid, true);
     assert.strictEqual(result.errors.length, 0);
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("GitHub Pre-flight: fails when docs/adr/ is missing", async () => {
+  const repo = createTempRepo();
+  try {
+    fs.writeFileSync(path.join(repo, "CONTEXT.md"), "# Domain Context\n");
+
+    const client = new GitHubClient({
+      token: "mock-token",
+      owner: "software-factory-09-test",
+      repo: "target-repo",
+    });
+    const tracker = new GitHubIssueTracker({ client });
+
+    const result = await tracker.validatePreflight(repo, "feat-auth");
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("docs/adr/")));
+  } finally {
+    cleanupTempRepo(repo);
+  }
+});
+
+test("loadAcceptedAdrsBundle: bundles accepted ADRs and skips non-accepted ADRs", async () => {
+  const repo = createTempRepo();
+  try {
+    const { loadAcceptedAdrsBundle } = await import("./preflight.ts");
+    const adrDir = path.join(repo, "docs", "adr");
+    fs.mkdirSync(adrDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(adrDir, "0001-active.md"),
+      "# 0001: Active Architecture\n\n**Status**: Accepted\n\nDetails of 0001."
+    );
+    fs.writeFileSync(
+      path.join(adrDir, "0002-superseded.md"),
+      "# 0002: Superseded Architecture\n\n**Status**: Superseded by 0003\n\nOld details."
+    );
+    fs.writeFileSync(
+      path.join(adrDir, "0003-default-active.md"),
+      "# 0003: Default Active\n\nNo explicit status line but valid active ADR."
+    );
+
+    fs.writeFileSync(
+      path.join(adrDir, "0004-draft.md"),
+      "# 0004: Draft Architecture\n\n**Status**: Draft\n\nDraft details."
+    );
+    fs.writeFileSync(
+      path.join(adrDir, "0005-withdrawn.md"),
+      "# 0005: Withdrawn Architecture\n\n**Status**: Withdrawn\n\nWithdrawn details."
+    );
+
+    const bundle = loadAcceptedAdrsBundle(repo);
+    assert.ok(bundle !== undefined);
+    assert.ok(bundle.includes("0001-active.md"));
+    assert.ok(bundle.includes("0003-default-active.md"));
+    assert.ok(!bundle.includes("0002-superseded.md"), "Superseded ADR must not be bundled");
+    assert.ok(!bundle.includes("0004-draft.md"), "Draft ADR must not be bundled");
+    assert.ok(!bundle.includes("0005-withdrawn.md"), "Withdrawn ADR must not be bundled");
   } finally {
     cleanupTempRepo(repo);
   }

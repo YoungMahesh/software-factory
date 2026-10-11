@@ -10,7 +10,7 @@ import {
   runReviewerAgent,
 } from "./harness.ts";
 import { type VerificationResult, verifyWorkspace } from "./verifier.ts";
-import { type Ticket, findContextFile } from "./preflight.ts";
+import { type Ticket, findContextFile, loadAcceptedAdrsBundle } from "./preflight.ts";
 import { updateTicketFile } from "./ticket.ts";
 import { commitAndPushFeatureBranch, commitFailureDiagnostics } from "./git.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
@@ -116,6 +116,8 @@ export async function runTicketLifecycle(
     ? fs.readFileSync(contextFilePath, "utf-8")
     : undefined;
 
+  const adrsContent = loadAcceptedAdrsBundle(workspaceDir);
+
   // 3. Stage 1: Planner Agent
   emitStageEvent("PLANNER", { ticketId: ticket.id, title: ticket.title }, { stream: options.stream });
   console.log(`\n🧠 Stage 1: Planner Agent: Planning implementation for ticket #${ticket.number ?? ticket.id}...`);
@@ -126,6 +128,7 @@ export async function runTicketLifecycle(
       ticket,
       specContent,
       contextContent,
+      adrsContent,
       provider: options.provider,
       model: options.model,
     });
@@ -275,6 +278,8 @@ export async function runTicketLifecycle(
         ticket,
         plan,
         diff: gitDiff,
+        contextContent,
+        adrsContent,
         provider: options.provider,
         model: options.model,
       });
