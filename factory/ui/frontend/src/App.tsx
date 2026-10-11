@@ -6,11 +6,13 @@ import {
   GitBranch,
 } from "lucide-react";
 import { Repo, Job, ChatMessage, LaunchJobParams, PreviewState } from "./types";
-import { formatToolLabel } from "./utils";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
 import { useJobStream } from "./hooks/useJobStream";
+import { foldTelemetryEvents } from "./utils/telemetryEvents";
+import { StudioProvider, StudioContextValue } from "./context/StudioContext";
 import * as api from "./api";
 
 const getInitialTab = (): "studio" | "console" => {
@@ -81,63 +83,7 @@ export const App: React.FC = () => {
   // Rehydrate & sync assistant turn in chat history from telemetry events
   useEffect(() => {
     if (events.length === 0 || !activeJobId) return;
-
-    setMessages((prev) => {
-      let targetMsg = prev.find((m) => m.role === "assistant" && m.jobId === activeJobId);
-      let isNew = false;
-      if (!targetMsg) {
-        isNew = true;
-        targetMsg = {
-          id: `assistant-${activeJobId}`,
-          role: "assistant",
-          timestamp: Date.now(),
-          jobId: activeJobId,
-          text: `Assembly line execution for ${activeJob?.feature || activeJob?.repo || activeJobId}`,
-          stepChips: [],
-        };
-      }
-
-      const updated: ChatMessage = {
-        ...targetMsg,
-        stepChips: [...(targetMsg.stepChips || [])],
-      };
-
-      // Process telemetry events to update thinking and step chips
-      events.forEach((evt) => {
-        if (evt.type === "thinking") {
-          const delta = evt.data?.delta || "";
-          const prevText = updated.thinking?.text || "";
-          const newText = delta ? prevText + delta : prevText;
-          updated.thinking = {
-            text: newText,
-            durationMs: evt.data?.durationMs || updated.thinking?.durationMs,
-            done: Boolean(evt.data?.done) || Boolean(updated.thinking?.done),
-          };
-        }
-
-        if (evt.type === "tool_result") {
-          const chipId = evt.data?.toolCallId || `chip-${evt.data?.toolName}-${evt.timestamp || Date.now()}`;
-          if (!updated.stepChips!.some((c) => c.id === chipId)) {
-            const toolName = evt.data?.toolName || "tool";
-            const label = `[${formatToolLabel(toolName, evt.data)}]`;
-
-            updated.stepChips!.push({
-              id: chipId,
-              toolName,
-              label,
-              data: evt.data,
-              stage: evt.stage,
-              toolCallId: evt.data?.toolCallId,
-            });
-          }
-        }
-      });
-
-      if (isNew) {
-        return [...prev, updated];
-      }
-      return prev.map((m) => (m.id === updated.id ? updated : m));
-    });
+    setMessages((prev) => foldTelemetryEvents(prev, events, activeJobId, activeJob));
   }, [events, activeJobId, activeJob]);
 
   // Load repositories & jobs on mount
@@ -293,7 +239,17 @@ export const App: React.FC = () => {
     if (!selectedRepo) return;
     try {
       await api.stopPreview(selectedRepo);
-      setPreviewState((prev) => (prev ? { ...prev, status: "STOPPED" } : null));
+      setPreviewState((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "STOPPED",
+              branch: prev.branch || "main",
+              preview_url: null,
+              error_message: null,
+            }
+          : null
+      );
     } catch (err) {
       console.error("Failed to stop preview:", err);
     }
@@ -408,122 +364,140 @@ export const App: React.FC = () => {
     }
   };
 
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+
+  const studioContextValue: StudioContextValue = {
+    repos,
+    selectedRepo,
+    onSelectRepo: setSelectedRepo,
+    onCreateRepo: handleCreateRepo,
+    activeJob,
+    messages,
+    onSendPrompt: handleSendPrompt,
+    onCancelJob: handleCancelJob,
+    onSwitchToConsole: () => switchTab("console"),
+    onOpenDrawer: () => setIsDrawerOpen(true),
+    isSending: isSendingPrompt,
+    previewState,
+    onLaunchPreview: handleLaunchPreview,
+    onStopPreview: handleStopPreview,
+    onRetryPreview: handleLaunchPreview,
+    onReconnectPreview: handleReconnectPreview,
+    refreshKey: previewRefreshKey,
+    isLaunchingPreview,
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans">
-      {/* Top Application Header */}
-      <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between z-30 shrink-0">
-        <div className="flex items-center space-x-6">
-          {/* Logo & Product Title */}
-          <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
-              <Boxes className="w-4 h-4" />
+    <QueryClientProvider client={queryClient}>
+      <StudioProvider value={studioContextValue}>
+        <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans">
+          {/* Top Application Header */}
+          <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between z-30 shrink-0">
+            <div className="flex items-center space-x-6">
+              {/* Logo & Product Title */}
+              <div className="flex items-center space-x-2.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
+                  <Boxes className="w-4 h-4" />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-sm tracking-tight text-slate-100">
+                    Software Factory
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                    v2
+                  </span>
+                </div>
+              </div>
+
+              {/* Navigation View Switcher */}
+              <nav className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button
+                  id="nav-tab-studio"
+                  type="button"
+                  onClick={() => switchTab("studio")}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    activeTab === "studio"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Factory Studio</span>
+                </button>
+
+                <button
+                  id="nav-tab-console"
+                  type="button"
+                  onClick={() => switchTab("console")}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    activeTab === "console"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Factory Testing Console</span>
+                </button>
+              </nav>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-sm tracking-tight text-slate-100">
-                Software Factory
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
-                v2
-              </span>
+
+            {/* Right Header Status / Links */}
+            <div className="flex items-center space-x-3 text-xs text-slate-400">
+              <a
+                href="https://github.com/software-factory-09-test"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-1.5 hover:text-slate-200 transition-colors"
+              >
+                <GitBranch className="w-4 h-4" />
+                <span className="hidden sm:inline">software-factory-09-test</span>
+              </a>
             </div>
-          </div>
+          </header>
 
-          {/* Navigation View Switcher */}
-          <nav className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-            <button
-              id="nav-tab-studio"
-              type="button"
-              onClick={() => switchTab("studio")}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === "studio"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Factory Studio</span>
-            </button>
+          {/* Main Active View */}
+          <main className="flex-1 overflow-auto">
+            {activeTab === "studio" ? (
+              <StudioView />
+            ) : (
+              <TestingConsoleView
+                repos={repos}
+                selectedRepo={selectedRepo}
+                onSelectRepo={setSelectedRepo}
+                onRefreshRepos={loadRepos}
+                activeJob={activeJob}
+                logs={logs}
+                jobs={jobs}
+                onLaunch={handleLaunchJob}
+                onCancel={handleCancelJob}
+                onSelectJob={handleSelectJob}
+                onClearLogs={clearLogs}
+              />
+            )}
+          </main>
 
-            <button
-              id="nav-tab-console"
-              type="button"
-              onClick={() => switchTab("console")}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === "console"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-              }`}
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Factory Testing Console</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Right Header Status / Links */}
-        <div className="flex items-center space-x-3 text-xs text-slate-400">
-          <a
-            href="https://github.com/software-factory-09-test"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center space-x-1.5 hover:text-slate-200 transition-colors"
-          >
-            <GitBranch className="w-4 h-4" />
-            <span className="hidden sm:inline">software-factory-09-test</span>
-          </a>
-        </div>
-      </header>
-
-      {/* Main Active View */}
-      <main className="flex-1 overflow-auto">
-        {activeTab === "studio" ? (
-          <StudioView
-            repos={repos}
-            selectedRepo={selectedRepo}
-            onSelectRepo={setSelectedRepo}
-            onCreateRepo={handleCreateRepo}
-            activeJob={activeJob}
-            messages={messages}
-            onSendPrompt={handleSendPrompt}
-            onCancelJob={handleCancelJob}
-            onSwitchToConsole={() => setActiveTab("console")}
-            onOpenDrawer={() => setIsDrawerOpen(true)}
-            isSending={isSendingPrompt}
-            previewState={previewState}
-            onLaunchPreview={handleLaunchPreview}
-            onStopPreview={handleStopPreview}
-            onRetryPreview={handleLaunchPreview}
-            onReconnectPreview={handleReconnectPreview}
-            refreshKey={previewRefreshKey}
-            isLaunchingPreview={isLaunchingPreview}
-          />
-        ) : (
-          <TestingConsoleView
-            repos={repos}
-            selectedRepo={selectedRepo}
-            onSelectRepo={setSelectedRepo}
-            onRefreshRepos={loadRepos}
-            activeJob={activeJob}
+          {/* Slide-over Agent Activity Drawer */}
+          <ActivityDrawer
+            isOpen={isDrawerOpen}
+            onClose={() => setIsDrawerOpen(false)}
+            jobId={activeJob?.id}
+            stage={activeJob?.stage}
+            events={events}
             logs={logs}
-            jobs={jobs}
-            onLaunch={handleLaunchJob}
-            onCancel={handleCancelJob}
-            onSelectJob={handleSelectJob}
-            onClearLogs={clearLogs}
           />
-        )}
-      </main>
-
-      {/* Slide-over Agent Activity Drawer */}
-      <ActivityDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        jobId={activeJob?.id}
-        stage={activeJob?.stage}
-        events={events}
-        logs={logs}
-      />
-    </div>
+        </div>
+      </StudioProvider>
+    </QueryClientProvider>
   );
 };
 

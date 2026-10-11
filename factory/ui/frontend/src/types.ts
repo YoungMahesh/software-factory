@@ -9,20 +9,56 @@ export type PreviewStage =
   | "STARTING_DEV"
   | "SERVING";
 
-export interface PreviewState {
-  repo: string;
-  status: PreviewStatus;
-  stage?: PreviewStage;
-  branch: string;
-  preview_url?: string | null;
+interface PreviewStateBase {
+  repo?: string;
   sandbox_id?: string | null;
   created_at?: number | null;
   started_at?: number | null;
   ended_at?: number | null;
-  error_message?: string | null;
-  logs?: string[];
   log_count?: number;
 }
+
+export type PreviewState =
+  | (PreviewStateBase & {
+      status: "IDLE";
+      stage?: PreviewStage;
+      branch?: null;
+      preview_url?: null;
+      logs?: string[];
+      error_message?: null;
+    })
+  | (PreviewStateBase & {
+      status: "PROVISIONING";
+      stage: PreviewStage;
+      branch: string;
+      preview_url?: null;
+      logs?: string[];
+      error_message?: null;
+    })
+  | (PreviewStateBase & {
+      status: "SERVING";
+      stage?: PreviewStage;
+      branch: string;
+      preview_url: string;
+      logs?: string[];
+      error_message?: null;
+    })
+  | (PreviewStateBase & {
+      status: "STOPPED";
+      stage?: PreviewStage;
+      branch: string;
+      preview_url?: null;
+      logs?: string[];
+      error_message?: null;
+    })
+  | (PreviewStateBase & {
+      status: "FAILED";
+      stage?: PreviewStage;
+      branch?: string | null;
+      preview_url?: null;
+      logs?: string[];
+      error_message: string;
+    });
 
 export type JobStage =
   | "IDLE"

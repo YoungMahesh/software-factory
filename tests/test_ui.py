@@ -410,6 +410,16 @@ class TestFastApiApp(unittest.TestCase):
         self.assertIn("already exists", resp.json()["detail"])
 
     @patch("factory.ui.app.instantiate_repo_from_template")
+    def test_create_repo_endpoint_github_gateway_error(self, mock_instantiate):
+        mock_instantiate.side_effect = RepoCreationError(
+            "GitHub API error (502): Bad Gateway",
+            status_code=502,
+        )
+        resp = self.client.post("/api/repos", json={"name": "gateway-err-app"})
+        self.assertEqual(resp.status_code, 502)
+        self.assertEqual(resp.json()["detail"], "GitHub API error (502): Bad Gateway")
+
+    @patch("factory.ui.app.instantiate_repo_from_template")
     def test_create_repo_endpoint_success(self, mock_instantiate):
         mock_instantiate.return_value = {
             "name": "my-portfolio",

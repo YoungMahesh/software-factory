@@ -138,7 +138,12 @@ def create_app(
             return _get_spa_html()
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
+    @app.exception_handler(RepoCreationError)
+    async def repo_creation_error_handler(request: Request, exc: RepoCreationError):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
     @app.get("/api/repos")
+    @app.get("/api/studio/repos")
     async def get_repos():
         detailed_repos = fetch_test_org_repos_detailed()
         return {
@@ -146,34 +151,20 @@ def create_app(
             "repos": detailed_repos,
         }
 
-    @app.get("/api/studio/repos")
-    async def get_studio_repos():
-        detailed_repos = fetch_test_org_repos_detailed()
-        return {
-            "org": DEFAULT_TEST_ORG,
-            "repos": detailed_repos,
-        }
-
     @app.post("/api/repos", status_code=201)
+    @app.post("/api/studio/repos", status_code=201)
     async def create_repo(req: CreateRepoRequest):
         repo_name = req.name.strip()
         valid, err_msg = validate_github_repo_name(repo_name)
         if not valid:
             raise HTTPException(status_code=400, detail=err_msg or "Invalid repository name.")
 
-        try:
-            result = instantiate_repo_from_template(
-                repo_name=repo_name,
-                description=req.description,
-                private=req.private,
-            )
-            return JSONResponse(status_code=201, content=result)
-        except RepoCreationError as e:
-            raise HTTPException(status_code=e.status_code, detail=e.message)
-
-    @app.post("/api/studio/repos", status_code=201)
-    async def create_studio_repo(req: CreateRepoRequest):
-        return await create_repo(req)
+        result = instantiate_repo_from_template(
+            repo_name=repo_name,
+            description=req.description,
+            private=req.private,
+        )
+        return JSONResponse(status_code=201, content=result)
 
     @app.post("/api/studio/prompt")
     @app.post("/api/prompt")

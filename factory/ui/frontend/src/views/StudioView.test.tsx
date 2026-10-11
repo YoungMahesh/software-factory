@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { StudioView } from "./StudioView";
+import { StudioProvider } from "../context/StudioContext";
 
 const mockRepos = [
   { name: "cool-app", is_tanstack_compatible: true },
@@ -417,6 +418,34 @@ describe("StudioView", () => {
     const streamReloadedIframe = screen.getByTitle("Live Application Preview");
     expect(streamReloadedIframe).toBeInTheDocument();
     expect(streamReloadedIframe).not.toBe(reloadedIframe);
+  });
+
+  it("consumes unified studio context when rendered inside StudioProvider with zero props", () => {
+    const handleSend = vi.fn();
+    render(
+      <StudioProvider
+        value={{
+          repos: mockRepos,
+          selectedRepo: "cool-app",
+          onSelectRepo: vi.fn(),
+          onCreateRepo: vi.fn(),
+          activeJob: null,
+          messages: [],
+          onSendPrompt: handleSend,
+          onCancelJob: vi.fn(),
+          onSwitchToConsole: vi.fn(),
+          previewState: null,
+        }}
+      >
+        <StudioView />
+      </StudioProvider>
+    );
+
+    const input = screen.getByPlaceholderText(/Describe what you want to build/i);
+    expect(input).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "Build navbar from context" } });
+    fireEvent.click(screen.getByRole("button", { name: /Send/i }));
+    expect(handleSend).toHaveBeenCalledWith("Build navbar from context");
   });
 });
 

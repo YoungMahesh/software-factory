@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Send,
   Plus,
   Activity,
   Terminal,
@@ -8,28 +7,30 @@ import {
   ShieldAlert,
   Loader2,
   Box,
-  X,
   Play,
   Square,
-  AlertTriangle,
-  RotateCw,
-  GitBranch,
 } from "lucide-react";
 import { Repo, Job, ChatMessage, PreviewState } from "../types";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
 import { ToolChip } from "../components/ToolChip";
+import { useStudioOptional } from "../context/StudioContext";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { NewAppModal } from "../components/NewAppModal";
+import { DisconnectedModal } from "../components/DisconnectedModal";
+import { PromptComposer } from "../components/PromptComposer";
 
-interface StudioViewProps {
-  repos: Repo[];
-  selectedRepo: string;
-  onSelectRepo: (repo: string) => void;
-  onCreateRepo: (params: { name: string; description?: string }) => Promise<void>;
-  activeJob: Job | null;
-  messages: ChatMessage[];
-  onSendPrompt: (prompt: string) => void;
-  onCancelJob: (jobId: string) => void;
-  onSwitchToConsole: () => void;
+export interface StudioViewProps {
+  repos?: Repo[];
+  selectedRepo?: string;
+  onSelectRepo?: (repo: string) => void;
+  onCreateRepo?: (params: { name: string; description?: string }) => Promise<void>;
+  activeJob?: Job | null;
+  messages?: ChatMessage[];
+  onSendPrompt?: (prompt: string) => void;
+  onCancelJob?: (jobId: string) => void;
+  onSwitchToConsole?: () => void;
   onOpenDrawer?: (targetToolCallId?: string) => void;
   isSending?: boolean;
   previewState?: PreviewState | null;
@@ -41,85 +42,40 @@ interface StudioViewProps {
   isLaunchingPreview?: boolean;
 }
 
-export const StudioView: React.FC<StudioViewProps> = ({
-  repos,
-  selectedRepo,
-  onSelectRepo,
-  onCreateRepo,
-  activeJob,
-  messages,
-  onSendPrompt,
-  onCancelJob,
-  onSwitchToConsole,
-  onOpenDrawer,
-  isSending = false,
-  previewState = null,
-  onLaunchPreview,
-  onStopPreview,
-  onRetryPreview,
-  onReconnectPreview,
-  refreshKey,
-  isLaunchingPreview = false,
-}) => {
-  const [prompt, setPrompt] = useState<string>("");
+export const StudioView: React.FC<StudioViewProps> = (props) => {
+  const ctx = useStudioOptional();
+
+  const repos = props.repos ?? ctx?.repos ?? [];
+  const selectedRepo = props.selectedRepo ?? ctx?.selectedRepo ?? "";
+  const onSelectRepo = props.onSelectRepo ?? ctx?.onSelectRepo ?? (() => {});
+  const onCreateRepo = props.onCreateRepo ?? ctx?.onCreateRepo ?? (async () => {});
+  const activeJob = props.activeJob !== undefined ? props.activeJob : (ctx?.activeJob ?? null);
+  const messages = props.messages ?? ctx?.messages ?? [];
+  const onSendPrompt = props.onSendPrompt ?? ctx?.onSendPrompt ?? (() => {});
+  const onCancelJob = props.onCancelJob ?? ctx?.onCancelJob ?? (() => {});
+  const onSwitchToConsole = props.onSwitchToConsole ?? ctx?.onSwitchToConsole ?? (() => {});
+  const onOpenDrawer = props.onOpenDrawer ?? ctx?.onOpenDrawer;
+  const isSending = props.isSending ?? ctx?.isSending ?? false;
+  const previewState = props.previewState !== undefined ? props.previewState : (ctx?.previewState ?? null);
+  const onLaunchPreview = props.onLaunchPreview ?? ctx?.onLaunchPreview;
+  const onStopPreview = props.onStopPreview ?? ctx?.onStopPreview;
+  const onRetryPreview = props.onRetryPreview ?? ctx?.onRetryPreview;
+  const onReconnectPreview = props.onReconnectPreview ?? ctx?.onReconnectPreview;
+  const refreshKey = props.refreshKey ?? ctx?.refreshKey;
+  const isLaunchingPreview = props.isLaunchingPreview ?? ctx?.isLaunchingPreview ?? false;
+
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
-  const [newAppName, setNewAppName] = useState<string>("");
-  const [newAppDesc, setNewAppDesc] = useState<string>("");
-  const [newAppError, setNewAppError] = useState<string | null>(null);
-  const [isCreatingApp, setIsCreatingApp] = useState<boolean>(false);
 
   const isDisconnected = previewState?.status === "STOPPED";
-
   const isExecutingTurn = Boolean(
     isSending || (activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))
   );
-
-  const isInputLocked = !selectedRepo || isExecutingTurn || isDisconnected;
 
   const handleReconnect = () => {
     if (onReconnectPreview) {
       onReconnectPreview();
     } else if (onLaunchPreview) {
       onLaunchPreview();
-    }
-  };
-
-  const handlePromptSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim() || isInputLocked) return;
-    onSendPrompt(prompt.trim());
-    setPrompt("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!prompt.trim() || isInputLocked) return;
-      onSendPrompt(prompt.trim());
-      setPrompt("");
-    }
-  };
-
-  const handleCreateNewApp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAppName.trim()) {
-      setNewAppError("App name is required.");
-      return;
-    }
-    setNewAppError(null);
-    setIsCreatingApp(true);
-    try {
-      await onCreateRepo({
-        name: newAppName.trim(),
-        description: newAppDesc.trim() || undefined,
-      });
-      setIsNewAppModalOpen(false);
-      setNewAppName("");
-      setNewAppDesc("");
-    } catch (err: any) {
-      setNewAppError(err.message || "Failed to create app");
-    } finally {
-      setIsCreatingApp(false);
     }
   };
 
@@ -144,15 +100,16 @@ export const StudioView: React.FC<StudioViewProps> = ({
             ))}
           </select>
 
-          <button
+          <Button
             id="btn-studio-new-app"
             type="button"
+            variant="primary"
+            size="sm"
             onClick={() => setIsNewAppModalOpen(true)}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs font-medium transition-colors shadow-sm"
+            icon={<Plus className="w-3.5 h-3.5" />}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New App</span>
-          </button>
+            New App
+          </Button>
 
           {selectedRepo && (
             <div className="flex items-center space-x-2">
@@ -168,7 +125,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   }
                 }}
                 disabled={isLaunchingPreview || previewState?.status === "PROVISIONING"}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm cursor-pointer ${
                   previewState?.status === "SERVING"
                     ? "bg-emerald-950/80 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/80"
                     : previewState?.status === "PROVISIONING" || isLaunchingPreview
@@ -197,7 +154,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   data-testid="studio-stop-preview-btn"
                   type="button"
                   onClick={onStopPreview}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-colors"
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-colors cursor-pointer"
                   title="Stop preview sandbox"
                 >
                   <Square className="w-3 h-3 fill-current" />
@@ -214,12 +171,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
             id="studio-floating-status-badge"
             className="flex items-center space-x-2 bg-slate-950 px-3 py-1.5 rounded-full border border-indigo-900/60 shadow-md text-xs"
           >
-            <span
-              id="studio-badge-stage-text"
-              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 uppercase border border-indigo-800"
-            >
+            <Badge id="studio-badge-stage-text" variant="stage">
               {activeJob.stage}
-            </span>
+            </Badge>
             <span id="studio-badge-job-detail" className="font-mono text-slate-300 text-[11px] truncate max-w-[150px]">
               {activeJob.id}
             </span>
@@ -229,7 +183,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 id="btn-studio-activity"
                 type="button"
                 onClick={() => onOpenDrawer()}
-                className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-indigo-300 hover:text-white bg-indigo-900/40 hover:bg-indigo-800 transition-colors"
+                className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-indigo-300 hover:text-white bg-indigo-900/40 hover:bg-indigo-800 transition-colors cursor-pointer"
                 title="Open Agent Activity Drawer"
               >
                 <Activity className="w-3 h-3" />
@@ -241,7 +195,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               id="btn-inspect-logs"
               type="button"
               onClick={onSwitchToConsole}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 transition-colors"
+              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
               title="Inspect terminal logs in Console"
             >
               <Terminal className="w-3 h-3" />
@@ -253,7 +207,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 id="btn-studio-cancel"
                 type="button"
                 onClick={() => onCancelJob(activeJob.id)}
-                className="p-1 rounded text-red-400 hover:text-red-200 hover:bg-red-950 transition-colors"
+                className="p-1 rounded text-red-400 hover:text-red-200 hover:bg-red-950 transition-colors cursor-pointer"
                 title="Cancel running assembly line"
               >
                 <XCircle className="w-3.5 h-3.5" />
@@ -305,9 +259,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                             <ShieldAlert className="w-4 h-4 shrink-0" />
                             <span>Request Refused</span>
                             {msg.refusal.category && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 border border-rose-900 text-rose-300 font-mono">
+                              <Badge variant="danger" className="font-mono">
                                 {msg.refusal.category}
-                              </span>
+                              </Badge>
                             )}
                           </div>
                           <p className="text-rose-200 text-xs mb-1">
@@ -368,62 +322,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           {/* Prompt Composer */}
-          <div className="p-3.5 bg-slate-900/80 border-t border-slate-800 space-y-2">
-            {isExecutingTurn && (
-              <div
-                data-testid="in-flight-indicator"
-                id="studio-in-flight-indicator"
-                className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-xs text-indigo-300 font-medium animate-pulse"
-              >
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400 shrink-0" />
-                <span>
-                  Assembly line turn in progress ({activeJob?.stage || "DISPATCHING"})...
-                </span>
-              </div>
-            )}
-
-            <form id="studio-prompt-form" onSubmit={handlePromptSubmit} className="space-y-2">
-              <div className="relative">
-                <textarea
-                  id="studio-prompt-input"
-                  data-testid="studio-prompt-input"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    isDisconnected
-                      ? "Sandbox disconnected. Click 'Reconnect Environment' to resume chatting."
-                      : isExecutingTurn
-                      ? "Assembly line turn in progress..."
-                      : "Describe what you want to build... (Enter to send)"
-                  }
-                  disabled={isInputLocked}
-                  rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-50"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500">
-                  Target: <span className="font-mono text-indigo-300">{selectedRepo || "none"}</span>
-                </span>
-
-                <button
-                  id="btn-studio-send"
-                  type="submit"
-                  disabled={!prompt.trim() || isInputLocked}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-semibold shadow-sm transition-colors"
-                >
-                  {isExecutingTurn ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )}
-                  <span>Send</span>
-                </button>
-              </div>
-            </form>
-          </div>
+          <PromptComposer
+            selectedRepo={selectedRepo}
+            isExecutingTurn={isExecutingTurn}
+            isDisconnected={isDisconnected}
+            activeStage={activeJob?.stage}
+            onSendPrompt={onSendPrompt}
+          />
         </div>
 
         {/* Right: Live Preview Iframe */}
@@ -446,137 +351,19 @@ export const StudioView: React.FC<StudioViewProps> = ({
       </div>
 
       {/* New App Modal */}
-      {isNewAppModalOpen && (
-        <div
-          id="modal-new-app"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
-        >
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
-                <Plus className="w-4 h-4 text-indigo-400" />
-                <span>Create New App</span>
-              </h3>
-              <button
-                id="btn-close-modal-x"
-                type="button"
-                onClick={() => setIsNewAppModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateNewApp} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  App Name (Repository) *
-                </label>
-                <input
-                  id="input-new-app-name"
-                  type="text"
-                  value={newAppName}
-                  onChange={(e) => setNewAppName(e.target.value)}
-                  placeholder="e.g. inventory-tracker"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Description (Optional)
-                </label>
-                <input
-                  id="input-new-app-desc"
-                  type="text"
-                  value={newAppDesc}
-                  onChange={(e) => setNewAppDesc(e.target.value)}
-                  placeholder="e.g. Inventory management dashboard"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              {newAppError && (
-                <div id="new-app-error" className="text-xs text-rose-400 bg-rose-950/40 border border-rose-900 p-2 rounded">
-                  {newAppError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end space-x-2 pt-2">
-                <button
-                  id="btn-cancel-new-app"
-                  type="button"
-                  onClick={() => setIsNewAppModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  id="btn-create-new-app"
-                  type="submit"
-                  disabled={isCreatingApp}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-colors"
-                >
-                  {isCreatingApp && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Create App</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <NewAppModal
+        isOpen={isNewAppModalOpen}
+        onClose={() => setIsNewAppModalOpen(false)}
+        onCreate={onCreateRepo}
+      />
 
       {/* Sandbox Disconnected Dialog */}
-      {isDisconnected && (
-        <div
-          id="modal-sandbox-disconnected"
-          data-testid="sandbox-disconnected-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="disconnected-dialog-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
-        >
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-amber-400">
-              <AlertTriangle className="w-6 h-6 shrink-0" />
-              <h3
-                id="disconnected-dialog-title"
-                data-testid="sandbox-disconnected-title"
-                className="text-base font-semibold text-slate-100"
-              >
-                Sandbox Disconnected
-              </h3>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              The Unified Studio Sandbox reached its 30-minute idle timeout or entered a stopped state.
-              Your chat conversation history has been preserved. Reconnect to rehydrate the environment tracked to the active remote branch and resume live preview.
-            </p>
-            {previewState?.branch && (
-              <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono">
-                <GitBranch className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span>Active branch: <strong className="text-indigo-300">{previewState.branch}</strong></span>
-              </div>
-            )}
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                id="btn-reconnect-environment"
-                data-testid="reconnect-environment-btn"
-                type="button"
-                onClick={handleReconnect}
-                disabled={isLaunchingPreview}
-                className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02]"
-              >
-                {isLaunchingPreview ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RotateCw className="w-3.5 h-3.5" />
-                )}
-                <span>Reconnect Environment</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DisconnectedModal
+        isOpen={isDisconnected}
+        branch={previewState?.branch}
+        onReconnect={handleReconnect}
+        isReconnecting={isLaunchingPreview}
+      />
     </div>
   );
 };
