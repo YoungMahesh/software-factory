@@ -975,3 +975,144 @@ def synthesize_and_create_issue(
     return issue
 
 
+def commit_approved_adr_to_branch(
+    repo_name: str,
+    branch: str,
+    draft_adr: dict[str, Any] | None = None,
+    context_update: str | None = None,
+    token: str | None = None,
+    org: str = DEFAULT_TEST_ORG,
+    timeout_secs: float = 20.0,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Commits approved draft ADR and updated CONTEXT.md directly to GitHub branch."""
+    clean_repo = strip_repo_owner(repo_name, org)
+    auth_token = token or get_test_org_token(repo_root=repo_root)
+
+    files_to_commit: dict[str, str] = {}
+    if draft_adr:
+        filename = draft_adr.get("filename")
+        if not filename:
+            title_slug = normalize_milestone_slug(draft_adr.get("title") or "decision")
+            filename = f"docs/adr/0002-{title_slug}.md"
+        content = draft_adr.get("content") or ""
+        files_to_commit[filename] = content
+
+    if context_update and context_update.strip():
+        files_to_commit["CONTEXT.md"] = context_update.strip()
+
+    if not files_to_commit:
+        return {
+            "repo": clean_repo,
+            "org": org,
+            "branch": branch,
+            "status": "skipped",
+            "files": [],
+        }
+
+    if not auth_token:
+        return {
+            "repo": clean_repo,
+            "org": org,
+            "branch": branch,
+            "status": "mocked",
+            "files": list(files_to_commit.keys()),
+            "commit_sha": "mock-commit-sha",
+        }
+
+    headers = {
+        "Authorization": f"Bearer {auth_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SoftwareFactory-Studio/1.0",
+    }
+
+    base_url = f"https://api.github.com/repos/{org}/{clean_repo}"
+
+    try:
+        with httpx.Client(timeout=timeout_secs) as client:
+            commit_sha: str | None = None
+            base_tree_sha: str | None = None
+
+            # 1. Check if target branch exists
+            ref_resp = client.get(f"{base_url}/git/ref/heads/{branch}", headers=headers)
+            if ref_resp.status_code != 200:
+                ref_resp = client.get(f"{base_url}/git/refs/heads/{branch}", headers=headers)
+
+            branch_exists = ref_resp.status_code == 200
+            if branch_exists:
+                commit_sha = ref_resp.json().get("object", {}).get("sha")
+            else:
+                # Fall back to main branch ref to branch off main
+                main_ref_resp = client.get(f"{base_url}/git/ref/heads/main", headers=headers)
+                if main_ref_resp.status_code != 200:
+                    main_ref_resp = client.get(f"{base_url}/git/refs/heads/main", headers=headers)
+                if main_ref_resp.status_code == 200:
+                    commit_sha = main_ref_resp.json().get("object", {}).get("sha")
+
+            if commit_sha:
+                commit_resp = client.get(f"{base_url}/git/commits/{commit_sha}", headers=headers)
+                if commit_resp.status_code == 200:
+                    base_tree_sha = commit_resp.json().get("tree", {}).get("sha")
+
+            # 2. Create new tree
+            tree_items = [
+                {
+                    "path": path_str,
+                    "mode": "100644",
+                    "type": "blob",
+                    "content": content_str,
+                }
+                for path_str, content_str in files_to_commit.items()
+            ]
+            tree_payload: dict[str, Any] = {"tree": tree_items}
+            if base_tree_sha:
+                tree_payload["base_tree"] = base_tree_sha
+
+            tree_resp = client.post(f"{base_url}/git/trees", headers=headers, json=tree_payload)
+            if tree_resp.status_code not in (200, 201):
+                raise RuntimeError(f"Failed to create Git tree ({tree_resp.status_code}): {tree_resp.text}")
+            new_tree_sha = tree_resp.json()["sha"]
+
+            # 3. Create commit
+            commit_payload: dict[str, Any] = {
+                "message": f"docs(adr): record architectural decision for {branch}",
+                "tree": new_tree_sha,
+                "parents": [commit_sha] if commit_sha else [],
+            }
+            new_commit_resp = client.post(f"{base_url}/git/commits", headers=headers, json=commit_payload)
+            if new_commit_resp.status_code not in (200, 201):
+                raise RuntimeError(f"Failed to create Git commit ({new_commit_resp.status_code}): {new_commit_resp.text}")
+            new_commit_sha = new_commit_resp.json()["sha"]
+
+            # 4. Update or create branch ref
+            if branch_exists:
+                ref_update_resp = client.patch(
+                    f"{base_url}/git/refs/heads/{branch}",
+                    headers=headers,
+                    json={"sha": new_commit_sha, "force": False},
+                )
+                if ref_update_resp.status_code not in (200, 201):
+                    raise RuntimeError(f"Failed to update branch ref ({ref_update_resp.status_code}): {ref_update_resp.text}")
+            else:
+                ref_create_resp = client.post(
+                    f"{base_url}/git/refs",
+                    headers=headers,
+                    json={"ref": f"refs/heads/{branch}", "sha": new_commit_sha},
+                )
+                if ref_create_resp.status_code not in (200, 201):
+                    raise RuntimeError(f"Failed to create branch ref ({ref_create_resp.status_code}): {ref_create_resp.text}")
+
+            return {
+                "repo": clean_repo,
+                "org": org,
+                "branch": branch,
+                "commit_sha": new_commit_sha,
+                "files": list(files_to_commit.keys()),
+                "status": "committed",
+            }
+    except Exception as e:
+        raise RuntimeError(f"Error committing approved ADR to branch '{branch}': {e}")
+
+
+

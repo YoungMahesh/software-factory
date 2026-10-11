@@ -1,16 +1,29 @@
-import { Repo, ScratchMetadata, Milestone, Issue, Job, LaunchJobParams, PreviewState } from "./types";
+import {
+  Repo,
+  ScratchMetadata,
+  Milestone,
+  Issue,
+  Job,
+  LaunchJobParams,
+  PreviewState,
+  GrillTurnResult,
+  DraftADR,
+} from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
   refusal?: string | null;
   reason?: string | null;
   category?: string | null;
+  turn?: GrillTurnResult | null;
   job?: Job | null;
   issue?: any | null;
   milestone?: any | null;
   stage?: string | null;
   preview_url?: string | null;
   preview?: PreviewState | null;
+  branch?: string | null;
+  draft_adr?: DraftADR | null;
 }
 
 export async function fetchRepos(): Promise<{ org: string; repos: Repo[] }> {
@@ -81,20 +94,64 @@ export async function launchJob(params: LaunchJobParams): Promise<Job> {
   return res.json();
 }
 
-export async function sendStudioPrompt(params: {
+export interface SendStudioPromptParams {
   repo: string;
   prompt: string;
-  model: string;
-  vm: boolean;
-}): Promise<StudioPromptResponse> {
+  model?: string;
+  vm?: boolean;
+  grill?: boolean;
+  history?: Array<{ role: string; text?: string }>;
+  milestone_title?: string;
+}
+
+export async function sendStudioPrompt(
+  params: SendStudioPromptParams
+): Promise<StudioPromptResponse> {
+  const payload = {
+    model: "deepseek-v4.1-flash",
+    vm: false,
+    grill: true,
+    history: [],
+    ...params,
+  };
   const res = await fetch("/api/studio/prompt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to submit prompt: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export interface ApprovePlanParams {
+  repo: string;
+  prompt: string;
+  milestone_title?: string;
+  draft_adr?: DraftADR | null;
+  context_update?: string | null;
+  model?: string;
+  vm?: boolean;
+}
+
+export async function approvePlan(
+  params: ApprovePlanParams
+): Promise<StudioPromptResponse> {
+  const payload = {
+    model: "deepseek-v4.1-flash",
+    vm: false,
+    ...params,
+  };
+  const res = await fetch("/api/studio/approve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to approve plan: ${res.statusText}`);
   }
   return res.json();
 }

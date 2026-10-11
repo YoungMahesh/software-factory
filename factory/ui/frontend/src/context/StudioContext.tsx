@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from "react";
-import { Repo, Job, ChatMessage, PreviewState } from "../types";
+import { Repo, Job, ChatMessage, PreviewState, GrillTurnResult } from "../types";
 
 export interface StudioContextValue {
   repos: Repo[];
@@ -8,7 +8,9 @@ export interface StudioContextValue {
   onCreateRepo: (params: { name: string; description?: string }) => Promise<void>;
   activeJob: Job | null;
   messages: ChatMessage[];
-  onSendPrompt: (prompt: string) => void;
+  onSendPrompt: (prompt: string, grill?: boolean) => void;
+  onApprovePlan?: (turn: GrillTurnResult) => Promise<void> | void;
+  isApproving?: boolean;
   onCancelJob: (jobId: string) => void;
   onSwitchToConsole: () => void;
   onOpenDrawer?: (targetToolCallId?: string) => void;

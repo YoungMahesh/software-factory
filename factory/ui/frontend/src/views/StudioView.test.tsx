@@ -26,7 +26,7 @@ describe("StudioView", () => {
     const sendBtn = screen.getByRole("button", { name: /Send/i });
     await user.click(sendBtn);
 
-    expect(handleSend).toHaveBeenCalledWith("Add a dark mode toggle");
+    expect(handleSend).toHaveBeenCalledWith("Add a dark mode toggle", true);
   });
 
   it("renders refusal card when intent guard rejects prompt", () => {
@@ -285,5 +285,117 @@ describe("StudioView", () => {
     const streamReloadedIframe = screen.getByTitle("Live Application Preview");
     expect(streamReloadedIframe).toBeInTheDocument();
     expect(streamReloadedIframe).not.toBe(reloadedIframe);
+  });
+
+  it("renders assistant grilling interview round with questions, recommended answers, and sharpened terms", () => {
+    const messages = [
+      {
+        id: "m-user-1",
+        role: "user" as const,
+        text: "Add an analytics chart with redux store",
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: "m-assistant-grill-1",
+        role: "assistant" as const,
+        timestamp: Date.now() - 30000,
+        grillTurn: {
+          type: "grill_round" as const,
+          round: 1,
+          summary: "Clarifying chart placement and state cache strategy.",
+          questions: [
+            {
+              id: "Q1",
+              title: "Route Placement",
+              question: "Where should the analytics route be located?",
+              recommended: "app/routes/analytics.tsx",
+              options: ["app/routes/analytics.tsx", "app/routes/dashboard/analytics.tsx"],
+            },
+            {
+              id: "Q2",
+              title: "State Management",
+              question: "How should chart metrics data be cached?",
+              recommended: "TanStack Query cache",
+              options: ["TanStack Query cache", "React local state"],
+            },
+          ],
+          sharpened_terms: [
+            {
+              fuzzy_term: "redux store",
+              canonical_term: "Client State",
+              explanation: "TanStack Start projects use TanStack Query cache for shared client state.",
+            },
+          ],
+        },
+      },
+    ];
+
+    renderStudio({ messages });
+
+    // 1. Verify grilling round badge and summary
+    expect(screen.getByTestId("grilling-round-badge")).toHaveTextContent("Grill & Align (Round 1)");
+    expect(screen.getByText("Clarifying chart placement and state cache strategy.")).toBeInTheDocument();
+
+    // 2. Verify sharpened terms banner
+    expect(screen.getByTestId("sharpened-terms-banner")).toBeInTheDocument();
+    expect(screen.getByText("Client State")).toBeInTheDocument();
+    expect(screen.getByText("redux store")).toBeInTheDocument();
+
+    // 3. Verify question cards and recommended answers
+    expect(screen.getByTestId("grill-question-Q1")).toBeInTheDocument();
+    expect(screen.getByText("Where should the analytics route be located?")).toBeInTheDocument();
+    expect(screen.getByTestId("recommended-answer-Q1")).toHaveTextContent("app/routes/analytics.tsx");
+
+    expect(screen.getByTestId("grill-question-Q2")).toBeInTheDocument();
+    expect(screen.getByText("How should chart metrics data be cached?")).toBeInTheDocument();
+    expect(screen.getByTestId("recommended-answer-Q2")).toHaveTextContent("TanStack Query cache");
+  });
+
+  it("renders interactive 'Approve Plan & Build' card upon ready_for_approval and triggers onApprovePlan", async () => {
+    const handleApprove = vi.fn();
+    const readyTurn = {
+      type: "ready_for_approval" as const,
+      round: 2,
+      summary: "Interview completed. Ready to build analytics dashboard.",
+      plan: "### Implementation Plan\n1. Scaffold route\n2. Add chart component",
+      draft_adr: {
+        title: "0002: Analytics Dashboard Architecture",
+        filename: "docs/adr/0002-analytics-dashboard-architecture.md",
+        content: "# 0002: Analytics Dashboard Architecture\n\n**Status**: Proposed",
+      },
+      questions: [],
+    };
+
+    const messages = [
+      {
+        id: "m-user-1",
+        role: "user" as const,
+        text: "Add an analytics chart",
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: "m-assistant-approval",
+        role: "assistant" as const,
+        timestamp: Date.now() - 10000,
+        grillTurn: readyTurn,
+      },
+    ];
+
+    const { user } = renderStudio({
+      messages,
+      onApprovePlan: handleApprove,
+    });
+
+    // 1. Verify ApprovalCard is rendered in the chat timeline
+    expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+    expect(screen.getByText("Plan Ready for Approval")).toBeInTheDocument();
+    expect(screen.getByText("docs/adr/0002-analytics-dashboard-architecture.md")).toBeInTheDocument();
+
+    // 2. Click "Approve Plan & Build"
+    const approveBtn = screen.getByTestId("approve-plan-build-btn");
+    await user.click(approveBtn);
+
+    expect(handleApprove).toHaveBeenCalledTimes(1);
+    expect(handleApprove).toHaveBeenCalledWith(readyTurn);
   });
 });

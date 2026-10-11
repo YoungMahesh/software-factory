@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from factory.ui.auth import BasicAuthMiddleware
 from factory.ui.github import (
     DEFAULT_TEST_ORG,
+    commit_approved_adr_to_branch,
     fetch_repo_issue,
     fetch_repo_issues,
     fetch_repo_milestones_and_issues,
@@ -71,6 +72,16 @@ class StudioPromptRequest(BaseModel):
     milestone_title: str | None = Field(None, description="Optional custom milestone title")
     grill: bool = Field(True, description="Whether to conduct conversational grilling before building")
     history: list[dict[str, Any]] = Field(default_factory=list, description="Client chat history")
+
+
+class ApprovePlanRequest(BaseModel):
+    repo: str = Field(..., description="Target repository name in Test Organization (e.g. 'inventory-tracker')")
+    prompt: str = Field(..., description="Prompt or approved plan summary")
+    milestone_title: str | None = Field(None, description="Optional custom milestone title")
+    draft_adr: dict[str, Any] | None = Field(None, description="Draft ADR details {filename, content, title}")
+    context_update: str | None = Field(None, description="Optional updated CONTEXT.md content")
+    model: str = Field("deepseek-v4.1-flash", description="Model identifier")
+    vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
 
 
 def create_app(
@@ -169,6 +180,48 @@ def create_app(
         )
         return JSONResponse(status_code=201, content=result)
 
+    async def _ensure_sandbox_and_dispatch_job(
+        repo: str,
+        milestone_slug: str,
+        issue_number: int | str,
+        model: str,
+        vm: bool,
+        target_branch: str,
+    ):
+        active_sandbox, preview_url = preview_reg.get_active_sandbox(repo)
+        preview_state = preview_reg.get_preview(repo)
+
+        if active_sandbox is None:
+            if not preview_state or preview_state.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED, PreviewStatus.IDLE):
+                preview_state = preview_reg.launch_preview(repo, branch=target_branch)
+
+            active_sandbox, preview_url = await preview_reg.wait_for_serving(repo)
+            preview_state = preview_reg.get_preview(repo)
+            if active_sandbox is None and preview_state and preview_state.status == PreviewStatus.FAILED:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Unified Studio Sandbox failed to start: {preview_state.error_message or 'Unknown error'}",
+                )
+
+        if preview_state:
+            preview_reg.update_branch(repo, target_branch)
+            if not preview_url and preview_state.preview_url:
+                preview_url = preview_state.preview_url
+
+        effective_preview_url = preview_url or (preview_state.preview_url if preview_state else None)
+
+        job = registry.create_job(
+            repo=repo,
+            feature=milestone_slug,
+            issue=str(issue_number),
+            model=model,
+            vm=vm,
+            dev=True,
+        )
+        job.preview_url = effective_preview_url
+        registry.start_job(job.id)
+        return job, preview_state, effective_preview_url
+
     @app.post("/api/studio/prompt")
     @app.post("/api/prompt")
     async def studio_prompt(req: StudioPromptRequest):
@@ -236,46 +289,17 @@ def create_app(
             milestone_slug=milestone_slug,
         )
 
-        # 5. Check for active Unified Studio Sandbox or auto-provision if inactive
-        active_sandbox, preview_url = preview_reg.get_active_sandbox(repo)
-        preview_state = preview_reg.get_preview(repo)
-
-        if active_sandbox is None:
-            # Submitting a prompt for a repository with no active sandbox automatically
-            # provisions a Unified Studio Sandbox, waits for the dev server to start serving
-            # on port 3000, and executes the prompt within that sandbox.
-            if not preview_state or preview_state.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED, PreviewStatus.IDLE):
-                preview_state = preview_reg.launch_preview(repo, branch=target_branch)
-
-            active_sandbox, preview_url = await preview_reg.wait_for_serving(repo)
-            preview_state = preview_reg.get_preview(repo)
-            if active_sandbox is None and preview_state and preview_state.status == PreviewStatus.FAILED:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Unified Studio Sandbox failed to start: {preview_state.error_message or 'Unknown error'}",
-                )
-
-        if preview_state:
-            # Update target branch tracking on preview state for in-place branch transition
-            preview_reg.update_branch(repo, target_branch)
-            if not preview_url and preview_state.preview_url:
-                preview_url = preview_state.preview_url
-
-        effective_preview_url = preview_url or (preview_state.preview_url if preview_state else None)
-
-        # 6. Dispatch autonomous assembly line job targeting the issue on branch factory/<milestone>
-        job = registry.create_job(
+        # 5. Ensure Unified Studio Sandbox is active and dispatch Assembly Line job
+        job, preview_state, effective_preview_url = await _ensure_sandbox_and_dispatch_job(
             repo=repo,
-            feature=milestone_slug,
-            issue=str(issue["number"]),
+            milestone_slug=milestone_slug,
+            issue_number=issue["number"],
             model=req.model,
             vm=req.vm,
-            dev=True,
+            target_branch=target_branch,
         )
-        job.preview_url = effective_preview_url
-        registry.start_job(job.id)
 
-        # 7. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
+        # 6. Return job metadata, synthesized issue reference, stage tracking, preview state and tunnel URL
         return {
             "accepted": True,
             "refusal": None,
@@ -289,6 +313,61 @@ def create_app(
             "preview": preview_state.to_dict() if preview_state else None,
         }
 
+    @app.post("/api/studio/approve")
+    async def approve_plan_endpoint(req: ApprovePlanRequest):
+        repo = req.repo.strip()
+        if not repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        prompt = req.prompt.strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required.")
+
+        # 1. Resolve or Create Active Milestone
+        milestone = resolve_or_create_milestone(
+            repo_name=repo,
+            title=req.milestone_title,
+        )
+        milestone_slug = milestone["slug"]
+        target_branch = f"factory/{milestone_slug}"
+
+        # 2. Commit approved draft ADR and updated CONTEXT.md to branch factory/<milestone_slug>
+        commit_approved_adr_to_branch(
+            repo_name=repo,
+            branch=target_branch,
+            draft_adr=req.draft_adr,
+            context_update=req.context_update,
+        )
+
+        # 3. Synthesize sequential GitHub Issue with acceptance criteria
+        issue = synthesize_and_create_issue(
+            repo_name=repo,
+            prompt=prompt,
+            milestone_number=milestone["number"],
+            milestone_slug=milestone_slug,
+        )
+
+        # 4. Ensure Unified Studio Sandbox is active and dispatch Assembly Line job
+        job, preview_state, effective_preview_url = await _ensure_sandbox_and_dispatch_job(
+            repo=repo,
+            milestone_slug=milestone_slug,
+            issue_number=issue["number"],
+            model=req.model,
+            vm=req.vm,
+            target_branch=target_branch,
+        )
+
+        # 5. Return response
+        return {
+            "accepted": True,
+            "job": job.to_dict(),
+            "issue": issue,
+            "milestone": milestone,
+            "stage": job.stage.value,
+            "preview_url": effective_preview_url,
+            "preview": preview_state.to_dict() if preview_state else None,
+            "branch": target_branch,
+            "draft_adr": req.draft_adr,
+        }
 
     @app.post("/api/studio/repos/{repo}/preview", status_code=201)
     async def launch_preview_endpoint(repo: str, req: LaunchPreviewRequest | None = None):

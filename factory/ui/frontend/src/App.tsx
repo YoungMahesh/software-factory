@@ -5,7 +5,7 @@ import {
   Terminal,
   GitBranch,
 } from "lucide-react";
-import { Job, ChatMessage, LaunchJobParams, PreviewState } from "./types";
+import { Job, ChatMessage, LaunchJobParams, PreviewState, GrillTurnResult } from "./types";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { TestingConsoleView } from "./views/TestingConsoleView";
@@ -20,6 +20,7 @@ import {
   useLaunchPreviewMutation,
   useStopPreviewMutation,
   useSendStudioPromptMutation,
+  useApprovePlanMutation,
   createStoppedPreviewState,
 } from "./hooks/useStudioQueries";
 import * as api from "./api";
@@ -52,9 +53,11 @@ export const AppContent: React.FC = () => {
   const launchPreviewMutation = useLaunchPreviewMutation();
   const stopPreviewMutation = useStopPreviewMutation();
   const sendPromptMutation = useSendStudioPromptMutation();
+  const approvePlanMutation = useApprovePlanMutation();
 
   const isLaunchingPreview = launchPreviewMutation.isPending;
   const isSendingPrompt = sendPromptMutation.isPending;
+  const isApproving = approvePlanMutation.isPending;
 
   // Select initial repo when repos load
   useEffect(() => {
@@ -299,9 +302,90 @@ export const AppContent: React.FC = () => {
     setActiveJob(job);
   };
 
+  // Handle Plan Approval (commit ADR, create issue, and dispatch Assembly Line)
+  const handleApprovePlan = async (turn: GrillTurnResult) => {
+    if (!selectedRepo || isApproving) return;
+
+    const prompt = turn.plan
+      ? `${turn.summary ? `${turn.summary}\n\n` : ""}${turn.plan}`.trim()
+      : (turn.summary || "Approved implementation plan");
+
+    try {
+      const res = await approvePlanMutation.mutateAsync({
+        repo: selectedRepo,
+        prompt,
+        milestone_title: turn.draft_adr?.title?.replace(/^\d+:\s*/, "") || undefined,
+        draft_adr: turn.draft_adr,
+        context_update: turn.context_update || null,
+        model: "deepseek-v4.1-flash",
+        vm: false,
+      });
+
+      if (res.job) {
+        clearLogs();
+        setActiveJobId(res.job.id);
+        setActiveJob(res.job);
+        setJobs((prev) => [res.job!, ...prev]);
+
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${res.job.id}`,
+          role: "assistant",
+          timestamp: Date.now(),
+          jobId: res.job.id,
+          stage: res.job.stage,
+          text: `Plan approved! Dispatched assembly line targeting ${res.job.feature || res.job.repo}`,
+          thinking: {
+            text: "Initializing autonomous agent harness...",
+            done: false,
+          },
+          stepChips: [],
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        if (res.preview) {
+          setPreviewState(res.preview);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to approve plan:", err);
+      const errorMessage: ChatMessage = {
+        id: `assistant-error-${Date.now()}`,
+        role: "assistant",
+        text: `Error approving plan: ${err.message || "Network request failed"}`,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
   // Handle Prompt Submission from Factory Studio
-  const handleSendPrompt = async (promptText: string) => {
-    if (!selectedRepo || isSendingPrompt) return;
+  const handleSendPrompt = async (promptText: string, grill: boolean = true) => {
+    if (!selectedRepo || isSendingPrompt || isApproving) return;
+
+    // Support text shortcuts (e.g. /proceed or approve) to trigger build approval directly
+    const trimmedLower = promptText.trim().toLowerCase();
+    const isShortcut =
+      trimmedLower === "/proceed" ||
+      trimmedLower === "approve" ||
+      trimmedLower === "/approve" ||
+      trimmedLower === "proceed";
+
+    if (isShortcut) {
+      const readyAssistantMsg = [...messages].reverse().find(
+        (m) => m.role === "assistant" && m.grillTurn?.type === "ready_for_approval"
+      );
+      if (readyAssistantMsg?.grillTurn) {
+        const userShortcutMessage: ChatMessage = {
+          id: `user-${Date.now()}`,
+          role: "user",
+          text: promptText,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, userShortcutMessage]);
+        await handleApprovePlan(readyAssistantMsg.grillTurn);
+        return;
+      }
+    }
 
     // 1. Append user prompt
     const userMessage: ChatMessage = {
@@ -314,11 +398,18 @@ export const AppContent: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
 
     try {
+      const history = messages.map((m) => ({
+        role: m.role,
+        text: m.text || m.grillTurn?.formatted_text || m.grillTurn?.summary || "",
+      }));
+
       const res = await sendPromptMutation.mutateAsync({
         repo: selectedRepo,
         prompt: promptText,
         model: "deepseek-v4.1-flash",
         vm: false,
+        grill,
+        history,
       });
 
       if (!res.accepted) {
@@ -334,32 +425,40 @@ export const AppContent: React.FC = () => {
           },
         };
         setMessages((prev) => [...prev, refusalMessage]);
-      } else {
-        // Accepted & job created
-        if (res.job) {
-          clearLogs();
-          setActiveJobId(res.job.id);
-          setActiveJob(res.job);
-          setJobs((prev) => [res.job!, ...prev]);
+      } else if (res.turn) {
+        // Conversational Grilling Turn
+        const assistantMessage: ChatMessage = {
+          id: `assistant-grill-${Date.now()}`,
+          role: "assistant",
+          timestamp: Date.now(),
+          text: res.turn.formatted_text || res.turn.summary || "",
+          grillTurn: res.turn,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } else if (res.job) {
+        // Accepted & job created (fast build mode)
+        clearLogs();
+        setActiveJobId(res.job.id);
+        setActiveJob(res.job);
+        setJobs((prev) => [res.job!, ...prev]);
 
-          const assistantMessage: ChatMessage = {
-            id: `assistant-${res.job.id}`,
-            role: "assistant",
-            timestamp: Date.now(),
-            jobId: res.job.id,
-            stage: res.job.stage,
-            text: `Dispatched assembly line targeting ${res.job.feature || res.job.repo}`,
-            thinking: {
-              text: "Initializing autonomous agent harness...",
-              done: false,
-            },
-            stepChips: [],
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${res.job.id}`,
+          role: "assistant",
+          timestamp: Date.now(),
+          jobId: res.job.id,
+          stage: res.job.stage,
+          text: `Dispatched assembly line targeting ${res.job.feature || res.job.repo}`,
+          thinking: {
+            text: "Initializing autonomous agent harness...",
+            done: false,
+          },
+          stepChips: [],
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
 
-          if (res.preview) {
-            setPreviewState(res.preview);
-          }
+        if (res.preview) {
+          setPreviewState(res.preview);
         }
       }
     } catch (err: any) {
@@ -382,10 +481,12 @@ export const AppContent: React.FC = () => {
     activeJob,
     messages,
     onSendPrompt: handleSendPrompt,
+    onApprovePlan: handleApprovePlan,
+    isApproving,
     onCancelJob: handleCancelJob,
     onSwitchToConsole: () => switchTab("console"),
     onOpenDrawer: () => setIsDrawerOpen(true),
-    isSending: isSendingPrompt,
+    isSending: isSendingPrompt || isApproving,
     previewState,
     onLaunchPreview: handleLaunchPreview,
     onStopPreview: handleStopPreview,

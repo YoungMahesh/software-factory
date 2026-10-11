@@ -18,6 +18,7 @@ import { Badge } from "../components/ui/Badge";
 import { NewAppModal } from "../components/NewAppModal";
 import { DisconnectedModal } from "../components/DisconnectedModal";
 import { PromptComposer } from "../components/PromptComposer";
+import { ApprovalCard } from "../components/ApprovalCard";
 
 export interface StudioViewProps {
   className?: string;
@@ -32,6 +33,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     activeJob,
     messages,
     onSendPrompt,
+    onApprovePlan,
+    isApproving = false,
     onCancelJob,
     onSwitchToConsole,
     onOpenDrawer,
@@ -301,11 +304,89 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                         </div>
                       )}
 
-                      {/* Text content if present */}
-                      {msg.text && (
-                        <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-wrap">
-                          {msg.text}
-                        </div>
+                      {/* Grilling Turn: Interview Round or Ready for Approval */}
+                      {msg.grillTurn ? (
+                        msg.grillTurn.type === "grill_round" ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="stage" data-testid="grilling-round-badge">
+                                Grill &amp; Align (Round {msg.grillTurn.round})
+                              </Badge>
+                            </div>
+
+                            {msg.grillTurn.sharpened_terms && msg.grillTurn.sharpened_terms.length > 0 && (
+                              <div
+                                data-testid="sharpened-terms-banner"
+                                className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-900/50 space-y-1.5 text-xs"
+                              >
+                                <div className="font-semibold text-indigo-300 text-[11px] uppercase tracking-wider">
+                                  Sharpened Domain Concepts
+                                </div>
+                                {msg.grillTurn.sharpened_terms.map((t, idx) => (
+                                  <div key={idx} className="text-[11px] text-slate-300 leading-relaxed">
+                                    • <span className="line-through text-slate-400">{t.fuzzy_term}</span> ➔{" "}
+                                    <span className="font-semibold text-indigo-300">{t.canonical_term}</span>:{" "}
+                                    <span className="text-slate-400">{t.explanation}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {msg.grillTurn.summary && (
+                              <p data-testid="grilling-round-summary" className="text-slate-300 text-xs font-medium leading-relaxed">
+                                {msg.grillTurn.summary}
+                              </p>
+                            )}
+
+                            {msg.grillTurn.questions && msg.grillTurn.questions.length > 0 && (
+                              <div data-testid="grilling-questions-list" className="space-y-2.5 pt-1">
+                                {msg.grillTurn.questions.map((q) => (
+                                  <div
+                                    key={q.id}
+                                    data-testid={`grill-question-${q.id}`}
+                                    className="p-3 rounded-lg bg-slate-950/80 border border-indigo-950/80 space-y-2"
+                                  >
+                                    <div className="flex items-center space-x-1.5 text-xs">
+                                      <span className="text-indigo-400 font-bold">❓ {q.id}</span>
+                                      <span className="text-slate-500">—</span>
+                                      <span className="text-slate-200 font-semibold">{q.title}</span>
+                                    </div>
+                                    <p className="text-slate-300 text-xs leading-relaxed">{q.question}</p>
+                                    {q.options && q.options.length > 0 && (
+                                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-400 pl-1">
+                                        {q.options.map((opt, i) => (
+                                          <li key={i}>{opt}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    <div
+                                      data-testid={`recommended-answer-${q.id}`}
+                                      className="flex items-center space-x-1.5 text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-900/50 px-2.5 py-1.5 rounded"
+                                    >
+                                      <span className="shrink-0 font-bold">➡️</span>
+                                      <span className="font-medium shrink-0">Recommended:</span>
+                                      <span className="text-emerald-300">{q.recommended}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <ApprovalCard
+                            turn={msg.grillTurn}
+                            onApprove={(turn) => onApprovePlan && onApprovePlan(turn)}
+                            isApproving={isApproving}
+                            isApproved={Boolean(activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))}
+                          />
+                        )
+                      ) : (
+                        /* Text content if present */
+                        msg.text && (
+                          <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-wrap">
+                            {msg.text}
+                          </div>
+                        )
                       )}
                     </div>
                   )}

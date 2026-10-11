@@ -8,7 +8,8 @@ export interface PromptComposerProps {
   isExecutingTurn: boolean;
   isDisconnected: boolean;
   activeStage?: string;
-  onSendPrompt: (prompt: string) => void;
+  onSendPrompt: (prompt: string, grill?: boolean) => void;
+  defaultGrillMode?: boolean;
 }
 
 export const PromptComposer: React.FC<PromptComposerProps> = ({
@@ -17,14 +18,16 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
   isDisconnected,
   activeStage,
   onSendPrompt,
+  defaultGrillMode = true,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
+  const [grillMode, setGrillMode] = useState<boolean>(defaultGrillMode);
 
   const isInputLocked = !selectedRepo || isExecutingTurn || isDisconnected;
 
   const submitPrompt = () => {
     if (!prompt.trim() || isInputLocked) return;
-    onSendPrompt(prompt.trim());
+    onSendPrompt(prompt.trim(), grillMode);
     setPrompt("");
   };
 
@@ -76,9 +79,29 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-slate-500">
-            Target: <span className="font-mono text-indigo-300">{selectedRepo || "none"}</span>
-          </span>
+          <div className="flex items-center space-x-3">
+            <span className="text-[10px] text-slate-500">
+              Target: <span className="font-mono text-indigo-300">{selectedRepo || "none"}</span>
+            </span>
+
+            <label
+              htmlFor="studio-grill-toggle"
+              className="inline-flex items-center space-x-1.5 cursor-pointer text-xs text-slate-300 hover:text-white select-none"
+            >
+              <input
+                type="checkbox"
+                id="studio-grill-toggle"
+                data-testid="grill-mode-toggle"
+                checked={grillMode}
+                onChange={(e) => setGrillMode(e.target.checked)}
+                disabled={isInputLocked}
+                className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+              />
+              <span className="font-medium text-[11px] text-indigo-300">
+                Grill &amp; Align <span className="text-[10px] text-indigo-400/80 font-normal">(Recommended)</span>
+              </span>
+            </label>
+          </div>
 
           <Button
             id="btn-studio-send"

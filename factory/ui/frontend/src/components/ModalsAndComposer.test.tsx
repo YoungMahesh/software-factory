@@ -115,8 +115,57 @@ describe("Decoupled Modals and PromptComposer", () => {
 
       // Enter submits
       fireEvent.keyDown(input, { key: "Enter", shiftKey: false });
-      expect(handleSend).toHaveBeenCalledWith("Multi-line text");
+      expect(handleSend).toHaveBeenCalledWith("Multi-line text", true);
       expect(input).toHaveValue("");
+    });
+
+    it("renders 'Grill & Align (Recommended)' toggle defaulting to enabled and submits with grill=true", () => {
+      const handleSend = vi.fn();
+      render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          onSendPrompt={handleSend}
+        />
+      );
+
+      const toggle = screen.getByTestId("grill-mode-toggle") as HTMLInputElement;
+      expect(toggle).toBeInTheDocument();
+      expect(toggle.checked).toBe(true);
+      expect(screen.getByText(/Grill & Align/i)).toBeInTheDocument();
+      expect(screen.getByText(/Recommended/i)).toBeInTheDocument();
+
+      const input = screen.getByTestId("studio-prompt-input");
+      fireEvent.change(input, { target: { value: "Build analytics" } });
+      fireEvent.click(screen.getByRole("button", { name: /Send/i }));
+
+      expect(handleSend).toHaveBeenCalledWith("Build analytics", true);
+    });
+
+    it("allows unchecking 'Grill & Align' to bypass grilling and submit with grill=false", () => {
+      const handleSend = vi.fn();
+      render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          onSendPrompt={handleSend}
+        />
+      );
+
+      const toggle = screen.getByTestId("grill-mode-toggle") as HTMLInputElement;
+      expect(toggle.checked).toBe(true);
+
+      // Uncheck toggle
+      fireEvent.click(toggle);
+      expect(toggle.checked).toBe(false);
+
+      const input = screen.getByTestId("studio-prompt-input");
+      fireEvent.change(input, { target: { value: "Fix button color" } });
+      fireEvent.click(screen.getByRole("button", { name: /Send/i }));
+
+      expect(handleSend).toHaveBeenCalledWith("Fix button color", false);
     });
 
     it("locks input and shows in-flight indicator when isExecutingTurn is true", () => {

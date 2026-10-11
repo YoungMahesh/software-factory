@@ -73,6 +73,7 @@ class GrillTurnResult:
     plan: str | None = None
     draft_adr: DraftADR | None = None
     sharpened_terms: list[DomainTermSharpening] = field(default_factory=list)
+    context_update: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -84,6 +85,7 @@ class GrillTurnResult:
             "plan": self.plan,
             "draft_adr": self.draft_adr.to_dict() if isinstance(self.draft_adr, DraftADR) else self.draft_adr,
             "sharpened_terms": [t.to_dict() if isinstance(t, DomainTermSharpening) else t for t in self.sharpened_terms],
+            "context_update": self.context_update,
         }
 
 

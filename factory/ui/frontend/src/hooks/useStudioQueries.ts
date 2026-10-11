@@ -88,7 +88,14 @@ export function useStopPreviewMutation() {
 
 export function useSendStudioPromptMutation() {
   return useMutation({
-    mutationFn: (params: { repo: string; prompt: string; model: string; vm: boolean }) =>
+    mutationFn: (params: api.SendStudioPromptParams) =>
       api.sendStudioPrompt(params),
+  });
+}
+
+export function useApprovePlanMutation() {
+  return useMutation({
+    mutationFn: (params: api.ApprovePlanParams) =>
+      api.approvePlan(params),
   });
 }

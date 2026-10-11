@@ -97,6 +97,38 @@ export interface AgentEvent {
   data: any;
 }
 
+export interface GrillQuestion {
+  id: string;
+  title: string;
+  question: string;
+  recommended: string;
+  options?: string[];
+}
+
+export interface DraftADR {
+  title: string;
+  filename: string;
+  content: string;
+}
+
+export interface DomainTermSharpening {
+  fuzzy_term: string;
+  canonical_term: string;
+  explanation: string;
+}
+
+export interface GrillTurnResult {
+  type: "grill_round" | "ready_for_approval";
+  round: number;
+  questions: GrillQuestion[];
+  formatted_text?: string;
+  summary?: string;
+  plan?: string | null;
+  draft_adr?: DraftADR | null;
+  sharpened_terms?: DomainTermSharpening[];
+  context_update?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -122,6 +154,8 @@ export interface ChatMessage {
     reason?: string;
     category?: string;
   };
+  grillTurn?: GrillTurnResult;
 }
 
 export type ViewportMode = "desktop" | "tablet" | "mobile";
+
