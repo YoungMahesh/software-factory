@@ -26,8 +26,12 @@ case "$1" in
         SOURCE_FILE="$SECRETS_DIR/antigravity-oauth-token.json"
         PROFILE="m47"
         ;;
+    mgh)
+        SOURCE_FILE="$SECRETS_DIR/antigravity-oauth-token-mgh.json"
+        PROFILE="mgh"
+        ;;
     -h|--help)
-        echo "Usage: $0 {anv|m47}"
+        echo "Usage: $0 {anv|m47|mgh}"
         echo
         echo "Switch Antigravity CLI OAuth profile:"
         echo "  anv  - Decrypt secrets/antigravity-oauth-token-anv.json to ~/.gemini/antigravity-cli/antigravity-oauth-token"
