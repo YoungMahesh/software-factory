@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Live inference requests in the grilling service target the canonical OpenCode Go URL (`https://opencode.ai/zen/go/v1`) with authenticated headers.
-- [ ] Remote inference failures (network timeouts, SSL mismatches, HTTP errors) return a structured error turn (`type="error"`) instead of silently executing `_handle_mock_turn()`.
-- [ ] Error turns are saved into the Studio Chat History database table.
-- [ ] Factory Studio chat interface renders an error callout banner in the conversation timeline displaying the failure reason and providing a retry action.
-- [ ] Mock mode is restricted strictly to explicit opt-in (`mock=True`), eliminating accidental fallback during normal studio usage.
+- [x] Live inference requests in the grilling service target the canonical OpenCode Go URL (`https://opencode.ai/zen/go/v1`) with authenticated headers.
+- [x] Remote inference failures (network timeouts, SSL mismatches, HTTP errors) return a structured error turn (`type="error"`) instead of silently executing `_handle_mock_turn()`.
+- [x] Error turns are saved into the Studio Chat History database table.
+- [x] Factory Studio chat interface renders an error callout banner in the conversation timeline displaying the failure reason and providing a retry action.
+- [x] Mock mode is restricted strictly to explicit opt-in (`mock=True`), eliminating accidental fallback during normal studio usage.

@@ -486,10 +486,12 @@ export const AppContent: React.FC = () => {
     );
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        text: m.text || m.grillTurn?.formatted_text || m.grillTurn?.summary || "",
-      }));
+      const history = messages
+        .filter((m) => !m.grillTurn || m.grillTurn.type !== "error")
+        .map((m) => ({
+          role: m.role,
+          text: m.text || m.grillTurn?.formatted_text || m.grillTurn?.summary || "",
+        }));
 
       const res = await sendPromptMutation.mutateAsync({
         repo: selectedRepo,
@@ -666,6 +668,7 @@ export const AppContent: React.FC = () => {
     activeJob,
     messages,
     onSendPrompt: handleSendPrompt,
+    onRetryTurn: (prompt: string) => handleSendPrompt(prompt, true),
     onApprovePlan: handleApprovePlan,
     isApproving,
     onCancelJob: handleCancelJob,

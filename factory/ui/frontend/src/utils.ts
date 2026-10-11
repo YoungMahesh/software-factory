@@ -80,8 +80,13 @@ export function convertDbMessageToChatMessage(dbMsg: DbChatMessage): ChatMessage
     };
   }
 
-  // 2. Grilling turn (grill_round or ready_for_approval)
-  if (turnData && (turnData.type === "grill_round" || turnData.type === "ready_for_approval")) {
+  // 2. Grilling turn (grill_round, ready_for_approval, or error)
+  if (
+    turnData &&
+    (turnData.type === "grill_round" ||
+      turnData.type === "ready_for_approval" ||
+      turnData.type === "error")
+  ) {
     return {
       id: dbMsg.id,
       role: "assistant",
@@ -109,5 +114,11 @@ export function convertDbMessageToChatMessage(dbMsg: DbChatMessage): ChatMessage
     text: dbMsg.content,
     timestamp,
   };
+}
+
+export function getLastUserPromptBefore(messages: ChatMessage[], currentMsgId: string): string | undefined {
+  const msgIndex = messages.findIndex((m) => m.id === currentMsgId);
+  const searchMessages = msgIndex >= 0 ? messages.slice(0, msgIndex) : messages;
+  return [...searchMessages].reverse().find((m) => m.role === "user")?.text;
 }
 

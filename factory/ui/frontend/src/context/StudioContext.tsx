@@ -17,6 +17,7 @@ export interface StudioContextValue {
   activeJob: Job | null;
   messages: ChatMessage[];
   onSendPrompt: (prompt: string, grill?: boolean) => void;
+  onRetryTurn?: (prompt: string) => void;
   onApprovePlan?: (turn: GrillTurnResult) => Promise<void> | void;
   isApproving?: boolean;
   onCancelJob: (jobId: string) => void;

@@ -10,6 +10,8 @@ import {
   Square,
   Check,
   GitPullRequest,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LivePreview } from "../components/LivePreview";
@@ -24,6 +26,7 @@ import { DisconnectedModal } from "../components/DisconnectedModal";
 import { PromptComposer } from "../components/PromptComposer";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { IssueDrawer } from "../components/IssueDrawer";
+import { getLastUserPromptBefore } from "../utils";
 
 export interface StudioViewProps {
   className?: string;
@@ -38,6 +41,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     activeJob,
     messages,
     onSendPrompt,
+    onRetryTurn,
     onApprovePlan,
     isApproving = false,
     onCancelJob,
@@ -441,6 +445,66 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                                 ))}
                               </div>
                             )}
+                          </div>
+                        ) : msg.grillTurn.type === "error" ? (
+                          <div
+                            data-testid="grilling-error-banner"
+                            className="p-3.5 rounded-xl border border-rose-800/80 bg-rose-950/40 text-xs space-y-2.5 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2 text-rose-400 font-semibold">
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                                <span>Inference Service Error</span>
+                              </div>
+                              <Badge variant="danger" className="font-mono text-[10px]">
+                                ERROR
+                              </Badge>
+                            </div>
+
+                            <p
+                              data-testid="grilling-error-reason"
+                              className="text-rose-200 text-xs font-medium leading-relaxed"
+                            >
+                              {msg.grillTurn.error_message ||
+                                msg.grillTurn.summary ||
+                                "Remote inference request failed."}
+                            </p>
+
+                            {msg.grillTurn.error_details && (
+                              <div
+                                data-testid="grilling-error-details"
+                                className="p-2.5 rounded bg-slate-950/80 border border-slate-800 text-[11px] font-mono text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto"
+                              >
+                                {msg.grillTurn.error_details}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1 border-t border-rose-900/40">
+                              <span className="text-[11px] text-slate-400">
+                                Verify network connectivity and OpenCode Credentials, then retry.
+                              </span>
+                              <Button
+                                data-testid="grilling-retry-btn"
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={isExecutingTurn}
+                                onClick={() => {
+                                  const userPrompt = getLastUserPromptBefore(messages, msg.id);
+                                  if (userPrompt) {
+                                    if (onRetryTurn) {
+                                      onRetryTurn(userPrompt);
+                                    } else {
+                                      onSendPrompt(userPrompt, true);
+                                    }
+                                  }
+                                }}
+                                icon={<RotateCcw className="w-3.5 h-3.5" />}
+                                className="bg-rose-900/40 hover:bg-rose-900/70 border-rose-800 text-rose-200"
+                              >
+                                Retry
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <ApprovalCard

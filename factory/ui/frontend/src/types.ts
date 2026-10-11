@@ -149,7 +149,7 @@ export interface DomainTermSharpening {
 }
 
 export interface GrillTurnResult {
-  type: "grill_round" | "ready_for_approval";
+  type: "grill_round" | "ready_for_approval" | "error";
   round: number;
   questions: GrillQuestion[];
   formatted_text?: string;
@@ -158,6 +158,8 @@ export interface GrillTurnResult {
   draft_adr?: DraftADR | null;
   sharpened_terms?: DomainTermSharpening[];
   context_update?: string | null;
+  error_message?: string | null;
+  error_details?: string | null;
 }
 
 export interface ChatMessage {

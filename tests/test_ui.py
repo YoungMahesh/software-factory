@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
+import httpx
 
 from fastapi.testclient import TestClient
 
@@ -2021,6 +2022,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
             json={
                 "repo": "test3",
                 "prompt": "Build an interactive analytics chart dashboard",
+                "mock": True,
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -2045,7 +2047,6 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         self.assertEqual(len(self.registry.list_jobs()), 0)
         self.assertIsNone(self.preview_registry.get_preview("test3"))
 
-
     def test_prompt_endpoint_grill_mode_with_history_reaches_ready_for_approval(self):
         history = [
             {"role": "user", "text": "Build an interactive analytics chart dashboard"},
@@ -2061,6 +2062,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                 "prompt": "Accept recommended defaults and build the feature",
                 "grill": True,
                 "history": history,
+                "mock": True,
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -2091,6 +2093,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
                 "repo": "test3",
                 "prompt": "Add a customer orders list with a redux store",
                 "grill": True,
+                "mock": True,
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -2099,6 +2102,36 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         turn = data["turn"]
         self.assertIsNotNone(turn)
         self.assertTrue(any(s["canonical_term"] == "Client State" for s in turn["sharpened_terms"]))
+
+    def test_prompt_endpoint_inference_failure_returns_structured_error_turn_and_saves_to_db(self):
+        with patch("httpx.AsyncClient.post", side_effect=httpx.ConnectError("Connection failed to opencode.ai")):
+            resp = self.client.post(
+                "/api/studio/prompt",
+                json={
+                    "repo": "test3",
+                    "prompt": "Build an interactive analytics chart dashboard",
+                    "grill": True,
+                    "mock": False,
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            turn = data["turn"]
+            self.assertIsNotNone(turn)
+            self.assertEqual(turn["type"], "error")
+            self.assertIn("Connection failed", turn["error_message"])
+            self.assertIn("OpenCode Go", turn["error_details"])
+
+            # Verify persisted in Studio Chat History (Studio Database)
+            get_resp = self.client.get("/api/studio/repos/test3/messages")
+            self.assertEqual(get_resp.status_code, 200)
+            messages = get_resp.json()["messages"]
+            self.assertEqual(len(messages), 2)
+            self.assertEqual(messages[0]["role"], "user")
+            self.assertEqual(messages[1]["role"], "assistant")
+            self.assertEqual(messages[1]["turn_data"]["type"], "error")
+            self.assertEqual(messages[1]["turn_data"]["error_message"], turn["error_message"])
 
     def test_prompt_endpoint_grill_mode_rejects_intent_guard_violations(self):
         resp = self.client.post(
@@ -2509,6 +2542,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
                 "prompt": "Accept recommended defaults and build the feature",
                 "grill": True,
                 "history": history,
+                "mock": True,
             },
         )
         self.assertEqual(resp.status_code, 200)

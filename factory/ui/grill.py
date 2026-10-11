@@ -17,7 +17,7 @@ import httpx
 from factory.ui.github import DEFAULT_TEST_ORG, get_test_org_token, resolve_repo_root, strip_repo_owner
 from factory.ui.scaffold import CONTEXT_TEMPLATE
 
-OPENCODE_GO_DEFAULT_URL = "https://api.opencode.net/v1"
+OPENCODE_GO_DEFAULT_URL = "https://opencode.ai/zen/go/v1"
 OPENCODE_GO_DEFAULT_MODEL = "deepseek-v4.1-flash"
 
 
@@ -65,7 +65,7 @@ class DomainTermSharpening:
 @dataclass
 class GrillTurnResult:
     """Structured response for a conversational grilling turn."""
-    type: Literal["grill_round", "ready_for_approval"]
+    type: Literal["grill_round", "ready_for_approval", "error"]
     round: int = 1
     questions: list[GrillQuestion] = field(default_factory=list)
     formatted_text: str = ""
@@ -74,6 +74,8 @@ class GrillTurnResult:
     draft_adr: DraftADR | None = None
     sharpened_terms: list[DomainTermSharpening] = field(default_factory=list)
     context_update: str | None = None
+    error_message: str | None = None
+    error_details: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -86,6 +88,8 @@ class GrillTurnResult:
             "draft_adr": self.draft_adr.to_dict() if isinstance(self.draft_adr, DraftADR) else self.draft_adr,
             "sharpened_terms": [t.to_dict() if isinstance(t, DomainTermSharpening) else t for t in self.sharpened_terms],
             "context_update": self.context_update,
+            "error_message": self.error_message,
+            "error_details": self.error_details,
         }
 
 
@@ -157,6 +161,16 @@ def resolve_opencode_go_api_key(
         pass
 
     return None
+
+
+def validate_opencode_go_api_key(key: str | None) -> tuple[bool, str | None]:
+    """Validates OpenCode Credentials format."""
+    if not key or not key.strip():
+        return False, "OpenCode Credentials are missing or not configured."
+    clean = key.strip()
+    if len(clean) < 8 or any(c.isspace() for c in clean):
+        return False, f"Invalid OpenCode Credentials format. Token must be at least 8 characters with no whitespace."
+    return True, None
 
 
 def parse_context_terms(context_content: str) -> list[dict[str, Any]]:
@@ -266,13 +280,13 @@ class GrillingAssistant:
         base_url: str = OPENCODE_GO_DEFAULT_URL,
     ):
         self.repo_root = resolve_repo_root(repo_root)
-        self.explicit_mock = mock
+        self.explicit_mock = bool(mock)
         self.api_key = resolve_opencode_go_api_key(options={"api_key": api_key}, repo_root=self.repo_root)
         self.base_url = base_url.rstrip("/")
 
     @property
     def is_mock_mode(self) -> bool:
-        return self.explicit_mock or not self.api_key
+        return bool(self.explicit_mock)
 
     async def get_repo_context(self, repo: str) -> str:
         """Loads target repository CONTEXT.md content via GitHub or fallback template."""
@@ -349,6 +363,30 @@ class GrillingAssistant:
                 sharpened_terms=sharpened_terms,
             )
 
+        # Ignore prior error turns when calculating current interview round
+        def _is_error_history(msg: dict[str, Any]) -> bool:
+            t = msg.get("text") or msg.get("content") or ""
+            return t.startswith("⚠️ **Inference") or msg.get("type") == "error"
+
+        valid_assistant_turns = [m for m in chat_history if m.get("role") == "assistant" and not _is_error_history(m)]
+        current_round = len(valid_assistant_turns) + 1
+
+        is_valid_token, token_err = validate_opencode_go_api_key(self.api_key)
+        if not is_valid_token:
+            err_msg = token_err or "OpenCode Credentials are missing or not configured."
+            details = (
+                "No valid OpenCode Credentials resolved from options, OPENCODE_GO_API_KEY environment variable, "
+                "~/.config/opencode/opencode.env, or Repository Environment Secrets."
+            )
+            return GrillTurnResult(
+                type="error",
+                round=current_round,
+                summary=err_msg,
+                error_message=err_msg,
+                error_details=f"Provider: OpenCode Go ({self.base_url})\n{details}",
+                formatted_text=f"⚠️ **Inference Configuration Error**: {err_msg}\n\n{details}",
+            )
+
         # Live OpenCode Go execution
         try:
             return await self._handle_live_turn(
@@ -360,15 +398,30 @@ class GrillingAssistant:
                 sharpened_terms=sharpened_terms,
                 model=model,
             )
-        except Exception:
-            # Resilient fallback to deterministic mock mode on remote errors
-            return self._handle_mock_turn(
-                repo=repo,
-                prompt=clean_prompt,
-                history=chat_history,
-                context_content=context_content,
-                existing_adrs=existing_adrs,
-                sharpened_terms=sharpened_terms,
+        except Exception as exc:
+            error_details = f"Provider: OpenCode Go ({self.base_url})\nError: {type(exc).__name__}: {str(exc)}"
+            if isinstance(exc, httpx.HTTPStatusError):
+                status = exc.response.status_code
+                try:
+                    resp_body = exc.response.text
+                except Exception:
+                    resp_body = ""
+                error_msg = f"HTTP {status} error from inference provider: {resp_body or exc}"
+                error_details = f"Endpoint: {self.base_url}/chat/completions\nStatus: {status}\nResponse: {resp_body}"
+            elif isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+                error_msg = f"Network connection error to OpenCode Go: {exc}"
+            elif isinstance(exc, httpx.TimeoutException):
+                error_msg = f"Inference request timed out: {exc}"
+            else:
+                error_msg = f"Inference error: {exc}"
+
+            return GrillTurnResult(
+                type="error",
+                round=current_round,
+                summary=error_msg,
+                error_message=error_msg,
+                error_details=error_details,
+                formatted_text=f"⚠️ **Inference Error**: {error_msg}\n\n{error_details}",
             )
 
     def _handle_mock_turn(
@@ -556,8 +609,10 @@ For ready for approval:
 
         for msg in history:
             role = msg.get("role")
-            text = msg.get("text") or ""
+            text = msg.get("text") or msg.get("content") or ""
             if role in ("user", "assistant") and text:
+                if text.startswith("⚠️ **Inference"):
+                    continue
                 messages.append({"role": role, "content": text})
 
         messages.append({"role": "user", "content": prompt})
@@ -565,6 +620,7 @@ For ready for approval:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "x-opencode-session": f"studio-{repo}",
         }
 
         payload = {

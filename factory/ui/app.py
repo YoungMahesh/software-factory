@@ -74,6 +74,7 @@ class StudioPromptRequest(BaseModel):
     milestone_title: str | None = Field(None, description="Optional custom milestone title")
     grill: bool = Field(True, description="Whether to conduct conversational grilling before building")
     history: list[dict[str, Any]] = Field(default_factory=list, description="Client chat history")
+    mock: bool = Field(False, description="Explicit mock mode for testing")
 
 
 class ApprovePlanRequest(BaseModel):
@@ -296,7 +297,7 @@ def create_app(
 
         # 2. Conversational Grilling Assistant Turn (Grill Mode)
         if req.grill:
-            assistant = GrillingAssistant()
+            assistant = GrillingAssistant(mock=req.mock)
             turn = await assistant.handle_turn(
                 repo=repo,
                 prompt=prompt,

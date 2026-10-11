@@ -465,5 +465,79 @@ describe("StudioView", () => {
     expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/feature-live");
     expect(screen.getByText("Persistent chat item before drawer open")).toBeInTheDocument();
   });
+
+  it("renders error callout banner with failure reason and diagnostic details when inference fails", () => {
+    const errorTurn = {
+      type: "error" as const,
+      round: 1,
+      questions: [],
+      error_message: "Network connection error to OpenCode Go: Connection refused",
+      error_details: "Provider: OpenCode Go (https://opencode.ai/zen/go/v1)\nException: ConnectError",
+      summary: "Inference request failed: Connection refused",
+    };
+
+    const messages = [
+      {
+        id: "m-user-prompt",
+        role: "user" as const,
+        text: "Remove social media links from footer",
+        timestamp: Date.now() - 30000,
+      },
+      {
+        id: "m-assistant-error",
+        role: "assistant" as const,
+        timestamp: Date.now(),
+        grillTurn: errorTurn,
+      },
+    ];
+
+    renderStudio({ messages });
+
+    expect(screen.getByTestId("grilling-error-banner")).toBeInTheDocument();
+    expect(screen.getByText("Inference Service Error")).toBeInTheDocument();
+    expect(screen.getByTestId("grilling-error-reason")).toHaveTextContent(
+      "Network connection error to OpenCode Go: Connection refused"
+    );
+    expect(screen.getByTestId("grilling-error-details")).toHaveTextContent("https://opencode.ai/zen/go/v1");
+    expect(screen.getByTestId("grilling-retry-btn")).toBeInTheDocument();
+  });
+
+  it("triggers retry action with the original user prompt when Retry button is clicked on error turn", async () => {
+    const handleRetry = vi.fn();
+    const handleSend = vi.fn();
+    const errorTurn = {
+      type: "error" as const,
+      round: 1,
+      questions: [],
+      error_message: "HTTP 503 error from inference provider",
+      error_details: "Endpoint: https://opencode.ai/zen/go/v1/chat/completions\nStatus: 503",
+    };
+
+    const messages = [
+      {
+        id: "m-user-orig",
+        role: "user" as const,
+        text: "Remove social media links from footer",
+        timestamp: Date.now() - 30000,
+      },
+      {
+        id: "m-assistant-err",
+        role: "assistant" as const,
+        timestamp: Date.now(),
+        grillTurn: errorTurn,
+      },
+    ];
+
+    const { user } = renderStudio({
+      messages,
+      onRetryTurn: handleRetry,
+      onSendPrompt: handleSend,
+    });
+
+    const retryBtn = screen.getByTestId("grilling-retry-btn");
+    await user.click(retryBtn);
+
+    expect(handleRetry).toHaveBeenCalledWith("Remove social media links from footer");
+  });
 });
 
