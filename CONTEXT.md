@@ -60,6 +60,10 @@ _Avoid_: Org token, org secret, organization token
 A dedicated GitHub organization (`software-factory-09-test`) configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
 _Avoid_: Test org, mock org, testing workspace
 
+**Private-by-Default Repository Policy**:
+The standard security convention where new target repositories instantiated via Factory Studio or the repository creation endpoints in the Test Organization (`software-factory-09-test`) are provisioned with private visibility on GitHub by default, with opt-out capability to create public repositories when explicitly declared.
+_Avoid_: Public-by-default, default public repo, open test repos
+
 
 **SOPS Decryption**:
 A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt repository credentials and tooling configuration, purging encryption keys by default before user session handoff unless explicitly retained via `--sops`.

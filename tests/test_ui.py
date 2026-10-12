@@ -466,7 +466,7 @@ class TestFastApiApp(unittest.TestCase):
             "full_name": "software-factory-09-test/my-portfolio",
             "html_url": "https://github.com/software-factory-09-test/my-portfolio",
             "description": "Portfolio frontend",
-            "private": False,
+            "private": True,
             "is_tanstack_compatible": True,
             "template_repository": "software-factory-09-test/tanstack-start-template",
         }
@@ -475,10 +475,36 @@ class TestFastApiApp(unittest.TestCase):
         data = resp.json()
         self.assertEqual(data["name"], "my-portfolio")
         self.assertTrue(data["is_tanstack_compatible"])
+        self.assertTrue(data["private"])
         self.assertEqual(data["template_repository"], "software-factory-09-test/tanstack-start-template")
         mock_instantiate.assert_called_once_with(
             repo_name="my-portfolio",
             description="Portfolio frontend",
+            private=True,
+        )
+
+    @patch("factory.ui.app.instantiate_repo_from_template")
+    def test_create_repo_endpoint_explicit_public(self, mock_instantiate):
+        mock_instantiate.return_value = {
+            "name": "my-public-portfolio",
+            "full_name": "software-factory-09-test/my-public-portfolio",
+            "html_url": "https://github.com/software-factory-09-test/my-public-portfolio",
+            "description": "Public portfolio",
+            "private": False,
+            "is_tanstack_compatible": True,
+            "template_repository": "software-factory-09-test/tanstack-start-template",
+        }
+        resp = self.client.post(
+            "/api/repos",
+            json={"name": "my-public-portfolio", "description": "Public portfolio", "private": False},
+        )
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        self.assertEqual(data["name"], "my-public-portfolio")
+        self.assertFalse(data["private"])
+        mock_instantiate.assert_called_once_with(
+            repo_name="my-public-portfolio",
+            description="Public portfolio",
             private=False,
         )
 
@@ -489,7 +515,7 @@ class TestFastApiApp(unittest.TestCase):
             "full_name": "software-factory-09-test/studio-app",
             "html_url": "https://github.com/software-factory-09-test/studio-app",
             "description": None,
-            "private": False,
+            "private": True,
             "is_tanstack_compatible": True,
             "template_repository": "software-factory-09-test/tanstack-start-template",
         }
@@ -500,7 +526,7 @@ class TestFastApiApp(unittest.TestCase):
         mock_instantiate.assert_called_once_with(
             repo_name="studio-app",
             description=None,
-            private=False,
+            private=True,
         )
 
     def test_get_repo_scratch_endpoint(self):
@@ -1253,6 +1279,7 @@ class TestGitHubTanStackCompatibility(unittest.TestCase):
                 "html_url": "https://github.com/software-factory-09-test/test1",
                 "description": "Standard repo",
                 "topics": [],
+                "private": False,
             },
             {
                 "name": "todo-app",
@@ -1260,6 +1287,7 @@ class TestGitHubTanStackCompatibility(unittest.TestCase):
                 "description": "Generated from TanStack Start",
                 "template_repository": {"name": "tanstack-start-template"},
                 "topics": ["tanstack-start"],
+                "private": True,
             },
         ]
         mock_resp = MagicMock()
@@ -1272,8 +1300,10 @@ class TestGitHubTanStackCompatibility(unittest.TestCase):
             # Should be sorted by name
             self.assertEqual(repos[0]["name"], "test1")
             self.assertFalse(repos[0]["is_tanstack_compatible"])
+            self.assertFalse(repos[0]["private"])
             self.assertEqual(repos[1]["name"], "todo-app")
             self.assertTrue(repos[1]["is_tanstack_compatible"])
+            self.assertTrue(repos[1]["private"])
 
     def test_fetch_test_org_repos_detailed_fallback_on_error(self):
         mock_resp = MagicMock()
@@ -1288,6 +1318,7 @@ class TestGitHubTanStackCompatibility(unittest.TestCase):
             self.assertIn("test3", names)
             for r in repos:
                 self.assertFalse(r["is_tanstack_compatible"])
+                self.assertFalse(r.get("private", False))
 
 
 class TestGitHubTemplateInstantiation(unittest.TestCase):
@@ -1321,7 +1352,7 @@ class TestGitHubTemplateInstantiation(unittest.TestCase):
             "full_name": "software-factory-09-test/new-portfolio",
             "html_url": "https://github.com/software-factory-09-test/new-portfolio",
             "description": "TanStack Start portfolio app",
-            "private": False,
+            "private": True,
             "template_repository": {
                 "name": "tanstack-start-template",
             },
@@ -1338,6 +1369,7 @@ class TestGitHubTemplateInstantiation(unittest.TestCase):
             self.assertEqual(result["full_name"], "software-factory-09-test/new-portfolio")
             self.assertEqual(result["html_url"], "https://github.com/software-factory-09-test/new-portfolio")
             self.assertTrue(result["is_tanstack_compatible"])
+            self.assertTrue(result["private"])
             self.assertEqual(result["template_repository"], "software-factory-09-test/tanstack-start-template")
             mock_scaffold.assert_called_once()
 
@@ -1352,6 +1384,36 @@ class TestGitHubTemplateInstantiation(unittest.TestCase):
             self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-secret-token")
             self.assertEqual(kwargs["json"]["name"], "new-portfolio")
             self.assertEqual(kwargs["json"]["owner"], "software-factory-09-test")
+            self.assertTrue(kwargs["json"]["private"])
+
+    @patch("factory.ui.github.fetch_test_org_repos", return_value=["test1", "test2"])
+    def test_successful_instantiation_explicit_public(self, mock_fetch):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {
+            "id": 888124,
+            "name": "public-portfolio",
+            "full_name": "software-factory-09-test/public-portfolio",
+            "html_url": "https://github.com/software-factory-09-test/public-portfolio",
+            "description": "Public portfolio app",
+            "private": False,
+            "template_repository": {
+                "name": "tanstack-start-template",
+            },
+        }
+
+        with patch("httpx.Client.post", return_value=mock_resp) as mock_post, \
+             patch("factory.ui.scaffold.scaffold_target_repo") as mock_scaffold:
+            result = instantiate_repo_from_template(
+                repo_name="public-portfolio",
+                description="Public portfolio app",
+                private=False,
+                token="test-secret-token",
+            )
+            self.assertEqual(result["name"], "public-portfolio")
+            self.assertFalse(result["private"])
+            args, kwargs = mock_post.call_args
+            self.assertFalse(kwargs["json"]["private"])
 
     @patch("factory.ui.github.fetch_test_org_repos", return_value=[])
     def test_github_422_duplicate_raises_conflict(self, mock_fetch):

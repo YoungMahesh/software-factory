@@ -7,6 +7,7 @@ import {
   History,
   XCircle,
   Eye,
+  Lock,
 } from "lucide-react";
 import { Repo, Job, ScratchMetadata, Milestone, Issue, LaunchJobParams } from "../types";
 import { StageStepper } from "../components/StageStepper";
@@ -151,6 +152,16 @@ export const TestingConsoleView: React.FC<TestingConsoleViewProps> = ({
             <h2 className="text-sm font-semibold text-slate-200 flex items-center space-x-2">
               <Box className="w-4 h-4 text-indigo-400" />
               <span>Target Repository</span>
+              {repos.find((r) => r.name === selectedRepo)?.private && (
+                <span
+                  data-testid="console-repo-private-badge"
+                  className="flex items-center text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 space-x-1"
+                  title="Private repository"
+                >
+                  <Lock className="w-2.5 h-2.5 text-slate-400" />
+                  <span>Private</span>
+                </span>
+              )}
             </h2>
             <button
               id="btn-refresh-repos"
@@ -176,7 +187,7 @@ export const TestingConsoleView: React.FC<TestingConsoleViewProps> = ({
               <option value="">Select a repository...</option>
               {repos.map((r) => (
                 <option key={r.name} value={r.name}>
-                  {r.name} {r.is_tanstack_compatible ? "✦ (TanStack)" : ""}
+                  {r.name} {r.is_tanstack_compatible ? "✦ (TanStack)" : ""}{r.private ? " 🔒" : ""}
                 </option>
               ))}
             </select>

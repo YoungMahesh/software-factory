@@ -136,6 +136,7 @@ def _fallback_repo_items(org: str = DEFAULT_TEST_ORG) -> list[dict[str, Any]]:
             "html_url": f"https://github.com/{org}/{r}",
             "topics": [],
             "default_branch": "main",
+            "private": False,
         }
         for r in sorted(FALLBACK_REPOS)
     ]
@@ -198,6 +199,7 @@ def fetch_test_org_repos_detailed(
                         "html_url": r.get("html_url") or f"https://github.com/{org}/{repo_name_str}",
                         "topics": r.get("topics") or [],
                         "default_branch": r.get("default_branch", "main"),
+                        "private": bool(r.get("private", False)),
                     })
                 if len(raw_repos) < 100:
                     break
@@ -233,7 +235,7 @@ class RepoCreationError(Exception):
 def instantiate_repo_from_template(
     repo_name: str,
     description: str | None = None,
-    private: bool = False,
+    private: bool = True,
     token: str | None = None,
     org: str = DEFAULT_TEST_ORG,
     template_org: str = CANONICAL_TEMPLATE_ORG,

@@ -306,7 +306,7 @@ export const AppContent: React.FC = () => {
   };
 
   // Handle Create Repo
-  const handleCreateRepo = async (params: { name: string; description?: string }) => {
+  const handleCreateRepo = async (params: { name: string; description?: string; private?: boolean }) => {
     const newRepo = await createRepoMutation.mutateAsync(params);
     setSelectedRepo(newRepo.name);
   };

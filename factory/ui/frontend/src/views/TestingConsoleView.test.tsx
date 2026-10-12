@@ -78,4 +78,32 @@ describe("TestingConsoleView", () => {
       expect(api.fetchScratch).toHaveBeenCalledWith("cool-app");
     });
   });
+
+  it("renders private repository badge when selected repo is private", async () => {
+    const reposWithPrivate = [
+      { name: "private-repo", is_tanstack_compatible: true, private: true },
+      { name: "public-repo", is_tanstack_compatible: false, private: false },
+    ];
+    renderWithProviders(
+      <TestingConsoleView
+        repos={reposWithPrivate}
+        selectedRepo="private-repo"
+        onSelectRepo={vi.fn()}
+        onRefreshRepos={vi.fn()}
+        activeJob={null}
+        jobs={[]}
+        onLaunch={vi.fn()}
+        onCancel={vi.fn()}
+        onSelectJob={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId("console-repo-private-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("console-repo-private-badge")).toHaveTextContent(/Private/i);
+    expect(screen.getByRole("option", { name: /private-repo ✦ \(TanStack\) 🔒/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(api.fetchScratch).toHaveBeenCalledWith("private-repo");
+    });
+  });
 });

@@ -63,7 +63,7 @@ class LaunchJobRequest(BaseModel):
 class CreateRepoRequest(BaseModel):
     name: str = Field(..., description="Project / repository name (e.g. 'inventory-tracker')")
     description: str | None = Field(None, description="Optional repository description")
-    private: bool = Field(False, description="Whether created repository is private")
+    private: bool = Field(True, description="Whether created repository is private")
 
 
 class StudioPromptRequest(BaseModel):

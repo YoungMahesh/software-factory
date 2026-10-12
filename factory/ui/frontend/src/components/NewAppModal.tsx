@@ -6,7 +6,7 @@ import { Input } from "./ui/Input";
 export interface NewAppModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (params: { name: string; description?: string }) => Promise<void>;
+  onCreate: (params: { name: string; description?: string; private?: boolean }) => Promise<void>;
 }
 
 export const NewAppModal: React.FC<NewAppModalProps> = ({
@@ -16,6 +16,7 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
 }) => {
   const [name, setName] = useState<string>("");
   const [desc, setDesc] = useState<string>("");
+  const [isPrivate, setIsPrivate] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -33,9 +34,11 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
       await onCreate({
         name: name.trim(),
         description: desc.trim() || undefined,
+        private: isPrivate,
       });
       setName("");
       setDesc("");
+      setIsPrivate(true);
       onClose();
     } catch (err: any) {
       setError(err.message || "Failed to create app");
@@ -46,6 +49,7 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
 
   const handleClose = () => {
     setError(null);
+    setIsPrivate(true);
     onClose();
   };
 
@@ -96,6 +100,24 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
               onChange={(e) => setDesc(e.target.value)}
               placeholder="e.g. Inventory management dashboard"
             />
+          </div>
+
+          <div className="flex items-start space-x-3 pt-1">
+            <input
+              id="input-new-app-private"
+              type="checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer accent-indigo-600"
+            />
+            <label htmlFor="input-new-app-private" className="cursor-pointer select-none">
+              <span className="block text-xs font-medium text-slate-200">
+                Private repository
+              </span>
+              <span className="block text-[11px] text-slate-400">
+                Only accessible to members of the organization
+              </span>
+            </label>
           </div>
 
           {error && (

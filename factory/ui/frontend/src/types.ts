@@ -31,6 +31,7 @@ export interface Repo {
   description?: string | null;
   html_url?: string;
   is_tanstack_compatible?: boolean;
+  private?: boolean;
 }
 
 export interface IssueMilestone {

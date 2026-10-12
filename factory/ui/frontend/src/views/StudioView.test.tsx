@@ -8,6 +8,20 @@ const renderStudio = (overrides: Partial<StudioContextValue> = {}) =>
   renderWithProviders(<StudioView />, { contextOverrides: overrides });
 
 describe("StudioView", () => {
+  it("renders private badge when selected repository is private", () => {
+    renderStudio({
+      repos: [
+        { name: "private-app", is_tanstack_compatible: true, private: true },
+        { name: "public-app", is_tanstack_compatible: true, private: false },
+      ],
+      selectedRepo: "private-app",
+    });
+
+    expect(screen.getByTestId("studio-repo-private-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("studio-repo-private-badge")).toHaveTextContent(/Private/i);
+    expect(screen.getByRole("option", { name: /private-app ✦ 🔒/i })).toBeInTheDocument();
+  });
+
   it("renders repo select, prompt input, send button and live preview", () => {
     renderStudio();
 

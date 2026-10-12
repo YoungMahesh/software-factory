@@ -13,7 +13,7 @@ export interface StudioContextValue {
   repos: Repo[];
   selectedRepo: string;
   onSelectRepo: (repo: string) => void;
-  onCreateRepo: (params: { name: string; description?: string }) => Promise<void>;
+  onCreateRepo: (params: { name: string; description?: string; private?: boolean }) => Promise<void>;
   activeJob: Job | null;
   messages: ChatMessage[];
   onSendPrompt: (prompt: string, grill?: boolean) => void;

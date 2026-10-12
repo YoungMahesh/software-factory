@@ -12,6 +12,7 @@ import {
   GitPullRequest,
   AlertTriangle,
   RotateCcw,
+  Lock,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LivePreview } from "../components/LivePreview";
@@ -134,10 +135,21 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             <option value="">Select a repository...</option>
             {repos.map((r) => (
               <option key={r.name} value={r.name}>
-                {r.name} {r.is_tanstack_compatible ? "✦" : ""}
+                {r.name} {r.is_tanstack_compatible ? "✦" : ""}{r.private ? " 🔒" : ""}
               </option>
             ))}
           </select>
+
+          {repos.find((r) => r.name === selectedRepo)?.private && (
+            <span
+              data-testid="studio-repo-private-badge"
+              className="flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 space-x-1"
+              title="Private repository"
+            >
+              <Lock className="w-3 h-3 text-slate-400" />
+              <span>Private</span>
+            </span>
+          )}
 
           <Button
             id="btn-studio-new-app"

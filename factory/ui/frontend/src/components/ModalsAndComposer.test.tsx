@@ -18,6 +18,11 @@ describe("Decoupled Modals and PromptComposer", () => {
 
       expect(screen.getByText(/Create New App/i)).toBeInTheDocument();
 
+      // Verify private checkbox is checked by default
+      const privateCheckbox = screen.getByLabelText(/Private repository/i);
+      expect(privateCheckbox).toBeInTheDocument();
+      expect(privateCheckbox).toBeChecked();
+
       // Submit with empty name
       fireEvent.click(screen.getByRole("button", { name: /Create App/i }));
       expect(screen.getByText("App name is required.")).toBeInTheDocument();
@@ -36,6 +41,34 @@ describe("Decoupled Modals and PromptComposer", () => {
         expect(handleCreate).toHaveBeenCalledWith({
           name: "my-new-app",
           description: "Nice description",
+          private: true,
+        });
+        expect(handleClose).toHaveBeenCalled();
+      });
+    });
+
+    it("allows toggling repository visibility to public", async () => {
+      const handleCreate = vi.fn().mockResolvedValue(undefined);
+      const handleClose = vi.fn();
+      render(<NewAppModal isOpen={true} onClose={handleClose} onCreate={handleCreate} />);
+
+      const privateCheckbox = screen.getByLabelText(/Private repository/i);
+      expect(privateCheckbox).toBeChecked();
+
+      // Uncheck private checkbox
+      fireEvent.click(privateCheckbox);
+      expect(privateCheckbox).not.toBeChecked();
+
+      fireEvent.change(screen.getByPlaceholderText(/e\.g\. inventory-tracker/i), {
+        target: { value: "my-public-app" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Create App/i }));
+
+      await waitFor(() => {
+        expect(handleCreate).toHaveBeenCalledWith({
+          name: "my-public-app",
+          description: undefined,
+          private: false,
         });
         expect(handleClose).toHaveBeenCalled();
       });
