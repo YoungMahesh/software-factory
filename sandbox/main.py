@@ -83,14 +83,15 @@ def print_access_info(
     print("=" * 60 + "\n")
 
 
-def main():
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress"
     )
     parser.add_argument(
-        "--github-ref",
+        "-b",
+        "--github-branch",
         default="main",
-        help="Git ref to checkout (branch, tag, commit). Default: main",
+        help="Git branch to checkout. Only branches are supported (not tags or commits). Default: main",
     )
     parser.add_argument(
         "-s",
@@ -166,6 +167,11 @@ def main():
         action="store_true",
         help="Retain SOPS age private key and credentials in ~/.config/sops for interactive debugging.",
     )
+    return parser
+
+
+def main():
+    parser = create_parser()
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -377,7 +383,7 @@ def main():
         sandbox = modal.Sandbox.create(
             "bash",
             REMOTE_STARTUP_SCRIPT,
-            args.github_ref,
+            args.github_branch,
             secrets=sandbox_secrets,
             **sandbox_kwargs,
         )

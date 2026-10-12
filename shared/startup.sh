@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REF="${1:-main}"
+BRANCH="${1:-main}"
 
 # 0. Setup and start SSH server
 mkdir -p /run/sshd /root/.ssh
@@ -172,15 +172,20 @@ TARGET_DIR="/root/$REPO_NAME"
 git config --global advice.detachedHead false
 git config --global user.name "Mahesh"
 git config --global user.email "maheshghamand@gmail.com"
-git config --global init.defaultBranch "$REF"
+git config --global init.defaultBranch "$BRANCH"
 
 if [ ! -d "$TARGET_DIR" ]; then
-    echo "🏝️  Cloning $GH_REPO (ref: $REF)..."
-    GIT_ASKPASS=echo git clone --quiet --branch "$REF" --single-branch \
+    echo "🏝️  Cloning $GH_REPO (branch: $BRANCH)..."
+    GIT_ASKPASS=echo git clone --quiet --branch "$BRANCH" --single-branch \
         "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
 fi
 
 cd "$TARGET_DIR"
+
+if ! git symbolic-ref -q HEAD >/dev/null; then
+    echo "ERROR: '$BRANCH' resolved to a tag or detached commit. Only Git branches are supported." >&2
+    exit 1
+fi
 
 # Decrypt repository environment secrets if env.map is present
 ENV_MAP_FILE="/root/secrets/repo/env.map"

@@ -28,6 +28,7 @@ python sandbox/main.py -s <secret-name> [flags]
 | Flag | Description | Default |
 | :--- | :--- | :--- |
 | `-s, --secret` | Repository secret name under `secrets/<secret-name>/fetch.env` | *Required* |
+| `-b, --github-branch` | Git branch to checkout (only branches supported; tags and commits rejected) | `main` |
 | `--testing` | Use credentials from Test Organization (`software-factory-09-test`) | `False` |
 | `--vm` | Provision a VM Sandbox with Docker daemon instead of a Standard Sandbox | `False` |
 | `--memory <GB>` | RAM allocation in GB (VM sandboxes only; 2× swap) | `1` |
