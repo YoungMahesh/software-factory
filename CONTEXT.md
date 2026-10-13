@@ -12,6 +12,11 @@ _Avoid_: Container sandbox, VM instance, Docker runner
 A lightweight container sandbox on Modal running directly on the container runtime without virtualized hardware abstraction or Docker daemon capabilities.
 _Avoid_: Basic sandbox, container VM
 
+**Filesystem Snapshot**:
+A point-in-time, copy-on-write capture of a Modal sandbox's root filesystem stored as a reusable `modal.Image` with an associated Time-To-Live (TTL), used to persist workspace state or accelerate subsequent sandbox cold starts without repeating repository cloning and dependency installation.
+_Avoid_: Memory snapshot, container backup, sandbox image, VM snapshot
+
+
 **OpenCode Server**:
 A background web and agent server bound to a dedicated encrypted tunnel port, protected by a per-launch generated access password.
 _Avoid_: OpenCode IDE, code server
