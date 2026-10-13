@@ -83,10 +83,51 @@ def print_access_info(
     print("=" * 60 + "\n")
 
 
+class SnapshotTTLAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "_snapshot_ttl_specified", True)
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress"
     )
+    # Filesystem Snapshot capture flags
+    parser.add_argument(
+        "--snapshot",
+        metavar="SANDBOX_ID",
+        default=None,
+        help="Capture a root filesystem snapshot of an active sandbox by ID.",
+    )
+    parser.add_argument(
+        "--snapshot-ttl",
+        type=int,
+        default=30,
+        action=SnapshotTTLAction,
+        metavar="DAYS",
+        help="Time-to-live in days for the captured snapshot image (default: 30 days).",
+    )
+    parser.add_argument(
+        "--terminate",
+        action="store_true",
+        help="Terminate the target sandbox immediately after snapshot capture.",
+    )
+
+    # Filesystem Snapshot restoration flags
+    parser.add_argument(
+        "--from-snapshot",
+        metavar="IMAGE_ID",
+        default=None,
+        help="Launch a sandbox directly from a filesystem snapshot image ID.",
+    )
+    parser.add_argument(
+        "--name",
+        default=None,
+        metavar="APP_NAME",
+        help="Explicit Modal application name (mandatory when launching with --from-snapshot without --secret).",
+    )
+
     parser.add_argument(
         "-b",
         "--github-branch",
@@ -97,7 +138,7 @@ def create_parser() -> argparse.ArgumentParser:
         "-s",
         "--secret",
         dest="secret",
-        required=True,
+        default=None,
         help="Repository secret name under secrets/<secret-name>/fetch.env",
     )
 
@@ -170,54 +211,149 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():
-    parser = create_parser()
-    args = parser.parse_args()
+def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.snapshot:
+        if args.from_snapshot:
+            parser.error("--snapshot and --from-snapshot cannot be used together.")
+        if args.secret:
+            parser.error("--snapshot cannot be used with --secret.")
+        if args.name:
+            parser.error("--snapshot cannot be used with --name.")
+        if args.testing:
+            parser.error("--snapshot cannot be used with --testing.")
+        if args.vm:
+            parser.error("--snapshot cannot be used with --vm.")
+        if args.memory is not None:
+            parser.error("--snapshot cannot be used with --memory.")
+        if args.no_cloudflare:
+            parser.error("--snapshot cannot be used with --no-cloudflare.")
+        if args.github_branch != "main":
+            parser.error("--snapshot cannot be used with --github-branch.")
+        if args.snapshot_ttl <= 0:
+            parser.error("--snapshot-ttl must be a positive integer.")
+        if (
+            args.opencode
+            or args.react_native
+            or args.modal
+            or args.sops
+            or args.browser
+            or args.agy
+        ):
+            parser.error("--snapshot cannot be used with launch configuration arguments.")
+    else:
+        if args.terminate:
+            parser.error("--terminate can only be used with --snapshot.")
+        if getattr(args, "_snapshot_ttl_specified", False):
+            parser.error("--snapshot-ttl can only be used with --snapshot.")
+        if args.from_snapshot and not args.secret and not args.name:
+            parser.error("--name is required when launching from a snapshot without --secret.")
+        if not args.from_snapshot and not args.secret:
+            parser.error("the following arguments are required: -s/--secret")
 
-    repo_root = Path(__file__).resolve().parent.parent
+
+def capture_snapshot(
+    sandbox_id: str,
+    ttl_days: int = 30,
+    terminate: bool = False,
+) -> str:
+    print(f"🔄 Flushing filesystem buffers inside sandbox {sandbox_id}...")
+    sandbox = modal.Sandbox.from_id(sandbox_id)
+    sync_proc = sandbox.exec("sync")
+    sync_proc.wait()
+
+    is_vm = False
+    try:
+        vm_proc = sandbox.exec("sh", "-c", "[ -S /var/run/docker.sock ] || [ -f /swapfile ]")
+        if vm_proc.wait() == 0:
+            is_vm = True
+    except Exception:
+        is_vm = False
+
+    if is_vm:
+        print(
+            "⚠️  Notice: VM Sandbox detected. Mounted volumes and Docker daemon storage "
+            "(/var/lib/docker) are ephemeral and not persisted in root filesystem snapshots."
+        )
+
+    ttl_seconds = ttl_days * 86400
+    print(f"📸 Capturing filesystem snapshot (retention: {ttl_days} days)...")
+    snapshot_image = sandbox.snapshot_filesystem(ttl=ttl_seconds)
+    image_id = snapshot_image.object_id
+
+    vm_flag = " --vm" if is_vm else ""
+    print("\n" + "=" * 60)
+    print("📸  Filesystem Snapshot Captured!")
+    print(f"  • Sandbox ID:  {sandbox_id}")
+    print(f"  • Image ID:    {image_id}")
+    print(f"  • Retention:   {ttl_days} days ({ttl_seconds}s)")
+    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
+    print("=" * 60 + "\n")
+
+    if terminate:
+        print(f"🧹 Terminating sandbox {sandbox_id}...")
+        sandbox.terminate()
+        print(f"✅ Sandbox {sandbox_id} terminated.")
+    else:
+        print(f"ℹ️  Sandbox {sandbox_id} remains running (non-destructive snapshot).")
+
+    return image_id
+
+
+def run_sandbox_launch(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+    repo_root: Path | None = None,
+):
+    if parser is None:
+        parser = create_parser()
+
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
 
     # Normalize secret name and detect testing mode
-    clean_secret = args.secret.strip().rstrip("/")
+    clean_secret = args.secret.strip().rstrip("/") if args.secret else None
     is_testing = args.testing
-    if clean_secret.startswith("secrets_testing/"):
-        clean_secret = clean_secret[len("secrets_testing/"):]
-        is_testing = True
-    elif clean_secret.startswith("secrets_org/"):
-        clean_secret = clean_secret[len("secrets_org/"):]
-        is_testing = True
-    elif clean_secret.startswith("secrets/"):
-        clean_secret = clean_secret[len("secrets/"):]
-    elif clean_secret.startswith(f"{DEFAULT_TEST_ORG}/") or clean_secret == DEFAULT_TEST_ORG:
-        is_testing = True
-
     target_repo = None
     is_org = False
+    secrets_dir = None
 
-    if is_testing:
-        if "/" in clean_secret:
-            org_name = clean_secret.split("/", 1)[0]
-            target_repo = clean_secret
-        else:
-            if (repo_root / "secrets_org" / clean_secret).is_dir():
-                org_name = clean_secret
+    if clean_secret:
+        if clean_secret.startswith("secrets_testing/"):
+            clean_secret = clean_secret[len("secrets_testing/"):]
+            is_testing = True
+        elif clean_secret.startswith("secrets_org/"):
+            clean_secret = clean_secret[len("secrets_org/"):]
+            is_testing = True
+        elif clean_secret.startswith("secrets/"):
+            clean_secret = clean_secret[len("secrets/"):]
+        elif clean_secret.startswith(f"{DEFAULT_TEST_ORG}/") or clean_secret == DEFAULT_TEST_ORG:
+            is_testing = True
+
+        if is_testing:
+            if "/" in clean_secret:
+                org_name = clean_secret.split("/", 1)[0]
+                target_repo = clean_secret
             else:
-                org_name = DEFAULT_TEST_ORG
-                target_repo = f"{DEFAULT_TEST_ORG}/{clean_secret}"
+                if (repo_root / "secrets_org" / clean_secret).is_dir():
+                    org_name = clean_secret
+                else:
+                    org_name = DEFAULT_TEST_ORG
+                    target_repo = f"{DEFAULT_TEST_ORG}/{clean_secret}"
 
-        secrets_dir = repo_root / "secrets_org" / org_name
-        token_file = secrets_dir / "token"
-        if not token_file.is_file():
-            parser.error(
-                f"Organization token secret not found: {token_file} (expected secrets_org/{org_name}/token)."
-            )
-        is_org = True
-    else:
-        secrets_dir = repo_root / "secrets" / clean_secret
-        secret_file = secrets_dir / "fetch.env"
-        if not secret_file.is_file():
-            parser.error(
-                f"Repository secret file not found: {secret_file} (expected secrets/{clean_secret}/fetch.env)."
-            )
+            secrets_dir = repo_root / "secrets_org" / org_name
+            token_file = secrets_dir / "token"
+            if not token_file.is_file():
+                parser.error(
+                    f"Organization token secret not found: {token_file} (expected secrets_org/{org_name}/token)."
+                )
+            is_org = True
+        else:
+            secrets_dir = repo_root / "secrets" / clean_secret
+            secret_file = secrets_dir / "fetch.env"
+            if not secret_file.is_file():
+                parser.error(
+                    f"Repository secret file not found: {secret_file} (expected secrets/{clean_secret}/fetch.env)."
+                )
 
     if args.memory is not None:
         if not args.vm:
@@ -242,10 +378,13 @@ def main():
 
     pubkey_content = load_ssh_pub_key()
 
-    bare_repo = clean_secret.split("/")[-1]
-    random_id = uuid.uuid4().hex[:8]
-    app_prefix = "test-" if is_testing else ""
-    app_name = f"{app_prefix}{bare_repo}-{random_id}"
+    if args.name:
+        app_name = args.name
+    else:
+        bare_repo = clean_secret.split("/")[-1] if clean_secret else "sandbox"
+        random_id = uuid.uuid4().hex[:8]
+        app_prefix = "test-" if is_testing else ""
+        app_name = f"{app_prefix}{bare_repo}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
 
@@ -255,18 +394,21 @@ def main():
         browser=args.browser, opencode=args.opencode, agy=args.agy
     )
 
-    # Build the image incrementally based on the CLI flags passed.
-    image = build_sandbox_image(
-        opencode=args.opencode,
-        agy=args.agy,
-        browser=browser_active,
-        modal_tooling=args.modal,
-        react_native=args.react_native,
-    )
-    if is_org:
-        image = image.add_local_dir(secrets_dir, REMOTE_ORG_SECRETS_DIR, copy=True)
+    if args.from_snapshot:
+        image = modal.Image.from_id(args.from_snapshot)
     else:
-        image = image.add_local_dir(secrets_dir, REMOTE_REPO_SECRETS_DIR, copy=True)
+        # Build the image incrementally based on the CLI flags passed.
+        image = build_sandbox_image(
+            opencode=args.opencode,
+            agy=args.agy,
+            browser=browser_active,
+            modal_tooling=args.modal,
+            react_native=args.react_native,
+        )
+
+    if secrets_dir:
+        remote_secrets_dir = REMOTE_ORG_SECRETS_DIR if is_org else REMOTE_REPO_SECRETS_DIR
+        image = image.add_local_dir(secrets_dir, remote_secrets_dir, copy=True)
 
     cloudflare_active = not args.no_cloudflare
 
@@ -278,6 +420,8 @@ def main():
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
     }
+    if args.from_snapshot:
+        env["RESUME_SNAPSHOT"] = "1"
     if target_repo:
         env["GH_REPO"] = target_repo
     if not cloudflare_active:
@@ -340,28 +484,12 @@ def main():
         features.append("Browser")
 
     features_suffix = f" & {' & '.join(features)}" if features else ""
+    from_suffix = f" from snapshot {args.from_snapshot}" if args.from_snapshot else ""
     print(
-        f"🏝️  Launching Modal {runtime_desc} with SSH"
+        f"🏝️  Launching Modal {runtime_desc}{from_suffix} with SSH"
         f"{features_suffix} (App: {app_name})..."
     )
 
-    # Sandbox resource configuration:
-    # CPU format: (request, limit) in physical CPU cores (1 physical core ≈ 2 vCPUs).
-    # - Default request: 0.125 (1/8 core). Default soft limit: request + 16 cores (16.125).
-    # - Highest maximum: Bounded by Modal host worker capacity (typically up to ~64-128 physical cores).
-    #   Exceeding host capacity raises InvalidError at creation time.
-    #
-    # Memory format:
-    # - VM Sandbox: VM sandboxes do not get dynamically expandable RAM, so memory must be a single
-    #   int (MiB): memory=(1024, 4096) would still cap the VM at the 1024 MiB request.
-    #   --memory N (GB) maps to N * 1024 MiB here (default: 1024 MiB).
-    #   Modal's VM defaults would be a 1024 MiB (1 GiB) memory request and a 0.125 physical core CPU request.
-    #   Swap is 10x to 50x slower than real RAM; keep it between 1× and 2× physical RAM.
-    #   ./startup.sh allocates a swapfile of 2× the VM RAM (SWAP_GB env var).
-    # - Standard Sandbox: Container sandboxes support (request, limit) in MiB with dynamic burstable memory.
-    #   Default request: 128 MiB for standard container sandboxes, up to 16384 MiB (16 GiB) soft limit.
-    #   Highest maximum: Bounded by Modal host worker RAM (typically up to ~256-512 GiB / ~262,144-524,288 MiB).
-    #   Exceeding host capacity raises InvalidError; exceeding limit at runtime causes OOM kill.
     sandbox_kwargs: dict = {
         "timeout": TIMEOUT_SECS,
         "idle_timeout": IDLE_TIMEOUT_SECS,
@@ -419,5 +547,22 @@ def main():
     )
 
 
+def main():
+    parser = create_parser()
+    args = parser.parse_args()
+    validate_args(parser, args)
+
+    if args.snapshot:
+        capture_snapshot(
+            sandbox_id=args.snapshot,
+            ttl_days=args.snapshot_ttl,
+            terminate=args.terminate,
+        )
+        return
+
+    run_sandbox_launch(args, parser=parser)
+
+
 if __name__ == "__main__":
     main()
+

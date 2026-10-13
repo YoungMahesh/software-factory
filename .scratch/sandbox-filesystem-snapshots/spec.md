@@ -1,7 +1,7 @@
 # Spec: Filesystem Snapshots in Unified Sandbox Runner
 
-Status: ready-for-agent
-Triage: ready-for-agent
+Status: resolved
+Triage: resolved
 
 ## Problem Statement
 
