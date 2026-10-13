@@ -2,6 +2,7 @@
   "artifactReviewPolicy": "always-proceed",
   "colorScheme": "dark",
   "editorMode": "vim",
+  "queuedMessages": "send-immediately",
   "toolPermission": "always-proceed",
   "vimInsertFirst": true
 }
