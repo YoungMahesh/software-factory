@@ -21,6 +21,10 @@ _Avoid_: Memory snapshot, container backup, sandbox image, VM snapshot
 A background web and agent server bound to a dedicated encrypted tunnel port, protected by a per-launch generated access password.
 _Avoid_: OpenCode IDE, code server
 
+**T3 Code Server**:
+A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents (Antigravity, OpenCode) across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
+_Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
+
 **Antigravity CLI**:
 Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
 _Avoid_: Gemini CLI, antigravity-ide

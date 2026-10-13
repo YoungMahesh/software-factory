@@ -1,7 +1,10 @@
 import argparse
+import io
+import json
 from pathlib import Path
 import secrets
 import sys
+import time
 import uuid
 
 import modal
@@ -29,6 +32,21 @@ IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_WEB_PORT = 3000
 DEFAULT_OPENCODE_PORT = 4096
 DEFAULT_METRO_PORT = 8081
+DEFAULT_T3_PORT = 3775
+
+
+def generate_ascii_qr(data: str) -> str | None:
+    """Generates an inverted unicode ASCII QR code string for terminal display."""
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(data)
+        buf = io.StringIO()
+        qr.print_ascii(out=buf, invert=True)
+        return buf.getvalue().rstrip()
+    except Exception:
+        return None
 
 
 def print_access_info(
@@ -40,6 +58,10 @@ def print_access_info(
     opencode_password: str | None = None,
     metro_url: str | None = None,
     metro_port: int | None = None,
+    t3_url: str | None = None,
+    t3_port: int | None = None,
+    t3_pair_url: str | None = None,
+    t3_qr_code: str | None = None,
     memory_gb: int | None = None,
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
@@ -65,6 +87,11 @@ def print_access_info(
                 f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
                 f"opencode --server {opencode_url}"
             )
+    if t3_pair_url:
+        print(f"  • T3 Code:  {t3_pair_url}")
+    elif t3_url:
+        print(f"  • T3 Code:  {t3_url} (port {t3_port})")
+        print(f"  • Web UI:   {t3_url}")
     if agy_enabled:
         print(f"  • Remote Control: https://antigravity.google.com (Instance: {app_name})")
     if ssh_info:
@@ -80,6 +107,10 @@ def print_access_info(
         print("  User root")
         print("  IdentityFile ~/.ssh/modal-sandbox")
         print("  StrictHostKeyChecking no")
+    if t3_qr_code:
+        print("\n📱 Scan with T3 Code Mobile App (iOS / Android):")
+        for line in t3_qr_code.splitlines():
+            print(f"  {line}")
     print("=" * 60 + "\n")
 
 
@@ -171,6 +202,19 @@ def create_parser() -> argparse.ArgumentParser:
         help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
     )
     parser.add_argument(
+        "--t3",
+        "--t3code",
+        action="store_true",
+        dest="t3",
+        help="Also run a T3 Code server in the sandbox and expose its WebUI over public HTTPS URL.",
+    )
+    parser.add_argument(
+        "--t3-port",
+        type=int,
+        default=DEFAULT_T3_PORT,
+        help=f"Port for the T3 Code server, only used with --t3 (default: {DEFAULT_T3_PORT})",
+    )
+    parser.add_argument(
         "--react-native",
         action="store_true",
         help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
@@ -238,6 +282,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.sops
             or args.browser
             or args.agy
+            or args.t3
         ):
             parser.error("--snapshot cannot be used with launch configuration arguments.")
     else:
@@ -376,6 +421,21 @@ def run_sandbox_launch(
                 "--metro-port and --opencode-port must differ: a port can only be exposed once."
             )
 
+    if args.t3 and args.t3_port == DEFAULT_WEB_PORT:
+        parser.error(
+            f"--t3-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
+        )
+
+    if args.t3 and args.opencode and args.t3_port == args.opencode_port:
+        parser.error(
+            "--t3-port and --opencode-port must differ: a port can only be exposed once."
+        )
+
+    if args.t3 and args.react_native and args.t3_port == args.metro_port:
+        parser.error(
+            "--t3-port and --metro-port must differ: a port can only be exposed once."
+        )
+
     pubkey_content = load_ssh_pub_key()
 
     if args.name:
@@ -404,6 +464,7 @@ def run_sandbox_launch(
             browser=browser_active,
             modal_tooling=args.modal,
             react_native=args.react_native,
+            t3=args.t3,
         )
 
     if secrets_dir:
@@ -447,6 +508,11 @@ def run_sandbox_launch(
         env["ENABLE_OPENCODE"] = "1"
         env["OPENCODE_PORT"] = str(args.opencode_port)
 
+    if args.t3:
+        encrypted_ports.append(args.t3_port)
+        env["ENABLE_T3"] = "1"
+        env["T3_PORT"] = str(args.t3_port)
+
     if args.agy:
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
         env["ENABLE_ANTIGRAVITY"] = "1"
@@ -476,6 +542,8 @@ def run_sandbox_launch(
         features.append("Antigravity")
     if args.opencode:
         features.append("OpenCode")
+    if args.t3:
+        features.append("T3 Code")
     if args.modal:
         features.append("Modal")
     if args.sops:
@@ -520,6 +588,7 @@ def run_sandbox_launch(
     ssh_info = None
     opencode_url = None
     metro_url = None
+    t3_url = None
     try:
         tunnels = sandbox.tunnels()
         if 22 in tunnels:
@@ -528,8 +597,33 @@ def run_sandbox_launch(
             opencode_url = tunnels[args.opencode_port].url
         if args.react_native and args.metro_port in tunnels:
             metro_url = tunnels[args.metro_port].url
+        if args.t3 and args.t3_port in tunnels:
+            t3_url = tunnels[args.t3_port].url
     except Exception as exc:
         print(f"⚠️  Could not obtain tunnel metadata: {exc}")
+
+    t3_pair_url = None
+    t3_qr_code = None
+    if args.t3 and t3_url:
+        # Retrieve the automatically minted pairing token from the sandbox
+        for _ in range(6):
+            try:
+                proc = sandbox.exec("cat", "/tmp/t3-pairing.json")
+                if proc.wait() == 0:
+                    out = proc.stdout.read().strip()
+                    if out:
+                        pairing_data = json.loads(out)
+                        credential = pairing_data.get("credential")
+                        if credential:
+                            t3_pair_url = f"{t3_url}/pair#token={credential}"
+                            t3_qr_code = generate_ascii_qr(t3_pair_url)
+                            break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+        if not t3_pair_url:
+            t3_pair_url = t3_url
 
     print_access_info(
         sandbox,
@@ -540,6 +634,10 @@ def run_sandbox_launch(
         opencode_password=opencode_password,
         metro_url=metro_url,
         metro_port=args.metro_port if args.react_native else None,
+        t3_url=t3_url,
+        t3_port=args.t3_port if args.t3 else None,
+        t3_pair_url=t3_pair_url,
+        t3_qr_code=t3_qr_code,
         memory_gb=memory_gb,
         agy_enabled=args.agy,
         cloudflare_enabled=not args.no_cloudflare,

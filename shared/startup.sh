@@ -305,6 +305,9 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
     grep -qxF 'export PATH="/root/.local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
     grep -qxF "alias agy='agy --dangerously-skip-permissions'" ~/.bashrc 2>/dev/null || echo "alias agy='agy --dangerously-skip-permissions'" >> ~/.bashrc
 fi
+if [ "${ENABLE_T3:-}" = "1" ]; then
+    grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+fi
 
 if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
     grep -qxF 'export ANDROID_HOME="/opt/android-sdk"' ~/.bashrc 2>/dev/null || echo 'export ANDROID_HOME="/opt/android-sdk"' >> ~/.bashrc
@@ -423,6 +426,17 @@ echo "=== OAuth Token ===" && ls -la ~/.gemini/antigravity-cli/antigravity-oauth
 EOF
     chmod +x /usr/local/bin/check-antigravity 2>/dev/null || true
     ln -sf /usr/local/bin/check-antigravity /usr/local/bin/check-agy
+fi
+
+if [ "${ENABLE_T3:-}" = "1" ]; then
+    cat << 'EOF' > /usr/local/bin/check-t3
+#!/usr/bin/env bash
+echo "=== T3 Code Binary ===" && which t3 && t3 --version
+echo "=== T3 Code Process ===" && ps aux | grep [t]3
+echo "=== T3 Server Log ===" && tail -n 20 /tmp/t3.log 2>/dev/null || true
+echo "=== Listening Sockets ===" && (ss -tulpn 2>/dev/null | grep 3775 || netstat -tulpn 2>/dev/null | grep 3775 || true)
+EOF
+    chmod +x /usr/local/bin/check-t3 2>/dev/null || true
 fi
 
 if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
@@ -585,5 +599,12 @@ if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     fi
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
     nohup opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" > /tmp/opencode.log 2>&1 &
+fi
+
+if [ "${ENABLE_T3:-}" = "1" ]; then
+    T3_PORT="${T3_PORT:-3775}"
+    echo "🏝️  Starting T3 Code server on port $T3_PORT..."
+    nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
+    t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true
 fi
 exec sleep infinity

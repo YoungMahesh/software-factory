@@ -129,6 +129,10 @@ def browser_enabled(
     return browser or opencode or agy
 
 
+T3_VERSION = "0.0.45"
+T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
+
+
 def build_sandbox_image(
     *,
     opencode: bool = False,
@@ -136,6 +140,7 @@ def build_sandbox_image(
     browser: bool = False,
     modal_tooling: bool = False,
     react_native: bool = False,
+    t3: bool = False,
 ) -> modal.Image:
     """Constructs the layered Modal image according to requested features."""
     image = base_image
@@ -225,6 +230,13 @@ def build_sandbox_image(
             image = image.add_local_file(
                 LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET, copy=True
             )
+
+    if t3:
+        image = image.run_commands(
+            "mkdir -p /opt/t3",
+            f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
+            "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+        )
 
     if path_prefixes:
         image = image.env({"PATH": ":".join(path_prefixes) + ":${PATH}"})
