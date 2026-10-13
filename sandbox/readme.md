@@ -53,3 +53,28 @@ python sandbox/main.py -s <secret-name> [flags]
 - **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes `https://3000.mahesh0.dev` to `localhost:3000`.
 - **OpenCode (Port 4096)**: HTTPS tunnel URL and one-time password printed on launch when `--opencode` is passed.
 - **Metro Bundler (Port 8081)**: HTTPS tunnel URL printed on launch when `--react-native` is passed.
+
+---
+
+## 4. Live Testing Verification
+
+When verifying changes to `sandbox/main.py` against live Modal cloud infrastructure, all runs adhere to the **Sandbox Live Verification** standard:
+
+- **Target Repository**: Strictly uses the **Test Repository Baseline** (`software-factory-09-test/test1`) via Test Organization credentials (`secrets_org/software-factory-09-test/token`). Never live test against production repositories in `secrets/`.
+- **Automated Verification**:
+  ```bash
+  python scripts/test_live_sandbox.py
+  ```
+  Launches an ephemeral sandbox with a short timeout (300s), verifies token decryption and git checkout (`/root/test1`), asserts environment invariants, and guarantees immediate teardown in `finally:`.
+- **Manual Ad-hoc Verification**:
+  ```bash
+  # Launch test sandbox
+  python sandbox/main.py -s test1 --testing
+
+  # Verify git clone inside sandbox
+  modal sandbox exec <sandbox-id> test -d /root/test1
+
+  # Immediately terminate to prevent lingering compute charges
+  modal sandbox terminate <sandbox-id>
+  ```
+

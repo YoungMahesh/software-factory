@@ -65,6 +65,14 @@ _Avoid_: Org token, org secret, organization token
 A dedicated GitHub organization (`software-factory-09-test`) configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
 _Avoid_: Test org, mock org, testing workspace
 
+**Test Repository Baseline**:
+The designated minimal test fixture repository (`software-factory-09-test/test1`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
+_Avoid_: Default test repo, test mock, dummy repo
+
+**Sandbox Live Verification**:
+An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`software-factory-09-test/test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
+_Avoid_: Manual live test, smoke run, sandbox healthcheck
+
 **Private-by-Default Repository Policy**:
 The standard security convention where new target repositories instantiated via Factory Studio or the repository creation endpoints in the Test Organization (`software-factory-09-test`) are provisioned with private visibility on GitHub by default, with opt-out capability to create public repositories when explicitly declared.
 _Avoid_: Public-by-default, default public repo, open test repos
