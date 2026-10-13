@@ -667,7 +667,7 @@ class TestT3CodeIntegration(unittest.TestCase):
             args = parser.parse_args(["-s", "my-secret", "--t3", "--name", "test-t3-pair"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
-        mock_sandbox.exec.assert_called_with("cat", "/tmp/t3-pairing.json")
+        mock_sandbox.exec.assert_called_with("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
         call_kwargs = mock_print_access.call_args.kwargs
         self.assertEqual(call_kwargs["t3_pair_url"], "https://t3.modal.run/pair#token=SECRET_TOKEN_XYZ")
         self.assertIsNotNone(call_kwargs["t3_qr_code"])

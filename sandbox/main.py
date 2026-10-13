@@ -605,22 +605,37 @@ def run_sandbox_launch(
     t3_pair_url = None
     t3_qr_code = None
     if args.t3 and t3_url:
-        # Retrieve the automatically minted pairing token from the sandbox
-        for _ in range(6):
-            try:
-                proc = sandbox.exec("cat", "/tmp/t3-pairing.json")
-                if proc.wait() == 0:
-                    out = proc.stdout.read().strip()
-                    if out:
-                        pairing_data = json.loads(out)
-                        credential = pairing_data.get("credential")
-                        if credential:
-                            t3_pair_url = f"{t3_url}/pair#token={credential}"
-                            t3_qr_code = generate_ascii_qr(t3_pair_url)
-                            break
-            except Exception:
-                pass
-            time.sleep(0.5)
+        # Mint the 24-hour pairing token directly from the container's pre-baked t3 binary
+        try:
+            proc = sandbox.exec("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
+            if proc.wait() == 0:
+                out = proc.stdout.read().strip()
+                if out:
+                    pairing_data = json.loads(out)
+                    credential = pairing_data.get("credential")
+                    if credential:
+                        t3_pair_url = f"{t3_url}/pair#token={credential}"
+                        t3_qr_code = generate_ascii_qr(t3_pair_url)
+        except Exception:
+            pass
+
+        # Fallback to /tmp/t3-pairing.json if direct exec failed
+        if not t3_pair_url:
+            for _ in range(6):
+                try:
+                    proc = sandbox.exec("cat", "/tmp/t3-pairing.json")
+                    if proc.wait() == 0:
+                        out = proc.stdout.read().strip()
+                        if out:
+                            pairing_data = json.loads(out)
+                            credential = pairing_data.get("credential")
+                            if credential:
+                                t3_pair_url = f"{t3_url}/pair#token={credential}"
+                                t3_qr_code = generate_ascii_qr(t3_pair_url)
+                                break
+                except Exception:
+                    pass
+                time.sleep(0.5)
 
         if not t3_pair_url:
             t3_pair_url = t3_url
