@@ -289,8 +289,8 @@ if [ -d /root/secrets/org ]; then
     echo "🧹 Purged organization secrets staging directory (/root/secrets/org)."
 fi
 
-if [ -f /root/.git.bash ]; then
-    grep -qxF "source /root/.git.bash" ~/.bashrc 2>/dev/null || echo "source /root/.git.bash" >> ~/.bashrc
+if [ -f /root/.bash_aliases ]; then
+    grep -qxF "source /root/.bash_aliases" ~/.bashrc 2>/dev/null || echo "source /root/.bash_aliases" >> ~/.bashrc
 fi
 grep -qxF "cd $TARGET_DIR" ~/.bashrc 2>/dev/null || echo "cd $TARGET_DIR" >> ~/.bashrc
 grep -qxF "export HOSTNAME=0.0.0.0" ~/.bashrc 2>/dev/null || echo "export HOSTNAME=0.0.0.0" >> ~/.bashrc

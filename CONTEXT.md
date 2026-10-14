@@ -102,6 +102,10 @@ _Avoid_: Gemini token, antigravity auth token, cli token
 Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`, `shared/antigravity-onboarding.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
+**Sandbox Shell Aliases**:
+A curated collection of interactive shell shortcuts for Docker and Git operations tracked in `shared/aliases.bash`, staged into sandboxes at `/root/.bash_aliases`, and automatically sourced in `~/.bashrc` across all sandbox runtime modes.
+_Avoid_: Terminal shortcuts, bash aliases script, developer helpers
+
 **Modal Client Credentials**:
 The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` via `scripts/setup.sh --modal` (mode 0600), withheld from automated sandbox initialization by default to enforce credential isolation, and provisioned into sandboxes strictly when `--modal` is explicitly passed.
 _Avoid_: Modal token, modal config, modal credentials

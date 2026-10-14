@@ -4,8 +4,8 @@ import modal
 SHARED_DIR = Path(__file__).resolve().parent
 LOCAL_STARTUP_SCRIPT = SHARED_DIR / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
-LOCAL_GIT_BASH = Path(__file__).resolve().parent.parent / "git.bash"
-REMOTE_GIT_BASH = "/root/.git.bash"
+LOCAL_ALIASES_BASH = SHARED_DIR / "aliases.bash"
+REMOTE_ALIASES_BASH = "/root/.bash_aliases"
 LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
 LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
@@ -91,8 +91,10 @@ base_image = (
     .add_local_file(LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True)
 )
 
-if LOCAL_GIT_BASH.exists():
-    base_image = base_image.add_local_file(LOCAL_GIT_BASH, REMOTE_GIT_BASH, copy=True)
+if LOCAL_ALIASES_BASH.exists():
+    base_image = base_image.add_local_file(
+        LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH, copy=True
+    )
 
 if LOCAL_SETUP_SCRIPT.exists():
     base_image = base_image.add_local_file(

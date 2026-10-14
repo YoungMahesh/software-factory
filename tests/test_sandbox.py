@@ -673,6 +673,59 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertIsNotNone(call_kwargs["t3_qr_code"])
 
 
+class TestSandboxShellAliases(unittest.TestCase):
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.aliases_path = self.repo_root / "shared" / "aliases.bash"
+        self.legacy_git_bash = self.repo_root / "git.bash"
+        self.startup_sh_path = self.repo_root / "shared" / "startup.sh"
+
+    def test_legacy_git_bash_removed(self):
+        self.assertFalse(self.legacy_git_bash.exists(), "Legacy root git.bash should be removed")
+
+    def test_shared_aliases_file_exists_and_contains_requested_aliases(self):
+        self.assertTrue(self.aliases_path.is_file(), "shared/aliases.bash must exist")
+        content = self.aliases_path.read_text()
+
+        expected_docker_aliases = [
+            "alias dc='docker container'",
+            "alias dco='docker compose'",
+            "alias di='docker image'",
+            "alias din='docker inspect'",
+            "alias dl='docker logs'",
+            "alias dn='docker network'",
+            "alias dv='docker volume'",
+        ]
+        expected_git_aliases = [
+            "alias gs='git status'",
+            "alias gd='git diff'",
+            "alias gds='git diff --cached'",
+            "alias ga='git add .'",
+            "alias gl='git log'",
+            "alias gc='git commit -m'",
+            "alias gp='git push'",
+            "alias gP='git pull'",
+            "alias gb='git branch'",
+        ]
+
+        for alias in expected_docker_aliases:
+            self.assertIn(alias, content, f"Missing Docker alias: {alias}")
+
+        for alias in expected_git_aliases:
+            self.assertIn(alias, content, f"Missing Git alias: {alias}")
+
+    def test_image_and_startup_script_stage_and_source_bash_aliases(self):
+        from shared.image import LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH
+
+        self.assertEqual(LOCAL_ALIASES_BASH, self.aliases_path)
+        self.assertEqual(REMOTE_ALIASES_BASH, "/root/.bash_aliases")
+
+        startup_content = self.startup_sh_path.read_text()
+        self.assertIn('if [ -f /root/.bash_aliases ]; then', startup_content)
+        self.assertIn('source /root/.bash_aliases', startup_content)
+        self.assertNotIn('/root/.git.bash', startup_content)
+
+
 if __name__ == "__main__":
     unittest.main()
 
