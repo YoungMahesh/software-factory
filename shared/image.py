@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from pathlib import Path
 import modal
 
@@ -56,6 +57,26 @@ def get_gradle_volumes() -> dict[str, modal.Volume]:
     }
 
 
+def add_local_files_if_present(
+    image: modal.Image, files: Iterable[tuple[Path | str, str]]
+) -> modal.Image:
+    """Conditionally stages existing local files into a Modal image."""
+    for local_path, remote_path in files:
+        if Path(local_path).exists():
+            image = image.add_local_file(local_path, remote_path, copy=True)
+    return image
+
+
+BASE_IMAGE_FILES: list[tuple[Path, str]] = [
+    (LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT),
+    (LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH),
+    (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
+    (LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978),
+    (LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT),
+    (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
+]
+
+
 # Shared Base Image: Cached once by Modal and shared between Standard and VM Sandboxes
 base_image = (
     modal.Image.from_registry("ubuntu:24.04")
@@ -92,33 +113,9 @@ base_image = (
         "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config.d/modal.conf",
         "ssh-keygen -A",
     )
-    .add_local_file(LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT, copy=True)
 )
 
-if LOCAL_ALIASES_BASH.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH, copy=True
-    )
-
-if LOCAL_GITCONFIG.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_GITCONFIG, REMOTE_GITCONFIG, copy=True
-    )
-
-if LOCAL_GITCONFIG_MAHESH471978.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978, copy=True
-    )
-
-if LOCAL_SETUP_SCRIPT.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT, copy=True
-    )
-
-if LOCAL_CLOUDFLARE_SECRET.exists():
-    base_image = base_image.add_local_file(
-        LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET, copy=True
-    )
+base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 
 
 def load_ssh_pub_key() -> str:
@@ -165,14 +162,13 @@ def build_sandbox_image(
     if opencode:
         image = image.run_commands("curl -fsSL https://opencode.ai/v2/install | bash")
         path_prefixes.append("/root/.opencode/bin")
-        if LOCAL_OPENCODE_CONFIG.exists():
-            image = image.add_local_file(
-                LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG, copy=True
-            )
-        if LOCAL_OPENCODE_SECRET.exists():
-            image = image.add_local_file(
-                LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET, copy=True
-            )
+        image = add_local_files_if_present(
+            image,
+            [
+                (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+            ],
+        )
 
     if agy:
         image = image.run_commands(
@@ -180,22 +176,15 @@ def build_sandbox_image(
             "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
         )
         path_prefixes.append("/root/.local/bin")
-        if LOCAL_ANTIGRAVITY_SETTINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS, copy=True
-            )
-        if LOCAL_ANTIGRAVITY_KEYBINDINGS.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS, copy=True
-            )
-        if LOCAL_ANTIGRAVITY_ONBOARDING.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING, copy=True
-            )
-        if LOCAL_ANTIGRAVITY_SECRET.exists():
-            image = image.add_local_file(
-                LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET, copy=True
-            )
+        image = add_local_files_if_present(
+            image,
+            [
+                (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
+                (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
+                (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
+                (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
+            ],
+        )
 
     if browser:
         # Single shared Google Chrome used by both the Playwright and Chrome
@@ -242,10 +231,12 @@ def build_sandbox_image(
             "mkdir -p /etc",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
         )
-        if LOCAL_MODAL_SECRET.exists():
-            image = image.add_local_file(
-                LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET, copy=True
-            )
+        image = add_local_files_if_present(
+            image,
+            [
+                (LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET),
+            ],
+        )
 
     if t3:
         image = image.run_commands(
