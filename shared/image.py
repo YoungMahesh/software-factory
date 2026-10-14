@@ -6,6 +6,10 @@ LOCAL_STARTUP_SCRIPT = SHARED_DIR / "startup.sh"
 REMOTE_STARTUP_SCRIPT = "/root/startup.sh"
 LOCAL_ALIASES_BASH = SHARED_DIR / "aliases.bash"
 REMOTE_ALIASES_BASH = "/root/.bash_aliases"
+LOCAL_GITCONFIG = SHARED_DIR / "gitconfig"
+REMOTE_GITCONFIG = "/root/.gitconfig"
+LOCAL_GITCONFIG_MAHESH471978 = SHARED_DIR / "gitconfig-mahesh471978"
+REMOTE_GITCONFIG_MAHESH471978 = "/root/.gitconfig-mahesh471978"
 LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
 LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
@@ -94,6 +98,16 @@ base_image = (
 if LOCAL_ALIASES_BASH.exists():
     base_image = base_image.add_local_file(
         LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH, copy=True
+    )
+
+if LOCAL_GITCONFIG.exists():
+    base_image = base_image.add_local_file(
+        LOCAL_GITCONFIG, REMOTE_GITCONFIG, copy=True
+    )
+
+if LOCAL_GITCONFIG_MAHESH471978.exists():
+    base_image = base_image.add_local_file(
+        LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978, copy=True
     )
 
 if LOCAL_SETUP_SCRIPT.exists():

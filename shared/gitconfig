@@ -1,0 +1,12 @@
+[user]
+    name = Mahesh
+    email = maheshghamand@gmail.com
+
+[advice]
+    detachedHead = false
+
+[init]
+    defaultBranch = main
+
+[includeIf "gitdir:/root/intrifund/"]
+    path = ~/.gitconfig-mahesh471978

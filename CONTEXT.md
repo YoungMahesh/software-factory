@@ -106,6 +106,10 @@ _Avoid_: Sandbox config, local config, runner settings
 A curated collection of interactive shell shortcuts for Docker and Git operations tracked in `shared/aliases.bash`, staged into sandboxes at `/root/.bash_aliases`, and automatically sourced in `~/.bashrc` across all sandbox runtime modes.
 _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
 
+**Sandbox Git Configuration**:
+Declarative global Git configuration and identity routing files tracked in `shared/gitconfig` and secondary identity profiles (e.g. `shared/gitconfig-mahesh471978`), staged into the Shared Base Image at `/root/.gitconfig` and `/root/.gitconfig-<identity>`, providing default authorship (`maheshghamand@gmail.com`) and conditional repository identity overrides (`includeIf`) without runtime shell mutation.
+_Avoid_: Dynamic git config, inline git config, startup git config
+
 **Modal Client Credentials**:
 The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` via `scripts/setup.sh --modal` (mode 0600), withheld from automated sandbox initialization by default to enforce credential isolation, and provisioned into sandboxes strictly when `--modal` is explicitly passed.
 _Avoid_: Modal token, modal config, modal credentials

@@ -725,6 +725,37 @@ class TestSandboxShellAliases(unittest.TestCase):
         self.assertIn('source /root/.bash_aliases', startup_content)
         self.assertNotIn('/root/.git.bash', startup_content)
 
+    def test_image_and_startup_script_stage_git_configs(self):
+        from shared.image import (
+            LOCAL_GITCONFIG,
+            REMOTE_GITCONFIG,
+            LOCAL_GITCONFIG_MAHESH471978,
+            REMOTE_GITCONFIG_MAHESH471978,
+        )
+
+        self.assertEqual(LOCAL_GITCONFIG, self.repo_root / "shared" / "gitconfig")
+        self.assertEqual(REMOTE_GITCONFIG, "/root/.gitconfig")
+        self.assertEqual(
+            LOCAL_GITCONFIG_MAHESH471978,
+            self.repo_root / "shared" / "gitconfig-mahesh471978",
+        )
+        self.assertEqual(REMOTE_GITCONFIG_MAHESH471978, "/root/.gitconfig-mahesh471978")
+
+        self.assertTrue(LOCAL_GITCONFIG.exists())
+        self.assertTrue(LOCAL_GITCONFIG_MAHESH471978.exists())
+
+        gitconfig_content = LOCAL_GITCONFIG.read_text()
+        self.assertIn("maheshghamand@gmail.com", gitconfig_content)
+        self.assertIn('[includeIf "gitdir:/root/intrifund/"]', gitconfig_content)
+        self.assertIn("path = ~/.gitconfig-mahesh471978", gitconfig_content)
+
+        secondary_content = LOCAL_GITCONFIG_MAHESH471978.read_text()
+        self.assertIn("mahesh471978@gmail.com", secondary_content)
+
+        startup_content = self.startup_sh_path.read_text()
+        self.assertNotIn('git config --global user.email', startup_content)
+        self.assertNotIn('git config --global user.name', startup_content)
+
 
 if __name__ == "__main__":
     unittest.main()
