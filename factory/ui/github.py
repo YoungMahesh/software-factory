@@ -1443,4 +1443,30 @@ def commit_approved_adr_to_branch(
         raise RuntimeError(f"Error committing approved ADR to branch '{branch}': {e}")
 
 
+def fetch_repo_branches(repo_name: str, token: str | None = None) -> list[str]:
+    """Fetches remote branches for a repository, filtering to default branch and factory/* branches."""
+    token = token or get_test_org_token()
+    clean_repo = repo_name.strip().split("/")[-1]
+    org = DEFAULT_TEST_ORG
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
+    try:
+        url = f"https://api.github.com/repos/{org}/{clean_repo}/branches?per_page=100"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                branch_items = resp.json()
+                if isinstance(branch_items, list):
+                    branch_names = [b.get("name") for b in branch_items if isinstance(b, dict) and b.get("name")]
+                    candidates = [b for b in branch_names if b in ("main", "master") or b.startswith("factory/")]
+                    default_first = [b for b in candidates if b in ("main", "master")]
+                    others = sorted([b for b in candidates if b not in ("main", "master")])
+                    return default_first + others
+    except Exception:
+        pass
+    return ["main"]

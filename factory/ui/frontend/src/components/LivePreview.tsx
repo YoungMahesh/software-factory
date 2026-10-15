@@ -14,6 +14,7 @@ import {
   ChevronDown,
   AlertTriangle,
   Check,
+  RefreshCw,
   Lock,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
@@ -42,6 +43,8 @@ interface LivePreviewProps {
   onRefresh?: () => void;
   refreshKey?: number;
   isLaunching?: boolean;
+  isSyncing?: boolean;
+  onSync?: () => void;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
@@ -66,6 +69,8 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   onRefresh,
   refreshKey,
   isLaunching = false,
+  isSyncing = false,
+  onSync,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -257,116 +262,159 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           </button>
         </div>
 
-        {/* Static Branch Pill (when no switch handler and no candidate branches are provided) */}
-        {currentBranch && !isInteractive && (
-          <div
-            data-testid="preview-branch-badge"
-            id="preview-branch-badge"
-            className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
-          >
-            <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
-            <span className="truncate max-w-[140px]">{currentBranch}</span>
-          </div>
-        )}
-
-        {/* Live Preview Branch Selector Dropdown */}
-        {currentBranch && isInteractive && (
-          <div className="relative shrink-0" ref={dropdownRef} onKeyDown={handleKeyDown}>
-            <button
-              ref={triggerRef}
+        {/* Active Branch Badge / Dropdown & Trunk Synchronization Button */}
+        <div className="flex items-center space-x-1.5 shrink-0">
+          {/* Static Branch Pill (when no switch handler and no candidate branches are provided) */}
+          {currentBranch && !isInteractive && (
+            <div
               data-testid="preview-branch-badge"
               id="preview-branch-badge"
-              type="button"
-              onClick={() => {
-                if (!isLocked && !isSwitching && availableBranches.length > 0) {
-                  setIsDropdownOpen((prev) => !prev);
-                  setHighlightedIndex(-1);
+              className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
+            >
+              <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
+              <span className="truncate max-w-[140px]">{currentBranch}</span>
+            </div>
+          )}
+
+          {/* Live Preview Branch Selector Dropdown */}
+          {currentBranch && isInteractive && (
+            <div className="relative shrink-0" ref={dropdownRef} onKeyDown={handleKeyDown}>
+              <button
+                ref={triggerRef}
+                data-testid="preview-branch-badge"
+                id="preview-branch-badge"
+                type="button"
+                onClick={() => {
+                  if (!isLocked && !isSwitching && availableBranches.length > 0) {
+                    setIsDropdownOpen((prev) => !prev);
+                    setHighlightedIndex(-1);
+                  }
+                }}
+                disabled={isLocked || isSwitching}
+                title={
+                  isLocked
+                    ? (lockTooltip || "Branch switching is disabled while an Assembly Line Pipeline job is active")
+                    : isSwitching
+                    ? "Switching branch..."
+                    : "Switch preview branch"
                 }
-              }}
-              disabled={isLocked || isSwitching}
+                aria-haspopup="listbox"
+                aria-expanded={isDropdownOpen}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border text-[11px] font-mono shrink-0 transition-all ${
+                  isLocked
+                    ? "border-amber-900/60 text-amber-400 bg-amber-950/20 cursor-not-allowed opacity-80"
+                    : isSwitching
+                    ? "border-indigo-800 text-indigo-300 bg-indigo-950/30 cursor-wait opacity-80"
+                    : "border-slate-800 text-indigo-300 hover:border-indigo-600 hover:text-indigo-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                }`}
+              >
+                {isSwitching ? (
+                  <Loader2 className="w-3 h-3 text-indigo-400 animate-spin shrink-0" data-testid="preview-branch-spinner" />
+                ) : (
+                  <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
+                )}
+                <span className="truncate max-w-[140px]">{currentBranch}</span>
+                {isLocked ? (
+                  <Lock className="w-3 h-3 text-amber-400 shrink-0" data-testid="preview-branch-lock-icon" />
+                ) : isSwitching ? null : (
+                  <ChevronDown
+                    className={`w-3 h-3 text-slate-400 shrink-0 transition-transform duration-150 ${
+                      isDropdownOpen ? "rotate-180 text-indigo-300" : ""
+                    }`}
+                    data-testid="preview-branch-chevron"
+                  />
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && !isLocked && !isSwitching && (
+                <div
+                  role="listbox"
+                  id="preview-branch-menu"
+                  data-testid="preview-branch-dropdown"
+                  className="absolute left-0 mt-1.5 w-64 bg-slate-900 border border-slate-700/80 rounded-lg shadow-2xl py-1 z-50 overflow-hidden"
+                >
+                  <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/80">
+                    Switch Branch
+                  </div>
+                  <div className="max-h-60 overflow-y-auto py-1">
+                    {availableBranches.map((candidateBranch, idx) => {
+                      const isActive = candidateBranch === currentBranch;
+                      return (
+                        <button
+                          key={candidateBranch}
+                          role="option"
+                          aria-selected={isActive}
+                          data-testid={`preview-branch-option-${candidateBranch}`}
+                          onClick={() => handleBranchSelect(candidateBranch)}
+                          onMouseEnter={() => setHighlightedIndex(idx)}
+                          className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-mono text-left transition-colors ${
+                            highlightedIndex === idx
+                              ? "bg-slate-800 text-slate-100"
+                              : "text-slate-300 hover:bg-slate-800/60"
+                          } ${isActive ? "text-indigo-400 font-semibold" : ""}`}
+                        >
+                          <div className="flex items-center space-x-2 truncate mr-2">
+                            <GitBranch className={`w-3 h-3 shrink-0 ${isActive ? "text-indigo-400" : "text-slate-500"}`} />
+                            <span className="truncate">{candidateBranch}</span>
+                            {candidateBranch === "main" && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-sans border border-slate-700">
+                                default
+                              </span>
+                            )}
+                          </div>
+                          {isActive && (
+                            <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" data-testid="preview-branch-check" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Trunk Synchronization Action Button */}
+          {onSync && (
+            <button
+              data-testid="sync-preview-btn"
+              id="btn-preview-sync"
+              type="button"
+              onClick={onSync}
+              disabled={isSyncing || isLocked || !onSync}
+              className={`p-1.5 rounded-lg border text-xs transition-colors flex items-center justify-center shrink-0 ${
+                isLocked
+                  ? "bg-slate-950/80 border-slate-800/80 text-slate-500 cursor-not-allowed"
+                  : isSyncing
+                  ? "bg-indigo-950/40 border-indigo-800/60 text-indigo-400 cursor-wait"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              } disabled:opacity-50`}
               title={
                 isLocked
-                  ? (lockTooltip || "Branch switching is disabled while an Assembly Line Pipeline job is active")
-                  : isSwitching
-                  ? "Switching branch..."
-                  : "Switch preview branch"
+                  ? "Cannot synchronize while an assembly line job is active"
+                  : isSyncing
+                  ? "Synchronizing with remote..."
+                  : "Pull latest from remote"
               }
-              aria-haspopup="listbox"
-              aria-expanded={isDropdownOpen}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border text-[11px] font-mono shrink-0 transition-all ${
+              aria-label={
                 isLocked
-                  ? "border-amber-900/60 text-amber-400 bg-amber-950/20 cursor-not-allowed opacity-80"
-                  : isSwitching
-                  ? "border-indigo-800 text-indigo-300 bg-indigo-950/30 cursor-wait opacity-80"
-                  : "border-slate-800 text-indigo-300 hover:border-indigo-600 hover:text-indigo-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              }`}
+                  ? "Cannot synchronize while an assembly line job is active"
+                  : isSyncing
+                  ? "Synchronizing with remote..."
+                  : "Pull latest from remote"
+              }
             >
-              {isSwitching ? (
-                <Loader2 className="w-3 h-3 text-indigo-400 animate-spin shrink-0" data-testid="preview-branch-spinner" />
-              ) : (
-                <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
-              )}
-              <span className="truncate max-w-[140px]">{currentBranch}</span>
               {isLocked ? (
-                <Lock className="w-3 h-3 text-amber-400 shrink-0" data-testid="preview-branch-lock-icon" />
-              ) : isSwitching ? null : (
-                <ChevronDown
-                  className={`w-3 h-3 text-slate-400 shrink-0 transition-transform duration-150 ${
-                    isDropdownOpen ? "rotate-180 text-indigo-300" : ""
-                  }`}
-                  data-testid="preview-branch-chevron"
-                />
+                <Lock className="w-3 h-3 text-amber-500/80" data-testid="sync-lock-icon" />
+              ) : isSyncing ? (
+                <Loader2 className="w-3 h-3 animate-spin text-indigo-400" data-testid="sync-loading-spinner" />
+              ) : (
+                <RefreshCw className="w-3 h-3 text-indigo-400 hover:text-indigo-300" data-testid="sync-icon" />
               )}
             </button>
-
-            {/* Dropdown Menu */}
-            {isDropdownOpen && !isLocked && !isSwitching && (
-              <div
-                role="listbox"
-                id="preview-branch-menu"
-                data-testid="preview-branch-dropdown"
-                className="absolute left-0 mt-1.5 w-64 bg-slate-900 border border-slate-700/80 rounded-lg shadow-2xl py-1 z-50 overflow-hidden"
-              >
-                <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/80">
-                  Switch Branch
-                </div>
-                <div className="max-h-60 overflow-y-auto py-1">
-                  {availableBranches.map((candidateBranch, idx) => {
-                    const isActive = candidateBranch === currentBranch;
-                    return (
-                      <button
-                        key={candidateBranch}
-                        role="option"
-                        aria-selected={isActive}
-                        data-testid={`preview-branch-option-${candidateBranch}`}
-                        onClick={() => handleBranchSelect(candidateBranch)}
-                        onMouseEnter={() => setHighlightedIndex(idx)}
-                        className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-mono text-left transition-colors ${
-                          highlightedIndex === idx
-                            ? "bg-slate-800 text-slate-100"
-                            : "text-slate-300 hover:bg-slate-800/60"
-                        } ${isActive ? "text-indigo-400 font-semibold" : ""}`}
-                      >
-                        <div className="flex items-center space-x-2 truncate mr-2">
-                          <GitBranch className={`w-3 h-3 shrink-0 ${isActive ? "text-indigo-400" : "text-slate-500"}`} />
-                          <span className="truncate">{candidateBranch}</span>
-                          {candidateBranch === "main" && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-sans border border-slate-700">
-                              default
-                            </span>
-                          )}
-                        </div>
-                        {isActive && (
-                          <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" data-testid="preview-branch-check" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {/* URL Address Bar */}
         <div className="flex-1 max-w-md mx-3">

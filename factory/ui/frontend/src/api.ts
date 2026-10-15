@@ -258,6 +258,64 @@ export function getPreviewStreamUrl(repo: string): string {
   return `/api/studio/repos/${encodeURIComponent(repo)}/preview/stream`;
 }
 
+export interface PreviewSyncResult {
+  success: boolean;
+  branch: string;
+  commit?: string | null;
+  updated: boolean;
+  message?: string;
+}
+
+export async function syncPreview(
+  repo: string,
+  branch?: string
+): Promise<PreviewSyncResult> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ branch }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to synchronize preview: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export interface PreviewBranchResult {
+  success: boolean;
+  branch: string;
+  commit?: string | null;
+  updated: boolean;
+}
+
+export async function switchPreviewBranch(
+  repo: string,
+  branch: string
+): Promise<PreviewBranchResult> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/branch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ branch }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to switch preview branch: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchRepoBranches(
+  repo: string
+): Promise<{ repo: string; branches: string[] }> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/branches`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch branches: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function fetchChatMessages(
   repo: string
 ): Promise<{ repo: string; messages: DbChatMessage[] }> {
