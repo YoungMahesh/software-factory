@@ -310,3 +310,8 @@ _Avoid_: Branch pill, branch toggle, git dropdown, preview branch switcher
 **Trunk Synchronization**:
 An interactive and in-place container git orchestration mechanism in Factory Studio that synchronizes the Unified Studio Sandbox with the default trunk branch (`main`), pulling latest remote commits via `sandbox.exec`, resolving dependency drift, and refreshing the Live Preview without container restart.
 _Avoid_: Auto-pull, git sync daemon, background fetcher, main updater
+
+**Turn Rollback**:
+The atomic reversal of a completed code-producing conversational turn in Factory Studio, reverting its feature branch commit, synchronizing the Unified Studio Sandbox dev server in place, reopening the associated work item, and recording an append-only rollback event in Studio Chat History.
+_Avoid_: Undo turn, revert version, turn reset, conversational rewind
+
