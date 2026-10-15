@@ -303,4 +303,9 @@ _Avoid_: Prompt log, conversation memory, message cache
 A durable database record capturing structured events (stage transitions, tool invocations, model reasoning deltas) and standard output console streams emitted during Assembly Line Pipeline execution, indexed by Job ID.
 _Avoid_: Run log, container output, worker debug
 
+**Live Preview Branch Selector**:
+An interactive dropdown control in the Factory Studio Live Preview toolbar displaying the active Git branch and allowing developers to switch between `main` and active `factory/<feature>` branches in place via `sandbox.exec` without container teardown.
+_Avoid_: Branch pill, branch toggle, git dropdown, preview branch switcher
+
+
 
