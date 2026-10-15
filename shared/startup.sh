@@ -345,7 +345,7 @@ if [ "${ENABLE_MODAL:-}" = "1" ]; then
     VENV_DIR="$TARGET_DIR/.venv"
     if [ ! -d "$VENV_DIR" ]; then
         echo "⚡ Creating virtual environment at $VENV_DIR..."
-        python3 -m venv "$VENV_DIR"
+        uv venv --seed "$VENV_DIR"
     fi
 
     grep -qxF "source $VENV_DIR/bin/activate" ~/.bashrc 2>/dev/null || echo "source $VENV_DIR/bin/activate" >> ~/.bashrc
@@ -360,7 +360,7 @@ EOF
     chmod +x /etc/profile.d/python-venv.sh 2>/dev/null || true
 
     echo "⚡ Installing Modal client package into .venv..."
-    "$VENV_DIR/bin/pip" install --quiet modal
+    uv pip install --python "$VENV_DIR/bin/python" --quiet modal
 
     # Quick verification banner
     PYTHON_VER=$("$VENV_DIR/bin/python3" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
@@ -566,7 +566,7 @@ if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
 
     if [ "${ENABLE_MODAL:-}" = "1" ] && [ -f "requirements.txt" ]; then
         echo "📦 Installing Python dependencies from requirements.txt into .venv..."
-        "$TARGET_DIR/.venv/bin/pip" install -r requirements.txt
+        uv pip install --python "$TARGET_DIR/.venv/bin/python" -r requirements.txt
     fi
 else
     echo "♻️  Resuming from filesystem snapshot: skipping git clone and package installation."

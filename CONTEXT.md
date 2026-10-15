@@ -119,7 +119,7 @@ A set of API keys and remote service tokens (`OPENCODE_GO_API_KEY`, `EXA_API_KEY
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 **Shared Base Image**:
-A cached Modal image definition built on Ubuntu 24.04 providing the foundational filesystem for both Standard Sandboxes and VM Sandboxes, pre-baked with common tooling including SSH server, SOPS, age, Git, ripgrep, Docker CLI binaries (including Buildx and Compose v2), Node.js 24, and pnpm.
+A cached Modal image definition built on Ubuntu 24.04 providing the foundational filesystem for both Standard Sandboxes and VM Sandboxes, pre-baked with common tooling including SSH server, SOPS, age, Git, ripgrep, tree, lsof, psmisc, fd, Python 3 (with venv and uv), Docker CLI binaries (including Buildx and Compose v2), Node.js 24, and pnpm.
 _Avoid_: Base container, root image, runner image
 
 **Browser Tooling**:

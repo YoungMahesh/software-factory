@@ -94,6 +94,14 @@ base_image = (
         "unzip",
         "ripgrep",
         "age",
+        "tree",
+        "lsof",
+        "psmisc",
+        "fd-find",
+        "python3",
+        "python3-pip",
+        "python3-venv",
+        "python-is-python3",
     )
     .run_commands(
         # Install Node.js 24 and pnpm at image build time
@@ -107,6 +115,12 @@ base_image = (
         # Install Cloudflared
         "curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared",
         "chmod +x /usr/local/bin/cloudflared",
+        # Install Astral uv and uvx
+        "curl -fsSL https://astral.sh/uv/install.sh | env UV_INSTALL_DIR='/usr/local/bin' sh",
+        # Symlink fd-find to fd
+        "ln -sf /usr/bin/fdfind /usr/local/bin/fd",
+        # Configure global pip defaults to allow non-venv installs when needed
+        "mkdir -p /etc && printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
         # Configure SSH daemon
         "mkdir -p /run/sshd /root/.ssh /etc/ssh/sshd_config.d",
         "echo 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/modal.conf",
@@ -226,12 +240,6 @@ def build_sandbox_image(
         )
 
     if modal_tooling:
-        image = image.apt_install(
-            "python3", "python3-pip", "python3-venv", "python-is-python3"
-        ).run_commands(
-            "mkdir -p /etc",
-            "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
-        )
         image = add_local_files_if_present(
             image,
             [
