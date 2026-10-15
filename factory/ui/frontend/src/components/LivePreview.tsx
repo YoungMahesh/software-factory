@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Monitor,
   Tablet,
@@ -13,6 +13,8 @@ import {
   Terminal,
   ChevronDown,
   AlertTriangle,
+  Check,
+  Lock,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
 import { PreviewProgressStepper } from "./PreviewProgressStepper";
@@ -23,6 +25,14 @@ interface LivePreviewProps {
   status?: PreviewStatus;
   stage?: PreviewStage;
   branch?: string | null;
+  branches?: string[];
+  availableBranches?: string[];
+  onSelectBranch?: (branch: string) => Promise<void> | void;
+  onSwitchBranch?: (branch: string) => Promise<void> | void;
+  isSwitchingBranch?: boolean;
+  isConcurrencyLocked?: boolean;
+  isJobActive?: boolean;
+  lockTooltip?: string;
   logs?: string[];
   errorMessage?: string | null;
   onLaunchPreview?: () => void;
@@ -39,6 +49,14 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   status = "IDLE",
   stage = "IDLE",
   branch = null,
+  branches = [],
+  availableBranches: availableBranchesProp,
+  onSelectBranch,
+  onSwitchBranch,
+  isSwitchingBranch = false,
+  isConcurrencyLocked = false,
+  isJobActive = false,
+  lockTooltip,
   logs = [],
   errorMessage = null,
   onLaunchPreview,
@@ -52,6 +70,101 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [isLogsDrawerOpen, setIsLogsDrawerOpen] = useState<boolean>(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const [isLocalSwitching, setIsLocalSwitching] = useState<boolean>(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const switchBranchFn = onSwitchBranch || onSelectBranch;
+  const isLocked = Boolean(isJobActive || isConcurrencyLocked);
+  const candidateBranches = availableBranchesProp && availableBranchesProp.length > 0
+    ? availableBranchesProp
+    : branches;
+  const currentBranch = branch || (candidateBranches.length > 0 ? candidateBranches[0] : null);
+  const isSwitching = isSwitchingBranch || isLocalSwitching;
+  const isInteractive = Boolean(
+    switchBranchFn ||
+    candidateBranches.length > 0 ||
+    isSwitching ||
+    isLocked
+  );
+
+  // Build sorted branch list: active branch first, then main, then others alphabetically
+  const availableBranches = useMemo(() => {
+    const list = Array.from(
+      new Set(candidateBranches.length > 0 ? candidateBranches : currentBranch ? [currentBranch] : [])
+    );
+    return list.sort((a, b) => {
+      if (a === currentBranch) return -1;
+      if (b === currentBranch) return 1;
+      if (a === "main") return -1;
+      if (b === "main") return 1;
+      return a.localeCompare(b);
+    });
+  }, [candidateBranches, currentBranch]);
+
+  // Click-away listener to close dropdown
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDropdownOpen]);
+
+  const handleBranchSelect = async (targetBranch: string) => {
+    setIsDropdownOpen(false);
+    setHighlightedIndex(-1);
+    if (targetBranch === currentBranch && !isSwitching) return;
+
+    setIsLocalSwitching(true);
+    try {
+      if (switchBranchFn) {
+        await switchBranchFn(targetBranch);
+      }
+      setReloadKey((prev) => prev + 1);
+      if (onRefresh) {
+        onRefresh();
+      }
+    } finally {
+      setIsLocalSwitching(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isConcurrencyLocked || isSwitching) return;
+
+    if (!isDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setIsDropdownOpen(true);
+        setHighlightedIndex(0);
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setIsDropdownOpen(false);
+      setHighlightedIndex(-1);
+      triggerRef.current?.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % availableBranches.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 + availableBranches.length) % availableBranches.length);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < availableBranches.length) {
+        handleBranchSelect(availableBranches[highlightedIndex]);
+      }
+    }
+  };
 
   // Auto-expand logs drawer on failure
   useEffect(() => {
@@ -144,15 +257,114 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           </button>
         </div>
 
-        {/* Active Branch Badge */}
-        {branch && (
+        {/* Static Branch Pill (when no switch handler and no candidate branches are provided) */}
+        {currentBranch && !isInteractive && (
           <div
             data-testid="preview-branch-badge"
             id="preview-branch-badge"
             className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
           >
-            <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" />
-            <span className="truncate max-w-[140px]">{branch}</span>
+            <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
+            <span className="truncate max-w-[140px]">{currentBranch}</span>
+          </div>
+        )}
+
+        {/* Live Preview Branch Selector Dropdown */}
+        {currentBranch && isInteractive && (
+          <div className="relative shrink-0" ref={dropdownRef} onKeyDown={handleKeyDown}>
+            <button
+              ref={triggerRef}
+              data-testid="preview-branch-badge"
+              id="preview-branch-badge"
+              type="button"
+              onClick={() => {
+                if (!isLocked && !isSwitching && availableBranches.length > 0) {
+                  setIsDropdownOpen((prev) => !prev);
+                  setHighlightedIndex(-1);
+                }
+              }}
+              disabled={isLocked || isSwitching}
+              title={
+                isLocked
+                  ? (lockTooltip || "Branch switching is disabled while an Assembly Line Pipeline job is active")
+                  : isSwitching
+                  ? "Switching branch..."
+                  : "Switch preview branch"
+              }
+              aria-haspopup="listbox"
+              aria-expanded={isDropdownOpen}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border text-[11px] font-mono shrink-0 transition-all ${
+                isLocked
+                  ? "border-amber-900/60 text-amber-400 bg-amber-950/20 cursor-not-allowed opacity-80"
+                  : isSwitching
+                  ? "border-indigo-800 text-indigo-300 bg-indigo-950/30 cursor-wait opacity-80"
+                  : "border-slate-800 text-indigo-300 hover:border-indigo-600 hover:text-indigo-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              }`}
+            >
+              {isSwitching ? (
+                <Loader2 className="w-3 h-3 text-indigo-400 animate-spin shrink-0" data-testid="preview-branch-spinner" />
+              ) : (
+                <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" data-testid="preview-branch-icon" />
+              )}
+              <span className="truncate max-w-[140px]">{currentBranch}</span>
+              {isLocked ? (
+                <Lock className="w-3 h-3 text-amber-400 shrink-0" data-testid="preview-branch-lock-icon" />
+              ) : isSwitching ? null : (
+                <ChevronDown
+                  className={`w-3 h-3 text-slate-400 shrink-0 transition-transform duration-150 ${
+                    isDropdownOpen ? "rotate-180 text-indigo-300" : ""
+                  }`}
+                  data-testid="preview-branch-chevron"
+                />
+              )}
+            </button>
+
+            {/* Dropdown Menu */}
+            {isDropdownOpen && !isLocked && !isSwitching && (
+              <div
+                role="listbox"
+                id="preview-branch-menu"
+                data-testid="preview-branch-dropdown"
+                className="absolute left-0 mt-1.5 w-64 bg-slate-900 border border-slate-700/80 rounded-lg shadow-2xl py-1 z-50 overflow-hidden"
+              >
+                <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/80">
+                  Switch Branch
+                </div>
+                <div className="max-h-60 overflow-y-auto py-1">
+                  {availableBranches.map((candidateBranch, idx) => {
+                    const isActive = candidateBranch === currentBranch;
+                    return (
+                      <button
+                        key={candidateBranch}
+                        role="option"
+                        aria-selected={isActive}
+                        data-testid={`preview-branch-option-${candidateBranch}`}
+                        onClick={() => handleBranchSelect(candidateBranch)}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-mono text-left transition-colors ${
+                          highlightedIndex === idx
+                            ? "bg-slate-800 text-slate-100"
+                            : "text-slate-300 hover:bg-slate-800/60"
+                        } ${isActive ? "text-indigo-400 font-semibold" : ""}`}
+                      >
+                        <div className="flex items-center space-x-2 truncate mr-2">
+                          <GitBranch className={`w-3 h-3 shrink-0 ${isActive ? "text-indigo-400" : "text-slate-500"}`} />
+                          <span className="truncate">{candidateBranch}</span>
+                          {candidateBranch === "main" && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-sans border border-slate-700">
+                              default
+                            </span>
+                          )}
+                        </div>
+                        {isActive && (
+                          <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" data-testid="preview-branch-check" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

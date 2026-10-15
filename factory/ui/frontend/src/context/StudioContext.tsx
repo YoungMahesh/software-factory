@@ -39,6 +39,9 @@ export interface StudioContextValue {
   isIssueDrawerOpen?: boolean;
   onInstantDispatch?: (params: StudioDispatchParams) => Promise<StudioDispatchResponse | void>;
   isDispatching?: boolean;
+  branches?: string[];
+  onSelectBranch?: (branch: string) => Promise<void> | void;
+  isSwitchingBranch?: boolean;
 }
 
 const StudioContext = createContext<StudioContextValue | undefined>(undefined);

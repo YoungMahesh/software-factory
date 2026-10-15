@@ -8,6 +8,8 @@ import {
   useClearChatMessagesMutation,
   useStudioIssuesQuery,
   useDispatchStudioMutation,
+  useRepoBranchesQuery,
+  useUpdatePreviewBranchMutation,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -19,6 +21,8 @@ vi.mock("../api", async (importOriginal) => {
     clearChatMessages: vi.fn(),
     fetchIssues: vi.fn(),
     dispatchStudio: vi.fn(),
+    fetchRepoBranches: vi.fn(),
+    updatePreviewBranch: vi.fn(),
   };
 });
 
@@ -169,4 +173,52 @@ describe("useStudioQueries - Chat Messages", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.issues("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.messages("my-app") });
   });
+
+  it("defines studioQueryKeys.branches(repo)", () => {
+    expect(studioQueryKeys.branches("my-app")).toEqual(["studio", "branches", "my-app"]);
+  });
+
+  it("fetches branches via useRepoBranchesQuery", async () => {
+    const mockData = {
+      repo: "my-app",
+      org: "software-factory-09-test",
+      branches: ["main", "factory/feature-1"],
+      default_branch: "main",
+    };
+    vi.mocked(api.fetchRepoBranches).mockResolvedValue(mockData);
+
+    const { result } = renderHook(() => useRepoBranchesQuery("my-app"), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.fetchRepoBranches).toHaveBeenCalledWith("my-app");
+    expect(result.current.data).toEqual(mockData);
+  });
+
+  it("updates preview branch and invalidates query caches via useUpdatePreviewBranchMutation", async () => {
+    const mockRes = {
+      repo: "my-app",
+      branch: "factory/feature-1",
+      status: "SERVING",
+      preview_url: "https://sandbox-preview.modal.host",
+      in_place: true,
+      success: true,
+    };
+    vi.mocked(api.updatePreviewBranch).mockResolvedValue(mockRes);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useUpdatePreviewBranchMutation(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ repo: "my-app", branch: "factory/feature-1" });
+    });
+
+    expect(api.updatePreviewBranch).toHaveBeenCalledWith("my-app", "factory/feature-1");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.branches("my-app") });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.preview("my-app") });
+  });
 });
+

@@ -23,6 +23,8 @@ vi.mock("./api", () => ({
   fetchChatMessages: vi.fn(),
   clearChatMessages: vi.fn(),
   dispatchStudio: vi.fn(),
+  fetchRepoBranches: vi.fn(),
+  updatePreviewBranch: vi.fn(),
 }));
 
 class MockEventSource {
@@ -80,6 +82,36 @@ describe("App Root Component", () => {
       repo: "my-app",
       deleted: 0,
       success: true,
+    });
+    vi.mocked(api.fetchRepoBranches).mockResolvedValue({
+      repo: "my-app",
+      org: "software-factory-09-test",
+      branches: ["main", "factory/feature-checkout"],
+      default_branch: "main",
+    });
+    vi.mocked(api.updatePreviewBranch).mockImplementation(async (repo: string, branch: string) => {
+      vi.mocked(api.fetchPreview).mockResolvedValue({
+        repo,
+        status: "SERVING",
+        stage: "SERVING",
+        branch,
+        preview_url: "https://sb-1-3000.modal.host",
+        sandbox_id: "sb-1",
+        created_at: Date.now(),
+        started_at: Date.now(),
+        ended_at: null,
+        error_message: null,
+        logs: ["Vite dev server running on port 3000"],
+        log_count: 1,
+      });
+      return {
+        repo,
+        branch,
+        status: "SERVING",
+        preview_url: "https://sb-1-3000.modal.host",
+        in_place: true,
+        success: true,
+      };
     });
   });
 
@@ -734,6 +766,34 @@ describe("App Root Component", () => {
 
     // 6. Live preview updates
     expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/v1-landing-page");
+  });
+
+  it("renders Live Preview Branch Selector, switches branch via dropdown, and updates preview", async () => {
+    render(<App />);
+
+    // 1. Wait for repos and initial preview to load
+    await waitFor(() => {
+      expect(screen.getByTestId("preview-branch-badge")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/feature-checkout");
+
+    // 2. Open branch dropdown
+    fireEvent.click(screen.getByTestId("preview-branch-badge"));
+    expect(await screen.findByTestId("preview-branch-dropdown")).toBeInTheDocument();
+
+    // 3. Select 'main' branch
+    const mainOption = screen.getByTestId("preview-branch-option-main");
+    fireEvent.click(mainOption);
+
+    // 4. Verify updatePreviewBranch called
+    await waitFor(() => {
+      expect(api.updatePreviewBranch).toHaveBeenCalledWith("my-app", "main");
+    });
+
+    // 5. Verify branch badge reflects main branch
+    await waitFor(() => {
+      expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("main");
+    });
   });
 });
 

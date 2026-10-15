@@ -39,6 +39,9 @@ export const createDefaultStudioContext = (
   onCloseIssueDrawer: vi.fn(),
   onInstantDispatch: vi.fn().mockResolvedValue(undefined),
   isDispatching: false,
+  branches: undefined,
+  onSelectBranch: undefined,
+  isSwitchingBranch: false,
   ...overrides,
 });
 
