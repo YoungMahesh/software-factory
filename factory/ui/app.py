@@ -31,6 +31,9 @@ from factory.ui.github import (
     synthesize_and_create_issue,
     validate_github_repo_name,
     normalize_milestone_slug,
+    fetch_repo_pull_requests,
+    merge_repo_pull_request,
+    PullRequestMergeError,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
@@ -96,6 +99,11 @@ class StudioDispatchRequest(BaseModel):
     milestone_title: str | None = Field(None, description="Optional milestone title")
     model: str = Field("deepseek-v4.1-flash", description="Model identifier")
     vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
+
+
+class MergePullRequestRequest(BaseModel):
+    commit_title: str | None = Field(None, description="Optional custom squash commit title")
+    commit_message: str | None = Field(None, description="Optional custom squash commit message")
 
 
 def create_app(
@@ -562,6 +570,90 @@ def create_app(
             raise HTTPException(status_code=400, detail="Repository name is required.")
         deleted = db.delete_chat_messages(clean_repo)
         return {"repo": clean_repo, "deleted": deleted, "success": True}
+
+    @app.get("/api/studio/repos/{repo}/pulls")
+    async def get_studio_pull_requests(
+        repo: str,
+        branch: str | None = None,
+        state: str = "all",
+    ):
+        clean_repo = repo.strip() if repo else ""
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        pulls = fetch_repo_pull_requests(clean_repo, branch=branch, state=state)
+        return {
+            "repo": clean_repo,
+            "pulls": pulls,
+            "pull_requests": pulls,
+        }
+
+    @app.post("/api/studio/repos/{repo}/pulls/{pull_number}/merge")
+    async def merge_studio_pull_request(
+        repo: str,
+        pull_number: int,
+        req: MergePullRequestRequest | None = None,
+    ):
+        clean_repo = repo.strip() if repo else ""
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        # Merging is strictly disabled while the Assembly Line is actively executing
+        active_jobs = [
+            j for j in registry.list_jobs()
+            if j.get("repo") == clean_repo and j.get("status") == "RUNNING"
+        ]
+        if active_jobs:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot merge pull request #{pull_number} while an assembly line job is actively running for repository '{clean_repo}'.",
+            )
+
+        commit_title = req.commit_title if req else None
+        commit_message = req.commit_message if req else None
+
+        try:
+            merge_res = merge_repo_pull_request(
+                repo_name=clean_repo,
+                pull_number=pull_number,
+                commit_title=commit_title,
+                commit_message=commit_message,
+            )
+        except PullRequestMergeError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to merge pull request #{pull_number}: {e}")
+
+        # Post-merge live preview sandbox synchronization
+        preview_synced = preview_reg.sync_sandbox_to_main(clean_repo)
+
+        # Record a structured delivery gate merge card in SQLite chat_messages table
+        card_content = f"Merged Feature Pull Request #{pull_number} into main. Live preview synchronized."
+        turn_data = {
+            "type": "delivery_gate",
+            "status": "merged",
+            "merged": True,
+            "pull_number": pull_number,
+            "sha": merge_res.get("sha"),
+            "branch": merge_res.get("branch"),
+            "commit_title": merge_res.get("commit_title"),
+            "commit_message": merge_res.get("commit_message"),
+            "preview_synced": preview_synced,
+            "result": merge_res,
+        }
+
+        db.save_chat_message(
+            repo=clean_repo,
+            role="assistant",
+            content=card_content,
+            turn_data=turn_data,
+        )
+
+        return {
+            "accepted": True,
+            "merged": True,
+            "result": merge_res,
+            "preview_synced": preview_synced,
+        }
 
     @app.post("/api/studio/repos/{repo}/preview", status_code=201)
     async def launch_preview_endpoint(repo: str, req: LaunchPreviewRequest | None = None):

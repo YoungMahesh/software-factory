@@ -977,6 +977,47 @@ class PreviewRegistry:
                     seen_previews.add(id(preview))
                     self._broadcast(preview, {"event": "preview_refresh", "repo": r})
 
+    def sync_sandbox_to_main(self, repo: str) -> bool:
+        """Synchronizes active Unified Studio Sandbox to main post-merge.
+
+        Executes git reset --hard && git clean -fd && git checkout main && git pull origin main
+        inside the running sandbox via sandbox.exec, updating preview registry branch state to main.
+        """
+        clean_repo = repo.strip()
+        sandbox, _ = self.get_active_sandbox(clean_repo)
+        if sandbox is None:
+            with self._lock:
+                preview = self._previews.get(clean_repo)
+                if preview:
+                    preview.branch = "main"
+                    self._persist_preview(preview)
+            return False
+
+        bare_repo = clean_repo.split("/")[-1]
+        workspace_dir = f"/root/{bare_repo}"
+        exec_cmd = (
+            f"cd {workspace_dir} && "
+            "git reset --hard && "
+            "git clean -fd && "
+            "git checkout main && "
+            "git pull origin main"
+        )
+
+        try:
+            process = sandbox.exec("bash", "-c", exec_cmd)
+            if hasattr(process, "wait"):
+                try:
+                    process.wait()
+                except TypeError:
+                    process.wait(raise_on_termination=False)
+        except Exception as e:
+            logger.warning(f"Failed to sync sandbox for {repo} to main: {e}")
+            return False
+
+        self.update_branch(clean_repo, "main")
+        self.broadcast_refresh(clean_repo)
+        return True
+
     def _set_stage(self, preview: PreviewState, stage: PreviewStage) -> None:
         """Updates preview stage if changed and broadcasts stage transition event."""
         current_rank = PREVIEW_STAGE_ORDER.get(preview.stage, 0)

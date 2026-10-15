@@ -32,11 +32,15 @@ from factory.ui.github import (
     synthesize_ticket_content,
     synthesize_and_create_issue,
     _normalize_github_issue,
+    fetch_repo_pull_requests,
+    merge_repo_pull_request,
+    PullRequestMergeError,
 )
 from factory.ui.guard import (
     evaluate_prompt_intent,
     IntentGuardResult,
 )
+from factory.ui.db import StudioDatabase
 from factory.ui.registry import (
     JobRegistry,
     JobStage,
@@ -3381,6 +3385,434 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
             self.assertEqual(card["turn_data"]["issue_number"], 77)
             self.assertIsNone(card["turn_data"]["milestone_slug"])
             self.assertEqual(card["turn_data"]["target_branch"], "factory/issue-77")
+
+
+class TestGitHubPullRequestsClient(unittest.TestCase):
+    """Test suite for GitHub pull request discovery and merge operations in factory/ui/github.py."""
+
+    def test_fetch_repo_pull_requests_normalized_statuses(self):
+        raw_prs = [
+            {
+                "id": 101,
+                "number": 1,
+                "title": "feat(inventory): add items table",
+                "body": "Resolves initial inventory schema.\n\nFixes #1: Setup schema",
+                "state": "open",
+                "draft": True,
+                "merged_at": None,
+                "mergeable": True,
+                "mergeable_state": "clean",
+                "html_url": "https://github.com/software-factory-09-test/inventory-app/pull/1",
+                "head": {"ref": "factory/inventory-v1"},
+                "base": {"ref": "main"},
+                "created_at": "2026-10-15T01:00:00Z",
+                "updated_at": "2026-10-15T01:10:00Z",
+            },
+            {
+                "id": 102,
+                "number": 2,
+                "title": "feat(inventory): add inventory dashboard",
+                "body": "## Resolved Work Items\n- Fixes #2: Add metrics\n- Fixes #3: Add charts",
+                "state": "open",
+                "draft": False,
+                "merged_at": None,
+                "mergeable": True,
+                "mergeable_state": "clean",
+                "html_url": "https://github.com/software-factory-09-test/inventory-app/pull/2",
+                "head": {"ref": "factory/inventory-v2"},
+                "base": {"ref": "main"},
+                "created_at": "2026-10-15T02:00:00Z",
+                "updated_at": "2026-10-15T02:10:00Z",
+            },
+            {
+                "id": 103,
+                "number": 3,
+                "title": "feat(inventory): merged billing module",
+                "body": "Completed billing.\n\nFixes #4: Add stripe",
+                "state": "closed",
+                "draft": False,
+                "merged_at": "2026-10-15T03:00:00Z",
+                "mergeable": None,
+                "mergeable_state": "unknown",
+                "html_url": "https://github.com/software-factory-09-test/inventory-app/pull/3",
+                "head": {"ref": "factory/billing"},
+                "base": {"ref": "main"},
+                "created_at": "2026-10-15T02:30:00Z",
+                "updated_at": "2026-10-15T03:00:00Z",
+            },
+            {
+                "id": 104,
+                "number": 4,
+                "title": "feat(auth): conflict branch",
+                "body": "Conflicting changes with main.",
+                "state": "open",
+                "draft": False,
+                "merged_at": None,
+                "mergeable": False,
+                "mergeable_state": "dirty",
+                "html_url": "https://github.com/software-factory-09-test/inventory-app/pull/4",
+                "head": {"ref": "factory/auth-conflict"},
+                "base": {"ref": "main"},
+                "created_at": "2026-10-15T03:15:00Z",
+                "updated_at": "2026-10-15T03:20:00Z",
+            },
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = raw_prs
+
+        with patch("httpx.Client.get", return_value=mock_resp):
+            prs = fetch_repo_pull_requests(
+                repo_name="inventory-app",
+                token="test-token",
+            )
+
+            self.assertEqual(len(prs), 4)
+            # PR 1: Draft
+            self.assertEqual(prs[0]["number"], 1)
+            self.assertEqual(prs[0]["status"], "draft")
+            self.assertTrue(prs[0]["draft"])
+            self.assertFalse(prs[0]["merged"])
+            self.assertEqual(prs[0]["head_branch"], "factory/inventory-v1")
+            self.assertEqual(prs[0]["base_branch"], "main")
+
+            # PR 2: Ready for review
+            self.assertEqual(prs[1]["number"], 2)
+            self.assertEqual(prs[1]["status"], "ready_for_review")
+            self.assertFalse(prs[1]["draft"])
+            self.assertFalse(prs[1]["merged"])
+            self.assertEqual(prs[1]["head_branch"], "factory/inventory-v2")
+
+            # PR 3: Merged
+            self.assertEqual(prs[2]["number"], 3)
+            self.assertEqual(prs[2]["status"], "merged")
+            self.assertTrue(prs[2]["merged"])
+
+            # PR 4: Conflict
+            self.assertEqual(prs[3]["number"], 4)
+            self.assertEqual(prs[3]["status"], "conflict")
+            self.assertFalse(prs[3]["merged"])
+
+    def test_fetch_repo_pull_requests_branch_filtering(self):
+        raw_prs = [
+            {
+                "id": 201,
+                "number": 10,
+                "title": "PR for branch A",
+                "body": "",
+                "state": "open",
+                "draft": False,
+                "merged_at": None,
+                "mergeable": True,
+                "mergeable_state": "clean",
+                "html_url": "https://github.com/software-factory-09-test/repo/pull/10",
+                "head": {"ref": "factory/feature-a"},
+                "base": {"ref": "main"},
+            },
+            {
+                "id": 202,
+                "number": 11,
+                "title": "PR for branch B",
+                "body": "",
+                "state": "open",
+                "draft": False,
+                "merged_at": None,
+                "mergeable": True,
+                "mergeable_state": "clean",
+                "html_url": "https://github.com/software-factory-09-test/repo/pull/11",
+                "head": {"ref": "factory/feature-b"},
+                "base": {"ref": "main"},
+            },
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = raw_prs
+
+        with patch("httpx.Client.get", return_value=mock_resp):
+            prs = fetch_repo_pull_requests(
+                repo_name="repo",
+                branch="factory/feature-b",
+                token="test-token",
+            )
+            self.assertEqual(len(prs), 1)
+            self.assertEqual(prs[0]["number"], 11)
+            self.assertEqual(prs[0]["head_branch"], "factory/feature-b")
+
+    def test_merge_repo_pull_request_squash_and_branch_deletion(self):
+        pr_data = {
+            "id": 105,
+            "number": 4,
+            "title": "Implement inventory dashboard",
+            "body": "## Summary\nImplementation\n\n## Resolved Work Items\n- Fixes #1: Setup layout\n- Fixes #2: Add metrics",
+            "state": "open",
+            "draft": False,
+            "merged": False,
+            "merged_at": None,
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "head": {"ref": "factory/inventory-dashboard"},
+            "base": {"ref": "main"},
+        }
+
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = pr_data
+
+        mock_put_resp = MagicMock()
+        mock_put_resp.status_code = 200
+        mock_put_resp.json.return_value = {
+            "sha": "1a2b3c4d5e6f",
+            "merged": True,
+            "message": "Pull Request successfully merged",
+        }
+
+        mock_delete_resp = MagicMock()
+        mock_delete_resp.status_code = 204
+
+        with patch("httpx.Client.get", return_value=mock_get_resp), \
+             patch("httpx.Client.put", return_value=mock_put_resp) as mock_put, \
+             patch("httpx.Client.delete", return_value=mock_delete_resp) as mock_delete:
+
+            res = merge_repo_pull_request(
+                repo_name="inventory-app",
+                pull_number=4,
+                token="test-token",
+            )
+
+            self.assertTrue(res["merged"])
+            self.assertEqual(res["sha"], "1a2b3c4d5e6f")
+            self.assertEqual(res["pull_number"], 4)
+            self.assertEqual(res["branch"], "factory/inventory-dashboard")
+            self.assertTrue(res["branch_deleted"])
+
+            # Verify squash merge request payload
+            mock_put.assert_called_once()
+            put_args, put_kwargs = mock_put.call_args
+            self.assertIn("/repos/software-factory-09-test/inventory-app/pulls/4/merge", put_args[0])
+            put_json = put_kwargs["json"]
+            self.assertEqual(put_json["merge_method"], "squash")
+            self.assertEqual(put_json["commit_title"], "Implement inventory dashboard (#4)")
+            self.assertIn("Fixes #1: Setup layout", put_json["commit_message"])
+            self.assertIn("Fixes #2: Add metrics", put_json["commit_message"])
+
+            # Verify branch deletion
+            mock_delete.assert_called_once()
+            del_args, _ = mock_delete.call_args
+            self.assertIn("/repos/software-factory-09-test/inventory-app/git/refs/heads/factory/inventory-dashboard", del_args[0])
+
+    def test_merge_repo_pull_request_draft_raises_error(self):
+        pr_data = {
+            "id": 106,
+            "number": 5,
+            "title": "WIP Feature",
+            "body": "Fixes #10",
+            "state": "open",
+            "draft": True,
+            "merged": False,
+            "merged_at": None,
+            "mergeable": True,
+            "head": {"ref": "factory/wip"},
+            "base": {"ref": "main"},
+        }
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = pr_data
+
+        with patch("httpx.Client.get", return_value=mock_get_resp):
+            with self.assertRaises(PullRequestMergeError) as ctx:
+                merge_repo_pull_request(
+                    repo_name="inventory-app",
+                    pull_number=5,
+                    token="test-token",
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("Draft", ctx.exception.message)
+
+    def test_merge_repo_pull_request_conflict_raises_error(self):
+        pr_data = {
+            "id": 107,
+            "number": 6,
+            "title": "Conflicting Feature",
+            "body": "Fixes #20",
+            "state": "open",
+            "draft": False,
+            "merged": False,
+            "merged_at": None,
+            "mergeable": False,
+            "mergeable_state": "dirty",
+            "head": {"ref": "factory/conflict"},
+            "base": {"ref": "main"},
+        }
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = pr_data
+
+        with patch("httpx.Client.get", return_value=mock_get_resp):
+            with self.assertRaises(PullRequestMergeError) as ctx:
+                merge_repo_pull_request(
+                    repo_name="inventory-app",
+                    pull_number=6,
+                    token="test-token",
+                )
+            self.assertEqual(ctx.exception.status_code, 409)
+            self.assertIn("conflict", ctx.exception.message.lower())
+
+
+class TestPreviewRegistrySync(unittest.TestCase):
+    """Test suite for PreviewRegistry.sync_sandbox_to_main in factory/ui/registry.py."""
+
+    def setUp(self):
+        self.preview_reg = PreviewRegistry()
+
+    def test_sync_sandbox_to_main_executes_git_checkout_and_updates_branch(self):
+        mock_sandbox = MagicMock()
+        mock_process = MagicMock()
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="inventory-app",
+            branch="factory/inventory-v1",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            preview_url="https://inventory-3000.modal.host",
+            sandbox=mock_sandbox,
+            sandbox_id="sb-inv-1",
+        )
+        self.preview_reg._previews["inventory-app"] = preview
+
+        listener = self.preview_reg.add_listener("inventory-app")
+
+        res = self.preview_reg.sync_sandbox_to_main("inventory-app")
+        self.assertTrue(res)
+
+        # Assert sandbox.exec executed checkout and pull
+        mock_sandbox.exec.assert_called_once()
+        exec_args, _ = mock_sandbox.exec.call_args
+        self.assertEqual(exec_args[0], "bash")
+        self.assertEqual(exec_args[1], "-c")
+        exec_cmd = exec_args[2]
+        self.assertIn("git reset --hard && git clean -fd && git checkout main && git pull origin main", exec_cmd)
+
+        # Assert preview branch updated to main
+        updated_preview = self.preview_reg.get_preview("inventory-app")
+        self.assertIsNotNone(updated_preview)
+        self.assertEqual(updated_preview.branch, "main")
+
+        # Assert refresh event broadcasted
+        self.assertFalse(listener.empty())
+        event = listener.get_nowait()
+        self.assertEqual(event["event"], "preview_refresh")
+
+    def test_sync_sandbox_to_main_no_active_sandbox_returns_false(self):
+        res = self.preview_reg.sync_sandbox_to_main("nonexistent-repo")
+        self.assertFalse(res)
+
+
+class TestStudioPullRequestEndpoints(unittest.TestCase):
+    """Test suite for GET and POST /api/studio/repos/{repo}/pulls endpoints in factory/ui/app.py."""
+
+    def setUp(self):
+        self.registry = JobRegistry()
+        self.preview_registry = PreviewRegistry()
+        self.db = StudioDatabase(":memory:")
+        self.app = create_app(
+            registry=self.registry,
+            preview_reg=self.preview_registry,
+            db=self.db,
+        )
+        self.client = TestClient(
+            self.app,
+            headers={"Authorization": "Basic YWRtaW46YWRtaW4="},  # admin:admin
+        )
+
+    def test_get_pull_requests_endpoint_unauthenticated(self):
+        unauth_client = TestClient(self.app)
+        resp = unauth_client.get("/api/studio/repos/test-repo/pulls")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_get_pull_requests_endpoint_success(self):
+        fake_prs = [
+            {
+                "id": 101,
+                "number": 1,
+                "title": "feat: init",
+                "status": "ready_for_review",
+                "draft": False,
+                "merged": False,
+                "head_branch": "factory/init",
+                "base_branch": "main",
+                "html_url": "https://github.com/software-factory-09-test/test-repo/pull/1",
+            }
+        ]
+        with patch("factory.ui.app.fetch_repo_pull_requests", return_value=fake_prs) as mock_fetch:
+            resp = self.client.get("/api/studio/repos/test-repo/pulls?branch=factory/init")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["repo"], "test-repo")
+            self.assertEqual(len(data["pulls"]), 1)
+            self.assertEqual(data["pulls"][0]["number"], 1)
+            self.assertEqual(data["pulls"][0]["status"], "ready_for_review")
+            mock_fetch.assert_called_once_with("test-repo", branch="factory/init", state="all")
+
+    def test_post_merge_pull_request_success_and_persists_delivery_gate_card(self):
+        fake_merge_result = {
+            "merged": True,
+            "sha": "fedcba987654",
+            "message": "Pull Request successfully merged",
+            "pull_number": 42,
+            "branch": "factory/feature-42",
+            "branch_deleted": True,
+            "commit_title": "feat: solve ticket 42 (#42)",
+            "commit_message": "Resolved work items:\n- Fixes #42: Do it",
+        }
+
+        with patch("factory.ui.app.merge_repo_pull_request", return_value=fake_merge_result) as mock_merge, \
+             patch.object(self.preview_registry, "sync_sandbox_to_main", return_value=True) as mock_sync:
+
+            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            self.assertTrue(data["merged"])
+            self.assertTrue(data["preview_synced"])
+
+            mock_merge.assert_called_once()
+            mock_sync.assert_called_once_with("test-repo")
+
+            # Verify Delivery Gate Card recorded in chat_messages table
+            messages = self.db.get_chat_messages("test-repo")
+            self.assertEqual(len(messages), 1)
+            card = messages[0]
+            self.assertEqual(card["role"], "assistant")
+            self.assertIn("Merged Feature Pull Request #42", card["content"])
+            self.assertIsNotNone(card["turn_data"])
+            self.assertEqual(card["turn_data"]["type"], "delivery_gate")
+            self.assertEqual(card["turn_data"]["status"], "merged")
+            self.assertTrue(card["turn_data"]["merged"])
+            self.assertEqual(card["turn_data"]["pull_number"], 42)
+            self.assertEqual(card["turn_data"]["sha"], "fedcba987654")
+
+    def test_post_merge_pull_request_conflict_returns_409(self):
+        with patch(
+            "factory.ui.app.merge_repo_pull_request",
+            side_effect=PullRequestMergeError("Pull request has merge conflicts with base branch.", status_code=409),
+        ):
+            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+            self.assertEqual(resp.status_code, 409)
+            self.assertIn("merge conflicts", resp.json()["detail"])
+
+    def test_post_merge_pull_request_blocked_when_job_running(self):
+        # Create and mark a job as RUNNING for test-repo
+        job = self.registry.create_job(repo="test-repo", feature="feature-42")
+        with self.registry._lock:
+            job.status = JobStatus.RUNNING
+
+        resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("running", resp.json()["detail"].lower())
 
 
 
