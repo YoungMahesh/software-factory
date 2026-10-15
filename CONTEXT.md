@@ -307,5 +307,6 @@ _Avoid_: Run log, container output, worker debug
 An interactive dropdown control in the Factory Studio Live Preview toolbar displaying the active Git branch and allowing developers to switch between `main` and active `factory/<feature>` branches in place via `sandbox.exec` without container teardown.
 _Avoid_: Branch pill, branch toggle, git dropdown, preview branch switcher
 
-
-
+**Trunk Synchronization**:
+An interactive and in-place container git orchestration mechanism in Factory Studio that synchronizes the Unified Studio Sandbox with the default trunk branch (`main`), pulling latest remote commits via `sandbox.exec`, resolving dependency drift, and refreshing the Live Preview without container restart.
+_Avoid_: Auto-pull, git sync daemon, background fetcher, main updater
