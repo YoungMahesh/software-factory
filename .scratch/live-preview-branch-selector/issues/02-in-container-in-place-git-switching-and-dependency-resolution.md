@@ -5,12 +5,12 @@ Enable developers to switch Git branches inside an actively serving Unified Stud
 
 **Blocked by:** 01: Remote Branch Discovery and Idle Target Selection
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `PreviewRegistry` implements `switch_preview_branch(repo, branch)` using `sandbox.exec` in the active Unified Studio Sandbox.
-- [ ] Working tree is cleaned (`git reset --hard && git clean -fd`) before running `git checkout <branch> && git pull origin <branch>`.
-- [ ] Diffs in `package.json` or `pnpm-lock.yaml` between previous and target revisions automatically trigger in-container `pnpm install --prefer-offline`.
-- [ ] `POST /api/studio/repos/{repo}/preview/branch` accepts `{"branch": string}`, triggers the switch, and returns updated branch state.
-- [ ] Preview SSE stream broadcasts `branch` update and `preview_refresh` event upon successful switch.
-- [ ] If checkout or install fails, error output is appended to preview dev logs drawer, container is kept running on current branch, and an error response is returned.
-- [ ] Automated tests verify successful in-place switching, diff-aware package installation, SSE event emissions, and non-destructive failure recovery.
+- [x] `PreviewRegistry` implements `switch_preview_branch(repo, branch)` using `sandbox.exec` in the active Unified Studio Sandbox.
+- [x] Working tree is cleaned (`git reset --hard && git clean -fd`) before running `git checkout <branch> && git pull origin <branch>`.
+- [x] Diffs in `package.json` or `pnpm-lock.yaml` between previous and target revisions automatically trigger in-container `pnpm install --prefer-offline`.
+- [x] `POST /api/studio/repos/{repo}/preview/branch` accepts `{"branch": string}`, triggers the switch, and returns updated branch state.
+- [x] Preview SSE stream broadcasts `branch` update and `preview_refresh` event upon successful switch.
+- [x] If checkout or install fails, error output is appended to preview dev logs drawer, container is kept running on current branch, and an error response is returned.
+- [x] Automated tests verify successful in-place switching, diff-aware package installation, SSE event emissions, and non-destructive failure recovery.

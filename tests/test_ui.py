@@ -35,6 +35,7 @@ from factory.ui.github import (
     fetch_repo_pull_requests,
     merge_repo_pull_request,
     PullRequestMergeError,
+    fetch_repo_branches,
 )
 from factory.ui.guard import (
     evaluate_prompt_intent,
@@ -64,6 +65,44 @@ class TestGitHubDiscovery(unittest.TestCase):
         self.assertIn("test1", repos)
         self.assertIn("test2", repos)
         self.assertIn("test3", repos)
+
+    def test_fetch_repo_branches_filtering_and_sorting(self):
+        mock_branches = [
+            {"name": "develop"},
+            {"name": "factory/issue-42"},
+            {"name": "experimental"},
+            {"name": "factory/auth"},
+            {"name": "main"},
+            {"name": "feature/ui"},
+            {"name": "factory/v1-core"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = mock_branches
+
+        with patch("httpx.Client.get", return_value=mock_resp):
+            branches = fetch_repo_branches("test-app", token="mock_token")
+            # Must strictly include default branch (main) and factory/* branches
+            # and sort with main first, followed by sorted factory branches
+            self.assertEqual(branches, ["main", "factory/auth", "factory/issue-42", "factory/v1-core"])
+
+    def test_fetch_repo_branches_fallback_on_unauthorized_or_network_error(self):
+        # 401 Unauthorized
+        mock_resp_401 = MagicMock()
+        mock_resp_401.status_code = 401
+        with patch("httpx.Client.get", return_value=mock_resp_401):
+            branches = fetch_repo_branches("test-app", token="bad_token")
+            self.assertEqual(branches, ["main"])
+
+        # Network error
+        with patch("httpx.Client.get", side_effect=httpx.ConnectError("Connection refused")):
+            branches = fetch_repo_branches("test-app", token="mock_token")
+            self.assertEqual(branches, ["main"])
+
+        # Missing token
+        with patch("factory.ui.github.get_test_org_token", return_value=None):
+            branches = fetch_repo_branches("test-app", token=None)
+            self.assertEqual(branches, ["main"])
 
     def test_fetch_repo_scratch_metadata_parsing(self):
         mock_tree = {
@@ -680,10 +719,14 @@ class TestFastApiApp(unittest.TestCase):
 
     def test_preview_endpoints_require_auth(self):
         unauth_client = TestClient(self.app)
+        resp_branches = unauth_client.get("/api/studio/repos/test3/branches")
+        self.assertEqual(resp_branches.status_code, 401)
         resp = unauth_client.get("/api/studio/repos/test3/preview")
         self.assertEqual(resp.status_code, 401)
         resp_post = unauth_client.post("/api/studio/repos/test3/preview")
         self.assertEqual(resp_post.status_code, 401)
+        resp_post_branch = unauth_client.post("/api/studio/repos/test3/preview/branch", json={"branch": "factory/feat"})
+        self.assertEqual(resp_post_branch.status_code, 401)
         resp_del = unauth_client.delete("/api/studio/repos/test3/preview")
         self.assertEqual(resp_del.status_code, 401)
         resp_stream = unauth_client.get("/api/studio/repos/test3/preview/stream")
@@ -802,6 +845,267 @@ class TestFastApiApp(unittest.TestCase):
                 stage_events = [e for e in events if e.get("event") == "stage"]
                 self.assertTrue(len(stage_events) >= 1)
                 self.assertEqual(stage_events[0]["stage"], "STARTING_DEV")
+
+    @patch("factory.ui.app.fetch_repo_branches")
+    def test_get_repo_branches_endpoint(self, mock_fetch_branches):
+        mock_fetch_branches.return_value = ["main", "factory/feature-a", "factory/feature-b"]
+
+        resp = self.client.get("/api/studio/repos/test3/branches")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "test3")
+        self.assertEqual(data["org"], "software-factory-09-test")
+        self.assertEqual(data["branches"], ["main", "factory/feature-a", "factory/feature-b"])
+        self.assertEqual(data["default_branch"], "main")
+        mock_fetch_branches.assert_called_once_with("test3")
+
+        # Also verify /api/repos/{repo}/branches alias works
+        resp_alias = self.client.get("/api/repos/test3/branches")
+        self.assertEqual(resp_alias.status_code, 200)
+        self.assertEqual(resp_alias.json()["branches"], ["main", "factory/feature-a", "factory/feature-b"])
+
+    @patch("factory.ui.app.fetch_repo_branches_with_diagnostics")
+    def test_get_repo_branches_endpoint(self, mock_fetch_branches):
+        mock_fetch_branches.return_value = (["main", "factory/feature-a", "factory/feature-b"], None)
+
+        resp = self.client.get("/api/studio/repos/test3/branches")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "test3")
+        self.assertEqual(data["org"], "software-factory-09-test")
+        self.assertEqual(data["branches"], ["main", "factory/feature-a", "factory/feature-b"])
+        self.assertEqual(data["default_branch"], "main")
+        self.assertNotIn("error", data)
+        mock_fetch_branches.assert_called_once_with("test3")
+
+        # Also verify /api/repos/{repo}/branches alias works
+        resp_alias = self.client.get("/api/repos/test3/branches")
+        self.assertEqual(resp_alias.status_code, 200)
+        self.assertEqual(resp_alias.json()["branches"], ["main", "factory/feature-a", "factory/feature-b"])
+
+    @patch("factory.ui.app.fetch_repo_branches_with_diagnostics")
+    def test_get_repo_branches_endpoint_graceful_error_handling(self, mock_fetch_branches):
+        mock_fetch_branches.return_value = (["main"], "GitHub API error (status 401)")
+
+        resp = self.client.get("/api/studio/repos/test3/branches")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "test3")
+        self.assertEqual(data["branches"], ["main"])
+        self.assertEqual(data["error"], "GitHub API error (status 401)")
+
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_post_preview_branch_endpoint_idle_and_stopped(self, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-branch-test"
+        mock_sandbox.stdout = iter([])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-branch-test-3000.modal.host")
+
+        # 1. Update target branch when preview is idle (no preview started yet)
+        resp = self.client.post(
+            "/api/studio/repos/branch-test-repo/preview/branch",
+            json={"branch": "factory/feature-preselected"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["repo"], "branch-test-repo")
+        self.assertEqual(data["branch"], "factory/feature-preselected")
+        self.assertEqual(data["status"], "IDLE")
+        self.assertFalse(data["in_place"])
+        self.assertTrue(data["success"])
+
+        # 2. Launch preview without specifying branch -> boots on preselected branch!
+        resp_launch = self.client.post("/api/studio/repos/branch-test-repo/preview", json={})
+        self.assertIn(resp_launch.status_code, (200, 201))
+        launch_data = resp_launch.json()
+        self.assertEqual(launch_data["branch"], "factory/feature-preselected")
+
+        mock_create.assert_called_once()
+        spawn_cfg = mock_create.call_args[0][0]
+        self.assertEqual(spawn_cfg.branch, "factory/feature-preselected")
+
+    def test_post_preview_branch_validation(self):
+        # Empty branch
+        resp_empty = self.client.post(
+            "/api/studio/repos/test3/preview/branch",
+            json={"branch": ""},
+        )
+        self.assertEqual(resp_empty.status_code, 400)
+
+        # Missing branch
+        resp_missing = self.client.post(
+            "/api/studio/repos/test3/preview/branch",
+            json={},
+        )
+        self.assertEqual(resp_missing.status_code, 422)
+
+        # Invalid branch format (not main and doesn't start with factory/)
+        resp_invalid = self.client.post(
+            "/api/studio/repos/test3/preview/branch",
+            json={"branch": "random-branch-name"},
+        )
+        self.assertEqual(resp_invalid.status_code, 400)
+        self.assertIn("must be 'main' or start with 'factory/'", resp_invalid.json()["detail"])
+
+    def test_post_preview_branch_concurrency_guard(self):
+        # When an Assembly Line job is running or queued, branch changes are blocked with 409
+        job = self.registry.create_job(repo="busy-repo", feature="active-feat")
+        job.status = JobStatus.RUNNING
+
+        resp = self.client.post(
+            "/api/studio/repos/busy-repo/preview/branch",
+            json={"branch": "factory/new-branch"},
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("Assembly Line Pipeline job is currently active", resp.json()["detail"])
+
+    def test_post_preview_branch_active_in_place_switching_success(self):
+        from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-active-switcher"
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Switched to branch 'factory/active-feature'\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        active_preview = PreviewState(
+            repo="active-switcher-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://active-switch.modal.host",
+            sandbox=mock_sandbox,
+        )
+        preview_registry._previews["active-switcher-repo"] = active_preview
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/active-switcher-repo/preview/branch",
+                json={"branch": "factory/active-feature"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["repo"], "active-switcher-repo")
+            self.assertEqual(data["branch"], "factory/active-feature")
+            self.assertEqual(data["status"], "SERVING")
+            self.assertEqual(data["preview_url"], "https://active-switch.modal.host")
+            self.assertTrue(data["in_place"])
+            self.assertTrue(data["success"])
+
+            # Verify in-container execution occurred
+            mock_sandbox.exec.assert_called_once()
+            exec_args = mock_sandbox.exec.call_args[0]
+            self.assertIn("git reset --hard && git clean -fd", exec_args[2])
+            self.assertIn("git checkout factory/active-feature && git pull origin factory/active-feature", exec_args[2])
+        finally:
+            preview_registry._previews.pop("active-switcher-repo", None)
+
+    def test_post_preview_branch_active_in_place_switching_failure(self):
+        from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-active-fail"
+        mock_sandbox.terminate = MagicMock()
+        mock_process = MagicMock()
+        mock_process.stdout = iter([])
+        mock_process.stderr = iter(["fatal: Remote branch factory/nonexistent not found\n"])
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mock_sandbox.exec.return_value = mock_process
+
+        active_preview = PreviewState(
+            repo="active-fail-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://active-fail.modal.host",
+            sandbox=mock_sandbox,
+        )
+        preview_registry._previews["active-fail-repo"] = active_preview
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/active-fail-repo/preview/branch",
+                json={"branch": "factory/nonexistent"},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("failed", resp.json()["detail"].lower())
+
+            # Unified Studio Sandbox must remain SERVING on original branch
+            self.assertEqual(active_preview.status, PreviewStatus.SERVING)
+            self.assertEqual(active_preview.branch, "main")
+            mock_sandbox.terminate.assert_not_called()
+        finally:
+            preview_registry._previews.pop("active-fail-repo", None)
+
+    def test_post_preview_branch_provisioning_guard(self):
+        from factory.ui.registry import preview_registry
+        prov_preview = PreviewState(
+            repo="prov-repo",
+            status=PreviewStatus.PROVISIONING,
+            stage=PreviewStage.PROVISIONING,
+            branch="main",
+        )
+        preview_registry._previews["prov-repo"] = prov_preview
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/prov-repo/preview/branch",
+                json={"branch": "factory/some-target"},
+            )
+            self.assertEqual(resp.status_code, 409)
+            self.assertIn("provisioning", resp.json()["detail"].lower())
+        finally:
+            preview_registry._previews.pop("prov-repo", None)
+
+    def test_post_preview_branch_broadcasts_sse_events(self):
+        from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-sse-broadcast"
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Switched to branch 'factory/sse-feature'\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        active_preview = PreviewState(
+            repo="sse-broadcast-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://sse-broadcast.modal.host",
+            sandbox=mock_sandbox,
+        )
+        preview_registry._previews["sse-broadcast-repo"] = active_preview
+        q = preview_registry.add_listener("sse-broadcast-repo")
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/sse-broadcast-repo/preview/branch",
+                json={"branch": "factory/sse-feature"},
+            )
+            self.assertEqual(resp.status_code, 200)
+
+            # Collect queued SSE broadcast events
+            events = []
+            while not q.empty():
+                events.append(q.get_nowait())
+
+            branch_events = [e for e in events if e.get("event") == "branch"]
+            self.assertEqual(len(branch_events), 1)
+            self.assertEqual(branch_events[0]["branch"], "factory/sse-feature")
+            self.assertEqual(branch_events[0]["repo"], "sse-broadcast-repo")
+
+            refresh_events = [e for e in events if e.get("event") == "preview_refresh"]
+            self.assertEqual(len(refresh_events), 1)
+            self.assertEqual(refresh_events[0]["repo"], "sse-broadcast-repo")
+        finally:
+            preview_registry._previews.pop("sse-broadcast-repo", None)
 
     @patch("factory.ui.app.instantiate_repo_from_template")
     def test_route_aliases_return_identical_responses(self, mock_instantiate):

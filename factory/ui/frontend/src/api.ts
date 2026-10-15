@@ -313,3 +313,42 @@ export async function mergePullRequest(
   return res.json();
 }
 
+export interface RepoBranchesResponse {
+  repo: string;
+  org: string;
+  branches: string[];
+  default_branch: string;
+  error?: string;
+}
+
+export async function fetchRepoBranches(repo: string): Promise<RepoBranchesResponse> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/branches`);
+  if (!res.ok) throw new Error(`Failed to fetch branches: ${res.statusText}`);
+  return res.json();
+}
+
+export interface UpdatePreviewBranchResponse {
+  repo: string;
+  branch: string;
+  status: string;
+  preview_url?: string | null;
+  in_place: boolean;
+  success: boolean;
+}
+
+export async function updatePreviewBranch(
+  repo: string,
+  branch: string
+): Promise<UpdatePreviewBranchResponse> {
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/branch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ branch }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update preview branch: ${res.statusText}`);
+  }
+  return res.json();
+}
+

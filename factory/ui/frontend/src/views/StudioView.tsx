@@ -25,6 +25,8 @@ import {
   useStudioIssuesQuery,
   useStudioPullRequestQuery,
   useMergePullRequestMutation,
+  useRepoBranchesQuery,
+  useUpdatePreviewBranchMutation,
   studioQueryKeys,
 } from "../hooks/useStudioQueries";
 import { Button } from "../components/ui/Button";
@@ -72,12 +74,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onCloseIssueDrawer,
     isIssueDrawerOpen: propIssueDrawerOpen,
     onMergeSuccess,
+    branches: propBranches,
+    onSelectBranch: propOnSelectBranch,
+    isSwitchingBranch: propIsSwitchingBranch,
   } = useStudio();
 
   const queryClient = useQueryClient();
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
   const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
   const [isLocalIssueDrawerOpen, setIsLocalIssueDrawerOpen] = useState<boolean>(false);
+  const [branchRefreshKey, setBranchRefreshKey] = useState<number>(0);
+  const [branchSwitchError, setBranchSwitchError] = useState<string | null>(null);
 
   const [isPRPopoverOpen, setIsPRPopoverOpen] = useState<boolean>(false);
   const [isConfirmingMerge, setIsConfirmingMerge] = useState<boolean>(false);
@@ -123,6 +130,32 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
 
   const issuesQuery = useStudioIssuesQuery(selectedRepo);
+  const branchesQuery = useRepoBranchesQuery(selectedRepo);
+  const updateBranchMutation = useUpdatePreviewBranchMutation();
+
+  const branches =
+    propBranches !== undefined
+      ? propBranches
+      : (branchesQuery.data?.branches || []);
+  const isSwitchingBranch =
+    propIsSwitchingBranch !== undefined
+      ? propIsSwitchingBranch
+      : updateBranchMutation.isPending;
+
+  // Invalidate branches query cache on repository switch
+  useEffect(() => {
+    if (selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
+    }
+  }, [selectedRepo, queryClient]);
+
+  // Invalidate branches query cache on job completion
+  useEffect(() => {
+    if (activeJob?.status === "SUCCESS" && selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
+    }
+  }, [activeJob?.status, selectedRepo, queryClient]);
+
   const openIssuesCount = (issuesQuery.data?.issues || []).filter((i) => {
     const isClosed = i.state && i.state.toLowerCase() === "closed";
     const isResolved =
@@ -134,6 +167,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   const handleOpenIssues = () => {
     if (selectedRepo) {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
     }
     setIsLocalIssueDrawerOpen(true);
     if (onOpenIssueDrawer) {
@@ -142,6 +176,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   };
 
   const handleCloseIssues = () => {
+    if (selectedRepo) {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
+    }
     setIsLocalIssueDrawerOpen(false);
     if (onCloseIssueDrawer) {
       onCloseIssueDrawer();
@@ -188,6 +225,29 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     );
     if (onMergeSuccess) {
       onMergeSuccess(res);
+    }
+  };
+
+  const handleSelectBranch = async (targetBranch: string) => {
+    setBranchSwitchError(null);
+    if (propOnSelectBranch) {
+      try {
+        await propOnSelectBranch(targetBranch);
+        setBranchRefreshKey((prev) => prev + 1);
+      } catch (err: any) {
+        setBranchSwitchError(err?.message || "Failed to switch preview branch");
+        throw err;
+      }
+      return;
+    }
+    if (!selectedRepo) return;
+    try {
+      await updateBranchMutation.mutateAsync({ repo: selectedRepo, branch: targetBranch });
+      setBranchRefreshKey((prev) => prev + 1);
+    } catch (err: any) {
+      setBranchSwitchError(err?.message || "Failed to switch preview branch");
+      console.error("Failed to switch preview branch:", err);
+      throw err;
     }
   };
 
@@ -857,13 +917,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             status={previewState?.status || "IDLE"}
             stage={previewState?.status === "PROVISIONING" ? previewState.stage : "IDLE"}
             branch={previewState?.branch || null}
+            branches={branches}
+            onSelectBranch={handleSelectBranch}
+            isSwitchingBranch={isSwitchingBranch}
+            isConcurrencyLocked={Boolean(activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))}
             logs={previewState?.logs || []}
             errorMessage={previewState?.error_message || null}
             onLaunchPreview={onLaunchPreview}
             onStopPreview={onStopPreview}
             onRetryPreview={onRetryPreview || onLaunchPreview}
             onReconnectPreview={handleReconnect}
-            refreshKey={refreshKey}
+            refreshKey={(refreshKey || 0) + branchRefreshKey}
             isLaunching={isLaunchingPreview}
           />
         </div>
@@ -891,6 +955,33 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         onClose={handleCloseIssues}
         repo={selectedRepo}
       />
+
+      {/* Branch Switch Error Toast */}
+      {branchSwitchError && (
+        <div
+          data-testid="branch-switch-error-toast"
+          role="alert"
+          className="fixed bottom-6 right-6 max-w-md bg-rose-950 border border-rose-800 text-rose-200 px-4 py-3 rounded-xl shadow-2xl z-50 flex items-start space-x-3 transition-all"
+        >
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs">
+            <h4 className="font-semibold text-rose-100 mb-0.5">Branch Switch Failed</h4>
+            <p className="text-[11px] text-rose-300 leading-relaxed mb-1">{branchSwitchError}</p>
+            <p className="text-[10px] text-rose-400/90 font-mono">
+              Check the Dev Server Logs drawer for in-container diagnostics.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="dismiss-branch-error-btn"
+            onClick={() => setBranchSwitchError(null)}
+            className="text-rose-400 hover:text-rose-100 p-1 rounded-md transition-colors"
+            title="Dismiss error alert"
+          >
+            <XCircle className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -24,6 +24,8 @@ import {
   useChatMessagesQuery,
   useClearChatMessagesMutation,
   useDispatchStudioMutation,
+  useRepoBranchesQuery,
+  useUpdatePreviewBranchMutation,
   studioQueryKeys,
   createStoppedPreviewState,
 } from "./hooks/useStudioQueries";
@@ -57,6 +59,7 @@ export const AppContent: React.FC = () => {
 
   const previewQuery = usePreviewQuery(selectedRepo);
   const messagesQuery = useChatMessagesQuery(selectedRepo);
+  const branchesQuery = useRepoBranchesQuery(selectedRepo);
 
   const createRepoMutation = useCreateRepoMutation();
   const launchPreviewMutation = useLaunchPreviewMutation();
@@ -65,23 +68,26 @@ export const AppContent: React.FC = () => {
   const approvePlanMutation = useApprovePlanMutation();
   const clearChatMutation = useClearChatMessagesMutation();
   const dispatchStudioMutation = useDispatchStudioMutation();
+  const updateBranchMutation = useUpdatePreviewBranchMutation();
 
   const isLaunchingPreview = launchPreviewMutation.isPending;
   const isSendingPrompt = sendPromptMutation.isPending;
   const isApproving = approvePlanMutation.isPending;
 
-  // Revalidate issues query on job completion
+  // Revalidate issues and branches query on job completion
   useEffect(() => {
     if (activeJob?.status === "SUCCESS" && selectedRepo) {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
     }
   }, [activeJob?.status, selectedRepo]);
 
-  // Reset chat cleared state and revalidate issues query when selected repo changes
+  // Reset chat cleared state and revalidate issues and branches query when selected repo changes
   useEffect(() => {
     setIsChatCleared(false);
     if (selectedRepo) {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
     }
   }, [selectedRepo]);
 
@@ -660,6 +666,26 @@ export const AppContent: React.FC = () => {
     }
   };
 
+  const handleSelectBranch = async (branch: string) => {
+    if (!selectedRepo || updateBranchMutation.isPending) return;
+    try {
+      const res = await updateBranchMutation.mutateAsync({ repo: selectedRepo, branch });
+      setPreviewState((prev) =>
+        prev
+          ? ({
+              ...prev,
+              branch: res.branch,
+              preview_url: res.preview_url !== undefined ? res.preview_url : prev.preview_url,
+            } as PreviewState)
+          : null
+      );
+      setPreviewRefreshKey((prev) => prev + 1);
+    } catch (err) {
+      console.error("Failed to switch preview branch:", err);
+      throw err;
+    }
+  };
+
   const studioContextValue: StudioContextValue = {
     repos,
     selectedRepo,
@@ -697,6 +723,9 @@ export const AppContent: React.FC = () => {
       });
       setPreviewRefreshKey((prev) => prev + 1);
     },
+    branches: branchesQuery.data?.branches || [],
+    onSelectBranch: handleSelectBranch,
+    isSwitchingBranch: updateBranchMutation.isPending,
   };
 
   return (

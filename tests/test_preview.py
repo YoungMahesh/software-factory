@@ -263,6 +263,98 @@ class TestPreviewRegistry(unittest.TestCase):
         lines_flushed = preview.buffer_and_extract_lines("", flush=True)
         self.assertEqual(lines_flushed, ["incomplete footer"])
 
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_idle_preview_target_branch_persistence_and_launch(self, mock_create):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewStatus
+        db = StudioDatabase(":memory:")
+        registry = PreviewRegistry(db=db)
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-idle-launch"
+        mock_sandbox.stdout = iter([])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-idle-3000.modal.host")
+
+        # 1. Update target branch when no preview exists yet (idle)
+        registry.update_branch("test-idle-repo", "factory/my-preselected-branch")
+
+        preview = registry.get_preview("test-idle-repo")
+        self.assertIsNotNone(preview)
+        self.assertEqual(preview.branch, "factory/my-preselected-branch")
+        self.assertEqual(preview.status, PreviewStatus.IDLE)
+
+        # Verify DB persistence
+        db_record = db.get_preview("test-idle-repo")
+        self.assertIsNotNone(db_record)
+        self.assertEqual(db_record["branch"], "factory/my-preselected-branch")
+
+        # 2. Launch preview without specifying branch -> must launch on preselected branch
+        launched = registry.launch_preview("test-idle-repo")
+        self.assertEqual(launched.branch, "factory/my-preselected-branch")
+
+        mock_create.assert_called_once()
+        spawn_cfg = mock_create.call_args[0][0]
+        self.assertEqual(spawn_cfg.branch, "factory/my-preselected-branch")
+
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_stopped_preview_target_branch_update_and_relaunch(self, mock_create):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewState, PreviewStatus
+        db = StudioDatabase(":memory:")
+        registry = PreviewRegistry(db=db)
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-stopped-launch"
+        mock_sandbox.stdout = iter([])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-stopped-3000.modal.host")
+
+        # 1. Start with a stopped preview on main
+        stopped_preview = PreviewState(
+            repo="stopped-repo",
+            status=PreviewStatus.STOPPED,
+            branch="main",
+        )
+        registry._previews["stopped-repo"] = stopped_preview
+        registry._persist_preview(stopped_preview)
+
+        # 2. Update target branch while stopped
+        registry.update_branch("stopped-repo", "factory/feature-v2")
+        self.assertEqual(stopped_preview.branch, "factory/feature-v2")
+
+        # 3. Relaunch without branch argument -> must use updated branch
+        relaunch = registry.launch_preview("stopped-repo")
+        self.assertEqual(relaunch.branch, "factory/feature-v2")
+
+        mock_create.assert_called_once()
+        spawn_cfg = mock_create.call_args[0][0]
+        self.assertEqual(spawn_cfg.branch, "factory/feature-v2")
+
+    def test_database_rehydration_preserves_idle_target_branch(self):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewStatus
+        db = StudioDatabase(":memory:")
+        db.save_preview({
+            "repo": "persisted-repo",
+            "branch": "factory/persisted-feature",
+            "status": "STOPPED",
+            "stage": "IDLE",
+            "preview_url": None,
+        })
+
+        new_registry = PreviewRegistry(db=db)
+        new_registry.rehydrate()
+
+        preview = new_registry.get_preview("persisted-repo")
+        self.assertIsNotNone(preview)
+        self.assertEqual(preview.branch, "factory/persisted-feature")
+        self.assertEqual(preview.status, PreviewStatus.STOPPED)
+
 
 class TestInSandboxRegistryExecution(unittest.TestCase):
     def setUp(self):
@@ -479,5 +571,193 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
             job_events.append(job_listener.get_nowait())
         refresh_events = [e for e in job_events if e.get("event") == "preview_refresh"]
         self.assertEqual(len(refresh_events), 0)
+
+
+class TestInContainerBranchSwitching(unittest.TestCase):
+    def setUp(self):
+        from factory.ui.registry import PreviewRegistry
+        self.registry = PreviewRegistry()
+
+    def test_switch_preview_branch_success_in_place(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-active-preview"
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Switched to branch 'factory/user-auth'\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="test-app",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            sandbox=mock_sandbox,
+            preview_url="https://preview.modal.host",
+        )
+        self.registry._previews["test-app"] = preview
+        q = self.registry.add_listener("test-app")
+        self.assertIsNotNone(q)
+
+        updated = self.registry.switch_preview_branch("test-app", "factory/user-auth")
+
+        self.assertEqual(updated.branch, "factory/user-auth")
+        self.assertEqual(updated.status, PreviewStatus.SERVING)
+
+        # Verify sandbox.exec call
+        mock_sandbox.exec.assert_called_once()
+        exec_args, _ = mock_sandbox.exec.call_args
+        self.assertEqual(exec_args[0], "bash")
+        self.assertEqual(exec_args[1], "-c")
+        exec_cmd = exec_args[2]
+
+        # Verify workspace directory
+        self.assertIn("/root/test-app", exec_cmd)
+        # Verify clean working tree reset before checkout
+        self.assertIn("git reset --hard && git clean -fd", exec_cmd)
+        # Verify checkout and pull of target branch
+        self.assertIn("git checkout factory/user-auth && git pull origin factory/user-auth", exec_cmd)
+
+        # Verify SSE events broadcasted
+        events = []
+        while not q.empty():
+            events.append(q.get_nowait())
+
+        branch_events = [e for e in events if e.get("event") == "branch"]
+        self.assertEqual(len(branch_events), 1)
+        self.assertEqual(branch_events[0]["branch"], "factory/user-auth")
+        self.assertEqual(branch_events[0]["repo"], "test-app")
+
+        refresh_events = [e for e in events if e.get("event") == "preview_refresh"]
+        self.assertEqual(len(refresh_events), 1)
+        self.assertEqual(refresh_events[0]["repo"], "test-app")
+
+        # Verify logs were appended
+        self.assertTrue(any("Switched to branch" in log for log in updated.logs))
+
+    def test_switch_preview_branch_diff_triggers_pnpm_install(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-diff-preview"
+        mock_process = MagicMock()
+        mock_process.stdout = iter([
+            "Switched to branch 'factory/new-deps'\n",
+            "📦 Dependency changes detected in package.json/pnpm-lock.yaml. Running pnpm install --prefer-offline...\n",
+            "Packages: +12\n",
+            "Progress: resolved 150, reused 150, downloaded 0, added 12\n",
+        ])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="test-deps-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            sandbox=mock_sandbox,
+            preview_url="https://preview.modal.host",
+        )
+        self.registry._previews["test-deps-repo"] = preview
+
+        updated = self.registry.switch_preview_branch("test-deps-repo", "factory/new-deps")
+
+        self.assertEqual(updated.branch, "factory/new-deps")
+
+        # Verify command asserts package.json / pnpm-lock.yaml diff and pnpm install --prefer-offline
+        _, kwargs_or_args = mock_sandbox.exec.call_args
+        exec_args = mock_sandbox.exec.call_args[0]
+        exec_cmd = exec_args[2]
+        self.assertIn("package.json pnpm-lock.yaml", exec_cmd)
+        self.assertIn("pnpm install --prefer-offline", exec_cmd)
+
+        # Verify stdout lines were captured in logs
+        self.assertTrue(any("Dependency changes detected" in l for l in updated.logs))
+        self.assertTrue(any("Packages: +12" in l for l in updated.logs))
+
+    def test_switch_preview_branch_failure_retains_container_and_branch(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-fail-preview"
+        mock_sandbox.terminate = MagicMock()
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["git checkout factory/broken-branch\n"])
+        mock_process.stderr = iter(["fatal: Remote branch factory/broken-branch not found in upstream origin\n"])
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="test-fail-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            sandbox=mock_sandbox,
+            preview_url="https://preview.modal.host",
+        )
+        self.registry._previews["test-fail-repo"] = preview
+
+        with self.assertRaises(RuntimeError) as ctx:
+            self.registry.switch_preview_branch("test-fail-repo", "factory/broken-branch")
+
+        self.assertIn("failed (exit code 1)", str(ctx.exception))
+        self.assertIn("Remote branch factory/broken-branch not found", str(ctx.exception))
+
+        # Invariant checks:
+        # 1. Container status remains SERVING (not STOPPED or FAILED)
+        self.assertEqual(preview.status, PreviewStatus.SERVING)
+        # 2. Container sandbox was NOT terminated
+        mock_sandbox.terminate.assert_not_called()
+        # 3. Branch remains on original branch 'main'
+        self.assertEqual(preview.branch, "main")
+        # 4. Error output appended to preview logs
+        self.assertTrue(any("fatal: Remote branch" in l or "failed" in l for l in preview.logs))
+
+    def test_switch_preview_branch_pnpm_install_failure_preserves_container_and_branch(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-pnpm-fail"
+        mock_sandbox.terminate = MagicMock()
+        mock_process = MagicMock()
+        mock_process.stdout = iter([
+            "Switched to branch 'factory/broken-deps'\n",
+            "📦 Dependency changes detected in package.json/pnpm-lock.yaml. Running pnpm install --prefer-offline...\n",
+        ])
+        mock_process.stderr = iter([
+            "ERR_PNPM_PEER_DEP_ISSUES: Unmet peer dependencies\n",
+            "⚠️ Rolling back container working tree to previous branch state...\n",
+        ])
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="test-pnpm-fail-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            sandbox=mock_sandbox,
+            preview_url="https://preview.modal.host",
+        )
+        self.registry._previews["test-pnpm-fail-repo"] = preview
+
+        with self.assertRaises(RuntimeError) as ctx:
+            self.registry.switch_preview_branch("test-pnpm-fail-repo", "factory/broken-deps")
+
+        self.assertIn("failed (exit code 1)", str(ctx.exception))
+        self.assertIn("ERR_PNPM_PEER_DEP_ISSUES", str(ctx.exception))
+
+        # Invariant checks:
+        self.assertEqual(preview.status, PreviewStatus.SERVING)
+        mock_sandbox.terminate.assert_not_called()
+        self.assertEqual(preview.branch, "main")
+        self.assertTrue(any("ERR_PNPM_PEER_DEP_ISSUES" in l for l in preview.logs))
 
 

@@ -40,6 +40,9 @@ export interface StudioContextValue {
   onInstantDispatch?: (params: StudioDispatchParams) => Promise<StudioDispatchResponse | void>;
   isDispatching?: boolean;
   onMergeSuccess?: (result?: any) => void;
+  branches?: string[];
+  onSelectBranch?: (branch: string) => Promise<void> | void;
+  isSwitchingBranch?: boolean;
 }
 
 const StudioContext = createContext<StudioContextValue | undefined>(undefined);

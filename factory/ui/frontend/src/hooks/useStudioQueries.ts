@@ -5,6 +5,7 @@ import { Repo, PreviewState } from "../types";
 export const studioQueryKeys = {
   repos: ["studio", "repos"] as const,
   preview: (repo: string) => ["studio", "preview", repo] as const,
+  branches: (repo: string) => ["studio", "branches", repo] as const,
   scratch: (repo: string) => ["studio", "scratch", repo] as const,
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
   issues: (repo: string) => ["studio", "issues", repo] as const,
@@ -178,4 +179,57 @@ export function useMergePullRequestMutation() {
   });
 }
 
+export function useRepoBranchesQuery(repo: string) {
+  return useQuery({
+    queryKey: studioQueryKeys.branches(repo),
+    queryFn: () => api.fetchRepoBranches(repo),
+    enabled: Boolean(repo),
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdatePreviewBranchMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ repo, branch }: { repo: string; branch: string }) =>
+      api.updatePreviewBranch(repo, branch),
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData<PreviewState | null>(
+        studioQueryKeys.preview(vars.repo),
+        (prev) => {
+          if (!prev) {
+            return data.status === "SERVING" && data.preview_url
+              ? {
+                  status: "SERVING",
+                  branch: data.branch,
+                  preview_url: data.preview_url,
+                  logs: [],
+                  error_message: null,
+                }
+              : {
+                  status: "IDLE",
+                  branch: null,
+                  preview_url: null,
+                  logs: [],
+                  error_message: null,
+                };
+          }
+          if (prev.status === "SERVING") {
+            return {
+              ...prev,
+              branch: data.branch,
+              preview_url: data.preview_url || prev.preview_url,
+            };
+          }
+          return {
+            ...prev,
+            branch: data.branch,
+          } as PreviewState;
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
+    },
+  });
+}
 
