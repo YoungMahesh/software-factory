@@ -652,6 +652,8 @@ def _normalize_github_pull_request(item: dict[str, Any]) -> dict[str, Any]:
 
     if is_merged:
         status = "merged"
+    elif item.get("state") == "closed":
+        status = "closed"
     elif mergeable is False or mergeable_state in ("dirty", "conflict"):
         status = "conflict"
     elif is_draft:
@@ -756,7 +758,7 @@ def merge_repo_pull_request(
         clean_repo = clean_repo[len(f"{org}/"):]
 
     if not auth_token:
-        raise PullRequestMergeError("GitHub organization token is required to merge pull request.", status_code=401)
+        raise PullRequestMergeError("Organization Credentials are required to merge pull request.", status_code=401)
 
     headers = {
         "Authorization": f"Bearer {auth_token}",
@@ -785,6 +787,12 @@ def merge_repo_pull_request(
         if pr_data.get("merged") or pr_data.get("merged_at"):
             raise PullRequestMergeError(
                 f"Pull request #{pull_number} is already merged.",
+                status_code=400,
+            )
+
+        if pr_data.get("state") == "closed":
+            raise PullRequestMergeError(
+                f"Cannot merge closed pull request #{pull_number}.",
                 status_code=400,
             )
 

@@ -584,7 +584,6 @@ def create_app(
         return {
             "repo": clean_repo,
             "pulls": pulls,
-            "pull_requests": pulls,
         }
 
     @app.post("/api/studio/repos/{repo}/pulls/{pull_number}/merge")
@@ -597,15 +596,15 @@ def create_app(
         if not clean_repo:
             raise HTTPException(status_code=400, detail="Repository name is required.")
 
-        # Merging is strictly disabled while the Assembly Line is actively executing
+        # Merging is strictly disabled while the Assembly Line is actively executing or queued
         active_jobs = [
             j for j in registry.list_jobs()
-            if j.get("repo") == clean_repo and j.get("status") == "RUNNING"
+            if j.get("repo") == clean_repo and j.get("status") in ("RUNNING", "QUEUED")
         ]
         if active_jobs:
             raise HTTPException(
                 status_code=409,
-                detail=f"Cannot merge pull request #{pull_number} while an assembly line job is actively running for repository '{clean_repo}'.",
+                detail=f"Cannot merge pull request #{pull_number} while an assembly line job is active or queued for repository '{clean_repo}'.",
             )
 
         commit_title = req.commit_title if req else None
@@ -626,7 +625,7 @@ def create_app(
         # Post-merge live preview sandbox synchronization
         preview_synced = preview_reg.sync_sandbox_to_main(clean_repo)
 
-        # Record a structured delivery gate merge card in SQLite chat_messages table
+        # Record a structured Delivery Gate Card in SQLite chat_messages table
         card_content = f"Merged Feature Pull Request #{pull_number} into main. Live preview synchronized."
         turn_data = {
             "type": "delivery_gate",

@@ -3586,7 +3586,7 @@ class TestGitHubPullRequestsClient(unittest.TestCase):
             self.assertEqual(res["branch"], "factory/inventory-dashboard")
             self.assertTrue(res["branch_deleted"])
 
-            # Verify squash merge request payload
+            # Verify squash merge payload
             mock_put.assert_called_once()
             put_args, put_kwargs = mock_put.call_args
             self.assertIn("/repos/software-factory-09-test/inventory-app/pulls/4/merge", put_args[0])
@@ -3600,6 +3600,34 @@ class TestGitHubPullRequestsClient(unittest.TestCase):
             mock_delete.assert_called_once()
             del_args, _ = mock_delete.call_args
             self.assertIn("/repos/software-factory-09-test/inventory-app/git/refs/heads/factory/inventory-dashboard", del_args[0])
+
+    def test_merge_repo_pull_request_closed_raises_error(self):
+        pr_data = {
+            "id": 108,
+            "number": 7,
+            "title": "Abandoned Feature",
+            "body": "Fixes #30",
+            "state": "closed",
+            "draft": False,
+            "merged": False,
+            "merged_at": None,
+            "mergeable": None,
+            "head": {"ref": "factory/abandoned"},
+            "base": {"ref": "main"},
+        }
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = pr_data
+
+        with patch("httpx.Client.get", return_value=mock_get_resp):
+            with self.assertRaises(PullRequestMergeError) as ctx:
+                merge_repo_pull_request(
+                    repo_name="inventory-app",
+                    pull_number=7,
+                    token="test-token",
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("closed", ctx.exception.message.lower())
 
     def test_merge_repo_pull_request_draft_raises_error(self):
         pr_data = {
@@ -3710,6 +3738,28 @@ class TestPreviewRegistrySync(unittest.TestCase):
         res = self.preview_reg.sync_sandbox_to_main("nonexistent-repo")
         self.assertFalse(res)
 
+    def test_sync_sandbox_to_main_command_failure_returns_false(self):
+        mock_sandbox = MagicMock()
+        mock_process = MagicMock()
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mock_sandbox.exec.return_value = mock_process
+
+        preview = PreviewState(
+            repo="inventory-app",
+            branch="factory/inventory-v1",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            preview_url="https://inventory-3000.modal.host",
+            sandbox=mock_sandbox,
+            sandbox_id="sb-inv-1",
+        )
+        self.preview_reg._previews["inventory-app"] = preview
+
+        res = self.preview_reg.sync_sandbox_to_main("inventory-app")
+        self.assertFalse(res)
+        self.assertEqual(preview.branch, "factory/inventory-v1")
+
 
 class TestStudioPullRequestEndpoints(unittest.TestCase):
     """Test suite for GET and POST /api/studio/repos/{repo}/pulls endpoints in factory/ui/app.py."""
@@ -3812,7 +3862,17 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
 
         resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
         self.assertEqual(resp.status_code, 409)
-        self.assertIn("running", resp.json()["detail"].lower())
+        self.assertIn("active or queued", resp.json()["detail"].lower())
+
+    def test_post_merge_pull_request_blocked_when_job_queued(self):
+        # Create and mark a job as QUEUED for test-repo
+        job = self.registry.create_job(repo="test-repo", feature="feature-42")
+        with self.registry._lock:
+            job.status = JobStatus.QUEUED
+
+        resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("active or queued", resp.json()["detail"].lower())
 
 
 

@@ -10,8 +10,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 import inspect
 import json
+import logging
 import queue
 import re
+
+logger = logging.getLogger(__name__)
 import threading
 import time
 from typing import Any
@@ -986,11 +989,6 @@ class PreviewRegistry:
         clean_repo = repo.strip()
         sandbox, _ = self.get_active_sandbox(clean_repo)
         if sandbox is None:
-            with self._lock:
-                preview = self._previews.get(clean_repo)
-                if preview:
-                    preview.branch = "main"
-                    self._persist_preview(preview)
             return False
 
         bare_repo = clean_repo.split("/")[-1]
@@ -1003,15 +1001,23 @@ class PreviewRegistry:
             "git pull origin main"
         )
 
+        exit_code = 0
         try:
             process = sandbox.exec("bash", "-c", exec_cmd)
             if hasattr(process, "wait"):
                 try:
-                    process.wait()
+                    exit_code = process.wait()
                 except TypeError:
                     process.wait(raise_on_termination=False)
+                    exit_code = getattr(process, "returncode", 0)
+            else:
+                exit_code = getattr(process, "returncode", 0)
         except Exception as e:
             logger.warning(f"Failed to sync sandbox for {repo} to main: {e}")
+            return False
+
+        if exit_code != 0:
+            logger.warning(f"Failed to sync sandbox for {clean_repo} to main: command exited with code {exit_code}")
             return False
 
         self.update_branch(clean_repo, "main")
