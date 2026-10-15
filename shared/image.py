@@ -85,6 +85,7 @@ base_image = (
         "curl",
         "git",
         "htop",
+        "jq",
         "openssh-server",
         "wget",
         "docker.io",
