@@ -910,6 +910,7 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(data["repo"], "branch-test-repo")
         self.assertEqual(data["branch"], "factory/feature-preselected")
         self.assertEqual(data["status"], "IDLE")
+        self.assertFalse(data["in_place"])
         self.assertTrue(data["success"])
 
         # 2. Launch preview without specifying branch -> boots on preselected branch!
@@ -957,29 +958,150 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
         self.assertIn("Assembly Line Pipeline job is currently active", resp.json()["detail"])
 
-    def test_post_preview_branch_active_sandbox_guard(self):
-        # When preview sandbox is currently actively serving, idle branch change returns 409
+    def test_post_preview_branch_active_in_place_switching_success(self):
         from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-active-switcher"
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Switched to branch 'factory/active-feature'\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
         active_preview = PreviewState(
-            repo="active-repo",
+            repo="active-switcher-repo",
             status=PreviewStatus.SERVING,
             stage=PreviewStage.SERVING,
             branch="main",
-            preview_url="https://active.modal.host",
+            preview_url="https://active-switch.modal.host",
+            sandbox=mock_sandbox,
         )
-        mock_sandbox = MagicMock()
-        active_preview.sandbox = mock_sandbox
-        preview_registry._previews["active-repo"] = active_preview
+        preview_registry._previews["active-switcher-repo"] = active_preview
 
         try:
             resp = self.client.post(
-                "/api/studio/repos/active-repo/preview/branch",
-                json={"branch": "factory/target"},
+                "/api/studio/repos/active-switcher-repo/preview/branch",
+                json={"branch": "factory/active-feature"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["repo"], "active-switcher-repo")
+            self.assertEqual(data["branch"], "factory/active-feature")
+            self.assertEqual(data["status"], "SERVING")
+            self.assertEqual(data["preview_url"], "https://active-switch.modal.host")
+            self.assertTrue(data["in_place"])
+            self.assertTrue(data["success"])
+
+            # Verify in-container execution occurred
+            mock_sandbox.exec.assert_called_once()
+            exec_args = mock_sandbox.exec.call_args[0]
+            self.assertIn("git reset --hard && git clean -fd", exec_args[2])
+            self.assertIn("git checkout factory/active-feature && git pull origin factory/active-feature", exec_args[2])
+        finally:
+            preview_registry._previews.pop("active-switcher-repo", None)
+
+    def test_post_preview_branch_active_in_place_switching_failure(self):
+        from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-active-fail"
+        mock_sandbox.terminate = MagicMock()
+        mock_process = MagicMock()
+        mock_process.stdout = iter([])
+        mock_process.stderr = iter(["fatal: Remote branch factory/nonexistent not found\n"])
+        mock_process.wait.return_value = 1
+        mock_process.returncode = 1
+        mock_sandbox.exec.return_value = mock_process
+
+        active_preview = PreviewState(
+            repo="active-fail-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://active-fail.modal.host",
+            sandbox=mock_sandbox,
+        )
+        preview_registry._previews["active-fail-repo"] = active_preview
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/active-fail-repo/preview/branch",
+                json={"branch": "factory/nonexistent"},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("failed", resp.json()["detail"].lower())
+
+            # Unified Studio Sandbox must remain SERVING on original branch
+            self.assertEqual(active_preview.status, PreviewStatus.SERVING)
+            self.assertEqual(active_preview.branch, "main")
+            mock_sandbox.terminate.assert_not_called()
+        finally:
+            preview_registry._previews.pop("active-fail-repo", None)
+
+    def test_post_preview_branch_provisioning_guard(self):
+        from factory.ui.registry import preview_registry
+        prov_preview = PreviewState(
+            repo="prov-repo",
+            status=PreviewStatus.PROVISIONING,
+            stage=PreviewStage.PROVISIONING,
+            branch="main",
+        )
+        preview_registry._previews["prov-repo"] = prov_preview
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/prov-repo/preview/branch",
+                json={"branch": "factory/some-target"},
             )
             self.assertEqual(resp.status_code, 409)
-            self.assertIn("Preview container is currently active", resp.json()["detail"])
+            self.assertIn("provisioning", resp.json()["detail"].lower())
         finally:
-            preview_registry._previews.pop("active-repo", None)
+            preview_registry._previews.pop("prov-repo", None)
+
+    def test_post_preview_branch_broadcasts_sse_events(self):
+        from factory.ui.registry import preview_registry
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-sse-broadcast"
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Switched to branch 'factory/sse-feature'\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        active_preview = PreviewState(
+            repo="sse-broadcast-repo",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            branch="main",
+            preview_url="https://sse-broadcast.modal.host",
+            sandbox=mock_sandbox,
+        )
+        preview_registry._previews["sse-broadcast-repo"] = active_preview
+        q = preview_registry.add_listener("sse-broadcast-repo")
+
+        try:
+            resp = self.client.post(
+                "/api/studio/repos/sse-broadcast-repo/preview/branch",
+                json={"branch": "factory/sse-feature"},
+            )
+            self.assertEqual(resp.status_code, 200)
+
+            # Collect queued SSE broadcast events
+            events = []
+            while not q.empty():
+                events.append(q.get_nowait())
+
+            branch_events = [e for e in events if e.get("event") == "branch"]
+            self.assertEqual(len(branch_events), 1)
+            self.assertEqual(branch_events[0]["branch"], "factory/sse-feature")
+            self.assertEqual(branch_events[0]["repo"], "sse-broadcast-repo")
+
+            refresh_events = [e for e in events if e.get("event") == "preview_refresh"]
+            self.assertEqual(len(refresh_events), 1)
+            self.assertEqual(refresh_events[0]["repo"], "sse-broadcast-repo")
+        finally:
+            preview_registry._previews.pop("sse-broadcast-repo", None)
 
     @patch("factory.ui.app.instantiate_repo_from_template")
     def test_route_aliases_return_identical_responses(self, mock_instantiate):

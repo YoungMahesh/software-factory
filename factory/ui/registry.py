@@ -12,6 +12,7 @@ import inspect
 import json
 import queue
 import re
+import shlex
 import threading
 import time
 from typing import Any
@@ -991,6 +992,132 @@ class PreviewRegistry:
             self._persist_preview(preview)
             self._broadcast(preview, {"event": "branch", "branch": clean_branch, "repo": clean_repo})
             return preview
+
+    def switch_preview_branch(self, repo: str, branch: str) -> PreviewState:
+        """Switches the active branch in an actively serving Unified Studio Sandbox in place via sandbox.exec.
+
+        Performs a clean working tree reset (`git reset --hard && git clean -fd`), fetches remote changes,
+        and checks out the target branch. Diffs in package.json or pnpm-lock.yaml trigger
+        in-container `pnpm install --prefer-offline`. Broadcasts SSE branch and preview_refresh events.
+        If in-container checkout or installation fails, non-destructive recovery preserves the container
+        on its current branch and logs diagnostic details.
+        """
+        clean_repo = repo.strip()
+        clean_branch = branch.strip()
+
+        with self._lock:
+            preview = self._previews.get(clean_repo)
+            if not preview or preview.sandbox is None or preview.status != PreviewStatus.SERVING:
+                raise RuntimeError(
+                    f"No active serving preview sandbox found for repository '{clean_repo}'. "
+                    "In-place branch switching requires an active Unified Studio Sandbox."
+                )
+            sandbox = preview.sandbox
+            prev_branch = preview.branch
+
+        bare_repo = clean_repo.split("/")[-1]
+        workspace_dir = f"/root/{bare_repo}"
+        q_branch = shlex.quote(clean_branch)
+        q_workspace = shlex.quote(workspace_dir)
+
+        self.append_log(
+            clean_repo,
+            f"🌿 Switching preview branch for {clean_repo} from '{prev_branch}' to '{clean_branch}' in place...\n",
+            flush=True,
+        )
+
+        exec_cmd = (
+            f"cd {q_workspace} && "
+            "PREV_REV=$(git rev-parse HEAD 2>/dev/null || echo '') && "
+            "PREV_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '') && "
+            "rollback() { "
+            "  echo '⚠️ Rolling back container working tree to previous branch state...' >&2; "
+            "  if [ -n \"$PREV_BRANCH\" ] && [ \"$PREV_BRANCH\" != 'HEAD' ]; then "
+            "    git checkout -f \"$PREV_BRANCH\" 2>/dev/null || true; "
+            "  fi; "
+            "  if [ -n \"$PREV_REV\" ]; then "
+            "    git reset --hard \"$PREV_REV\" 2>/dev/null || true; "
+            "    git clean -fd 2>/dev/null || true; "
+            "  fi; "
+            "} && "
+            "trap 'rollback' ERR && "
+            "set -e && "
+            "echo '🧹 Cleaning working tree (git reset --hard && git clean -fd)...' && "
+            "git reset --hard && git clean -fd && "
+            "git fetch origin && "
+            f"(git checkout {q_branch} 2>/dev/null || git checkout -b {q_branch} origin/{q_branch} 2>/dev/null || true) && "
+            f"git checkout {q_branch} && git pull origin {q_branch} && "
+            "TARGET_REV=$(git rev-parse HEAD 2>/dev/null || echo '') && "
+            "if [ -n \"$PREV_REV\" ] && [ -n \"$TARGET_REV\" ] && [ \"$PREV_REV\" != \"$TARGET_REV\" ]; then "
+            "  DIFF_FILES=$(git diff --name-only \"$PREV_REV\" \"$TARGET_REV\" -- package.json pnpm-lock.yaml 2>/dev/null || echo ''); "
+            "  if [ -n \"$DIFF_FILES\" ]; then "
+            "    echo '📦 Dependency changes detected in package.json/pnpm-lock.yaml. Running pnpm install --prefer-offline...'; "
+            "    pnpm install --prefer-offline; "
+            "  fi; "
+            "fi"
+        )
+
+        try:
+            process = sandbox.exec("bash", "-c", exec_cmd)
+        except Exception as e:
+            err_msg = f"Failed to execute branch switch in container: {e}"
+            self.append_log(clean_repo, f"❌ [ERROR] {err_msg}\n", flush=True)
+            raise RuntimeError(err_msg) from e
+
+        # Stream stdout and stderr to preview logs
+        import concurrent.futures
+        captured_stderr: list[str] = []
+
+        def stream_pipe(reader, is_stderr: bool = False):
+            try:
+                for chunk in reader:
+                    text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+                    if is_stderr:
+                        captured_stderr.append(text)
+                    self.append_log(clean_repo, text)
+            except Exception:
+                pass
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            f_out = executor.submit(stream_pipe, getattr(process, "stdout", iter([])), False)
+            f_err = executor.submit(stream_pipe, getattr(process, "stderr", iter([])), True)
+            concurrent.futures.wait([f_out, f_err])
+
+        if hasattr(process, "wait"):
+            try:
+                exit_code = process.wait()
+            except TypeError:
+                process.wait(raise_on_termination=False)
+                exit_code = getattr(process, "returncode", None)
+        else:
+            exit_code = getattr(process, "returncode", 0)
+
+        self.flush_buffer(clean_repo)
+
+        if exit_code is None:
+            exit_code = getattr(process, "returncode", 0)
+
+        if exit_code != 0:
+            error_details = "".join(captured_stderr).strip() or f"Process exited with code {exit_code}"
+            err_msg = (
+                f"In-container branch switch to '{clean_branch}' failed (exit code {exit_code}): {error_details}"
+            )
+            self.append_log(clean_repo, f"\n❌ [ERROR] {err_msg}\n", flush=True)
+            # Safe recovery: ensure preview container remains SERVING on its original branch
+            with self._lock:
+                preview.branch = prev_branch
+                self._persist_preview(preview)
+            raise RuntimeError(err_msg)
+
+        # Success: update branch, persist, broadcast events
+        with self._lock:
+            preview.branch = clean_branch
+            self._persist_preview(preview)
+            self._broadcast(preview, {"event": "branch", "branch": clean_branch, "repo": clean_repo})
+
+        self.broadcast_refresh(clean_repo)
+        self.append_log(clean_repo, f"✅ Switched preview branch to '{clean_branch}'.\n", flush=True)
+        return preview
 
     def broadcast_refresh(self, repo: str) -> None:
         """Broadcasts a preview_refresh event to all preview listeners for the repository."""

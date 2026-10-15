@@ -603,22 +603,37 @@ def create_app(
                 detail=f"Cannot change branch: an Assembly Line Pipeline job is currently active for {clean_repo}.",
             )
 
-        # State check: in-place switching for active previews belongs to Issue 02
         preview = preview_reg.get_preview(clean_repo)
         active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
-        if active_sandbox is not None or (preview and preview.status in (PreviewStatus.SERVING, PreviewStatus.PROVISIONING)):
+
+        # Provisioning state guard: cannot switch in place while container is bootstrapping
+        if preview and preview.status == PreviewStatus.PROVISIONING:
             raise HTTPException(
                 status_code=409,
-                detail="Preview container is currently active. In-place container switching is required for active previews.",
+                detail=f"Unified Studio Sandbox for '{clean_repo}' is currently provisioning. Please wait until provisioning completes before switching branches.",
             )
 
-        updated_preview = preview_reg.update_branch(clean_repo, branch)
+        # In-place branch switching for active Unified Studio Sandbox
+        if active_sandbox is not None or (preview and preview.status == PreviewStatus.SERVING and preview.sandbox is not None):
+            try:
+                updated_preview = await asyncio.to_thread(preview_reg.switch_preview_branch, clean_repo, branch)
+                in_place = True
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to switch preview branch: {e}",
+                ) from e
+        else:
+            # Idle or stopped preview: persist pre-selected branch for subsequent container launch
+            updated_preview = preview_reg.update_branch(clean_repo, branch)
+            in_place = False
 
         return {
             "repo": clean_repo,
             "branch": updated_preview.branch,
             "status": updated_preview.status.value,
             "preview_url": updated_preview.preview_url,
+            "in_place": in_place,
             "success": True,
         }
 
