@@ -15,11 +15,11 @@ Decompose `factory/ui/frontend/src/components/LivePreview.tsx` (660 physical lin
 
 **Blocked by:** 11-decompose-sandbox-main
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/ui/frontend/src/components/live-preview/` directory and internal components.
-- [ ] Migrate toolbar, frame, and overlay logic into sub-components.
-- [ ] Refactor `LivePreview.tsx` to orchestrate sub-components cleanly.
-- [ ] Confirm all touched files are $\le 500$ physical lines.
-- [ ] Verify `pnpm test` passes in `factory/ui/frontend`.
+- [x] Create `factory/ui/frontend/src/components/live-preview/` directory and internal components.
+- [x] Migrate toolbar, frame, and overlay logic into sub-components.
+- [x] Refactor `LivePreview.tsx` to orchestrate sub-components cleanly.
+- [x] Confirm all touched files are $\le 500$ physical lines.
+- [x] Verify `pnpm test` passes in `factory/ui/frontend`.

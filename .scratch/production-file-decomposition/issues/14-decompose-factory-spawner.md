@@ -12,11 +12,12 @@ Decompose `factory/spawner.py` (522 physical lines) into a cohesive directory pa
 
 **Blocked by:** 13-decompose-github-tracker
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/spawner/` directory and internal sub-modules (`_config.py`, `_factory.py`, `_preview.py`).
-- [ ] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
-- [ ] Populate `factory/spawner/__init__.py` with all public re-exports matching the original interface.
-- [ ] Remove legacy `factory/spawner.py`.
-- [ ] Verify `pytest tests/test_sandbox.py tests/test_ui.py` passes without test modifications.
+- [x] Create `factory/spawner/` directory and internal sub-modules (`_config.py`, `_factory.py`, `_preview.py`).
+- [x] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
+- [x] Populate `factory/spawner/__init__.py` with all public re-exports matching the original interface.
+- [x] Remove legacy `factory/spawner.py`.
+- [x] Verify `pytest tests/test_sandbox.py tests/test_ui.py` passes without test modifications.
+

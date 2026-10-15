@@ -13,10 +13,10 @@ Decompose `sandbox/factory/harness.ts` (708 physical lines) into a cohesive pack
 
 **Blocked by:** 08-decompose-issue-drawer
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `sandbox/factory/harness/` directory and internal sub-modules (`types.ts`, `prompts.ts`, `parser.ts`, `runner.ts`).
-- [ ] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
-- [ ] Provide `index.ts` re-exporting all symbols and update `sandbox/factory/harness.ts` to proxy re-exports.
-- [ ] Verify `pnpm test` passes in `sandbox/factory`.
+- [x] Create `sandbox/factory/harness/` directory and internal sub-modules (`types.ts`, `prompts.ts`, `parser.ts`, `runner.ts`).
+- [x] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
+- [x] Provide `index.ts` re-exporting all symbols and update `sandbox/factory/harness.ts` to proxy re-exports.
+- [x] Verify `pnpm test` passes in `sandbox/factory`.

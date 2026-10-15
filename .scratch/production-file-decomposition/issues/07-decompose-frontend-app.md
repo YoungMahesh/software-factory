@@ -14,11 +14,11 @@ Decompose `factory/ui/frontend/src/App.tsx` (853 physical lines) into cohesive h
 
 **Blocked by:** 06-decompose-studio-view
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `useAppTelemetry.ts` and migrate SSE event stream orchestration.
-- [ ] Create `AppNavigation.tsx` and migrate header tab navigation controls.
-- [ ] Refactor `App.tsx` to orchestrate navigation and providers cleanly.
-- [ ] Confirm all touched files are $\le 500$ physical lines.
-- [ ] Verify `pnpm test` passes in `factory/ui/frontend`.
+- [x] Create `useAppTelemetry.ts` and migrate SSE event stream orchestration.
+- [x] Create `AppNavigation.tsx` and migrate header tab navigation controls.
+- [x] Refactor `App.tsx` to orchestrate navigation and providers cleanly.
+- [x] Confirm all touched files are $\le 500$ physical lines.
+- [x] Verify `pnpm test` passes in `factory/ui/frontend`.

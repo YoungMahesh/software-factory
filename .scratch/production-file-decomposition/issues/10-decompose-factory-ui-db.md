@@ -14,11 +14,11 @@ Decompose `factory/ui/db.py` (687 physical lines) into a cohesive directory pack
 
 **Blocked by:** 09-decompose-sandbox-factory-harness
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/ui/db/` directory and internal sub-modules (`_schema.py`, `_models.py`, `_chat.py`, `_jobs.py`, `_preview.py`).
-- [ ] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
-- [ ] Populate `factory/ui/db/__init__.py` with `StudioDatabase` composing the modules.
-- [ ] Remove legacy `factory/ui/db.py`.
-- [ ] Verify `pytest tests/test_ui.py` passes without test modifications.
+- [x] Create `factory/ui/db/` directory and internal sub-modules (`_schema.py`, `_models.py`, `_chat.py`, `_jobs.py`, `_preview.py`).
+- [x] Move logic into respective sub-modules ensuring each is $\le 500$ physical lines.
+- [x] Populate `factory/ui/db/__init__.py` with `StudioDatabase` composing the modules.
+- [x] Remove legacy `factory/ui/db.py`.
+- [x] Verify `pytest tests/test_ui.py` passes without test modifications.

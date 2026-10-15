@@ -12,10 +12,11 @@ Decompose `factory/ui/frontend/src/views/TestingConsoleView.tsx` (514 physical l
 
 **Blocked by:** 14-decompose-factory-spawner
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/ui/frontend/src/components/console/JobConfigPanel.tsx` and migrate job configuration form logic.
-- [ ] Refactor `TestingConsoleView.tsx` to embed `JobConfigPanel`.
-- [ ] Confirm all touched files are $\le 500$ physical lines.
-- [ ] Verify `pnpm test` passes in `factory/ui/frontend`.
+- [x] Create `factory/ui/frontend/src/components/console/JobConfigPanel.tsx` and migrate job configuration form logic.
+- [x] Refactor `TestingConsoleView.tsx` to embed `JobConfigPanel`.
+- [x] Confirm all touched files are $\le 500$ physical lines.
+- [x] Verify `pnpm test` passes in `factory/ui/frontend`.
+

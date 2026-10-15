@@ -25,6 +25,7 @@ import type {
   DeliveryGateFinalizeOptions,
   DeliveryGateFinalizeResult,
 } from "./types.ts";
+import { GitHubDeliveryGateManager } from "./github-delivery-gates.ts";
 
 export interface GitHubIssueTrackerOptions {
   client?: GitHubClient;
@@ -138,11 +139,23 @@ export function gitHubIssueToTicket(issue: GitHubIssue): Ticket {
 export class GitHubIssueTracker implements IssueTracker {
   public readonly id = "github" as const;
   public readonly client: GitHubClient;
-  public activePullRequest: GitHubPullRequest | null = null;
+  private deliveryGates: GitHubDeliveryGateManager;
   private cachedMilestones: Map<string, GitHubMilestone | null> = new Map();
 
   constructor(options: GitHubIssueTrackerOptions = {}) {
     this.client = options.client ?? new GitHubClient(options);
+    this.deliveryGates = new GitHubDeliveryGateManager(
+      this.client,
+      (slug) => this.resolveMilestone(slug)
+    );
+  }
+
+  get activePullRequest(): GitHubPullRequest | null {
+    return this.deliveryGates.activePullRequest;
+  }
+
+  set activePullRequest(pr: GitHubPullRequest | null) {
+    this.deliveryGates.activePullRequest = pr;
   }
 
   private async resolveMilestone(featureSlug: string): Promise<GitHubMilestone | null> {
@@ -372,177 +385,22 @@ export class GitHubIssueTracker implements IssueTracker {
     }
   }
 
-  private async findActivePullRequest(branch: string): Promise<GitHubPullRequest | null> {
-    if (this.activePullRequest) {
-      return this.activePullRequest;
-    }
-    try {
-      const prs = await this.client.listPullRequests({ state: "open" });
-      this.activePullRequest =
-        prs.find(
-          (p: any) =>
-            p.head === branch ||
-            p.head?.ref === branch ||
-            p.head?.label === `${this.client.owner}:${branch}` ||
-            p.head === `${this.client.owner}:${branch}`
-        ) ?? null;
-      return this.activePullRequest;
-    } catch {
-      return null;
-    }
-  }
-
-  private appendResolvedWorkItem(body: string, ticket: Ticket): string {
-    const itemRef = `Fixes #${ticket.number ?? ticket.id}`;
-    if (body.includes(itemRef)) {
-      return body;
-    }
-    if (body.includes("## Resolved Work Items")) {
-      return body.replace(
-        /## Resolved Work Items/,
-        `## Resolved Work Items\n- ${itemRef}: ${ticket.title}`
-      );
-    }
-    return (body.trim() ? body.trim() + "\n\n" : "") + `## Resolved Work Items\n- ${itemRef}: ${ticket.title}\n`;
-  }
-
   public async initializeDeliveryGate(
     options: DeliveryGateInitOptions
   ): Promise<DeliveryGateInitResult | null> {
-    const { branch, ticket } = options;
-    const featureSlug = options.featureSlug ?? (ticket ? `issue-${ticket.number ?? ticket.id}` : "");
-
-    let pr = await this.findActivePullRequest(branch);
-
-    if (!pr) {
-      let title = `feat: resolve #${ticket?.number ?? ticket?.id ?? "issue"} - ${ticket?.title ?? featureSlug}`;
-      const issueNum = extractIssueNumber(undefined, featureSlug);
-      if (issueNum === null && featureSlug) {
-        try {
-          const ms = await this.resolveMilestone(featureSlug);
-          title = `feat(${featureSlug}): implement ${ms?.title ?? featureSlug}`;
-        } catch {
-          title = `feat(${featureSlug}): implement ${featureSlug}`;
-        }
-      } else if (ticket) {
-        title = `feat: resolve #${ticket.number ?? ticket.id} - ${ticket.title}`;
-      }
-
-      const workItemLine = ticket
-        ? `- Fixes #${ticket.number ?? ticket.id}: ${ticket.title}`
-        : "";
-
-      const body = [
-        `## Summary`,
-        `Autonomous feature implementation for ${featureSlug}.`,
-        ``,
-        `## Resolved Work Items`,
-        workItemLine,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      pr = await this.client.createPullRequest({
-        title,
-        body,
-        head: branch,
-        base: "main",
-        draft: true,
-      });
-    } else if (ticket) {
-      const updatedBody = this.appendResolvedWorkItem(pr.body || "", ticket);
-      if (updatedBody !== (pr.body || "")) {
-        pr = await this.client.updatePullRequest(pr.number, { body: updatedBody });
-      }
-    }
-
-    this.activePullRequest = pr;
-    return {
-      pullRequestNumber: pr.number,
-      pullRequestUrl: pr.html_url,
-      branch,
-      title: pr.title,
-    };
+    return this.deliveryGates.initDeliveryGate(options);
   }
 
   public async updateDeliveryGate(
     options: DeliveryGateUpdateOptions
   ): Promise<void> {
-    const { branch, ticket, status, diagnostics } = options;
-
-    const pr = await this.findActivePullRequest(branch);
-    if (!pr) {
-      return;
-    }
-
-    if (status === "resolved") {
-      const updatedBody = this.appendResolvedWorkItem(pr.body || "", ticket);
-      if (updatedBody !== (pr.body || "")) {
-        this.activePullRequest = await this.client.updatePullRequest(pr.number, {
-          body: updatedBody,
-        });
-      }
-    } else if (status === "ready-for-human") {
-      const alertBlock = [
-        ``,
-        `> [!WARNING]`,
-        `> ⚠️ **Software Factory Alert: Execution Halted**`,
-        `> Ticket #${ticket.number ?? ticket.id} (${ticket.title}) failed after exhausting retries and requires human intervention.`,
-      ].join("\n");
-
-      const updatedBody = (pr.body || "") + "\n" + alertBlock;
-      this.activePullRequest = await this.client.updatePullRequest(pr.number, {
-        body: updatedBody,
-      });
-
-      const alertComment = [
-        `## ⚠️ Software Factory Alert: Ticket #${ticket.number ?? ticket.id} Needs Human Intervention`,
-        ``,
-        `- **Ticket**: #${ticket.number ?? ticket.id} - ${ticket.title}`,
-        `- **Status**: \`factory:ready-for-human\``,
-        `- **Branch**: \`${branch}\``,
-        ``,
-        `### Failure Diagnostics`,
-        diagnostics || "Ticket failed after maximum retries.",
-      ].join("\n");
-
-      try {
-        await this.client.addComment(pr.number, alertComment);
-      } catch {
-        // Non-fatal if comment fails
-      }
-    }
+    return this.deliveryGates.updateDeliveryGate(options);
   }
 
   public async finalizeDeliveryGate(
     options: DeliveryGateFinalizeOptions
   ): Promise<DeliveryGateFinalizeResult | null> {
-    const { branch, summary } = options;
-
-    const pr = await this.findActivePullRequest(branch);
-
-    if (pr) {
-      this.activePullRequest = await this.client.updatePullRequest(pr.number, {
-        draft: false,
-      });
-
-      if (summary) {
-        try {
-          await this.client.addComment(pr.number, summary);
-        } catch {
-          // Non-fatal if comment fails
-        }
-      }
-
-      return {
-        pullRequestNumber: this.activePullRequest.number,
-        pullRequestUrl: this.activePullRequest.html_url,
-        branch,
-        title: this.activePullRequest.title,
-        readyForReview: true,
-      };
-    }
-
-    return null;
+    return this.deliveryGates.finalizeDeliveryGate(options);
   }
 }
+

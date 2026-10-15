@@ -14,11 +14,11 @@ Decompose `sandbox/main.py` (681 physical lines) by extracting CLI argument hand
 
 **Blocked by:** 10-decompose-factory-ui-db
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `sandbox/cli.py` and extract CLI parsing and QR generation logic.
-- [ ] Create `sandbox/config.py` and extract sandbox defaults, port constants, and volume configurations.
-- [ ] Refactor `sandbox/main.py` to import from `cli.py` and `config.py`.
-- [ ] Confirm all touched files are $\le 500$ physical lines.
-- [ ] Verify `pytest tests/test_sandbox.py` passes without test modifications.
+- [x] Create `sandbox/cli.py` and extract CLI parsing and QR generation logic.
+- [x] Create `sandbox/config.py` and extract sandbox defaults, port constants, and volume configurations.
+- [x] Refactor `sandbox/main.py` to import from `cli.py` and `config.py`.
+- [x] Confirm all touched files are $\le 500$ physical lines.
+- [x] Verify `pytest tests/test_sandbox.py` passes without test modifications.

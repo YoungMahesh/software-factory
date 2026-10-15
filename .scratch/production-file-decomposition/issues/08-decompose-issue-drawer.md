@@ -15,11 +15,11 @@ Decompose `factory/ui/frontend/src/components/IssueDrawer.tsx` (715 physical lin
 
 **Blocked by:** 07-decompose-frontend-app
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/ui/frontend/src/components/issue-drawer/` directory and internal components.
-- [ ] Migrate `IssueCard`, `MilestoneGroup`, and `IssueFilterBar` logic.
-- [ ] Refactor `IssueDrawer.tsx` to orchestrate sub-components.
-- [ ] Confirm all touched files are $\le 500$ physical lines.
-- [ ] Verify `pnpm test` passes in `factory/ui/frontend`.
+- [x] Create `factory/ui/frontend/src/components/issue-drawer/` directory and internal components.
+- [x] Migrate `IssueCard`, `MilestoneGroup`, and `IssueFilterBar` logic.
+- [x] Refactor `IssueDrawer.tsx` to orchestrate sub-components.
+- [x] Confirm all touched files are $\le 500$ physical lines.
+- [x] Verify `pnpm test` passes in `factory/ui/frontend`.

@@ -13,10 +13,11 @@ Decompose `sandbox/factory/tracker/github-tracker.ts` (548 physical lines) by ex
 
 **Blocked by:** 12-decompose-live-preview
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `sandbox/factory/tracker/github-delivery-gates.ts` and migrate delivery gate evaluation logic.
-- [ ] Refactor `GitHubIssueTracker` in `github-tracker.ts` to delegate delivery gate operations.
-- [ ] Ensure all touched files are $\le 500$ physical lines.
-- [ ] Verify `pnpm test` passes in `sandbox/factory`.
+- [x] Create `sandbox/factory/tracker/github-delivery-gates.ts` and migrate delivery gate evaluation logic.
+- [x] Refactor `GitHubIssueTracker` in `github-tracker.ts` to delegate delivery gate operations.
+- [x] Ensure all touched files are $\le 500$ physical lines.
+- [x] Verify `pnpm test` passes in `sandbox/factory`.
+
