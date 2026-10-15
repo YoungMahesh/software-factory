@@ -263,6 +263,98 @@ class TestPreviewRegistry(unittest.TestCase):
         lines_flushed = preview.buffer_and_extract_lines("", flush=True)
         self.assertEqual(lines_flushed, ["incomplete footer"])
 
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_idle_preview_target_branch_persistence_and_launch(self, mock_create):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewStatus
+        db = StudioDatabase(":memory:")
+        registry = PreviewRegistry(db=db)
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-idle-launch"
+        mock_sandbox.stdout = iter([])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-idle-3000.modal.host")
+
+        # 1. Update target branch when no preview exists yet (idle)
+        registry.update_branch("test-idle-repo", "factory/my-preselected-branch")
+
+        preview = registry.get_preview("test-idle-repo")
+        self.assertIsNotNone(preview)
+        self.assertEqual(preview.branch, "factory/my-preselected-branch")
+        self.assertEqual(preview.status, PreviewStatus.IDLE)
+
+        # Verify DB persistence
+        db_record = db.get_preview("test-idle-repo")
+        self.assertIsNotNone(db_record)
+        self.assertEqual(db_record["branch"], "factory/my-preselected-branch")
+
+        # 2. Launch preview without specifying branch -> must launch on preselected branch
+        launched = registry.launch_preview("test-idle-repo")
+        self.assertEqual(launched.branch, "factory/my-preselected-branch")
+
+        mock_create.assert_called_once()
+        spawn_cfg = mock_create.call_args[0][0]
+        self.assertEqual(spawn_cfg.branch, "factory/my-preselected-branch")
+
+    @patch("factory.ui.registry.create_preview_sandbox")
+    def test_stopped_preview_target_branch_update_and_relaunch(self, mock_create):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewState, PreviewStatus
+        db = StudioDatabase(":memory:")
+        registry = PreviewRegistry(db=db)
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-stopped-launch"
+        mock_sandbox.stdout = iter([])
+        mock_sandbox.stderr = iter([])
+        mock_sandbox.wait.return_value = 0
+        mock_sandbox.returncode = 0
+        mock_create.return_value = (mock_sandbox, "https://sb-stopped-3000.modal.host")
+
+        # 1. Start with a stopped preview on main
+        stopped_preview = PreviewState(
+            repo="stopped-repo",
+            status=PreviewStatus.STOPPED,
+            branch="main",
+        )
+        registry._previews["stopped-repo"] = stopped_preview
+        registry._persist_preview(stopped_preview)
+
+        # 2. Update target branch while stopped
+        registry.update_branch("stopped-repo", "factory/feature-v2")
+        self.assertEqual(stopped_preview.branch, "factory/feature-v2")
+
+        # 3. Relaunch without branch argument -> must use updated branch
+        relaunch = registry.launch_preview("stopped-repo")
+        self.assertEqual(relaunch.branch, "factory/feature-v2")
+
+        mock_create.assert_called_once()
+        spawn_cfg = mock_create.call_args[0][0]
+        self.assertEqual(spawn_cfg.branch, "factory/feature-v2")
+
+    def test_database_rehydration_preserves_idle_target_branch(self):
+        from factory.ui.db import StudioDatabase
+        from factory.ui.registry import PreviewRegistry, PreviewStatus
+        db = StudioDatabase(":memory:")
+        db.save_preview({
+            "repo": "persisted-repo",
+            "branch": "factory/persisted-feature",
+            "status": "STOPPED",
+            "stage": "IDLE",
+            "preview_url": None,
+        })
+
+        new_registry = PreviewRegistry(db=db)
+        new_registry.rehydrate()
+
+        preview = new_registry.get_preview("persisted-repo")
+        self.assertIsNotNone(preview)
+        self.assertEqual(preview.branch, "factory/persisted-feature")
+        self.assertEqual(preview.status, PreviewStatus.STOPPED)
+
 
 class TestInSandboxRegistryExecution(unittest.TestCase):
     def setUp(self):

@@ -5,11 +5,11 @@ Enable Factory Studio to discover remote branches for a repository and allow dev
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `fetch_repo_branches(repo_name)` queries GitHub REST API `GET /repos/{owner}/{repo}/branches` and returns candidate branches.
-- [ ] Remote branches are filtered to include only `main` (or default branch) and branches with prefix `factory/`, sorted with default branch first.
-- [ ] `GET /api/studio/repos/{repo}/branches` endpoint returns the filtered list of available branches.
-- [ ] When the preview sandbox is stopped or idle, updating the target branch persists the selection so subsequent launches start on that branch.
-- [ ] API handles unauthorized or network errors from GitHub gracefully with non-blocking diagnostic responses.
-- [ ] Automated tests verify branch filtering, API endpoint responses, and idle preview branch persistence.
+- [x] `fetch_repo_branches(repo_name)` queries GitHub REST API `GET /repos/{owner}/{repo}/branches` and returns candidate branches.
+- [x] Remote branches are filtered to include only `main` (or default branch) and branches with prefix `factory/`, sorted with default branch first.
+- [x] `GET /api/studio/repos/{repo}/branches` endpoint returns the filtered list of available branches.
+- [x] When the preview sandbox is stopped or idle, updating the target branch persists the selection so subsequent launches start on that branch.
+- [x] API handles unauthorized or network errors from GitHub gracefully with non-blocking diagnostic responses.
+- [x] Automated tests verify branch filtering, API endpoint responses, and idle preview branch persistence.

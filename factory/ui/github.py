@@ -694,6 +694,90 @@ def strip_repo_owner(repo_name: str, org: str = DEFAULT_TEST_ORG) -> str:
     return clean
 
 
+def fetch_repo_branches(
+    repo_name: str,
+    token: str | None = None,
+    org: str = DEFAULT_TEST_ORG,
+    timeout_secs: float = 8.0,
+    default_branch: str = "main",
+) -> list[str]:
+    """Queries GitHub REST API GET /repos/{owner}/{repo}/branches and returns candidate branches.
+
+    Filters candidate branches strictly to the default branch ('main') and active feature
+    branches prefixed with 'factory/'. Results are ordered with the default branch first,
+    followed by feature branches sorted alphabetically.
+    Handles network or authentication errors gracefully by returning a non-blocking fallback ([default_branch]).
+    """
+    branches, _ = fetch_repo_branches_with_diagnostics(
+        repo_name=repo_name,
+        token=token,
+        org=org,
+        timeout_secs=timeout_secs,
+        default_branch=default_branch,
+    )
+    return branches
+
+
+def fetch_repo_branches_with_diagnostics(
+    repo_name: str,
+    token: str | None = None,
+    org: str = DEFAULT_TEST_ORG,
+    timeout_secs: float = 8.0,
+    default_branch: str = "main",
+) -> tuple[list[str], str | None]:
+    """Queries GitHub REST API GET /repos/{owner}/{repo}/branches with non-blocking diagnostic error feedback."""
+    auth_token = token or get_test_org_token()
+    clean_repo = strip_repo_owner(repo_name, org)
+
+    if not auth_token:
+        return [default_branch], "GitHub credentials unavailable"
+
+    headers = {
+        "Authorization": f"Bearer {auth_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SoftwareFactory-TestingConsole/1.0",
+    }
+
+    url = f"https://api.github.com/repos/{org}/{clean_repo}/branches?per_page=100"
+    try:
+        with httpx.Client(timeout=timeout_secs) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code != 200:
+                logger.warning(
+                    "GitHub API returned status %s when fetching branches for %s/%s",
+                    resp.status_code,
+                    org,
+                    clean_repo,
+                )
+                return [default_branch], f"GitHub API error (status {resp.status_code})"
+
+            data = resp.json()
+            if not isinstance(data, list):
+                return [default_branch], "Invalid GitHub response payload"
+
+            factory_branches: list[str] = []
+            for b in data:
+                if not isinstance(b, dict):
+                    continue
+                name = b.get("name", "")
+                if name == default_branch:
+                    pass
+                elif name.startswith("factory/"):
+                    factory_branches.append(name)
+
+            sorted_factory = sorted(set(factory_branches))
+            return [default_branch] + sorted_factory, None
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch branches for %s/%s from GitHub API: %s",
+            org,
+            clean_repo,
+            e,
+        )
+        return [default_branch], f"Network error: {e}"
+
+
 def create_repo_milestone(
     repo_name: str,
     title: str = "v1: Initial App",

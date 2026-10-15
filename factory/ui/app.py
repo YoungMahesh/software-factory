@@ -31,6 +31,8 @@ from factory.ui.github import (
     synthesize_and_create_issue,
     validate_github_repo_name,
     normalize_milestone_slug,
+    fetch_repo_branches,
+    fetch_repo_branches_with_diagnostics,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
@@ -49,6 +51,10 @@ STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
 class LaunchPreviewRequest(BaseModel):
     branch: str | None = Field(None, description="Optional target branch to serve (e.g. 'factory/<feature>' or 'main')")
+
+
+class UpdatePreviewBranchRequest(BaseModel):
+    branch: str = Field(..., description="Target preview branch name (e.g. 'factory/<feature>' or 'main')")
 
 
 class LaunchJobRequest(BaseModel):
@@ -572,6 +578,50 @@ def create_app(
         preview = preview_reg.launch_preview(clean_repo, branch=branch)
         return JSONResponse(status_code=201, content=preview.to_dict())
 
+    @app.post("/api/studio/repos/{repo}/preview/branch")
+    @app.post("/api/repos/{repo}/preview/branch")
+    async def update_preview_branch_endpoint(repo: str, req: UpdatePreviewBranchRequest):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        branch = req.branch.strip()
+        if not branch:
+            raise HTTPException(status_code=400, detail="Branch name cannot be empty.")
+
+        # Target branch format validation: must be 'main' or start with 'factory/'
+        if not (branch == "main" or branch.startswith("factory/")):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid target branch '{branch}'. Target branch must be 'main' or start with 'factory/'.",
+            )
+
+        # Concurrency safety guard: cannot switch branches while an Assembly Line job is active
+        if registry.is_job_active(clean_repo):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot change branch: an Assembly Line Pipeline job is currently active for {clean_repo}.",
+            )
+
+        # State check: in-place switching for active previews belongs to Issue 02
+        preview = preview_reg.get_preview(clean_repo)
+        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
+        if active_sandbox is not None or (preview and preview.status in (PreviewStatus.SERVING, PreviewStatus.PROVISIONING)):
+            raise HTTPException(
+                status_code=409,
+                detail="Preview container is currently active. In-place container switching is required for active previews.",
+            )
+
+        updated_preview = preview_reg.update_branch(clean_repo, branch)
+
+        return {
+            "repo": clean_repo,
+            "branch": updated_preview.branch,
+            "status": updated_preview.status.value,
+            "preview_url": updated_preview.preview_url,
+            "success": True,
+        }
+
     @app.get("/api/studio/repos/{repo}/preview")
     async def get_preview_endpoint(repo: str):
         clean_repo = repo.strip()
@@ -657,6 +707,23 @@ def create_app(
         )
 
 
+
+    @app.get("/api/studio/repos/{repo}/branches")
+    @app.get("/api/repos/{repo}/branches")
+    async def get_repo_branches_endpoint(repo: str):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+        branches, error_msg = fetch_repo_branches_with_diagnostics(clean_repo)
+        resp: dict[str, Any] = {
+            "repo": clean_repo,
+            "org": DEFAULT_TEST_ORG,
+            "branches": branches,
+            "default_branch": "main",
+        }
+        if error_msg:
+            resp["error"] = error_msg
+        return resp
 
     @app.get("/api/repos/{repo}/scratch")
     async def get_repo_scratch(repo: str):

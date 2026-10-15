@@ -223,6 +223,15 @@ class JobRegistry:
             return p_reg.get_active_sandbox(repo)
         return None, None
 
+    def is_job_active(self, repo: str) -> bool:
+        """Returns True if there is a running or queued Assembly Line job for the given repository."""
+        clean_repo = repo.strip()
+        with self._lock:
+            return any(
+                j.repo == clean_repo and j.status in (JobStatus.QUEUED, JobStatus.RUNNING)
+                for j in self._jobs.values()
+            )
+
     def create_job(
         self,
         repo: str,
@@ -840,7 +849,13 @@ class PreviewRegistry:
             if existing and existing.status in (PreviewStatus.PROVISIONING, PreviewStatus.SERVING):
                 return existing
 
-            resolved_branch = branch.strip() if branch else resolve_active_preview_branch(clean_repo)
+            if branch and branch.strip():
+                resolved_branch = branch.strip()
+            elif existing and existing.branch:
+                resolved_branch = existing.branch
+            else:
+                resolved_branch = resolve_active_preview_branch(clean_repo)
+
             preview = PreviewState(
                 repo=clean_repo,
                 branch=resolved_branch,
@@ -957,13 +972,25 @@ class PreviewRegistry:
             await asyncio.sleep(poll_interval)
         return self.get_active_sandbox(repo)
 
-    def update_branch(self, repo: str, branch: str) -> None:
+    def update_branch(self, repo: str, branch: str) -> PreviewState:
         """Updates the active branch tracking for a repository preview."""
+        clean_repo = repo.strip()
+        clean_branch = branch.strip()
         with self._lock:
-            preview = self._previews.get(repo.strip())
+            preview = self._previews.get(clean_repo)
             if preview:
-                preview.branch = branch
-                self._persist_preview(preview)
+                preview.branch = clean_branch
+            else:
+                preview = PreviewState(
+                    repo=clean_repo,
+                    branch=clean_branch,
+                    status=PreviewStatus.IDLE,
+                    stage=PreviewStage.IDLE,
+                )
+                self._previews[clean_repo] = preview
+            self._persist_preview(preview)
+            self._broadcast(preview, {"event": "branch", "branch": clean_branch, "repo": clean_repo})
+            return preview
 
     def broadcast_refresh(self, repo: str) -> None:
         """Broadcasts a preview_refresh event to all preview listeners for the repository."""
