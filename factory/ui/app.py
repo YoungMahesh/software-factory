@@ -40,8 +40,8 @@ from factory.ui.github import (
     fetch_repo_branches,
     fetch_repo_branches_with_diagnostics,
     reopen_repo_issue_for_rollback,
-    update_local_markdown_issue_for_rollback,
 )
+from factory.ui.tracker import update_local_markdown_issue_for_rollback
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
 from factory.ui.guard import evaluate_prompt_intent
@@ -883,18 +883,11 @@ def create_app(
             "git clean -fd && "
             'OLD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "") && '
             f'TARGET_COMMIT={target_commit_expr} && '
-            'echo "ORIGINAL_COMMIT_SHA:$TARGET_COMMIT" && '
+            'echo "ORIGINAL_COMMIT_SHA:$(git rev-parse --short $TARGET_COMMIT)" && '
             'if ! git revert --no-edit "$TARGET_COMMIT"; then '
             'echo "Revert conflict encountered. Aborting..." >&2; '
             'git revert --abort; '
             'exit 1; '
-            'fi && '
-            'if [ -d ".scratch" ]; then '
-            'find .scratch -path "*/issues/*.md" -type f -exec sed -i -E \'s/(Status:[[:space:]]*)[a-zA-Z0-9_-]+/\\1ready-for-agent/g\' {} + 2>/dev/null || true; '
-            'find .scratch -path "*/issues/*.md" -type f -exec sed -i -E \'/^[[:space:]]*Commit:/d\' {} + 2>/dev/null || true; '
-            'if ! git diff --quiet 2>/dev/null; then '
-            'git commit -am "chore(tracker): reset issue status for rollback" 2>/dev/null || true; '
-            'fi; '
             'fi && '
             f"git push origin {shlex.quote(target_branch)} && "
             'NEW_SHA=$(git rev-parse HEAD) && '
@@ -960,10 +953,12 @@ def create_app(
 
         full_output = "".join(stdout_lines)
         orig_sha_match = re.search(r"ORIGINAL_COMMIT_SHA:([^\r\n]+)", full_output)
-        original_sha = orig_sha_match.group(1).strip() if orig_sha_match else (commit_sha or "HEAD")
+        raw_orig_sha = orig_sha_match.group(1).strip() if orig_sha_match else (commit_sha or "HEAD")
+        original_sha = raw_orig_sha[:7] if len(raw_orig_sha) >= 7 and raw_orig_sha != "HEAD" else raw_orig_sha
 
         rev_sha_match = re.search(r"REVERT_COMMIT_SHA:([^\r\n]+)", full_output)
-        revert_sha = rev_sha_match.group(1).strip() if rev_sha_match else "unknown"
+        raw_rev_sha = rev_sha_match.group(1).strip() if rev_sha_match else "unknown"
+        revert_sha = raw_rev_sha[:7] if len(raw_rev_sha) >= 7 and raw_rev_sha != "unknown" else raw_rev_sha
 
         preview_reg.append_log(
             clean_repo,
@@ -985,9 +980,9 @@ def create_app(
                 detail=f"Cannot rollback turn while an Assembly Line Pipeline job is active or queued for repository '{clean_repo}'.",
             )
 
-        # 2. Resolve target branch and merge safety guard early if branch provided
+        # 2. Determine target branch
         preview = preview_reg.get_preview(clean_repo)
-        target_branch = req.branch.strip() if req and req.branch and req.branch.strip() else None
+        explicit_branch = req.branch.strip() if req and req.branch and req.branch.strip() else None
 
         # 3. Resolve target message and turn data from SQLite chat history
         messages = db.get_chat_messages(clean_repo)
@@ -1008,8 +1003,14 @@ def create_app(
                     status_code=400,
                     detail=f"Turn message '{req.message_id}' has already been reverted.",
                 )
+            target_branch = (
+                explicit_branch
+                or target_msg.get("turn_data", {}).get("branch")
+                or (preview.branch if preview and preview.branch else "main")
+            )
         else:
-            # Find latest completed code-producing turn in reverse order
+            target_branch = explicit_branch or (preview.branch if preview and preview.branch else "main")
+            # Find latest completed code-producing turn on active branch in reverse order
             for m in reversed(messages):
                 t_data = m.get("turn_data")
                 if not isinstance(t_data, dict):
@@ -1018,7 +1019,7 @@ def create_app(
                     continue
                 if t_data.get("refusal") or t_data.get("type") == "turn_rollback":
                     continue
-                if (
+                is_code_producing = (
                     m.get("role") == "assistant"
                     and (
                         t_data.get("commit_sha")
@@ -1028,24 +1029,22 @@ def create_app(
                         or t_data.get("issue_number")
                         or m.get("issue_number") is not None
                     )
-                ):
-                    target_msg = m
-                    break
+                )
+                if not is_code_producing:
+                    continue
+                msg_branch = t_data.get("branch")
+                if msg_branch and msg_branch != target_branch:
+                    continue
+                target_msg = m
+                break
 
-        if not target_branch:
-            if target_msg:
-                fallback_branch = preview.branch if preview is not None and preview.branch else "main"
-                target_branch = target_msg.get("turn_data", {}).get("branch") or fallback_branch
-            elif preview is not None and preview.branch:
-                target_branch = preview.branch
-
+        # Merge safety guard: strictly reject if target branch is 'main' or PR has already been merged into main
         if not target_branch or target_branch == "main":
             raise HTTPException(
                 status_code=400,
                 detail="Cannot roll back turn: target branch is 'main' or has already been merged into main.",
             )
 
-        # Merge safety guard: strictly reject if PR has already been merged into main
         prs = fetch_repo_pull_requests(clean_repo, branch=target_branch, state="all")
         for pr in prs:
             if pr.get("merged") or pr.get("status") == "merged":
@@ -1054,10 +1053,10 @@ def create_app(
                     detail=f"Cannot roll back turn: Feature Pull Request #{pr.get('number')} for branch '{target_branch}' has already been merged into main.",
                 )
 
-        if not target_msg and not messages and not req.branch:
+        if not target_msg:
             raise HTTPException(
                 status_code=400,
-                detail=f"No completed code-producing turn found to roll back for repository '{clean_repo}'.",
+                detail=f"No completed code-producing turn found to roll back on branch '{target_branch}'.",
             )
 
         # 4. Auto-boot fallback: ensure Unified Studio Sandbox is running

@@ -4548,6 +4548,13 @@ class TestStudioTurnRollback(unittest.TestCase):
 
     @patch("factory.ui.app.fetch_repo_pull_requests", return_value=[])
     def test_rollback_git_revert_conflict_aborts_and_returns_400(self, mock_fetch_prs):
+        self.db.save_chat_message(
+            repo="conflict-repo",
+            role="assistant",
+            content="Built feature with conflict",
+            issue_number=11,
+            turn_data={"commit_sha": "abc1111", "branch": "factory/feat-1"},
+        )
         state, mock_sandbox = self._register_serving_preview(
             "conflict-repo",
             branch="factory/feat-1",
@@ -4708,7 +4715,13 @@ class TestStudioTurnRollback(unittest.TestCase):
 
     @patch("factory.ui.app.fetch_repo_pull_requests", return_value=[])
     def test_rollback_auto_boots_stopped_sandbox(self, mock_fetch_prs):
-        # 1. Stopped preview state
+        # 1. Setup completed turn and stopped preview state
+        self.db.save_chat_message(
+            repo="stopped-repo",
+            role="assistant",
+            content="Built feature in stopped sandbox",
+            turn_data={"commit_sha": "sha999", "branch": "factory/feat-stopped"},
+        )
         state = PreviewState(
             repo="stopped-repo",
             branch="factory/feat-stopped",

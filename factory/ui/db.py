@@ -401,9 +401,9 @@ class StudioDatabase:
         """Persists an append-only turn rollback event to chat messages."""
         if content is None:
             issue_str = f" for Issue #{issue_number}" if issue_number is not None else ""
-            orig_s = original_commit_sha or "unknown"
-            rev_s = revert_commit_sha or "unknown"
-            content = f"↩️ Rolled back turn{issue_str} (commit {orig_s} ➔ {rev_s}). Live Preview restored to previous version."
+            orig_sha_display = original_commit_sha or "unknown"
+            revert_sha_display = revert_commit_sha or "unknown"
+            content = f"↩️ Rolled back turn{issue_str} (commit {orig_sha_display} ➔ {revert_sha_display}). Live Preview restored to previous version."
 
         turn_data: dict[str, Any] = {
             "type": "turn_rollback",
