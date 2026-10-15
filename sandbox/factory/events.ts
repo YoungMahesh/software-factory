@@ -32,6 +32,7 @@ export type TelemetryEventType =
   | "attempt"
   | "attempt_start"
   | "reviewer_rejection"
+  | "delivery_gate"
   | (string & {});
 
 export type TelemetryStage =
@@ -103,6 +104,18 @@ export function parseTelemetryEnvelope<T = any>(
   }
 }
 
+let globalTelemetryStream: { write: (chunk: string) => any } | null = null;
+
+export function setGlobalTelemetryStream(
+  stream: { write: (chunk: string) => any } | null
+): void {
+  globalTelemetryStream = stream;
+}
+
+export function getGlobalTelemetryStream(): { write: (chunk: string) => any } | null {
+  return globalTelemetryStream;
+}
+
 /**
  * Emits a structured telemetry event unbuffered to container stdout (or custom stream).
  */
@@ -111,9 +124,10 @@ export function emitTelemetryEvent<T = any>(
   options?: EmitOptions
 ): string {
   const formatted = formatTelemetryEnvelope(input);
+  const stream = options?.stream ?? globalTelemetryStream;
 
-  if (options?.stream) {
-    options.stream.write(formatted);
+  if (stream) {
+    stream.write(formatted);
   } else if (options?.sync === false) {
     process.stdout.write(formatted);
   } else {
@@ -543,6 +557,49 @@ export function emitReviewerRejectionEvent(
   );
 }
 
+export interface DeliveryGateEventData {
+  pullRequestNumber?: number;
+  pull_request_number?: number;
+  pullRequestUrl?: string;
+  pull_request_url?: string;
+  html_url?: string;
+  branch: string;
+  title?: string;
+  draft?: boolean;
+  ready_for_review?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Emits a structured Feature Pull Request delivery gate telemetry event.
+ */
+export function emitDeliveryGateEvent(
+  data: DeliveryGateEventData,
+  stage?: TelemetryStage,
+  options?: EmitOptions
+): string {
+  const normalizedData: DeliveryGateEventData = {
+    ...data,
+    ...(data.pullRequestNumber !== undefined && data.pull_request_number === undefined
+      ? { pull_request_number: data.pullRequestNumber }
+      : {}),
+    ...(data.pullRequestUrl !== undefined
+      ? {
+          ...(data.pull_request_url === undefined ? { pull_request_url: data.pullRequestUrl } : {}),
+          ...(data.html_url === undefined ? { html_url: data.pullRequestUrl } : {}),
+        }
+      : {}),
+  };
+  return emitTelemetryEvent(
+    {
+      type: "delivery_gate",
+      ...(stage ? { stage } : {}),
+      data: normalizedData,
+    },
+    options
+  );
+}
+
 /**
  * Micro-batch buffer that aggregates high-frequency streaming thinking deltas
  * into 100ms chunks to prevent stdout stream saturation.
@@ -754,6 +811,15 @@ export class AgentEventStream {
     verdict: Partial<ReviewVerdict> | Record<string, any>
   ): string {
     return emitReviewerRejectionEvent(verdict, this.currentStage ?? "REVIEWER", {
+      stream: this.stream,
+    });
+  }
+
+  emitDeliveryGate(
+    data: DeliveryGateEventData,
+    stage?: TelemetryStage
+  ): string {
+    return emitDeliveryGateEvent(data, stage ?? this.currentStage, {
       stream: this.stream,
     });
   }

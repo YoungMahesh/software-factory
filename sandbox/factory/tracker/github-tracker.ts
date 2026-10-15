@@ -461,6 +461,7 @@ export class GitHubIssueTracker implements IssueTracker {
       pullRequestNumber: pr.number,
       pullRequestUrl: pr.html_url,
       branch,
+      title: pr.title,
     };
   }
 
@@ -536,6 +537,8 @@ export class GitHubIssueTracker implements IssueTracker {
       return {
         pullRequestNumber: this.activePullRequest.number,
         pullRequestUrl: this.activePullRequest.html_url,
+        branch,
+        title: this.activePullRequest.title,
         readyForReview: true,
       };
     }

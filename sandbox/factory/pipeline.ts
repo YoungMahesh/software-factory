@@ -19,7 +19,7 @@ import {
 import { verifyWorkspace } from "./verifier.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
 import type { IssueTracker, TrackerType } from "./tracker/types.ts";
-import { emitStageEvent } from "./events.ts";
+import { emitStageEvent, emitTelemetryEvent, emitDeliveryGateEvent } from "./events.ts";
 
 export interface PipelineOptions {
   workspaceDir: string;
@@ -179,14 +179,23 @@ export async function runAssemblyLinePipeline(
 
     if (lifecycleResult.status === "resolved") {
       if (tracker.initializeDeliveryGate) {
-        await tracker.initializeDeliveryGate({
+        const gateInitResult = await tracker.initializeDeliveryGate({
           workspaceDir,
           featureSlug,
           branch,
           ticket: targetTicket,
         });
-        deliveryGateInitialized = true;
+        if (gateInitResult) {
+          emitDeliveryGateEvent({
+            pullRequestNumber: gateInitResult.pullRequestNumber,
+            pullRequestUrl: gateInitResult.pullRequestUrl,
+            branch: gateInitResult.branch ?? branch,
+            title: gateInitResult.title ?? targetTicket.title,
+            draft: true,
+          });
+        }
       }
+      deliveryGateInitialized = true;
     } else {
       haltedOnError = true;
       if (tracker.updateDeliveryGate) {
@@ -232,12 +241,21 @@ export async function runAssemblyLinePipeline(
       if (lifecycleResult.status === "resolved") {
         if (!deliveryGateInitialized) {
           if (tracker.initializeDeliveryGate) {
-            await tracker.initializeDeliveryGate({
+            const gateInitResult = await tracker.initializeDeliveryGate({
               workspaceDir,
               featureSlug,
               branch,
               ticket: nextTicket,
             });
+            if (gateInitResult) {
+              emitDeliveryGateEvent({
+                pullRequestNumber: gateInitResult.pullRequestNumber,
+                pullRequestUrl: gateInitResult.pullRequestUrl,
+                branch: gateInitResult.branch ?? branch,
+                title: gateInitResult.title ?? nextTicket.title,
+                draft: true,
+              });
+            }
           }
           deliveryGateInitialized = true;
         } else {
@@ -297,13 +315,23 @@ export async function runAssemblyLinePipeline(
       blockedBy: [],
     }));
 
-    await tracker.finalizeDeliveryGate({
+    const finalizeResult = await tracker.finalizeDeliveryGate({
       workspaceDir,
       featureSlug,
       branch,
       tickets: executedTicketObjects,
       summary,
     });
+
+    if (finalizeResult) {
+      emitDeliveryGateEvent({
+        pullRequestNumber: finalizeResult.pullRequestNumber,
+        pullRequestUrl: finalizeResult.pullRequestUrl,
+        branch: finalizeResult.branch ?? branch,
+        title: finalizeResult.title,
+        ready_for_review: true,
+      });
+    }
   }
 
   return {

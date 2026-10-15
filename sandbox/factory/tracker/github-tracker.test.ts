@@ -304,6 +304,7 @@ test("GitHubIssueTracker: Delivery Gate lifecycle (create draft PR -> incrementa
   assert.ok(initResult);
   assert.equal(initResult?.pullRequestNumber, 77);
   assert.equal(initResult?.branch, "factory/feature-alpha");
+  assert.ok(initResult?.title);
   assert.ok(createdPrPayload);
   assert.equal(createdPrPayload.draft, true);
   assert.equal(createdPrPayload.base, "main");
@@ -358,6 +359,9 @@ test("GitHubIssueTracker: Delivery Gate lifecycle (create draft PR -> incrementa
 
   assert.ok(finalizeResult);
   assert.equal(finalizeResult?.readyForReview, true);
+  assert.equal(finalizeResult?.branch, "factory/feature-alpha");
+  assert.ok(finalizeResult?.title);
+  assert.equal(finalizeResult?.pullRequestNumber, 77);
   assert.equal(currentPr.draft, false);
   assert.equal(prComments.length, 2);
   assert.ok(prComments[1].includes("| Ticket | Status |"));

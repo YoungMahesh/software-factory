@@ -12,6 +12,8 @@ import {
   emitAttemptEvent,
   emitAttemptStartEvent,
   emitReviewerRejectionEvent,
+  emitDeliveryGateEvent,
+  type DeliveryGateEventData,
   AgentEventStream,
   ThinkingBatchBuffer,
   ThinkingExtractor,
@@ -937,6 +939,92 @@ describe("Agent Event Stream Telemetry Emitter", () => {
 
       const res = parseTelemetryEnvelope(chunks[0]);
       assert.equal(res?.data.matchCount, 2);
+    });
+  });
+
+  describe("delivery_gate telemetry events", () => {
+    it("emits formatted delivery_gate envelope for gate initialization", () => {
+      const chunks: string[] = [];
+      const stream = { write: (c: string) => chunks.push(c) };
+
+      const eventData: DeliveryGateEventData = {
+        pullRequestNumber: 42,
+        pull_request_number: 42,
+        pullRequestUrl: "https://github.com/org/repo/pull/42",
+        pull_request_url: "https://github.com/org/repo/pull/42",
+        html_url: "https://github.com/org/repo/pull/42",
+        branch: "factory/feature-auth",
+        title: "feat(auth): implement user authentication",
+        draft: true,
+      };
+
+      const emitted = emitDeliveryGateEvent(eventData, undefined, { stream });
+      assert.ok(emitted.startsWith(EVENT_PREFIX));
+      assert.equal(chunks.length, 1);
+
+      const parsed = parseTelemetryEnvelope<DeliveryGateEventData>(chunks[0]);
+      assert.ok(parsed);
+      assert.equal(parsed.type, "delivery_gate");
+      assert.equal(parsed.data.pullRequestNumber, 42);
+      assert.equal(parsed.data.pull_request_number, 42);
+      assert.equal(parsed.data.pullRequestUrl, "https://github.com/org/repo/pull/42");
+      assert.equal(parsed.data.branch, "factory/feature-auth");
+      assert.equal(parsed.data.title, "feat(auth): implement user authentication");
+      assert.equal(parsed.data.draft, true);
+      assert.equal(parsed.data.ready_for_review, undefined);
+    });
+
+    it("emits formatted delivery_gate envelope for gate finalization", () => {
+      const chunks: string[] = [];
+      const stream = { write: (c: string) => chunks.push(c) };
+
+      const eventData: DeliveryGateEventData = {
+        pullRequestNumber: 42,
+        pull_request_number: 42,
+        pullRequestUrl: "https://github.com/org/repo/pull/42",
+        pull_request_url: "https://github.com/org/repo/pull/42",
+        html_url: "https://github.com/org/repo/pull/42",
+        branch: "factory/feature-auth",
+        title: "feat(auth): implement user authentication",
+        ready_for_review: true,
+      };
+
+      const emitted = emitDeliveryGateEvent(eventData, undefined, { stream });
+      assert.ok(emitted.startsWith(EVENT_PREFIX));
+
+      const parsed = parseTelemetryEnvelope<DeliveryGateEventData>(chunks[0]);
+      assert.ok(parsed);
+      assert.equal(parsed.type, "delivery_gate");
+      assert.equal(parsed.data.pullRequestNumber, 42);
+      assert.equal(parsed.data.pull_request_number, 42);
+      assert.equal(parsed.data.pullRequestUrl, "https://github.com/org/repo/pull/42");
+      assert.equal(parsed.data.branch, "factory/feature-auth");
+      assert.equal(parsed.data.ready_for_review, true);
+      assert.equal(parsed.data.draft, undefined);
+    });
+
+    it("AgentEventStream emits delivery_gate event through stream", () => {
+      const chunks: string[] = [];
+      const stream = { write: (c: string) => chunks.push(c) };
+      const aes = new AgentEventStream({ stream });
+
+      aes.emitDeliveryGate({
+        pullRequestNumber: 99,
+        pull_request_number: 99,
+        pullRequestUrl: "https://github.com/org/repo/pull/99",
+        pull_request_url: "https://github.com/org/repo/pull/99",
+        html_url: "https://github.com/org/repo/pull/99",
+        branch: "factory/issue-99",
+        title: "feat: resolve #99 - Fix login",
+        draft: true,
+      });
+
+      assert.equal(chunks.length, 1);
+      const parsed = parseTelemetryEnvelope<DeliveryGateEventData>(chunks[0]);
+      assert.ok(parsed);
+      assert.equal(parsed.type, "delivery_gate");
+      assert.equal(parsed.data.pullRequestNumber, 99);
+      assert.equal(parsed.data.draft, true);
     });
   });
 });
