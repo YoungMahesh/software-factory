@@ -122,6 +122,9 @@ export interface DeliveryGateData {
   commit_message?: string;
   preview_synced?: boolean;
   result?: any;
+  reverted?: boolean;
+  reverted_at?: number;
+  revert_commit?: string;
 }
 
 export interface StudioDispatchParams {
@@ -270,4 +273,29 @@ export interface DbChatMessage {
 }
 
 export type ViewportMode = "desktop" | "tablet" | "mobile";
+
+export interface TurnRollbackData {
+  type: "turn_rollback";
+  original_message_id?: string | null;
+  original_commit_sha?: string | null;
+  revert_commit_sha?: string | null;
+  issue_number?: number | string | null;
+  branch?: string | null;
+  [key: string]: any;
+}
+
+export interface RollbackTurnParams {
+  repo: string;
+  message_id?: string | null;
+  branch?: string | null;
+}
+
+export interface RollbackTurnResponse {
+  success: boolean;
+  branch: string;
+  original_commit: string;
+  revert_commit: string;
+  issue_number?: number | string | null;
+  message: string;
+}
 

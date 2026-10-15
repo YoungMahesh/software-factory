@@ -14,6 +14,8 @@ import {
   PullRequest,
   MergePullRequestParams,
   MergePullRequestResponse,
+  RollbackTurnParams,
+  RollbackTurnResponse,
 } from "./types";
 
 export type {
@@ -22,6 +24,9 @@ export type {
   PullRequest,
   MergePullRequestParams,
   MergePullRequestResponse,
+  TurnRollbackData,
+  RollbackTurnParams,
+  RollbackTurnResponse,
 } from "./types";
 
 export interface StudioPromptResponse {
@@ -402,6 +407,22 @@ export async function updatePreviewBranch(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to update preview branch: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function rollbackTurn(
+  params: RollbackTurnParams
+): Promise<RollbackTurnResponse> {
+  const { repo, message_id, branch } = params;
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/turns/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message_id, branch }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to roll back turn: ${res.statusText}`);
   }
   return res.json();
 }

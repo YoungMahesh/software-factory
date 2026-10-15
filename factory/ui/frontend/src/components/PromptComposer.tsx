@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Send, Loader2, Trash2, Check } from "lucide-react";
+import { Send, Loader2, Trash2, Check, RotateCcw } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Textarea } from "./ui/Textarea";
 
@@ -13,6 +13,8 @@ export interface PromptComposerProps {
   onClearChat?: () => void;
   isClearingChat?: boolean;
   isChatCleared?: boolean;
+  onRollbackLastTurn?: () => void;
+  isRollingBack?: boolean;
 }
 
 export const PromptComposer: React.FC<PromptComposerProps> = ({
@@ -25,6 +27,8 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
   onClearChat,
   isClearingChat = false,
   isChatCleared = false,
+  onRollbackLastTurn,
+  isRollingBack = false,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
   const [grillMode, setGrillMode] = useState<boolean>(defaultGrillMode);
@@ -123,6 +127,24 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 title="Clear chat history for this repository"
               >
                 Clear Chat
+              </Button>
+            )}
+
+            {onRollbackLastTurn && (
+              <Button
+                id="btn-composer-rollback"
+                data-testid="composer-rollback-btn"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onRollbackLastTurn}
+                disabled={isInputLocked || isRollingBack}
+                isLoading={isRollingBack}
+                icon={<RotateCcw className="w-3.5 h-3.5 text-slate-400" />}
+                className="text-xs text-slate-400 hover:text-indigo-300 hover:bg-indigo-950/40 px-2 py-1"
+                title="Undo last turn on active branch"
+              >
+                Undo Last Turn
               </Button>
             )}
 

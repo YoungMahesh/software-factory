@@ -462,5 +462,67 @@ describe("LivePreview", () => {
       expect(handleSync).not.toHaveBeenCalled();
     });
   });
+
+  describe("Turn Rollback Controls", () => {
+    it("renders 'Undo Last Turn' button in toolbar and triggers onRollbackLastTurn when clicked", async () => {
+      const user = userEvent.setup();
+      const handleRollback = vi.fn();
+      renderWithProviders(
+        <LivePreview
+          status="SERVING"
+          branch="factory/feature-1"
+          onRollbackLastTurn={handleRollback}
+        />
+      );
+
+      const rollbackBtn = screen.getByTestId("preview-rollback-btn");
+      expect(rollbackBtn).toBeInTheDocument();
+      expect(rollbackBtn).not.toBeDisabled();
+      expect(screen.getByTestId("rollback-icon")).toBeInTheDocument();
+
+      await user.click(rollbackBtn);
+      expect(handleRollback).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables 'Undo Last Turn' button when isJobActive or isConcurrencyLocked is true", async () => {
+      const user = userEvent.setup();
+      const handleRollback = vi.fn();
+      renderWithProviders(
+        <LivePreview
+          status="SERVING"
+          branch="factory/feature-1"
+          isJobActive={true}
+          onRollbackLastTurn={handleRollback}
+        />
+      );
+
+      const rollbackBtn = screen.getByTestId("preview-rollback-btn");
+      expect(rollbackBtn).toBeDisabled();
+
+      await user.click(rollbackBtn);
+      expect(handleRollback).not.toHaveBeenCalled();
+    });
+
+    it("shows loading spinner and disables clicks when isRollingBack is true", async () => {
+      const user = userEvent.setup();
+      const handleRollback = vi.fn();
+      renderWithProviders(
+        <LivePreview
+          status="SERVING"
+          branch="factory/feature-1"
+          isRollingBack={true}
+          onRollbackLastTurn={handleRollback}
+        />
+      );
+
+      const rollbackBtn = screen.getByTestId("preview-rollback-btn");
+      expect(rollbackBtn).toBeDisabled();
+      expect(screen.getByTestId("rollback-loading-spinner")).toBeInTheDocument();
+
+      await user.click(rollbackBtn);
+      expect(handleRollback).not.toHaveBeenCalled();
+    });
+  });
 });
+
 

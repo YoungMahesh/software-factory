@@ -28,6 +28,7 @@ import {
   useMergePullRequestMutation,
   useRepoBranchesQuery,
   useUpdatePreviewBranchMutation,
+  useRollbackTurnMutation,
   studioQueryKeys,
 } from "../hooks/useStudioQueries";
 import { Button } from "../components/ui/Button";
@@ -38,6 +39,7 @@ import { PromptComposer } from "../components/PromptComposer";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { DeliveryGateCard } from "../components/DeliveryGateCard";
 import { IssueDrawer } from "../components/IssueDrawer";
+import { TurnRollbackModal } from "../components/TurnRollbackModal";
 import { getLastUserPromptBefore, getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 import { PullRequest, PreviewState } from "../types";
 
@@ -94,6 +96,19 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  const [isRollbackModalOpen, setIsRollbackModalOpen] = useState<boolean>(false);
+  const [targetRollbackTurn, setTargetRollbackTurn] = useState<{
+    messageId?: string;
+    branch?: string;
+    commitSha?: string | null;
+    issueNumber?: number | string | null;
+    issueTitle?: string | null;
+  } | null>(null);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
+
+  const rollbackMutation = useRollbackTurnMutation();
+  const isRollingBack = rollbackMutation.isPending;
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => {
@@ -110,6 +125,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     setIsPRPopoverOpen(false);
     setIsConfirmingMerge(false);
     setPopoverMergeError(null);
+    setIsRollbackModalOpen(false);
+    setTargetRollbackTurn(null);
+    setRollbackError(null);
   }, [selectedRepo]);
 
   const pullRequests: PullRequest[] = prQuery.data?.pulls || [];
@@ -317,6 +335,86 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleOpenRollback = (turnInfo?: {
+    messageId?: string;
+    branch?: string;
+    commitSha?: string | null;
+    issueNumber?: number | string | null;
+    issueTitle?: string | null;
+  }) => {
+    setRollbackError(null);
+    if (turnInfo) {
+      setTargetRollbackTurn(turnInfo);
+    } else {
+      const activeBranch = previewState?.branch || undefined;
+      const targetMsg = [...messages].reverse().find((m) => {
+        if (m.role !== "assistant") return false;
+        const tData = m.turn_data || {};
+        if (tData.reverted || tData.refusal || tData.type === "turn_rollback") return false;
+        const isCodeProducing = Boolean(
+          tData.commit_sha ||
+          tData.sha ||
+          tData.job_id ||
+          tData.issue ||
+          tData.issue_number ||
+          m.jobId ||
+          m.deliveryGate
+        );
+        if (!isCodeProducing) return false;
+        if (activeBranch && tData.branch && tData.branch !== activeBranch) return false;
+        return true;
+      });
+
+      const commitSha =
+        targetMsg?.turn_data?.commit_sha ||
+        targetMsg?.turn_data?.sha ||
+        targetMsg?.deliveryGate?.sha ||
+        null;
+      const issueNum =
+        targetMsg?.turn_data?.issue_number ||
+        targetMsg?.turn_data?.issue?.number ||
+        targetMsg?.deliveryGate?.resolved_issues?.[0] ||
+        null;
+      const issueTitle =
+        targetMsg?.turn_data?.issue?.title ||
+        targetMsg?.deliveryGate?.pull_request?.title ||
+        null;
+
+      setTargetRollbackTurn({
+        messageId: targetMsg?.id,
+        branch: activeBranch || targetMsg?.turn_data?.branch,
+        commitSha,
+        issueNumber: issueNum,
+        issueTitle,
+      });
+    }
+    setIsRollbackModalOpen(true);
+  };
+
+  const handleConfirmRollback = async () => {
+    if (!selectedRepo) return;
+    setRollbackError(null);
+    try {
+      const res = await rollbackMutation.mutateAsync({
+        repo: selectedRepo,
+        message_id: targetRollbackTurn?.messageId,
+        branch: targetRollbackTurn?.branch || previewState?.branch || undefined,
+      });
+      setIsRollbackModalOpen(false);
+      setToast({
+        type: "success",
+        message: res.message || `Rolled back turn on ${res.branch}.`,
+      });
+    } catch (err: any) {
+      const msg = err.message || "Failed to roll back turn.";
+      setRollbackError(msg);
+      setToast({
+        type: "error",
+        message: msg,
+      });
     }
   };
 
@@ -712,9 +810,69 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                     <div className="max-w-[85%] bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs shadow-sm leading-relaxed whitespace-pre-wrap">
                       {msg.text}
                     </div>
+                  ) : msg.turn_data?.type === "turn_rollback" ? (
+                    /* Dedicated TurnRollbackCard */
+                    <div
+                      data-testid="turn-rollback-card"
+                      className="w-full bg-slate-900/60 border border-indigo-900/60 rounded-xl p-3.5 space-y-2.5 shadow-sm text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2 text-indigo-400 font-semibold">
+                          <RotateCcw className="w-4 h-4 text-indigo-400 shrink-0" />
+                          <span>Turn Rolled Back</span>
+                        </div>
+                        {msg.turn_data.branch && (
+                          <Badge variant="stage" className="font-mono text-[10px]">
+                            {msg.turn_data.branch}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2 p-2 rounded bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-slate-300">
+                        <span className="text-slate-500 font-sans text-xs">Commit Reversion:</span>
+                        <span className="text-rose-400 font-mono">
+                          {msg.turn_data.original_commit_sha?.slice(0, 7) || "unknown"}
+                        </span>
+                        <span className="text-slate-500 font-sans">➔</span>
+                        <span className="text-emerald-400 font-mono">
+                          {msg.turn_data.revert_commit_sha?.slice(0, 7) || "unknown"}
+                        </span>
+                        {msg.turn_data.issue_number && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-indigo-300 font-sans">Issue #{msg.turn_data.issue_number}</span>
+                          </>
+                        )}
+                      </div>
+
+                      <p className="text-slate-300 text-xs leading-relaxed">
+                        {msg.text || "Live Preview restored to previous version."}
+                      </p>
+                    </div>
                   ) : (
                     /* Assistant Response Card */
-                    <div className="w-full bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-sm text-xs">
+                    <div className={`w-full ${
+                      msg.turn_data?.reverted
+                        ? "bg-slate-950/40 border-slate-800/80 opacity-70"
+                        : "bg-slate-900/60 border-slate-800"
+                    } rounded-xl p-3.5 space-y-2.5 shadow-sm text-xs`}>
+                      {/* Reverted Status Badge on superseded card */}
+                      {msg.turn_data?.reverted && (
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
+                          <Badge
+                            data-testid="turn-reverted-badge"
+                            variant="neutral"
+                            className="bg-slate-800 text-slate-400 border-slate-700"
+                          >
+                            Reverted
+                          </Badge>
+                          {msg.turn_data.revert_commit && (
+                            <span className="text-[10px] font-mono text-slate-500">
+                              Revert SHA: {msg.turn_data.revert_commit.slice(0, 7)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {/* Intent Guard Refusal Banner (if rejected) */}
                       {msg.refusal && (
                         <div className="p-3 rounded-lg border border-rose-800/80 bg-rose-950/30 text-xs">
@@ -897,25 +1055,70 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                             turn={msg.grillTurn}
                             onApprove={(turn) => onApprovePlan && onApprovePlan(turn)}
                             isApproving={isApproving}
-                            isApproved={Boolean(activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))}
+                            isApproved={Boolean(
+                              msg.turn_data?.reverted ||
+                              (activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))
+                            )}
                           />
                         )
                       ) : msg.deliveryGate || msg.turn_data?.type === "delivery_gate" ? (
                         <DeliveryGateCard
                           repo={selectedRepo}
-                          data={msg.deliveryGate || msg.turn_data}
+                          data={{
+                            ...(msg.deliveryGate || msg.turn_data),
+                            reverted: Boolean(msg.turn_data?.reverted || msg.deliveryGate?.reverted),
+                          }}
                           activeJobRunning={Boolean(
                             activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED")
                           )}
                           onMergeSuccess={handleMergeSuccess}
+                          onRollbackTurn={() =>
+                            handleOpenRollback({
+                              messageId: msg.id,
+                              branch: (msg.deliveryGate || msg.turn_data)?.branch || previewState?.branch,
+                              commitSha: (msg.deliveryGate || msg.turn_data)?.sha,
+                              issueNumber: (msg.deliveryGate || msg.turn_data)?.resolved_issues?.[0],
+                              issueTitle: (msg.deliveryGate || msg.turn_data)?.pull_request?.title,
+                            })
+                          }
+                          isRollingBack={isRollingBack}
+                          isReverted={Boolean(msg.turn_data?.reverted)}
                         />
                       ) : (
                         /* Text content if present */
-                        msg.text && (
-                          <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-wrap">
-                            {msg.text}
-                          </div>
-                        )
+                        <div className="space-y-2">
+                          {msg.text && (
+                            <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-wrap">
+                              {msg.text}
+                            </div>
+                          )}
+                          {!msg.turn_data?.reverted && (msg.turn_data?.commit_sha || msg.turn_data?.sha) && (
+                            <div className="flex items-center justify-end pt-1 border-t border-slate-800/60">
+                              <Button
+                                data-testid="assistant-card-rollback-btn"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={isExecutingTurn || isRollingBack}
+                                isLoading={isRollingBack}
+                                onClick={() =>
+                                  handleOpenRollback({
+                                    messageId: msg.id,
+                                    branch: msg.turn_data?.branch || previewState?.branch,
+                                    commitSha: msg.turn_data?.commit_sha || msg.turn_data?.sha,
+                                    issueNumber: msg.turn_data?.issue_number,
+                                    issueTitle: msg.turn_data?.issue?.title,
+                                  })
+                                }
+                                icon={<RotateCcw className="w-3.5 h-3.5 text-slate-400" />}
+                                className="text-xs text-slate-400 hover:text-indigo-300 hover:bg-indigo-950/40 px-2 py-1"
+                                title="Undo this turn"
+                              >
+                                Undo Turn
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -941,6 +1144,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             onClearChat={onClearChat}
             isClearingChat={isClearingChat}
             isChatCleared={isChatCleared}
+            onRollbackLastTurn={() => handleOpenRollback()}
+            isRollingBack={isRollingBack}
           />
         </div>
 
@@ -966,6 +1171,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             isSyncing={isSyncing}
             onSync={handleSync}
             isJobActive={isExecutingTurn}
+            onRollbackLastTurn={() => handleOpenRollback()}
+            isRollingBack={isRollingBack}
           />
         </div>
       </div>
@@ -975,6 +1182,25 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         isOpen={isNewAppModalOpen}
         onClose={() => setIsNewAppModalOpen(false)}
         onCreate={onCreateRepo}
+      />
+
+      {/* Turn Rollback Confirmation Modal */}
+      <TurnRollbackModal
+        isOpen={isRollbackModalOpen}
+        onClose={() => {
+          if (!isRollingBack) {
+            setIsRollbackModalOpen(false);
+            setRollbackError(null);
+          }
+        }}
+        onConfirm={handleConfirmRollback}
+        isRollingBack={isRollingBack}
+        repo={selectedRepo}
+        branch={targetRollbackTurn?.branch || previewState?.branch || null}
+        commitSha={targetRollbackTurn?.commitSha || null}
+        issueNumber={targetRollbackTurn?.issueNumber || null}
+        issueTitle={targetRollbackTurn?.issueTitle || null}
+        errorMessage={rollbackError}
       />
 
       {/* Sandbox Disconnected Dialog */}

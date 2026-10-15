@@ -14,15 +14,15 @@ Implement the frontend user interface and reactive state management for Turn Rol
 
 **Blocked by:** 01 (needs backend rollback endpoint)
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Define `TurnRollbackData`, `RollbackTurnParams`, and `RollbackTurnResponse` in `types.ts`.
-- [ ] Implement `rollbackTurn` API client method in `api.ts` with React Query mutation.
-- [ ] Add `TurnRollbackCard` rendering in `StudioView.tsx` for messages with `turn_data.type === "turn_rollback"`.
-- [ ] Render visual `Reverted` badge on superseded assistant cards and disable duplicate approval/merge buttons when `turn_data.reverted === true`.
-- [ ] Add inline "Undo Turn" button in `DeliveryGateCard.tsx` with appropriate disabled guards.
-- [ ] Add "Undo Last Turn" button in `LivePreview.tsx` toolbar and `PromptComposer.tsx`.
-- [ ] Implement confirmation modal dialog displaying issue title, commit SHA, and branch before confirmation.
-- [ ] Handle in-flight loading states and display success/error toast notifications.
-- [ ] Add unit and component integration tests in `StudioView.test.tsx`, `LivePreview.test.tsx`, and `DeliveryGateCard.test.tsx`.
+- [x] Define `TurnRollbackData`, `RollbackTurnParams`, and `RollbackTurnResponse` in `types.ts`.
+- [x] Implement `rollbackTurn` API client method in `api.ts` with React Query mutation.
+- [x] Add `TurnRollbackCard` rendering in `StudioView.tsx` for messages with `turn_data.type === "turn_rollback"`.
+- [x] Render visual `Reverted` badge on superseded assistant cards and disable duplicate approval/merge buttons when `turn_data.reverted === true`.
+- [x] Add inline "Undo Turn" button in `DeliveryGateCard.tsx` with appropriate disabled guards.
+- [x] Add "Undo Last Turn" button in `LivePreview.tsx` toolbar and `PromptComposer.tsx`.
+- [x] Implement confirmation modal dialog displaying issue title, commit SHA, and branch before confirmation.
+- [x] Handle in-flight loading states and display success/error toast notifications.
+- [x] Add unit and component integration tests in `StudioView.test.tsx`, `LivePreview.test.tsx`, and `DeliveryGateCard.test.tsx`.

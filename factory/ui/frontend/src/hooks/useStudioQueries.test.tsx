@@ -12,6 +12,7 @@ import {
   useMergePullRequestMutation,
   useRepoBranchesQuery,
   useUpdatePreviewBranchMutation,
+  useRollbackTurnMutation,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -27,6 +28,7 @@ vi.mock("../api", async (importOriginal) => {
     mergePullRequest: vi.fn(),
     fetchRepoBranches: vi.fn(),
     updatePreviewBranch: vi.fn(),
+    rollbackTurn: vi.fn(),
   };
 });
 
@@ -306,5 +308,32 @@ describe("useStudioQueries - Chat Messages", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.branches("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.preview("my-app") });
   });
+
+  it("rolls back turn and invalidates messages, issues, pullRequests, and preview query caches via useRollbackTurnMutation", async () => {
+    const mockRes = {
+      success: true,
+      branch: "factory/feature-1",
+      original_commit: "abc1234",
+      revert_commit: "def5678",
+      issue_number: 42,
+      message: "Rolled back turn for Issue #42 (commit abc1234 ➔ def5678).",
+    };
+    vi.mocked(api.rollbackTurn).mockResolvedValue(mockRes);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useRollbackTurnMutation(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ repo: "my-app", branch: "factory/feature-1", message_id: "msg-123" });
+    });
+
+    expect(api.rollbackTurn).toHaveBeenCalledWith({ repo: "my-app", branch: "factory/feature-1", message_id: "msg-123" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.messages("my-app") });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.issues("my-app") });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.pullRequests("my-app") });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.preview("my-app") });
+  });
 });
+
 
