@@ -107,6 +107,18 @@ export function convertDbMessageToChatMessage(dbMsg: DbChatMessage): ChatMessage
     };
   }
 
+  // 4. Delivery Gate card
+  if (turnData && turnData.type === "delivery_gate") {
+    return {
+      id: dbMsg.id,
+      role: "assistant",
+      text: dbMsg.content,
+      timestamp,
+      turn_data: turnData,
+      deliveryGate: turnData,
+    };
+  }
+
   // 4. Default assistant message
   return {
     id: dbMsg.id,

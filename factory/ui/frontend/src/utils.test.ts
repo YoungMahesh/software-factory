@@ -101,4 +101,32 @@ describe("convertDbMessageToChatMessage", () => {
     expect(chatMsg.jobId).toBe("job-12345");
     expect(chatMsg.timestamp).toBe(1728639203000);
   });
+
+  it("converts delivery_gate db message to ChatMessage with deliveryGate payload", () => {
+    const dbMsg: DbChatMessage = {
+      id: "msg-delivery-gate-1",
+      repo: "my-app",
+      role: "assistant",
+      content: "Merged Feature Pull Request #12 into main. Live preview synchronized.",
+      turn_data: {
+        type: "delivery_gate",
+        status: "merged",
+        merged: true,
+        pull_number: 12,
+        sha: "abc1234",
+        branch: "factory/feature-1",
+        preview_synced: true,
+      },
+      created_at: 1728639204,
+    };
+
+    const chatMsg = convertDbMessageToChatMessage(dbMsg);
+    expect(chatMsg.id).toBe("msg-delivery-gate-1");
+    expect(chatMsg.role).toBe("assistant");
+    expect(chatMsg.text).toBe(
+      "Merged Feature Pull Request #12 into main. Live preview synchronized."
+    );
+    expect(chatMsg.deliveryGate).toEqual(dbMsg.turn_data);
+    expect(chatMsg.turn_data).toEqual(dbMsg.turn_data);
+  });
 });

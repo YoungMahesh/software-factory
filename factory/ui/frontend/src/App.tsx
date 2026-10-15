@@ -690,6 +690,13 @@ export const AppContent: React.FC = () => {
     isIssueDrawerOpen,
     onInstantDispatch: handleInstantDispatch,
     isDispatching: dispatchStudioMutation.isPending,
+    onMergeSuccess: () => {
+      setPreviewState((prev) => {
+        if (!prev || prev.status === "IDLE") return prev;
+        return { ...prev, branch: "main" };
+      });
+      setPreviewRefreshKey((prev) => prev + 1);
+    },
   };
 
   return (

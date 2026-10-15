@@ -13,10 +13,11 @@ import {
   MessageSquareQuote,
   Lock,
 } from "lucide-react";
-import { Issue, IssueMilestone } from "../types";
-import { useStudioIssuesQuery, studioQueryKeys } from "../hooks/useStudioQueries";
+import { Issue, IssueMilestone, PullRequest } from "../types";
+import { useStudioIssuesQuery, useStudioPullRequestQuery, studioQueryKeys } from "../hooks/useStudioQueries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "../context/StudioContext";
+import { Badge } from "./ui/Badge";
 
 export interface IssueDrawerProps {
   isOpen: boolean;
@@ -46,6 +47,11 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
   const queryClient = useQueryClient();
   const studioContext = useStudio();
   const issuesQuery = useStudioIssuesQuery(repo, "all");
+  const prQuery = useStudioPullRequestQuery(repo);
+
+  const pullRequests: PullRequest[] = useMemo(() => {
+    return prQuery.data?.pulls || [];
+  }, [prQuery.data?.pulls]);
 
   const [filterState, setFilterState] = useState<"open" | "closed" | "all">("open");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -78,6 +84,7 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
     }
     if (repo) {
       await queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(repo) });
+      await queryClient.invalidateQueries({ queryKey: studioQueryKeys.pullRequests(repo) });
     }
   };
 
@@ -384,6 +391,13 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
 
                 const isPopoverOpen = activePopoverMilestone === milestone.slug;
 
+                const associatedPR = pullRequests.find((p) => {
+                  if (milestone.slug && p.head_branch === `factory/${milestone.slug}`) return true;
+                  if (milestone.slug && p.head_branch.endsWith(`/${milestone.slug}`)) return true;
+                  if (milestone.title && p.title.toLowerCase().includes(milestone.title.toLowerCase())) return true;
+                  return false;
+                });
+
                 return (
                   <div
                     key={milestone.slug || milestone.title}
@@ -395,12 +409,52 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
                       <div className="flex items-center space-x-2.5">
                         <Layers className="w-4 h-4 text-indigo-400" />
                         <div>
-                          <div className="text-xs font-semibold text-slate-200">
-                            {milestone.title}{" "}
-                            {milestone.number && (
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                (#{milestone.number})
-                              </span>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-semibold text-slate-200">
+                              {milestone.title}{" "}
+                              {milestone.number && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  (#{milestone.number})
+                                </span>
+                              )}
+                            </span>
+
+                            {associatedPR && (
+                              <div className="flex items-center space-x-1.5 ml-2">
+                                <Badge
+                                  data-testid={`milestone-pr-badge-${milestone.slug}`}
+                                  variant={
+                                    associatedPR.merged || associatedPR.status === "merged"
+                                      ? "stage"
+                                      : associatedPR.status === "conflict" || associatedPR.mergeable === false
+                                      ? "danger"
+                                      : associatedPR.draft || associatedPR.status === "draft"
+                                      ? "warning"
+                                      : "success"
+                                  }
+                                  className="text-[10px] px-1.5 py-0.2"
+                                >
+                                  {associatedPR.merged || associatedPR.status === "merged"
+                                    ? "Merged"
+                                    : associatedPR.status === "conflict" || associatedPR.mergeable === false
+                                    ? "Conflict"
+                                    : associatedPR.draft || associatedPR.status === "draft"
+                                    ? "Draft"
+                                    : "Ready for Review"}
+                                </Badge>
+                                {associatedPR.html_url && (
+                                  <a
+                                    data-testid={`milestone-pr-link-${milestone.slug}`}
+                                    href={associatedPR.html_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-slate-400 hover:text-indigo-300 transition-colors p-0.5"
+                                    title={`View Pull Request #${associatedPR.number} on GitHub`}
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
                             )}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">

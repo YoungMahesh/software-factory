@@ -60,6 +60,70 @@ export interface Milestone {
   issues: Issue[];
 }
 
+export type PullRequestStatus =
+  | "draft"
+  | "ready_for_review"
+  | "merged"
+  | "conflict"
+  | "closed"
+  | string;
+
+export interface PullRequest {
+  id?: number;
+  number: number;
+  title: string;
+  body?: string;
+  state: "open" | "closed" | string;
+  status: PullRequestStatus;
+  draft: boolean;
+  merged: boolean;
+  mergeable?: boolean | null;
+  mergeable_state?: string | null;
+  head_branch: string;
+  base_branch: string;
+  html_url: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  merged_at?: string | null;
+  closed_at?: string | null;
+}
+
+export interface MergePullRequestParams {
+  commit_title?: string;
+  commit_message?: string;
+}
+
+export interface MergePullRequestResponse {
+  accepted: boolean;
+  merged: boolean;
+  result?: {
+    sha?: string;
+    branch?: string;
+    pull_number?: number;
+    branch_deleted?: boolean;
+    commit_title?: string;
+    commit_message?: string;
+    message?: string;
+  };
+  preview_synced?: boolean;
+}
+
+export interface DeliveryGateData {
+  phase?: "init" | "finalized" | string;
+  pull_number?: number;
+  pull_request?: PullRequest;
+  resolved_issues?: Array<string | number>;
+  test_verdict?: string;
+  status?: string;
+  merged?: boolean;
+  sha?: string;
+  branch?: string;
+  commit_title?: string;
+  commit_message?: string;
+  preview_synced?: boolean;
+  result?: any;
+}
+
 export interface StudioDispatchParams {
   repo: string;
   issue_number?: number | string;
@@ -189,6 +253,8 @@ export interface ChatMessage {
     category?: string;
   };
   grillTurn?: GrillTurnResult;
+  turn_data?: any;
+  deliveryGate?: DeliveryGateData;
 }
 
 export interface DbChatMessage {

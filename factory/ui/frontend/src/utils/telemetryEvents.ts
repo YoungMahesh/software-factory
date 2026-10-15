@@ -86,6 +86,11 @@ export function foldTelemetryEvents(
       }
     }
 
+    if (evt.type === "delivery_gate") {
+      updated.deliveryGate = evt.data;
+      updated.turn_data = { type: "delivery_gate", ...evt.data };
+    }
+
     if (evt.stage) {
       updated.stage = evt.stage;
     }

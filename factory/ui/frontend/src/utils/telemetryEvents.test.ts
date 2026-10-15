@@ -245,4 +245,29 @@ describe("foldTelemetryEvents", () => {
     expect(result[0].thinking?.done).toBe(true);
     expect(result[0].thinking?.durationMs).toBe(1200);
   });
+
+  it("folds delivery_gate event and attaches deliveryGate payload to assistant message", () => {
+    const initial: ChatMessage[] = [
+      {
+        id: "assistant-job-1",
+        role: "assistant",
+        jobId: "job-1",
+        timestamp: 1000,
+        text: "Assembly line execution",
+      },
+    ];
+    const deliveryData = {
+      phase: "finalized",
+      pull_number: 12,
+      resolved_issues: ["#3"],
+      test_verdict: "deterministic_tests_passed",
+    };
+    const events: AgentEvent[] = [
+      { type: "delivery_gate", stage: "DELIVERY", data: deliveryData },
+    ];
+
+    const result = foldTelemetryEvents(initial, events, "job-1");
+    expect(result[0].deliveryGate).toEqual(deliveryData);
+    expect(result[0].turn_data).toEqual({ type: "delivery_gate", ...deliveryData });
+  });
 });
