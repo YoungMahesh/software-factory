@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DeliveryGateCard } from "./DeliveryGateCard";
@@ -245,7 +246,8 @@ describe("DeliveryGateCard Component", () => {
     expect(screen.queryByTestId("btn-delivery-gate-merge")).not.toBeInTheDocument();
   });
 
-  it("renders inline 'Undo Turn' button and calls onRollbackTurn when clicked", () => {
+  it("renders inline 'Undo Turn' button and calls onRollbackTurn when clicked", async () => {
+    const user = userEvent.setup();
     const handleRollback = vi.fn();
     renderCard({ onRollbackTurn: handleRollback });
 
@@ -254,16 +256,17 @@ describe("DeliveryGateCard Component", () => {
     expect(undoBtn).not.toBeDisabled();
     expect(undoBtn).toHaveTextContent(/Undo Turn/i);
 
-    fireEvent.click(undoBtn);
+    await user.click(undoBtn);
     expect(handleRollback).toHaveBeenCalledTimes(1);
   });
 
-  it("disables 'Undo Turn' button when activeJobRunning is true", () => {
+  it("disables 'Undo Turn' button and displays lock icon when activeJobRunning is true", () => {
     const handleRollback = vi.fn();
     renderCard({ activeJobRunning: true, onRollbackTurn: handleRollback });
 
     const undoBtn = screen.getByTestId("delivery-gate-rollback-btn");
     expect(undoBtn).toBeDisabled();
+    expect(screen.getByTestId("delivery-gate-lock-icon")).toBeInTheDocument();
   });
 
   it("disables 'Undo Turn' button when PR is merged", () => {

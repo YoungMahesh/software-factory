@@ -83,15 +83,17 @@ export const TurnRollbackModal: React.FC<TurnRollbackModalProps> = ({
           </div>
 
           {/* Issue Info */}
-          {cleanIssueNumber && (
+          {(cleanIssueNumber || issueTitle) && (
             <div className="flex items-center space-x-2 text-slate-300">
               <FileCode className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="font-semibold text-indigo-300">Issue #{cleanIssueNumber}</span>
+              {cleanIssueNumber && (
+                <span className="font-semibold text-indigo-300">Issue #{cleanIssueNumber}</span>
+              )}
+              {cleanIssueNumber && issueTitle && (
+                <span className="text-slate-500">•</span>
+              )}
               {issueTitle && (
-                <>
-                  <span className="text-slate-500">•</span>
-                  <span className="truncate text-slate-200 font-sans">{issueTitle}</span>
-                </>
+                <span className="truncate text-slate-200 font-sans">{issueTitle}</span>
               )}
             </div>
           )}

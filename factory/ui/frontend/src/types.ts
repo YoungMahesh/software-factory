@@ -299,3 +299,11 @@ export interface RollbackTurnResponse {
   message: string;
 }
 
+export interface RollbackTarget {
+  messageId?: string;
+  branch?: string;
+  commitSha?: string | null;
+  issueNumber?: number | string | null;
+  issueTitle?: string | null;
+}
+

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   RotateCcw,
+  Lock,
 } from "lucide-react";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -334,7 +335,13 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                   disabled={activeJobRunning || isMerged || isClosed || isReverted || isRollingBack}
                   isLoading={isRollingBack}
                   onClick={() => onRollbackTurn(data)}
-                  icon={<RotateCcw className="w-3.5 h-3.5" />}
+                  icon={
+                    activeJobRunning ? (
+                      <Lock className="w-3.5 h-3.5" data-testid="delivery-gate-lock-icon" />
+                    ) : (
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    )
+                  }
                   title={
                     activeJobRunning
                       ? "Cannot undo turn while job is running"

@@ -1184,7 +1184,7 @@ describe("StudioView", () => {
 
       const approveBtn = screen.getByTestId("approve-plan-build-btn");
       expect(approveBtn).toBeDisabled();
-      expect(approveBtn).toHaveTextContent(/Plan Approved/i);
+      expect(approveBtn).toHaveTextContent(/Plan Reverted/i);
     });
 
     it("opens TurnRollbackModal when clicking Undo Last Turn in LivePreview, confirms, calls rollbackTurn, and displays success toast", async () => {

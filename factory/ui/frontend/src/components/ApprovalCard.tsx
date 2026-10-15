@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, FileCode2, Play, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, FileCode2, Play, Sparkles, RotateCcw } from "lucide-react";
 import { GrillTurnResult } from "../types";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
@@ -9,6 +9,7 @@ export interface ApprovalCardProps {
   onApprove: (turn: GrillTurnResult) => void;
   isApproving?: boolean;
   isApproved?: boolean;
+  isReverted?: boolean;
 }
 
 export const ApprovalCard: React.FC<ApprovalCardProps> = ({
@@ -16,6 +17,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
   onApprove,
   isApproving = false,
   isApproved = false,
+  isReverted = false,
 }) => {
   const [isAdrExpanded, setIsAdrExpanded] = useState<boolean>(false);
 
@@ -23,22 +25,32 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
     <div
       id="studio-approval-card"
       data-testid="approval-card"
-      className="p-4 rounded-xl border border-emerald-800/70 bg-gradient-to-b from-emerald-950/40 to-slate-900/90 shadow-md space-y-3"
+      className={`p-4 rounded-xl border ${
+        isReverted
+          ? "border-slate-800 bg-slate-900/60 opacity-75"
+          : "border-emerald-800/70 bg-gradient-to-b from-emerald-950/40 to-slate-900/90"
+      } shadow-md space-y-3`}
     >
       {/* Top Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2 text-emerald-400">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
+        <div className={`flex items-center space-x-2 ${isReverted ? "text-slate-400" : "text-emerald-400"}`}>
+          {isReverted ? (
+            <RotateCcw className="w-4 h-4 shrink-0 text-slate-400" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          )}
           <span className="font-semibold text-xs tracking-wide">
-            {isApproved ? "Plan Approved & Dispatched" : "Plan Ready for Approval"}
+            {isReverted ? "Plan Reverted" : isApproved ? "Plan Approved & Dispatched" : "Plan Ready for Approval"}
           </span>
         </div>
         <Badge
           data-testid="approval-badge"
-          variant="success"
-          className="text-[11px] font-mono tracking-wider uppercase px-2 py-0.5"
+          variant={isReverted ? "neutral" : "success"}
+          className={`text-[11px] font-mono tracking-wider uppercase px-2 py-0.5 ${
+            isReverted ? "bg-slate-800 text-slate-400 border-slate-700" : ""
+          }`}
         >
-          {isApproved ? "Approved" : "Ready for Approval"}
+          {isReverted ? "Reverted" : isApproved ? "Approved" : "Ready for Approval"}
         </Badge>
       </div>
 
@@ -121,15 +133,25 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
           size="sm"
           onClick={() => onApprove(turn)}
           isLoading={isApproving}
-          disabled={isApproving || isApproved}
-          icon={isApproved ? <CheckCircle2 className="w-3 h-3 text-emerald-300" /> : <Play className="w-3 h-3 fill-current" />}
+          disabled={isApproving || isApproved || isReverted}
+          icon={
+            isReverted ? (
+              <RotateCcw className="w-3 h-3 text-slate-500" />
+            ) : isApproved ? (
+              <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+            ) : (
+              <Play className="w-3 h-3 fill-current" />
+            )
+          }
           className={
-            isApproved
+            isReverted
+              ? "bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed"
+              : isApproved
               ? "bg-emerald-950/80 border border-emerald-800 text-emerald-300 cursor-default"
               : "bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-sm"
           }
         >
-          {isApproved ? "Plan Approved" : "Approve Plan & Build"}
+          {isReverted ? "Plan Reverted" : isApproved ? "Plan Approved" : "Approve Plan & Build"}
         </Button>
       </div>
     </div>

@@ -1,10 +1,12 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
+import { renderWithProviders } from "../test/test-utils";
 import { TurnRollbackModal } from "./TurnRollbackModal";
 
 describe("TurnRollbackModal", () => {
   it("renders nothing when isOpen is false", () => {
-    render(
+    renderWithProviders(
       <TurnRollbackModal
         isOpen={false}
         onClose={vi.fn()}
@@ -17,7 +19,7 @@ describe("TurnRollbackModal", () => {
   });
 
   it("renders accessible dialog with issue, commit, and branch details", () => {
-    render(
+    renderWithProviders(
       <TurnRollbackModal
         isOpen={true}
         onClose={vi.fn()}
@@ -39,9 +41,27 @@ describe("TurnRollbackModal", () => {
     expect(screen.getByText("factory/feature-1")).toBeInTheDocument();
   });
 
-  it("triggers onConfirm when Confirm Rollback button is clicked", () => {
+  it("renders issue title even when issue number is absent", () => {
+    renderWithProviders(
+      <TurnRollbackModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        repo="my-app"
+        branch="factory/feature-1"
+        commitSha="abc1234567"
+        issueTitle="Visual Layout Fix"
+      />
+    );
+
+    expect(screen.getByTestId("turn-rollback-dialog")).toBeInTheDocument();
+    expect(screen.getByText(/Visual Layout Fix/i)).toBeInTheDocument();
+  });
+
+  it("triggers onConfirm when Confirm Rollback button is clicked", async () => {
+    const user = userEvent.setup();
     const handleConfirm = vi.fn();
-    render(
+    renderWithProviders(
       <TurnRollbackModal
         isOpen={true}
         onClose={vi.fn()}
@@ -52,13 +72,14 @@ describe("TurnRollbackModal", () => {
     );
 
     const confirmBtn = screen.getByTestId("confirm-rollback-btn");
-    fireEvent.click(confirmBtn);
+    await user.click(confirmBtn);
     expect(handleConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it("triggers onClose when Cancel button is clicked", () => {
+  it("triggers onClose when Cancel button is clicked", async () => {
+    const user = userEvent.setup();
     const handleClose = vi.fn();
-    render(
+    renderWithProviders(
       <TurnRollbackModal
         isOpen={true}
         onClose={handleClose}
@@ -69,12 +90,12 @@ describe("TurnRollbackModal", () => {
     );
 
     const cancelBtn = screen.getByTestId("cancel-rollback-btn");
-    fireEvent.click(cancelBtn);
+    await user.click(cancelBtn);
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
   it("disables buttons and shows spinner when isRollingBack is true", () => {
-    render(
+    renderWithProviders(
       <TurnRollbackModal
         isOpen={true}
         onClose={vi.fn()}
@@ -89,3 +110,4 @@ describe("TurnRollbackModal", () => {
     expect(screen.getByTestId("cancel-rollback-btn")).toBeDisabled();
   });
 });
+

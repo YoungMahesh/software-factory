@@ -498,6 +498,29 @@ describe("LivePreview", () => {
 
       const rollbackBtn = screen.getByTestId("preview-rollback-btn");
       expect(rollbackBtn).toBeDisabled();
+      expect(screen.getByTestId("rollback-lock-icon")).toBeInTheDocument();
+
+      await user.click(rollbackBtn);
+      expect(handleRollback).not.toHaveBeenCalled();
+    });
+
+    it("disables 'Undo Last Turn' button and shows lock icon when isRollbackDisabled is true", async () => {
+      const user = userEvent.setup();
+      const handleRollback = vi.fn();
+      renderWithProviders(
+        <LivePreview
+          status="SERVING"
+          branch="factory/feature-1"
+          isRollbackDisabled={true}
+          rollbackDisabledReason="Cannot roll back turn for a merged pull request"
+          onRollbackLastTurn={handleRollback}
+        />
+      );
+
+      const rollbackBtn = screen.getByTestId("preview-rollback-btn");
+      expect(rollbackBtn).toBeDisabled();
+      expect(screen.getByTestId("rollback-lock-icon")).toBeInTheDocument();
+      expect(rollbackBtn.getAttribute("title")).toMatch(/merged/i);
 
       await user.click(rollbackBtn);
       expect(handleRollback).not.toHaveBeenCalled();

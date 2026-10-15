@@ -27,6 +27,7 @@ export type {
   TurnRollbackData,
   RollbackTurnParams,
   RollbackTurnResponse,
+  RollbackTarget,
 } from "./types";
 
 export interface StudioPromptResponse {
