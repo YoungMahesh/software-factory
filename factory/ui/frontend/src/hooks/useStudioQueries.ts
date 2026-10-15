@@ -6,7 +6,6 @@ export const studioQueryKeys = {
   repos: ["studio", "repos"] as const,
   preview: (repo: string) => ["studio", "preview", repo] as const,
   branches: (repo: string) => ["studio", "branches", repo] as const,
-  scratch: (repo: string) => ["studio", "scratch", repo] as const,
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
   issues: (repo: string) => ["studio", "issues", repo] as const,
   messages: (repo: string) => ["studio", "messages", repo] as const,
@@ -34,14 +33,6 @@ export function usePreviewQuery(repo: string) {
   return useQuery({
     queryKey: studioQueryKeys.preview(repo),
     queryFn: () => api.fetchPreview(repo),
-    enabled: Boolean(repo),
-  });
-}
-
-export function useScratchQuery(repo: string) {
-  return useQuery({
-    queryKey: studioQueryKeys.scratch(repo),
-    queryFn: () => api.fetchScratch(repo),
     enabled: Boolean(repo),
   });
 }

@@ -16,7 +16,6 @@ from factory.ui.github import (
     fetch_repo_issues,
     fetch_repo_milestones,
     fetch_repo_milestones_and_issues,
-    fetch_repo_scratch_metadata,
     check_tanstack_start_compatibility,
     fetch_test_org_repos,
     fetch_test_org_repos_detailed,
@@ -38,10 +37,6 @@ from factory.ui.github import (
     fetch_repo_branches,
     reopen_repo_issue_for_rollback,
     update_local_markdown_issue_for_rollback,
-)
-from factory.ui.guard import (
-    evaluate_prompt_intent,
-    IntentGuardResult,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.registry import (
@@ -105,29 +100,6 @@ class TestGitHubDiscovery(unittest.TestCase):
         with patch("factory.ui.github.get_test_org_token", return_value=None):
             branches = fetch_repo_branches("test-app", token=None)
             self.assertEqual(branches, ["main"])
-
-    def test_fetch_repo_scratch_metadata_parsing(self):
-        mock_tree = {
-            "tree": [
-                {"path": ".scratch/queues-page/spec.md"},
-                {"path": ".scratch/queues-page/issues/01-initial-view.md"},
-                {"path": ".scratch/queues-page/issues/02-bulk-actions.md"},
-                {"path": "src/index.ts"},
-            ]
-        }
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_tree
-
-        with patch("httpx.Client.get", return_value=mock_resp):
-            meta = fetch_repo_scratch_metadata("test-mock", token="test_token")
-            self.assertTrue(meta["has_scratch"])
-            self.assertEqual(len(meta["features"]), 1)
-            feature = meta["features"][0]
-            self.assertEqual(feature["slug"], "queues-page")
-            self.assertEqual(len(feature["issues"]), 2)
-            self.assertEqual(feature["issues"][0]["id"], "01")
-            self.assertEqual(feature["issues"][1]["id"], "02")
 
     def test_parse_github_blocked_by(self):
         self.assertEqual(parse_github_blocked_by("Blocked by: #12"), ["12"])
@@ -574,12 +546,9 @@ class TestFastApiApp(unittest.TestCase):
             private=True,
         )
 
-    def test_get_repo_scratch_endpoint(self):
+    def test_get_repo_scratch_endpoint_returns_404(self):
         resp = self.client.get("/api/repos/test3/scratch")
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(data["repo"], "test3")
-        self.assertIn("features", data)
+        self.assertEqual(resp.status_code, 404)
 
     @patch("factory.ui.app.fetch_repo_milestones_and_issues")
     def test_get_repo_milestones_endpoint(self, mock_fetch):
@@ -1753,80 +1722,19 @@ class TestGitHubTemplateInstantiation(unittest.TestCase):
             self.assertIn("not found", ctx.exception.message)
 
 
-class TestFastIntentGuard(unittest.TestCase):
-    def test_guard_allows_pure_frontend_requests(self):
-        frontend_prompts = [
-            "Build a responsive calculator app with arithmetic history and dark mode toggle.",
-            "Create a kanban board with drag and drop columns using client-side state and localStorage.",
-            "Design a dashboard with Chart.js showing interactive metrics with mock data.",
-            "Build a weather app calling the Open-Meteo public REST API and rendering forecast cards.",
-            "Implement a markdown editor with live side-by-side preview and syntax highlighting in TanStack Start.",
-            "Create an interactive todo list with filtering, search, and sessionStorage persistence.",
-        ]
-        for prompt in frontend_prompts:
-            with self.subTest(prompt=prompt):
-                result = evaluate_prompt_intent(prompt)
-                self.assertTrue(result.allowed, f"Expected prompt to be allowed: {prompt}")
-                self.assertIsNone(result.refusal_message)
-                self.assertIsNone(result.category)
-
-    def test_guard_rejects_database_prompts(self):
-        database_prompts = [
-            "Create a blog with a PostgreSQL database and Prisma schema migrations.",
-            "Build a user service storing profiles in MongoDB with mongoose models.",
-            "Set up a Redis caching database with session persistence.",
-            "Create an application with MySQL tables, foreign keys, and SQL queries.",
-            "Build a todo app backed by SQLite database with server migrations.",
-            "Connect this to a Supabase database to persist user records in Postgres.",
-        ]
-        for prompt in database_prompts:
-            with self.subTest(prompt=prompt):
-                result = evaluate_prompt_intent(prompt)
-                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
-                self.assertIsNotNone(result.refusal_message)
-                self.assertEqual(result.category, "database")
-                self.assertIn("TanStack Start", result.refusal_message)
-                self.assertIn("frontend", result.refusal_message.lower())
-
-    def test_guard_rejects_backend_server_prompts(self):
-        backend_prompts = [
-            "Build a Node.js Express server with backend endpoints for authentication.",
-            "Create a Python FastAPI backend service with background tasks.",
-            "Build a REST backend API with Flask and server-side routes.",
-            "Implement a Spring Boot backend microservice architecture.",
-            "Add a Django backend server handling user registration and server sessions.",
-            "Create a WebSocket server daemon running on the backend.",
-        ]
-        for prompt in backend_prompts:
-            with self.subTest(prompt=prompt):
-                result = evaluate_prompt_intent(prompt)
-                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
-                self.assertIsNotNone(result.refusal_message)
-                self.assertEqual(result.category, "backend_api")
-                self.assertIn("TanStack Start", result.refusal_message)
-
-    def test_guard_rejects_external_storage_prompts(self):
-        storage_prompts = [
-            "Store uploaded user images in an AWS S3 bucket.",
-            "Upload files to Google Cloud Storage (GCS) blob storage.",
-            "Persist customer attachments on Azure Blob Storage containers.",
-            "Implement server filesystem persistence storing files in /var/data on the server.",
-        ]
-        for prompt in storage_prompts:
-            with self.subTest(prompt=prompt):
-                result = evaluate_prompt_intent(prompt)
-                self.assertFalse(result.allowed, f"Expected prompt to be rejected: {prompt}")
-                self.assertIsNotNone(result.refusal_message)
-                self.assertEqual(result.category, "server_storage")
-                self.assertIn("storage", result.refusal_message.lower())
-
-    def test_guard_handles_empty_or_whitespace_prompts(self):
-        result = evaluate_prompt_intent("")
-        self.assertFalse(result.allowed)
-        self.assertIn("empty", result.reason.lower() if result.reason else "")
-
-        result2 = evaluate_prompt_intent("   \n\t  ")
-        self.assertFalse(result2.allowed)
+class TestGrillingSystemInstructions(unittest.TestCase):
+    def test_grilling_system_instruction_includes_client_side_tanstack_start_constraints(self):
+        from factory.ui.grill._inference import build_system_instruction
+        instruction = build_system_instruction(
+            repo="test3",
+            context_content="Sample CONTEXT.md",
+            existing_adrs=["0001-init.md"],
+            formatted_structure="src/App.tsx",
+            formatted_sources="export function App() {}",
+        )
+        self.assertIn("client-side", instruction.lower())
+        self.assertIn("tanstack start", instruction.lower())
+        self.assertIn("localstorage", instruction.lower())
 
 
 class TestTicketAndMilestoneSynthesis(unittest.TestCase):
@@ -2042,54 +1950,42 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Prompt is required", resp.json()["detail"])
 
-    def test_prompt_endpoint_rejects_database_prompt_without_dispatching_job(self):
+    def test_prompt_endpoint_accepts_database_prompt_for_grilling(self):
         resp = self.client.post(
             "/api/studio/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Build a user login app with a PostgreSQL database and Prisma migrations",
+                "mock": True,
+                "grill": True,
             },
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertFalse(data["accepted"])
-        self.assertIsNotNone(data["refusal"])
-        self.assertIn("TanStack Start", data["refusal"])
-        self.assertIsNone(data["job"])
-        self.assertIsNone(data["issue"])
-        self.assertIsNone(data["milestone"])
-        # Ensure no job dispatched in registry
-        self.assertEqual(len(self.registry.list_jobs()), 0)
+        self.assertTrue(data["accepted"])
+        self.assertIsNone(data["refusal"])
+        self.assertIsNotNone(data["turn"])
 
-    def test_prompt_endpoint_rejects_backend_server_prompt_without_dispatching_job(self):
-        resp = self.client.post(
-            "/api/studio/prompt",
-            json={
-                "repo": "test3",
-                "prompt": "Build a FastAPI backend server with background worker endpoints",
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertFalse(data["accepted"])
-        self.assertIn("backend", data["refusal"].lower())
-        self.assertIsNone(data["job"])
-        self.assertEqual(len(self.registry.list_jobs()), 0)
-
-    def test_prompt_endpoint_rejects_storage_prompt_without_dispatching_job(self):
-        resp = self.client.post(
-            "/api/studio/prompt",
-            json={
-                "repo": "test3",
-                "prompt": "Upload and store customer documents in an AWS S3 bucket",
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertFalse(data["accepted"])
-        self.assertIn("storage", data["refusal"].lower())
-        self.assertIsNone(data["job"])
-        self.assertEqual(len(self.registry.list_jobs()), 0)
+    def test_prompt_endpoint_accepts_backend_and_storage_prompts(self):
+        prompts = [
+            "Build a FastAPI backend server with background worker endpoints",
+            "Upload and store customer documents in an AWS S3 bucket",
+        ]
+        for p in prompts:
+            resp = self.client.post(
+                "/api/studio/prompt",
+                json={
+                    "repo": "test3",
+                    "prompt": p,
+                    "mock": True,
+                    "grill": True,
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["accepted"])
+            self.assertIsNone(data["refusal"])
+            self.assertIsNotNone(data["turn"])
 
     @patch("factory.ui.app.resolve_or_create_milestone")
     @patch("factory.ui.app.synthesize_and_create_issue")
@@ -2639,7 +2535,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         self.assertIsNone(turn2["draft_adr"])
         self.assertNotIn("Draft ADR Ready", turn2["formatted_text"])
 
-    def test_prompt_endpoint_grill_mode_rejects_intent_guard_violations(self):
+    def test_prompt_endpoint_grill_mode_accepts_database_prompts(self):
         resp = self.client.post(
             "/api/studio/prompt",
             json={
@@ -2650,11 +2546,9 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertFalse(data["accepted"])
-        self.assertIsNotNone(data["refusal"])
-        self.assertIsNone(data["turn"])
-        self.assertIsNone(data["job"])
-        self.assertEqual(len(self.registry.list_jobs()), 0)
+        self.assertTrue(data["accepted"])
+        self.assertIsNone(data["refusal"])
+        self.assertIsNotNone(data["turn"])
 
 
 class TestStudioApproveEndpoint(unittest.TestCase):
@@ -3239,7 +3133,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.assertEqual(data["repo"], "empty-repo")
         self.assertEqual(data["messages"], [])
 
-    def test_prompt_submission_fast_guard_rejection_recorded(self):
+    def test_prompt_submission_with_backend_prompt_recorded_in_db(self):
         resp = self.client.post(
             "/api/studio/prompt",
             json={
@@ -3250,8 +3144,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertFalse(data["accepted"])
-        self.assertIsNotNone(data["refusal"])
+        self.assertTrue(data["accepted"])
 
         # Check recorded messages in DB via endpoint
         get_resp = self.client.get("/api/studio/repos/test-repo/messages")
@@ -3261,9 +3154,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.assertEqual(messages[0]["role"], "user")
         self.assertEqual(messages[0]["content"], "Set up a PostgreSQL database with schema migrations")
         self.assertEqual(messages[1]["role"], "assistant")
-        self.assertEqual(messages[1]["content"], data["refusal"])
         self.assertIsNotNone(messages[1]["turn_data"])
-        self.assertTrue(messages[1]["turn_data"]["refusal"])
 
     def test_prompt_submission_grill_turn_recorded(self):
         history = [

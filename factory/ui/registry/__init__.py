@@ -3,11 +3,10 @@
 Re-exports all public functions, classes, enums, and singleton instances for full backward compatibility.
 """
 
-from factory.spawner import create_factory_sandbox, create_preview_sandbox
+from factory.spawner import create_preview_sandbox
 from factory.ui.github import (
     fetch_repo_issues,
     fetch_repo_milestones,
-    fetch_repo_scratch_metadata,
 )
 from factory.ui.registry._dispatch import JobRegistry, job_registry
 from factory.ui.registry._milestones import (
@@ -45,11 +44,9 @@ __all__ = [
     "PreviewState",
     "PreviewStatus",
     "STAGE_PATTERNS",
-    "create_factory_sandbox",
     "create_preview_sandbox",
     "fetch_repo_issues",
     "fetch_repo_milestones",
-    "fetch_repo_scratch_metadata",
     "job_registry",
     "preview_registry",
     "resolve_active_preview_branch",

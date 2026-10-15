@@ -225,29 +225,51 @@ exit 0
             stdout, stderr = proc.communicate(timeout=5)
 
             self.assertEqual(proc.returncode, 0)
-            self.assertIn("Dev Preview Keep-Alive Daemon", stdout)
-            self.assertIn("https://3000.mahesh0.dev", stdout)
             self.assertIn("pnpm dev --port 3000 --host 0.0.0.0", log_file.read_text())
 
-    def test_cloudflare_tunnel_configured_in_dev_mode(self):
+    def test_dev_mode_without_cloudflare_secret_succeeds(self):
         import tempfile
         import time
         import signal
         with tempfile.TemporaryDirectory() as td:
             tmpdir = Path(td)
-            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0)
-            # Create mock cloudflare secret
-            (tmpdir / "secrets" / "cloudflare.env").write_text("CF_TOKEN=mock-token\n")
+            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0, with_cloudflare=False)
 
             proc = subprocess.Popen(
-                ["bash", str(self.entrypoint_script), "--feature", "test-feat"],
+                ["bash", str(self.entrypoint_script), "--feature", "test-feat", "--dev"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=dict(env, DEV_PREVIEW="1"),
+                env=env,
             )
 
-            # Wait for dev server to start
+            started = False
+            for _ in range(50):
+                time.sleep(0.1)
+                if log_file.exists() and "pnpm dev started" in log_file.read_text():
+                    started = True
+                    break
+
+            self.assertTrue(started, "Dev server failed to start without Cloudflare secret.")
+            proc.send_signal(signal.SIGTERM)
+            proc.communicate(timeout=5)
+
+    def test_dev_preview_does_not_invoke_cloudflared_or_watcher(self):
+        import tempfile
+        import time
+        import signal
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            env, log_file, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0, with_cloudflare=False)
+
+            proc = subprocess.Popen(
+                ["bash", str(self.entrypoint_script), "--feature", "test-feat", "--dev"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+
             for _ in range(50):
                 time.sleep(0.1)
                 if log_file.exists() and "pnpm dev started" in log_file.read_text():
@@ -256,26 +278,12 @@ exit 0
             proc.send_signal(signal.SIGTERM)
             stdout, stderr = proc.communicate(timeout=5)
 
-            combined = stdout + stderr
-            self.assertIn("Cloudflare Tunnel", combined)
-            self.assertIn("3000.mahesh0.dev", stdout)
-            self.assertIn("port 3000", combined.lower())
+            combined_logs = log_file.read_text()
+            combined_output = stdout + stderr
 
-    def test_cloudflare_tunnel_missing_secret_fails_fast(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as td:
-            tmpdir = Path(td)
-            env, _, _ = self._setup_mock_sandbox_root(tmpdir, pipeline_exit=0, with_cloudflare=False)
-            # Notice: no secrets/cloudflare.env created!
-
-            res = subprocess.run(
-                ["bash", str(self.entrypoint_script), "--feature", "test-feat", "--dev"],
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-            self.assertNotEqual(res.returncode, 0)
-            self.assertIn("Cloudflare Tunnel secret file not found", res.stderr)
+            self.assertNotIn("cloudflared", combined_logs)
+            self.assertNotIn("Cloudflare Tunnel", combined_output)
+            self.assertNotIn("port watcher started", combined_output.lower())
 
     def _run_dev_preview_server(self, env_overrides: dict[str, str] | None = None) -> str:
         import signal
@@ -308,13 +316,14 @@ exit 0
 
     def test_dev_preview_exports_fallback_allowed_hosts(self):
         logs = self._run_dev_preview_server()
-        self.assertIn("ALLOWED_HOSTS=.modal.host,3000.mahesh0.dev", logs)
+        self.assertIn("ALLOWED_HOSTS=.modal.host", logs)
+        self.assertNotIn("3000.mahesh0.dev", logs)
 
     def test_dev_preview_preserves_custom_allowed_hosts(self):
         logs = self._run_dev_preview_server(
-            {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "custom.modal.host,3000.mahesh0.dev"}
+            {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "custom.modal.host"}
         )
-        self.assertIn("ALLOWED_HOSTS=custom.modal.host,3000.mahesh0.dev", logs)
+        self.assertIn("ALLOWED_HOSTS=custom.modal.host", logs)
 
 
     def test_container_bootstrap_writes_protected_factory_env(self):

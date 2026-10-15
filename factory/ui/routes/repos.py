@@ -71,11 +71,6 @@ async def get_repo_branches_endpoint(repo: str):
     return resp
 
 
-@router.get("/api/repos/{repo}/scratch")
-async def get_repo_scratch(repo: str):
-    metadata = _gh("fetch_repo_scratch_metadata")(repo)
-    return metadata
-
 
 @router.get("/api/repos/{repo}/milestones")
 async def get_repo_milestones(repo: str):

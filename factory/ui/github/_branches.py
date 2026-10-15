@@ -1,6 +1,5 @@
 """Branch inspection, git tree fetching, template instantiation, and ADR commits."""
 
-from collections import defaultdict
 import logging
 from pathlib import Path
 import sys
@@ -224,57 +223,6 @@ def instantiate_repo_from_template(
 
     raise RepoCreationError(f"GitHub API error ({resp.status_code}): {error_message}", status_code=502)
 
-
-def fetch_repo_scratch_metadata(
-    repo_name: str,
-    token: str | None = None,
-    org: str = DEFAULT_TEST_ORG,
-    timeout_secs: float = 8.0,
-) -> dict[str, Any]:
-    """Inspects the repository's Git Tree for .scratch/ feature folders and issue tickets."""
-    pkg = _get_pkg()
-    token_fn = getattr(pkg, "get_test_org_token", get_test_org_token) if pkg else get_test_org_token
-    auth_token = token or token_fn()
-    clean_repo = strip_repo_owner(repo_name, org)
-    features_map: dict[str, list[dict[str, str]]] = defaultdict(list)
-    has_scratch = False
-
-    if auth_token:
-        headers = {
-            "Authorization": f"Bearer {auth_token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "SoftwareFactory-TestingConsole/1.0",
-        }
-        for branch in ("main", "master"):
-            url = f"https://api.github.com/repos/{org}/{clean_repo}/git/trees/{branch}?recursive=1"
-            try:
-                with httpx.Client(timeout=timeout_secs) as client:
-                    resp = client.get(url, headers=headers)
-                    if resp.status_code == 200:
-                        for item in resp.json().get("tree", []):
-                            p = item.get("path", "")
-                            if not p.startswith(".scratch/"):
-                                continue
-                            has_scratch = True
-                            parts = p.split("/")
-                            if len(parts) >= 4 and parts[2] == "issues" and parts[3].endswith(".md"):
-                                features_map[parts[1]].append({
-                                    "id": parts[3].split("-")[0],
-                                    "slug": parts[3][:-3],
-                                    "filename": parts[3],
-                                })
-                        break
-            except Exception:
-                pass
-
-    feature_list = [{"slug": s, "issues": sorted(iss, key=lambda x: x["id"])} for s, iss in sorted(features_map.items())]
-    return {
-        "repo": clean_repo,
-        "org": org,
-        "has_scratch": has_scratch or bool(feature_list),
-        "features": feature_list,
-    }
 
 
 def fetch_repo_branches(

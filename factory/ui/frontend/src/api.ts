@@ -1,6 +1,5 @@
 import {
   Repo,
-  ScratchMetadata,
   Milestone,
   Issue,
   Job,
@@ -72,12 +71,6 @@ export async function createRepo(params: {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to create repo: ${res.statusText}`);
   }
-  return res.json();
-}
-
-export async function fetchScratch(repo: string): Promise<ScratchMetadata> {
-  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/scratch`);
-  if (!res.ok) throw new Error(`Failed to fetch scratch: ${res.statusText}`);
   return res.json();
 }
 

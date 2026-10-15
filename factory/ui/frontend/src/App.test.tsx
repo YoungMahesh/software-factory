@@ -7,7 +7,6 @@ vi.mock("./api", () => ({
   fetchStudioRepos: vi.fn(),
   fetchRepos: vi.fn(),
   createRepo: vi.fn(),
-  fetchScratch: vi.fn(),
   fetchMilestones: vi.fn(),
   fetchIssues: vi.fn(),
   launchJob: vi.fn(),
@@ -56,7 +55,6 @@ describe("App Root Component", () => {
       org: "software-factory-09-test",
       repos: [{ name: "my-app", is_tanstack_compatible: true }],
     });
-    vi.mocked(api.fetchScratch).mockResolvedValue({} as any);
     vi.mocked(api.fetchMilestones).mockResolvedValue({ repo: "my-app", milestones: [] });
     vi.mocked(api.fetchIssues).mockResolvedValue({ repo: "my-app", issues: [] });
     vi.mocked(api.listJobs).mockResolvedValue({ jobs: [] });

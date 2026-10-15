@@ -88,26 +88,19 @@ class TestBranchResolution(unittest.TestCase):
         self.assertEqual(branch, "factory/issue-42")
 
     @patch("factory.ui.registry.fetch_repo_issues")
-    @patch("factory.ui.registry.fetch_repo_scratch_metadata")
     @patch("factory.ui.registry.fetch_repo_milestones")
-    def test_resolve_active_preview_branch_scratch(self, mock_milestones, mock_scratch, mock_issues):
+    def test_resolve_active_preview_branch_fallback_to_main_without_scratch(self, mock_milestones, mock_issues):
         from factory.ui.registry import resolve_active_preview_branch
         mock_milestones.return_value = []
         mock_issues.return_value = []
-        mock_scratch.return_value = {"features": [{"slug": "dashboard"}]}
-        branch = resolve_active_preview_branch("test3")
-        self.assertEqual(branch, "factory/dashboard")
-
-    @patch("factory.ui.registry.fetch_repo_issues")
-    @patch("factory.ui.registry.fetch_repo_scratch_metadata")
-    @patch("factory.ui.registry.fetch_repo_milestones")
-    def test_resolve_active_preview_branch_fallback(self, mock_milestones, mock_scratch, mock_issues):
-        from factory.ui.registry import resolve_active_preview_branch
-        mock_milestones.return_value = []
-        mock_issues.return_value = []
-        mock_scratch.return_value = {"features": []}
         branch = resolve_active_preview_branch("test3")
         self.assertEqual(branch, "main")
+        mock_milestones.assert_called_once_with(repo_name="test3", state="open")
+        mock_issues.assert_called_once_with(repo_name="test3", state="open")
+        # Ensure registry does not export fetch_repo_scratch_metadata or create_factory_sandbox
+        import factory.ui.registry as reg
+        self.assertFalse(hasattr(reg, "fetch_repo_scratch_metadata"))
+        self.assertFalse(hasattr(reg, "create_factory_sandbox"))
 
 
 class TestPreviewRegistry(unittest.TestCase):
@@ -355,6 +348,31 @@ class TestPreviewRegistry(unittest.TestCase):
         self.assertEqual(preview.branch, "factory/persisted-feature")
         self.assertEqual(preview.status, PreviewStatus.STOPPED)
 
+    def test_wait_for_serving_sync_returns_immediately_if_already_serving(self):
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
+        mock_sandbox = MagicMock()
+        self.registry._previews["repo-serving"] = PreviewState(
+            repo="repo-serving",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            preview_url="https://repo-serving-3000.modal.host",
+            sandbox=mock_sandbox,
+        )
+        sb, url = self.registry.wait_for_serving_sync("repo-serving", timeout=1.0)
+        self.assertEqual(sb, mock_sandbox)
+        self.assertEqual(url, "https://repo-serving-3000.modal.host")
+
+    def test_wait_for_serving_sync_breaks_on_failed_status(self):
+        from factory.ui.registry import PreviewState, PreviewStatus
+        self.registry._previews["repo-failed"] = PreviewState(
+            repo="repo-failed",
+            status=PreviewStatus.FAILED,
+            error_message="Vite build failed",
+        )
+        sb, url = self.registry.wait_for_serving_sync("repo-failed", timeout=1.0, poll_interval=0.01)
+        self.assertIsNone(sb)
+        self.assertIsNone(url)
+
 
 class TestInSandboxRegistryExecution(unittest.TestCase):
     def setUp(self):
@@ -362,8 +380,7 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         self.preview_reg = PreviewRegistry()
         self.job_reg = JobRegistry(preview_registry=self.preview_reg)
 
-    @patch("factory.ui.registry.create_factory_sandbox")
-    def test_job_registry_delegates_to_active_preview_sandbox(self, mock_create_sandbox):
+    def test_job_registry_delegates_to_active_preview_sandbox(self):
         import time
         from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
 
@@ -414,9 +431,6 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         self.assertTrue(j.is_in_sandbox_exec)
         self.assertEqual(j.preview_url, "https://test3-3000.modal.host")
 
-        # Must not spawn new container
-        mock_create_sandbox.assert_not_called()
-
         # Must invoke sandbox.exec
         mock_sandbox.exec.assert_called_once()
         exec_args, exec_kwargs = mock_sandbox.exec.call_args
@@ -457,17 +471,31 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         preview_refresh = [e for e in preview_events if e.get("event") == "preview_refresh"]
         self.assertEqual(len(preview_refresh), 1)
 
-    @patch("factory.ui.registry.create_factory_sandbox")
-    def test_job_registry_spawns_new_sandbox_when_no_active_studio_sandbox(self, mock_create_sandbox):
+    def test_job_registry_auto_provisions_unified_sandbox_when_no_active_studio_sandbox(self):
         import time
+        from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
 
         mock_sandbox = MagicMock()
-        mock_sandbox.object_id = "sb-new"
-        mock_sandbox.stdout = iter(["Step 1 complete\n"])
-        mock_sandbox.stderr = iter([])
-        mock_sandbox.wait.return_value = 0
-        mock_sandbox.returncode = 0
-        mock_create_sandbox.return_value = mock_sandbox
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Step 1 complete\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
+
+        def fake_launch(repo, branch=None):
+            preview = PreviewState(
+                repo=repo,
+                branch=branch or "main",
+                status=PreviewStatus.SERVING,
+                stage=PreviewStage.SERVING,
+                sandbox=mock_sandbox,
+                preview_url="https://auto-prov-3000.modal.host",
+            )
+            self.preview_reg._previews[repo] = preview
+            return preview
+
+        self.preview_reg.launch_preview = MagicMock(side_effect=fake_launch)
 
         job = self.job_reg.create_job(
             repo="no-active-repo",
@@ -484,29 +512,38 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         j = self.job_reg.get_job(job.id)
         self.assertIsNotNone(j)
         self.assertEqual(j.status, "SUCCESS")
-        self.assertFalse(j.is_in_sandbox_exec)
-        mock_create_sandbox.assert_called_once()
+        self.assertTrue(j.is_in_sandbox_exec)
+        self.preview_reg.launch_preview.assert_called_once_with("no-active-repo", branch="factory/feature-standalone")
+        mock_sandbox.exec.assert_called_once()
 
-    @patch("factory.ui.registry.create_factory_sandbox")
-    def test_job_registry_does_not_delegate_when_preview_is_provisioning(self, mock_create_sandbox):
+    def test_job_registry_waits_for_serving_when_preview_is_provisioning(self):
         import time
         from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
 
         mock_sandbox = MagicMock()
-        mock_sandbox.object_id = "sb-fallback"
-        mock_sandbox.stdout = iter(["Step 1 complete\n"])
-        mock_sandbox.stderr = iter([])
-        mock_sandbox.wait.return_value = 0
-        mock_sandbox.returncode = 0
-        mock_create_sandbox.return_value = mock_sandbox
+        mock_process = MagicMock()
+        mock_process.stdout = iter(["Step 1 complete\n"])
+        mock_process.stderr = iter([])
+        mock_process.wait.return_value = 0
+        mock_process.returncode = 0
+        mock_sandbox.exec.return_value = mock_process
 
         preview = PreviewState(
             repo="test-prov",
             status=PreviewStatus.PROVISIONING,
             stage=PreviewStage.PROVISIONING,
-            sandbox=mock_sandbox,
+            sandbox=None,
         )
         self.preview_reg._previews["test-prov"] = preview
+
+        def fake_wait(repo, timeout=60.0, poll_interval=0.05):
+            preview.status = PreviewStatus.SERVING
+            preview.stage = PreviewStage.SERVING
+            preview.sandbox = mock_sandbox
+            preview.preview_url = "https://test-prov-3000.modal.host"
+            return mock_sandbox, preview.preview_url
+
+        self.preview_reg.wait_for_serving_sync = MagicMock(side_effect=fake_wait)
 
         job = self.job_reg.create_job(
             repo="test-prov",
@@ -523,12 +560,43 @@ class TestInSandboxRegistryExecution(unittest.TestCase):
         j = self.job_reg.get_job(job.id)
         self.assertIsNotNone(j)
         self.assertEqual(j.status, "SUCCESS")
-        self.assertFalse(j.is_in_sandbox_exec)
-        # Should not have called sandbox.exec because preview was still PROVISIONING
-        mock_create_sandbox.assert_called_once()
+        self.assertTrue(j.is_in_sandbox_exec)
+        mock_sandbox.exec.assert_called_once()
 
-    @patch("factory.ui.registry.create_factory_sandbox")
-    def test_in_sandbox_execution_failure_emits_no_refresh(self, mock_create_sandbox):
+    def test_job_registry_fails_when_sandbox_fails_to_serve(self):
+        import time
+        from factory.ui.registry import PreviewState, PreviewStatus
+
+        def fake_launch(repo, branch=None):
+            preview = PreviewState(
+                repo=repo,
+                branch=branch or "main",
+                status=PreviewStatus.FAILED,
+                error_message="Vite compilation error",
+            )
+            self.preview_reg._previews[repo] = preview
+            return preview
+
+        self.preview_reg.launch_preview = MagicMock(side_effect=fake_launch)
+
+        job = self.job_reg.create_job(
+            repo="fail-prov-repo",
+            feature="feat-fail",
+        )
+        self.job_reg.start_job(job.id)
+
+        for _ in range(50):
+            time.sleep(0.05)
+            j = self.job_reg.get_job(job.id)
+            if j and j.status in ("SUCCESS", "FAILED"):
+                break
+
+        j = self.job_reg.get_job(job.id)
+        self.assertIsNotNone(j)
+        self.assertEqual(j.status, "FAILED")
+        self.assertIn("Unified Studio Sandbox failed to reach serving status", j.error_message)
+
+    def test_in_sandbox_execution_failure_emits_no_refresh(self):
         import time
         from factory.ui.registry import PreviewStage, PreviewState, PreviewStatus
 

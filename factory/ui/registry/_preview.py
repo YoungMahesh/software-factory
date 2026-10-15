@@ -16,7 +16,6 @@ from factory.spawner import PreviewSpawnConfig, create_preview_sandbox
 from factory.ui.github import (
     fetch_repo_issues,
     fetch_repo_milestones,
-    fetch_repo_scratch_metadata,
 )
 from factory.ui.registry._milestones import (
     PREVIEW_COMPILATION_ERROR_PATTERN,
@@ -41,7 +40,6 @@ def resolve_active_preview_branch(repo_name: str) -> str:
     pkg = _get_pkg()
     fetch_ms_fn = getattr(pkg, "fetch_repo_milestones", fetch_repo_milestones) if pkg else fetch_repo_milestones
     fetch_iss_fn = getattr(pkg, "fetch_repo_issues", fetch_repo_issues) if pkg else fetch_repo_issues
-    fetch_meta_fn = getattr(pkg, "fetch_repo_scratch_metadata", fetch_repo_scratch_metadata) if pkg else fetch_repo_scratch_metadata
 
     try:
         milestones = fetch_ms_fn(repo_name=repo_name, state="open")
@@ -54,14 +52,6 @@ def resolve_active_preview_branch(repo_name: str) -> str:
         issues = fetch_iss_fn(repo_name=repo_name, state="open")
         if issues and issues[0].get("number") is not None:
             return f"factory/issue-{issues[0]['number']}"
-    except Exception:
-        pass
-
-    try:
-        scratch = fetch_meta_fn(repo_name=repo_name)
-        features = scratch.get("features") or []
-        if features and features[0].get("slug"):
-            return f"factory/{features[0]['slug']}"
     except Exception:
         pass
 
@@ -218,6 +208,23 @@ class PreviewRegistry:
             if preview and preview.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED):
                 break
             await asyncio.sleep(poll_interval)
+        return self.get_active_sandbox(repo)
+
+    def wait_for_serving_sync(
+        self,
+        repo: str,
+        timeout: float = 60.0,
+        poll_interval: float = 0.05,
+    ) -> tuple[modal.Sandbox | None, str | None]:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            sandbox, preview_url = self.get_active_sandbox(repo)
+            if sandbox is not None:
+                return sandbox, preview_url
+            preview = self.get_preview(repo)
+            if preview and preview.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED):
+                break
+            time.sleep(poll_interval)
         return self.get_active_sandbox(repo)
 
     def update_branch(self, repo: str, branch: str) -> PreviewState:

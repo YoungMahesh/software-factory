@@ -87,7 +87,7 @@ if [ -n "$MODEL_ID" ]; then
     echo "  • Model Override: ${MODEL_ID}"
 fi
 if [ "${DEV_PREVIEW:-0}" = "1" ]; then
-    echo "  • Dev Preview: Enabled (port 3000 -> https://3000.mahesh0.dev)"
+    echo "  • Dev Preview: Enabled (port 3000 -> Modal Application Tunnel)"
 fi
 echo "================================================================"
 
@@ -133,69 +133,6 @@ echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
 chmod 600 ~/.config/sops/age/keys.txt
 export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
 export SOPS_AGE_KEY_FILE="${HOME:-/root}/.config/sops/age/keys.txt"
-
-# Start Cloudflare Tunnel service and port watcher if enabled or in dev preview mode
-WATCHER_PID=""
-if [ "${ENABLE_CLOUDFLARE:-0}" != "0" ] || [ "${DEV_PREVIEW:-0}" = "1" ]; then
-    CLOUDFLARE_SECRET_FILE="${BASE_DIR}/secrets/cloudflare.env"
-    if [ ! -f "$CLOUDFLARE_SECRET_FILE" ]; then
-        echo "ERROR: Cloudflare Tunnel secret file not found at $CLOUDFLARE_SECRET_FILE." >&2
-        exit 1
-    fi
-
-    echo "🚇 Decrypting Cloudflare Tunnel token from $CLOUDFLARE_SECRET_FILE..."
-    CF_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt --extract '["CF_TOKEN"]' "$CLOUDFLARE_SECRET_FILE" 2>/dev/null || true)
-    if [ -z "$CF_TOKEN" ]; then
-        echo "ERROR: Failed to decrypt CF_TOKEN from $CLOUDFLARE_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-        exit 1
-    fi
-
-    if [ ! -f /etc/init.d/cloudflared ]; then
-        echo "🚇 Installing Cloudflare Tunnel service..."
-        cloudflared service install "$CF_TOKEN" 2>/dev/null || true
-    elif [ -f /etc/cloudflared/token ]; then
-        CURRENT_TOKEN=$(cat /etc/cloudflared/token 2>/dev/null || true)
-        if [ "$CURRENT_TOKEN" != "$CF_TOKEN" ]; then
-            echo "$CF_TOKEN" > /etc/cloudflared/token
-        fi
-    fi
-
-    /etc/init.d/cloudflared stop >/dev/null 2>&1 || true
-
-    WATCHER_BIN="/usr/local/bin/cloudflared-port-watcher"
-    if [ ! -f "$WATCHER_BIN" ]; then
-        mkdir -p "$(dirname "$WATCHER_BIN")" 2>/dev/null || true
-        cat << 'EOF' > "$WATCHER_BIN" 2>/dev/null || true
-#!/usr/bin/env bash
-TARGET_PORT="${1:-3000}"
-CHECK_INTERVAL=2
-
-while true; do
-    TARGET_HEX=$(printf "%04X" "$TARGET_PORT")
-    if grep -q -E ":${TARGET_HEX} [0-9A-F:]+ 0A" /proc/net/tcp /proc/net/tcp6 2>/dev/null; then
-        if ! /etc/init.d/cloudflared status >/dev/null 2>&1; then
-            echo "[$(date +%T)] 🚇 Port $TARGET_PORT is active. Starting Cloudflare Tunnel..."
-            /etc/init.d/cloudflared start >/dev/null 2>&1 || true
-        fi
-    else
-        if /etc/init.d/cloudflared status >/dev/null 2>&1; then
-            echo "[$(date +%T)] 🚇 Port $TARGET_PORT is closed. Stopping Cloudflare Tunnel..."
-            /etc/init.d/cloudflared stop >/dev/null 2>&1 || true
-        fi
-    fi
-    sleep "$CHECK_INTERVAL"
-done
-EOF
-        chmod +x "$WATCHER_BIN" 2>/dev/null || true
-    fi
-
-    if [ -x "$WATCHER_BIN" ]; then
-        nohup "$WATCHER_BIN" "${PORT:-3000}" > /var/log/cloudflared-watcher.log 2>&1 &
-        WATCHER_PID=$!
-        echo "🚇 Cloudflare Tunnel port watcher started for port ${PORT:-3000} (PID: $WATCHER_PID)."
-    fi
-    rm -f "$CLOUDFLARE_SECRET_FILE"
-fi
 
 # 2. Ephemerally decrypt OpenCode credentials into ~/.config/opencode/opencode.env
 OPENCODE_SECRET_FILE="${BASE_DIR}/secrets/opencode.env"
@@ -494,7 +431,7 @@ fi
 
 # 10. Dev preview keep-alive daemon
 if [ "${DEV_PREVIEW:-0}" = "1" ]; then
-    export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-.modal.host,3000.mahesh0.dev}"
+    export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-.modal.host}"
 
     echo ""
     echo "================================================================"
@@ -502,7 +439,7 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     echo "PREVIEW_STAGE:STARTING_DEV"
     echo "  • Working Directory: ${TARGET_DIR}"
     echo "  • Dev Command: pnpm dev --port 3000 --host 0.0.0.0"
-    echo "  • Preview URL: https://3000.mahesh0.dev"
+    echo "  • Preview: Modal Application Tunnel (port 3000)"
     echo "  • Allowed Hosts: ${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS}"
     echo "================================================================"
 
@@ -514,9 +451,6 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
         echo ""
         echo "🛑 Shutting down dev server supervisor daemon..."
         SUPERVISOR_STOPPED=1
-        if [ -n "${WATCHER_PID:-}" ] && kill -0 "$WATCHER_PID" 2>/dev/null; then
-            kill -TERM "$WATCHER_PID" 2>/dev/null || true
-        fi
         if [ -n "$DEV_PID" ]; then
             kill -TERM -- -"$DEV_PID" 2>/dev/null || kill -TERM "$DEV_PID" 2>/dev/null || true
             wait "$DEV_PID" 2>/dev/null || true
@@ -530,7 +464,7 @@ if [ "${DEV_PREVIEW:-0}" = "1" ]; then
         DEV_PID=$!
 
         echo "📡 Dev server running with PID ${DEV_PID}."
-        echo "⏳ Container entering active serving keep-alive state (https://3000.mahesh0.dev)..."
+        echo "⏳ Container entering active serving keep-alive state..."
 
         # Maintain serving keep-alive state until process termination or cancellation
         set +e

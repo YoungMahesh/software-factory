@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
-from factory.ui.guard import evaluate_prompt_intent
 import factory.ui.github as gh
 from factory.ui.registry import (
     JobRegistry,
@@ -146,34 +145,7 @@ async def studio_prompt(req: StudioPromptRequest, request: Request):
         content=prompt,
     )
 
-    # 1. Fast Intent Classification Guard
-    guard_result = evaluate_prompt_intent(prompt)
-    if not guard_result.allowed:
-        db.save_chat_message(
-            repo=repo,
-            role="assistant",
-            content=guard_result.refusal_message or "Prompt rejected by intent guard.",
-            turn_data={
-                "refusal": True,
-                "reason": guard_result.reason,
-                "category": guard_result.category,
-            },
-        )
-        return {
-            "accepted": False,
-            "refusal": guard_result.refusal_message,
-            "reason": guard_result.reason,
-            "category": guard_result.category,
-            "turn": None,
-            "job": None,
-            "issue": None,
-            "milestone": None,
-            "stage": None,
-            "preview_url": None,
-            "preview": None,
-        }
-
-    # 2. Conversational Grilling Assistant Turn (Grill Mode)
+    # Conversational Grilling Assistant Turn (Grill Mode)
     if req.grill:
         assistant = GrillingAssistant(mock=req.mock)
         milestone_slug = _gh("normalize_milestone_slug")(req.milestone_title) if req.milestone_title else None

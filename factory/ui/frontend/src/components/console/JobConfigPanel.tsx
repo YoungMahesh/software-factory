@@ -4,8 +4,8 @@ import {
   Cpu,
   XCircle,
 } from "lucide-react";
-import { Job, ScratchMetadata, Milestone, Issue, LaunchJobParams } from "../../types";
-import { fetchScratch, fetchMilestones } from "../../api";
+import { Job, Milestone, Issue, LaunchJobParams } from "../../types";
+import { fetchMilestones } from "../../api";
 
 export interface JobConfigPanelProps {
   selectedRepo: string;
@@ -20,7 +20,6 @@ export const JobConfigPanel: React.FC<JobConfigPanelProps> = ({
   activeJob,
   onCancel,
 }) => {
-  const [scratchMeta, setScratchMeta] = useState<ScratchMetadata | null>(null);
   const [milestonesMeta, setMilestonesMeta] = useState<Milestone[]>([]);
   const [feature, setFeature] = useState<string>("");
   const [customFeature, setCustomFeature] = useState<string>("");
@@ -34,7 +33,6 @@ export const JobConfigPanel: React.FC<JobConfigPanelProps> = ({
   // Discover features / issues when repo changes
   useEffect(() => {
     if (!selectedRepo) {
-      setScratchMeta(null);
       setMilestonesMeta([]);
       return;
     }
@@ -42,14 +40,14 @@ export const JobConfigPanel: React.FC<JobConfigPanelProps> = ({
     let isCancelled = false;
     setLoadingMeta(true);
 
-    Promise.all([
-      fetchScratch(selectedRepo).catch(() => null),
-      fetchMilestones(selectedRepo).catch(() => ({ repo: selectedRepo, milestones: [] })),
-    ])
-      .then(([scratchRes, msRes]) => {
+    fetchMilestones(selectedRepo)
+      .then((msRes) => {
         if (isCancelled) return;
-        setScratchMeta(scratchRes);
         setMilestonesMeta(msRes?.milestones || []);
+      })
+      .catch(() => {
+        if (isCancelled) return;
+        setMilestonesMeta([]);
       })
       .finally(() => {
         if (!isCancelled) setLoadingMeta(false);
@@ -60,38 +58,16 @@ export const JobConfigPanel: React.FC<JobConfigPanelProps> = ({
     };
   }, [selectedRepo]);
 
-  // Derived available features from scratch + milestones
-  const availableFeatures: { slug: string; source: "scratch" | "github" }[] = [];
-  if (scratchMeta?.features) {
-    scratchMeta.features.forEach((f) => {
-      availableFeatures.push({ slug: f.slug, source: "scratch" });
-    });
-  }
-  milestonesMeta.forEach((m) => {
-    if (!availableFeatures.some((f) => f.slug === m.title)) {
-      availableFeatures.push({ slug: m.title, source: "github" });
-    }
-  });
+  // Derived available features from GitHub milestones
+  const availableFeatures: { slug: string }[] = milestonesMeta.map((m) => ({
+    slug: m.title,
+  }));
 
   // Derived available issues for selected feature
   const effectiveFeature = feature === "__custom__" ? customFeature : feature;
   const availableIssues: Issue[] = [];
 
   if (feature && feature !== "__custom__") {
-    // 1. From scratch
-    const scratchFeat = scratchMeta?.features?.find((f) => f.slug === feature);
-    if (scratchFeat) {
-      scratchFeat.issues.forEach((iss) => {
-        availableIssues.push({
-          number: iss.id,
-          title: iss.title || `Issue ${iss.id}`,
-          status: "ready-for-agent",
-          blocked_by: [],
-        });
-      });
-    }
-
-    // 2. From GitHub milestones
     const ms = milestonesMeta.find((m) => m.title === feature);
     if (ms) {
       ms.issues.forEach((iss) => {
@@ -143,7 +119,7 @@ export const JobConfigPanel: React.FC<JobConfigPanelProps> = ({
             <option value="">(None / Root frontier)</option>
             {availableFeatures.map((f) => (
               <option key={f.slug} value={f.slug}>
-                {f.slug} ({f.source})
+                {f.slug}
               </option>
             ))}
             <option value="__custom__">Custom feature slug...</option>

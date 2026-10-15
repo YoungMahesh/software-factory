@@ -24,7 +24,6 @@ from factory.ui.github import (
     fetch_repo_issues,
     fetch_repo_milestones_and_issues,
     fetch_repo_pull_requests,
-    fetch_repo_scratch_metadata,
     fetch_test_org_repos,
     fetch_test_org_repos_detailed,
     instantiate_repo_from_template,

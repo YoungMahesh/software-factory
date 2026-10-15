@@ -148,17 +148,6 @@ export interface StudioDispatchResponse {
   stage: string;
 }
 
-export interface ScratchFeature {
-  slug: string;
-  issues: Array<{ id: string; title?: string }>;
-}
-
-export interface ScratchMetadata {
-  repo: string;
-  has_scratch: boolean;
-  features: ScratchFeature[];
-}
-
 export interface LaunchJobParams {
   repo: string;
   feature?: string;

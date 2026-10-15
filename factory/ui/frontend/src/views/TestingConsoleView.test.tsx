@@ -5,7 +5,6 @@ import { renderWithProviders, userEvent } from "../test/test-utils";
 import * as api from "../api";
 
 vi.mock("../api", () => ({
-  fetchScratch: vi.fn(),
   fetchMilestones: vi.fn(),
   fetchIssues: vi.fn(),
 }));
@@ -18,7 +17,6 @@ const mockRepos = [
 describe("TestingConsoleView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.fetchScratch).mockResolvedValue({ repo: "cool-app", features: [] } as any);
     vi.mocked(api.fetchMilestones).mockResolvedValue({ repo: "cool-app", milestones: [] });
     vi.mocked(api.fetchIssues).mockResolvedValue({ repo: "cool-app", issues: [] });
   });
@@ -43,7 +41,7 @@ describe("TestingConsoleView", () => {
     expect(screen.getByRole("button", { name: /Launch Assembly Line/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(api.fetchScratch).toHaveBeenCalledWith("cool-app");
+      expect(api.fetchMilestones).toHaveBeenCalledWith("cool-app");
     });
   });
 
@@ -75,7 +73,7 @@ describe("TestingConsoleView", () => {
     );
 
     await waitFor(() => {
-      expect(api.fetchScratch).toHaveBeenCalledWith("cool-app");
+      expect(api.fetchMilestones).toHaveBeenCalledWith("cool-app");
     });
   });
 
@@ -103,7 +101,7 @@ describe("TestingConsoleView", () => {
     expect(screen.getByRole("option", { name: /private-repo ✦ \(TanStack\) 🔒/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(api.fetchScratch).toHaveBeenCalledWith("private-repo");
+      expect(api.fetchMilestones).toHaveBeenCalledWith("private-repo");
     });
   });
 });

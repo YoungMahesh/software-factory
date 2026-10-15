@@ -12,8 +12,6 @@ from typing import Any
 import uuid
 import modal
 
-from factory.orchestrator import FACTORY_TIMEOUT_SECS
-from factory.spawner import FactorySpawnConfig, create_factory_sandbox
 from factory.ui.registry._milestones import STAGE_PATTERNS
 from factory.ui.registry._models import (
     DEFAULT_PREVIEW_URL,
@@ -368,6 +366,16 @@ class JobRegistry:
                     if p_reg is not None and hasattr(p_reg, "broadcast_refresh"):
                         p_reg.broadcast_refresh(job.repo)
 
+    def _fail_job(self, job: FactoryJob, error_message: str) -> None:
+        with self._lock:
+            if not job._cancelled:
+                job.status = JobStatus.FAILED
+                job.error_message = error_message
+                job.ended_at = time.time()
+                self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
+                self._persist_job(job)
+                self.append_log(job.id, f"\n❌ [ERROR] {error_message}\n")
+
     def _run_job_worker(self, job_id: str) -> None:
         job = self.get_job(job_id)
         if not job:
@@ -381,106 +389,86 @@ class JobRegistry:
             self._persist_job(job)
 
         active_sandbox, preview_url = self.get_active_sandbox(job.repo)
+        p_reg = self._get_effective_preview_registry()
+        target_branch = f"factory/{job.feature}" if job.feature and not job.feature.startswith("factory/") else (job.feature or "main")
 
-        if active_sandbox is not None:
+        if active_sandbox is None:
             with self._lock:
                 if job._cancelled:
                     return
-                job.sandbox = active_sandbox
-                job.is_in_sandbox_exec = True
-                job.stage = JobStage.PREFLIGHT
-                if preview_url and not job.preview_url:
-                    job.preview_url = preview_url
+                job.stage = JobStage.PROVISIONING
                 self._broadcast(job, {"event": "status", "status": JobStatus.RUNNING.value})
-                self._broadcast(job, {"event": "stage", "stage": JobStage.PREFLIGHT.value})
+                self._broadcast(job, {"event": "stage", "stage": JobStage.PROVISIONING.value})
+                self._persist_job(job)
 
-            self.append_log(job_id, f"🚀 [DELEGATE] Active Unified Studio Sandbox detected for {job.repo}. Delegating via sandbox.exec()...\n")
+            self.append_log(job_id, f"🚀 [INIT] No active sandbox found for {job.repo}. Provisioning fresh Unified Studio Sandbox on branch '{target_branch}'...\n")
+
+            if p_reg is None:
+                self._fail_job(job, "No preview registry available to provision sandbox")
+                return
 
             try:
-                bare_repo = job.repo.strip().split("/")[-1]
-                workspace_dir = f"/root/{bare_repo}"
-                cmd_args = [
-                    "node", "--experimental-strip-types", "/root/factory/pipeline.ts",
-                    "--workspace", workspace_dir, "--feature", job.feature, "--studio",
-                ]
-                if job.issue:
-                    cmd_args.extend(["--issue", str(job.issue)])
-                if job.model:
-                    cmd_args.extend(["--model", job.model])
+                if hasattr(p_reg, "launch_preview"):
+                    p_reg.launch_preview(job.repo, branch=target_branch)
 
-                p_reg = self._get_effective_preview_registry()
-                if p_reg is not None and hasattr(p_reg, "update_branch"):
-                    target_branch = f"factory/{job.feature}" if not job.feature.startswith("factory/") else job.feature
-                    p_reg.update_branch(job.repo, target_branch)
-
-                pipeline_cmd = " ".join(shlex.quote(a) for a in cmd_args)
-                exec_cmd = (
-                    "if [ ! -f /root/.factory.env ]; then "
-                    "echo 'ERROR: /root/.factory.env not found in sandbox' >&2; exit 1; fi; "
-                    "set -a; source /root/.factory.env; set +a; "
-                    f"export PYTHONUNBUFFERED=1; export STUDIO_MODE=1; exec {pipeline_cmd}"
-                )
-
-                process = active_sandbox.exec("bash", "-c", exec_cmd)
-                exit_code = self._stream_and_wait(job, process)
-                self._finalize_job(job, exit_code, is_in_sandbox=True)
+                if hasattr(p_reg, "wait_for_serving_sync"):
+                    active_sandbox, preview_url = p_reg.wait_for_serving_sync(job.repo)
+                else:
+                    active_sandbox, preview_url = self.get_active_sandbox(job.repo)
             except Exception as e:
-                with self._lock:
-                    if not job._cancelled:
-                        job.status = JobStatus.FAILED
-                        job.error_message = str(e)
-                        job.ended_at = time.time()
-                        self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
-                        self._persist_job(job)
-                        self.append_log(job_id, f"\n❌ [ERROR] In-sandbox execution failed: {e}\n")
-            return
+                self._fail_job(job, f"Failed to provision Unified Studio Sandbox: {e}")
+                return
+
+            if active_sandbox is None:
+                preview_state = p_reg.get_preview(job.repo) if hasattr(p_reg, "get_preview") else None
+                err_detail = f": {preview_state.error_message}" if preview_state and getattr(preview_state, "error_message", None) else ""
+                self._fail_job(job, f"Unified Studio Sandbox failed to reach serving status{err_detail}")
+                return
+
+            self.append_log(job_id, f"🚀 [ATTACH] Unified Studio Sandbox ready for {job.repo}. Executing pipeline via sandbox.exec()...\n")
+        else:
+            self.append_log(job_id, f"🚀 [DELEGATE] Active Unified Studio Sandbox detected for {job.repo}. Delegating via sandbox.exec()...\n")
 
         with self._lock:
             if job._cancelled:
                 return
-            job.stage = JobStage.PROVISIONING
+            job.sandbox = active_sandbox
+            job.is_in_sandbox_exec = True
+            job.stage = JobStage.PREFLIGHT
+            if preview_url and not job.preview_url:
+                job.preview_url = preview_url
             self._broadcast(job, {"event": "status", "status": JobStatus.RUNNING.value})
-            self._broadcast(job, {"event": "stage", "stage": JobStage.PROVISIONING.value})
-
-        self.append_log(job_id, f"🚀 [INIT] Spawning Software Factory Sandbox for {job.repo} ({job.feature})...\n")
-
-        pkg = _get_pkg()
-        create_factory_fn = getattr(pkg, "create_factory_sandbox", create_factory_sandbox) if pkg else create_factory_sandbox
+            self._broadcast(job, {"event": "stage", "stage": JobStage.PREFLIGHT.value})
+            self._persist_job(job)
 
         try:
-            config = FactorySpawnConfig(
-                project=f"software-factory-09-test/{job.repo}",
-                feature=job.feature,
-                issue=job.issue,
-                vm=job.vm,
-                testing=True,
-                model=job.model,
-                dev=job.dev,
-                timeout_secs=FACTORY_TIMEOUT_SECS,
+            bare_repo = job.repo.strip().split("/")[-1]
+            workspace_dir = f"/root/{bare_repo}"
+            cmd_args = [
+                "node", "--experimental-strip-types", "/root/factory/pipeline.ts",
+                "--workspace", workspace_dir, "--feature", job.feature, "--studio",
+            ]
+            if job.issue:
+                cmd_args.extend(["--issue", str(job.issue)])
+            if job.model:
+                cmd_args.extend(["--model", job.model])
+
+            if p_reg is not None and hasattr(p_reg, "update_branch"):
+                p_reg.update_branch(job.repo, target_branch)
+
+            pipeline_cmd = " ".join(shlex.quote(a) for a in cmd_args)
+            exec_cmd = (
+                "if [ ! -f /root/.factory.env ]; then "
+                "echo 'ERROR: /root/.factory.env not found in sandbox' >&2; exit 1; fi; "
+                "set -a; source /root/.factory.env; set +a; "
+                f"export PYTHONUNBUFFERED=1; export STUDIO_MODE=1; exec {pipeline_cmd}"
             )
-            sandbox = create_factory_fn(config)
-            with self._lock:
-                if job._cancelled:
-                    try:
-                        sandbox.terminate()
-                    except Exception:
-                        pass
-                    return
-                job.sandbox = sandbox
 
-            self.append_log(job_id, f"📦 [MODAL] Sandbox created: {sandbox.object_id}\n")
-            exit_code = self._stream_and_wait(job, sandbox)
-            self._finalize_job(job, exit_code, is_in_sandbox=False)
-
+            process = active_sandbox.exec("bash", "-c", exec_cmd)
+            exit_code = self._stream_and_wait(job, process)
+            self._finalize_job(job, exit_code, is_in_sandbox=True)
         except Exception as e:
-            with self._lock:
-                if not job._cancelled:
-                    job.status = JobStatus.FAILED
-                    job.error_message = str(e)
-                    job.ended_at = time.time()
-                    self._broadcast(job, {"event": "status", "status": JobStatus.FAILED.value})
-                    self._persist_job(job)
-                    self.append_log(job_id, f"\n❌ [ERROR] Execution failed: {e}\n")
+            self._fail_job(job, f"In-sandbox execution failed: {e}")
 
 
 job_registry = JobRegistry()

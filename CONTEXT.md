@@ -135,7 +135,7 @@ An ephemeral encrypted HTTPS tunnel provided by Modal (`sandbox.tunnels()[3000].
 _Avoid_: Modal web tunnel, web url tunnel, preview port forward
 
 **Dedicated Preview Sandbox**:
-An ephemeral Modal sandbox provisioned to build and serve a target application's active branch on port 3000 without executing the multi-agent assembly line.
+_Deprecated_: Superseded by Unified Studio Sandbox. Formerly an ephemeral Modal sandbox provisioned to build and serve a target application's active branch on port 3000 without executing the multi-agent assembly line.
 _Avoid_: Dev runner, preview container, standalone server, test preview container
 
 **Unified Studio Sandbox**:
@@ -160,11 +160,11 @@ An abstraction interface within the assembly line harness that decouples ticket 
 _Avoid_: Ticket provider, tracker backend, issue driver
 
 **GitHub Issue Tracker**:
-A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests.
+A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests. In Factory Studio and the Factory Testing Console, this serves as the sole convention for web UI operations.
 _Avoid_: GitHub project, issue board, repo issues
 
 **Local Markdown Issue Tracker**:
-A filesystem-based task tracking convention that stores specifications and work items as markdown documents under `.scratch/<feature>/`.
+A filesystem-based task tracking convention that stores specifications and work items as markdown documents under `.scratch/<feature>/`. Used for CLI dispatchers, headless batch workflows, and internal Factory Hub development, but deprecated and excluded from web UI operations.
 _Avoid_: Flat notes, scratchpad, local tickets
 
 **Feature Pull Request**:
