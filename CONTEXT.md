@@ -243,6 +243,14 @@ _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 A slide-over interface within Factory Studio that displays GitHub issues for the active repository, providing controls to inspect specifications, trigger the Grill-Before-Change Protocol, or directly dispatch the Assembly Line Pipeline.
 _Avoid_: Issue panel, issue modal, GitHub view, issue selector
 
+**Delivery Gate Card**:
+A structured conversational card in Factory Studio Chat History summarizing Feature Pull Request status, resolved work items, and test verdicts, with controls to review and merge into main.
+_Avoid_: PR card, merge card, gate message
+
+**In-Studio Merge Control**:
+An interactive control in Factory Studio that triggers a squash merge of a Feature Pull Request into main via the GitHub API, deletes the remote Feature Branch, and synchronizes the Unified Studio Sandbox.
+_Avoid_: Merge button, quick merge, direct merge
+
 **Agent Event Stream**:
 A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into the Factory Testing Console and Factory Studio.
 _Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
