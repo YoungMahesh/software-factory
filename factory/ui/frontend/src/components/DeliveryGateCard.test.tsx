@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DeliveryGateCard } from "./DeliveryGateCard";
@@ -90,7 +90,21 @@ describe("DeliveryGateCard Component", () => {
     expect(screen.getByText(/Tests Passing/i)).toBeInTheDocument();
   });
 
-  it("renders 'Ready for Review' badge and enabled 'Merge into main' button", () => {
+  it("renders verifier test verdict for failing quality gates", () => {
+    renderCard({
+      data: {
+        ...mockDeliveryGateData,
+        test_verdict: "failed",
+      },
+    });
+
+    const verdict = screen.getByTestId("delivery-gate-verifier-verdict");
+    expect(verdict).toBeInTheDocument();
+    expect(within(verdict).getByText("Failed")).toBeInTheDocument();
+    expect(within(verdict).getByText("Quality gate failed")).toBeInTheDocument();
+  });
+
+  it("renders 'Ready for Review' badge and enabled In-Studio Merge Control", () => {
     renderCard();
 
     expect(screen.getByTestId("pr-status-badge")).toHaveTextContent(/Ready for Review/i);
@@ -99,7 +113,7 @@ describe("DeliveryGateCard Component", () => {
     expect(mergeBtn).not.toBeDisabled();
   });
 
-  it("disables merge button when PR is in Draft state", () => {
+  it("disables In-Studio Merge Control when PR is in Draft state", () => {
     const draftPR: PullRequest = {
       ...mockPR,
       draft: true,
@@ -117,12 +131,31 @@ describe("DeliveryGateCard Component", () => {
     expect(mergeBtn).toBeDisabled();
   });
 
-  it("disables merge button when an assembly line job is actively executing", () => {
+  it("disables In-Studio Merge Control when an assembly line job is actively executing", () => {
     renderCard({ activeJobRunning: true });
 
     const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
     expect(mergeBtn).toBeDisabled();
     expect(screen.getByText(/Job Actively Executing/i)).toBeInTheDocument();
+  });
+
+  it("disables In-Studio Merge Control when PR is closed without being merged", () => {
+    const closedPR: PullRequest = {
+      ...mockPR,
+      state: "closed",
+      merged: false,
+      status: "closed",
+    };
+    renderCard({
+      data: {
+        ...mockDeliveryGateData,
+        pull_request: closedPR,
+      },
+    });
+
+    expect(screen.getByTestId("pr-status-badge")).toHaveTextContent(/Closed/i);
+    const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
+    expect(mergeBtn).toBeDisabled();
   });
 
   it("displays Conflict badge and links to GitHub when PR has merge conflicts", () => {

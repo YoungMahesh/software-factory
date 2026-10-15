@@ -18,6 +18,7 @@ import { useStudioIssuesQuery, useStudioPullRequestQuery, studioQueryKeys } from
 import { useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "../context/StudioContext";
 import { Badge } from "./ui/Badge";
+import { getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 
 export interface IssueDrawerProps {
   isOpen: boolean;
@@ -419,43 +420,33 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
                               )}
                             </span>
 
-                            {associatedPR && (
-                              <div className="flex items-center space-x-1.5 ml-2">
-                                <Badge
-                                  data-testid={`milestone-pr-badge-${milestone.slug}`}
-                                  variant={
-                                    associatedPR.merged || associatedPR.status === "merged"
-                                      ? "stage"
-                                      : associatedPR.status === "conflict" || associatedPR.mergeable === false
-                                      ? "danger"
-                                      : associatedPR.draft || associatedPR.status === "draft"
-                                      ? "warning"
-                                      : "success"
-                                  }
-                                  className="text-[10px] px-1.5 py-0.2"
-                                >
-                                  {associatedPR.merged || associatedPR.status === "merged"
-                                    ? "Merged"
-                                    : associatedPR.status === "conflict" || associatedPR.mergeable === false
-                                    ? "Conflict"
-                                    : associatedPR.draft || associatedPR.status === "draft"
-                                    ? "Draft"
-                                    : "Ready for Review"}
-                                </Badge>
-                                {associatedPR.html_url && (
-                                  <a
-                                    data-testid={`milestone-pr-link-${milestone.slug}`}
-                                    href={associatedPR.html_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-slate-400 hover:text-indigo-300 transition-colors p-0.5"
-                                    title={`View Pull Request #${associatedPR.number} on GitHub`}
+                            {associatedPR && (() => {
+                              const prStatus = getPullRequestStatus(associatedPR);
+                              const badgeConfig = getPullRequestBadgeConfig(prStatus);
+                              return (
+                                <div className="flex items-center space-x-1.5 ml-2">
+                                  <Badge
+                                    data-testid={`milestone-pr-badge-${milestone.slug}`}
+                                    variant={badgeConfig.variant}
+                                    className={`text-[10px] px-1.5 py-0.2 ${badgeConfig.className}`}
                                   >
-                                    <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                )}
-                              </div>
-                            )}
+                                    {badgeConfig.label}
+                                  </Badge>
+                                  {associatedPR.html_url && (
+                                    <a
+                                      data-testid={`milestone-pr-link-${milestone.slug}`}
+                                      href={associatedPR.html_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-slate-400 hover:text-indigo-300 transition-colors p-0.5"
+                                      title={`View Pull Request #${associatedPR.number} on GitHub`}
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
                             {resolvedCount} / {totalCount} closed • {readyCount} ready

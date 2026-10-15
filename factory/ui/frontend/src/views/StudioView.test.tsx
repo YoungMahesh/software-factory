@@ -645,7 +645,7 @@ describe("StudioView", () => {
     const ghLink = screen.getByTestId("studio-pr-gh-link");
     expect(ghLink).toHaveAttribute("href", "https://github.com/software-factory-09-test/cool-app/pull/101");
 
-    // In Draft status, merge button in popover is disabled
+    // In Draft status, In-Studio Merge Control in popover is disabled
     const mergeBtn = screen.getByTestId("btn-studio-popover-merge");
     expect(mergeBtn).toBeDisabled();
   });
@@ -699,7 +699,7 @@ describe("StudioView", () => {
     });
   });
 
-  it("renders DeliveryGateCard in conversational timeline for delivery gate message", async () => {
+  it("renders DeliveryGateCard in conversational timeline for Delivery Gate Card event", async () => {
     const deliveryGateMessage = {
       id: "msg-delivery-gate-1",
       role: "assistant" as const,
@@ -733,7 +733,7 @@ describe("StudioView", () => {
     expect(screen.getByText(/Feature: Settings Page/i)).toBeInTheDocument();
   });
 
-  it("disables merge button and displays active job warning in popover when job is running", async () => {
+  it("disables In-Studio Merge Control and displays active job warning in popover when job is running", async () => {
     vi.mocked(api.fetchPullRequests).mockResolvedValue({
       repo: "cool-app",
       pulls: [
@@ -804,6 +804,10 @@ describe("StudioView", () => {
     await user.click(prBtn);
 
     expect(screen.getByTestId("studio-popover-conflict-warning")).toBeInTheDocument();
+    const conflictLink = screen.getByTestId("studio-popover-conflict-link");
+    expect(conflictLink).toBeInTheDocument();
+    expect(conflictLink).toHaveAttribute("href", "https://github.com/software-factory-09-test/cool-app/pull/104");
+
     const mergeBtn = screen.getByTestId("btn-studio-popover-merge");
     expect(mergeBtn).toBeDisabled();
   });
@@ -836,6 +840,66 @@ describe("StudioView", () => {
 
     expect(screen.getByText(/Merged into main/i)).toBeInTheDocument();
     expect(screen.queryByTestId("btn-studio-popover-merge")).not.toBeInTheDocument();
+  });
+
+  it("synchronizes Live Preview branch indicator to main upon successful squash merge", async () => {
+    vi.mocked(api.fetchPullRequests).mockResolvedValue({
+      repo: "cool-app",
+      pulls: [
+        {
+          id: 1,
+          number: 106,
+          title: "Feature: Live Sync Test",
+          state: "open",
+          status: "ready_for_review",
+          draft: false,
+          merged: false,
+          mergeable: true,
+          head_branch: "factory/live-sync",
+          base_branch: "main",
+          html_url: "https://github.com/software-factory-09-test/cool-app/pull/106",
+        },
+      ],
+    });
+
+    vi.mocked(api.mergePullRequest).mockResolvedValue({
+      accepted: true,
+      merged: true,
+      result: { sha: "abc999", branch: "factory/live-sync", pull_number: 106, branch_deleted: true },
+      preview_synced: true,
+    });
+
+    const onMergeSuccess = vi.fn();
+    const { user } = renderStudio({
+      selectedRepo: "cool-app",
+      previewState: {
+        status: "SERVING",
+        branch: "factory/live-sync",
+        preview_url: "https://cool-app-3000.modal.host",
+        logs: [],
+        error_message: null,
+      },
+      onMergeSuccess,
+    });
+
+    // Preview branch badge initially shows feature branch
+    expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("factory/live-sync");
+
+    const prBtn = await screen.findByTestId("studio-pr-control-btn");
+    await user.click(prBtn);
+
+    const mergeBtn = screen.getByTestId("btn-studio-popover-merge");
+    await user.click(mergeBtn);
+
+    const confirmBtn = screen.getByTestId("btn-studio-popover-confirm-merge");
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.mergePullRequest).toHaveBeenCalledWith("cool-app", 106, expect.any(Object));
+      expect(onMergeSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ accepted: true, merged: true, preview_synced: true })
+      );
+    });
   });
 });
 

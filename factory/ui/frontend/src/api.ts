@@ -283,7 +283,7 @@ export async function fetchPullRequests(
   repo: string,
   branch?: string,
   state: string = "all"
-): Promise<{ repo: string; pulls: PullRequest[]; pull_requests?: PullRequest[] }> {
+): Promise<{ repo: string; pulls: PullRequest[] }> {
   const params = new URLSearchParams();
   if (branch) params.set("branch", branch);
   if (state) params.set("state", state);

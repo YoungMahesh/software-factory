@@ -35,7 +35,7 @@ import { PromptComposer } from "../components/PromptComposer";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { DeliveryGateCard } from "../components/DeliveryGateCard";
 import { IssueDrawer } from "../components/IssueDrawer";
-import { getLastUserPromptBefore } from "../utils";
+import { getLastUserPromptBefore, getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 import { PullRequest, PreviewState } from "../types";
 
 export interface StudioViewProps {
@@ -113,21 +113,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     return pullRequests[0];
   })();
 
-  const prIsMerged = Boolean(activePR?.merged || activePR?.status === "merged");
-  const prHasConflict = Boolean(
-    activePR?.status === "conflict" ||
-    activePR?.mergeable === false ||
-    activePR?.mergeable_state === "dirty" ||
-    activePR?.mergeable_state === "conflict"
-  );
-  const prIsDraft = Boolean(activePR?.draft || activePR?.status === "draft");
-  const prStatus = prIsMerged
-    ? "merged"
-    : prHasConflict
-    ? "conflict"
-    : prIsDraft
-    ? "draft"
-    : "ready_for_review";
+  const prStatus = getPullRequestStatus(activePR);
+  const prIsMerged = prStatus === "merged";
+  const prHasConflict = prStatus === "conflict";
+  const prIsDraft = prStatus === "draft";
+  const prIsClosed = prStatus === "closed";
 
   const isIssueDrawerOpen =
     propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
@@ -223,49 +213,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   };
 
   const renderPRControlBadge = () => {
-    switch (prStatus) {
-      case "merged":
-        return (
-          <Badge
-            data-testid="studio-pr-badge-merged"
-            variant="stage"
-            className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-800"
-          >
-            Merged
-          </Badge>
-        );
-      case "conflict":
-        return (
-          <Badge
-            data-testid="studio-pr-badge-conflict"
-            variant="danger"
-            className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800"
-          >
-            Conflict
-          </Badge>
-        );
-      case "draft":
-        return (
-          <Badge
-            data-testid="studio-pr-badge-draft"
-            variant="warning"
-            className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800"
-          >
-            Draft
-          </Badge>
-        );
-      case "ready_for_review":
-      default:
-        return (
-          <Badge
-            data-testid="studio-pr-badge-ready"
-            variant="success"
-            className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800"
-          >
-            Ready for Review
-          </Badge>
-        );
-    }
+    const config = getPullRequestBadgeConfig(prStatus);
+    const testIdStatus = prStatus === "ready_for_review" ? "ready" : prStatus;
+    return (
+      <Badge
+        data-testid={`studio-pr-badge-${testIdStatus}`}
+        variant={config.variant}
+        className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${config.className}`}
+      >
+        {config.label}
+      </Badge>
+    );
   };
 
   return (
@@ -394,7 +352,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                       {prHasConflict && (
                         <div
                           data-testid="studio-popover-conflict-warning"
-                          className="p-2.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs space-y-1"
+                          className="p-2.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs space-y-1.5"
                         >
                           <div className="font-semibold text-rose-200 flex items-center space-x-1">
                             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
@@ -403,6 +361,18 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                           <div className="text-[11px] text-rose-300/90">
                             Resolve conflicts on GitHub before merging.
                           </div>
+                          {activePR.html_url && (
+                            <a
+                              data-testid="studio-popover-conflict-link"
+                              href={activePR.html_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center space-x-1 text-[11px] font-medium text-rose-300 underline hover:text-white"
+                            >
+                              <span>Resolve conflicts on GitHub</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
                         </div>
                       )}
 
@@ -457,6 +427,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                                 <span>Draft status</span>
                               ) : prHasConflict ? (
                                 <span className="text-rose-400">Conflict</span>
+                              ) : prIsClosed ? (
+                                <span className="text-slate-400">Closed</span>
                               ) : (
                                 <span>Ready to merge</span>
                               )}
@@ -467,7 +439,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                               type="button"
                               variant="primary"
                               size="sm"
-                              disabled={prIsDraft || isExecutingTurn || prHasConflict || prIsMerged}
+                              disabled={prIsDraft || isExecutingTurn || prHasConflict || prIsMerged || prIsClosed}
                               onClick={() => setIsConfirmingMerge(true)}
                               icon={<GitMerge className="w-3 h-3" />}
                               title={
@@ -477,6 +449,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                                   ? "Cannot merge PR in Draft status"
                                   : prHasConflict
                                   ? "Cannot merge due to conflicts"
+                                  : prIsClosed
+                                  ? "Cannot merge a closed pull request"
                                   : "Squash merge into main"
                               }
                             >

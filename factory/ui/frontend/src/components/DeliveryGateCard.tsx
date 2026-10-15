@@ -11,6 +11,7 @@ import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { DeliveryGateData, PullRequest } from "../types";
 import { useStudioPullRequestQuery, useMergePullRequestMutation } from "../hooks/useStudioQueries";
+import { getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 
 export interface DeliveryGateCardProps {
   repo: string;
@@ -42,29 +43,22 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   const pr: PullRequest | undefined = livePR || data.pull_request;
 
   // Determine current status
-  const isMerged = Boolean(
-    data.merged ||
-    pr?.merged ||
-    pr?.status === "merged" ||
-    data.status === "merged"
-  );
+  const status = getPullRequestStatus(pr, data);
+  const isMerged = status === "merged";
+  const hasConflict = status === "conflict";
+  const isDraft = status === "draft";
+  const isClosed = status === "closed";
 
-  const hasConflict = Boolean(
-    pr?.status === "conflict" ||
-    pr?.mergeable === false ||
-    pr?.mergeable_state === "dirty" ||
-    pr?.mergeable_state === "conflict"
-  );
+  const isTestPassed =
+    !data.test_verdict ||
+    data.test_verdict.toLowerCase().includes("pass") ||
+    data.test_verdict.toLowerCase().includes("success");
 
-  const isDraft = Boolean(pr?.draft || pr?.status === "draft");
-
-  const status = isMerged
-    ? "merged"
-    : hasConflict
-    ? "conflict"
-    : isDraft
-    ? "draft"
-    : "ready_for_review";
+  const testVerdictTitle = data.test_verdict
+    ? data.test_verdict === "deterministic_tests_passed" || data.test_verdict === "passed"
+      ? "Deterministic Tests Passing"
+      : data.test_verdict.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Deterministic Tests Passing";
 
   // Resolved issues list
   const resolvedIssues: string[] = (() => {
@@ -102,52 +96,19 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   };
 
   const getStatusBadge = () => {
-    switch (status) {
-      case "merged":
-        return (
-          <Badge
-            data-testid="pr-status-badge"
-            variant="stage"
-            className="bg-purple-950/80 text-purple-300 border-purple-800"
-          >
-            Merged
-          </Badge>
-        );
-      case "conflict":
-        return (
-          <Badge
-            data-testid="pr-status-badge"
-            variant="danger"
-            className="bg-rose-950/80 text-rose-300 border-rose-800"
-          >
-            Conflict
-          </Badge>
-        );
-      case "draft":
-        return (
-          <Badge
-            data-testid="pr-status-badge"
-            variant="warning"
-            className="bg-amber-950/80 text-amber-300 border-amber-800"
-          >
-            Draft
-          </Badge>
-        );
-      case "ready_for_review":
-      default:
-        return (
-          <Badge
-            data-testid="pr-status-badge"
-            variant="success"
-            className="bg-emerald-950/80 text-emerald-300 border-emerald-800"
-          >
-            Ready for Review
-          </Badge>
-        );
-    }
+    const config = getPullRequestBadgeConfig(status);
+    return (
+      <Badge
+        data-testid="pr-status-badge"
+        variant={config.variant}
+        className={config.className}
+      >
+        {config.label}
+      </Badge>
+    );
   };
 
-  const isMergeDisabled = isDraft || activeJobRunning || hasConflict || isMerged;
+  const isMergeDisabled = isDraft || activeJobRunning || hasConflict || isMerged || isClosed;
 
   return (
     <div
@@ -215,10 +176,16 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
         data-testid="delivery-gate-verifier-verdict"
         className="flex items-center space-x-2 p-2 rounded bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-300"
       >
-        <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-        <span className="font-medium text-slate-200">Deterministic Tests Passing</span>
+        {isTestPassed ? (
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+        ) : (
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+        )}
+        <span className="font-medium text-slate-200">{testVerdictTitle}</span>
         <span className="text-slate-500">•</span>
-        <span className="text-slate-400">Quality gate verified</span>
+        <span className="text-slate-400">
+          {isTestPassed ? "Quality gate verified" : "Quality gate failed"}
+        </span>
       </div>
 
       {/* Conflict Warning */}
@@ -312,6 +279,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 <span>PR is currently in Draft</span>
               ) : hasConflict ? (
                 <span className="text-rose-400">Blocked by merge conflicts</span>
+              ) : isClosed ? (
+                <span className="text-slate-400">PR is closed</span>
               ) : (
                 <span>All checks passed. Ready to squash merge.</span>
               )}
@@ -332,6 +301,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                   ? "Cannot merge while PR is in Draft"
                   : hasConflict
                   ? "Cannot merge due to conflicts"
+                  : isClosed
+                  ? "Cannot merge a closed pull request"
                   : "Squash merge Feature Pull Request into main"
               }
             >
