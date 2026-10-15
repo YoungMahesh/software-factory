@@ -7,6 +7,8 @@ issue discovery, and Server-Sent Events (SSE) for live terminal streaming.
 import asyncio
 import json
 from pathlib import Path
+import re
+import shlex
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -19,6 +21,7 @@ from factory.ui.auth import BasicAuthMiddleware
 from factory.ui.github import (
     DEFAULT_TEST_ORG,
     commit_approved_adr_to_branch,
+    fetch_repo_branches,
     fetch_repo_issue,
     fetch_repo_issues,
     fetch_repo_milestones_and_issues,
@@ -49,6 +52,14 @@ STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
 class LaunchPreviewRequest(BaseModel):
     branch: str | None = Field(None, description="Optional target branch to serve (e.g. 'factory/<feature>' or 'main')")
+
+
+class PreviewSyncRequest(BaseModel):
+    branch: str | None = Field(None, description="Optional target branch to synchronize (defaults to active preview branch or main)")
+
+
+class PreviewBranchRequest(BaseModel):
+    branch: str = Field(..., description="Target branch to switch to")
 
 
 class LaunchJobRequest(BaseModel):
@@ -656,8 +667,206 @@ def create_app(
             },
         )
 
+    def _execute_in_sandbox_sync(
+        active_sandbox: Any,
+        clean_repo: str,
+        bare_repo: str,
+        target_branch: str,
+        action_desc: str,
+    ) -> str | None:
+        """Executes in-container branch checkout, remote fetch, and diff-aware package install."""
+        import concurrent.futures
+        sync_script = (
+            f"cd /root/{bare_repo} && "
+            f"git fetch origin {shlex.quote(target_branch)} && "
+            'OLD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "") && '
+            f"(git checkout {shlex.quote(target_branch)} 2>/dev/null || git checkout -B {shlex.quote(target_branch)} origin/{shlex.quote(target_branch)}) && "
+            f"git reset --hard origin/{shlex.quote(target_branch)} && "
+            "git clean -fd && "
+            'if [ -n "$OLD_SHA" ] && git diff --name-only "$OLD_SHA" HEAD | grep -E \'^(package\\.json|pnpm-lock\\.yaml)$\' >/dev/null; then '
+            "pnpm install --prefer-offline; "
+            "fi && "
+            'echo "SYNC_COMMIT_SHA:$(git rev-parse --short HEAD)"'
+        )
 
+        preview_reg.append_log(
+            clean_repo,
+            f"🔄 [SYNC] {action_desc}...\n",
+            flush=True,
+        )
 
+        proc = active_sandbox.exec("bash", "-c", sync_script)
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def stream_pipe(reader, is_err=False):
+            if reader is None:
+                return
+            try:
+                for chunk in reader:
+                    text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+                    if is_err:
+                        stderr_lines.append(text)
+                    else:
+                        stdout_lines.append(text)
+                    for subline in text.splitlines(keepends=True):
+                        if subline.startswith("SYNC_COMMIT_SHA:"):
+                            continue
+                        prefix = "❌ [SYNC ERROR] " if is_err else "🔄 [SYNC] "
+                        preview_reg.append_log(clean_repo, f"{prefix}{subline}", flush=True)
+            except Exception:
+                pass
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            f_out = executor.submit(stream_pipe, getattr(proc, "stdout", None), False)
+            f_err = executor.submit(stream_pipe, getattr(proc, "stderr", None), True)
+            concurrent.futures.wait([f_out, f_err])
+
+        exit_code = 0
+        if hasattr(proc, "wait"):
+            try:
+                exit_code = proc.wait()
+            except TypeError:
+                proc.wait(raise_on_termination=False)
+                exit_code = getattr(proc, "returncode", 0)
+        elif hasattr(proc, "returncode"):
+            exit_code = proc.returncode
+
+        if exit_code is None:
+            exit_code = getattr(proc, "returncode", 0)
+
+        if exit_code != 0:
+            err_msg = "".join(stderr_lines).strip() or "".join(stdout_lines).strip() or f"Process exited with code {exit_code}"
+            preview_reg.append_log(clean_repo, f"❌ [SYNC ERROR] {err_msg}\n", flush=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Trunk synchronization failed: {err_msg}",
+            )
+
+        commit_sha = None
+        full_output = "".join(stdout_lines)
+        match = re.search(r"SYNC_COMMIT_SHA:([0-9a-fA-F]+)", full_output)
+        if match:
+            commit_sha = match.group(1)
+        else:
+            sha_match = re.search(r"HEAD is now at ([0-9a-fA-F]+)", full_output)
+            if sha_match:
+                commit_sha = sha_match.group(1)
+
+        preview_reg.update_branch(clean_repo, target_branch)
+        preview_reg.append_log(
+            clean_repo,
+            f"🔄 [SYNC] Successfully synchronized with origin/{target_branch} (commit {commit_sha or 'HEAD'}).\n",
+            flush=True,
+        )
+        preview_reg.broadcast_refresh(clean_repo)
+        return commit_sha
+
+    @app.post("/api/studio/repos/{repo}/preview/sync")
+    async def sync_preview_endpoint(repo: str, req: PreviewSyncRequest | None = None):
+        clean_repo = repo.strip()
+        bare_repo = clean_repo.split("/")[-1]
+
+        # 1. Concurrency safety guard: strictly reject if an assembly line job is active
+        if registry.is_job_active(clean_repo):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot synchronize preview while an Assembly Line Pipeline job is active (RUNNING or QUEUED).",
+            )
+
+        preview = preview_reg.get_preview(clean_repo)
+        target_branch = (req.branch.strip() if req and req.branch and req.branch.strip() else None)
+        if not target_branch:
+            target_branch = preview.branch if (preview and preview.branch) else "main"
+
+        # 2. If Unified Studio Sandbox is actively SERVING, execute in-place sync
+        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
+        if active_sandbox is not None and preview is not None and preview.status == PreviewStatus.SERVING:
+            try:
+                commit_sha = _execute_in_sandbox_sync(
+                    active_sandbox,
+                    clean_repo,
+                    bare_repo,
+                    target_branch,
+                    f"Synchronizing Unified Studio Sandbox with origin/{target_branch}",
+                )
+                return {
+                    "success": True,
+                    "branch": target_branch,
+                    "commit": commit_sha,
+                    "updated": True,
+                    "message": f"Synchronized with origin/{target_branch}",
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                preview_reg.append_log(clean_repo, f"❌ [SYNC ERROR] {e}\n", flush=True)
+                raise HTTPException(status_code=400, detail=f"Trunk synchronization failed: {e}")
+
+        # 3. If preview sandbox is stopped or idle, record target branch in registry
+        preview_reg.record_target_branch(clean_repo, target_branch)
+        return {
+            "success": True,
+            "branch": target_branch,
+            "commit": None,
+            "updated": False,
+            "message": f"Target branch set to '{target_branch}' for next preview launch",
+        }
+
+    @app.post("/api/studio/repos/{repo}/preview/branch")
+    async def switch_preview_branch_endpoint(repo: str, req: PreviewBranchRequest):
+        clean_repo = repo.strip()
+        bare_repo = clean_repo.split("/")[-1]
+        target_branch = req.branch.strip() if req.branch else ""
+        if not target_branch:
+            raise HTTPException(status_code=400, detail="Branch name is required.")
+
+        # Concurrency safety guard
+        if registry.is_job_active(clean_repo):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot switch preview branch while an Assembly Line Pipeline job is active (RUNNING or QUEUED).",
+            )
+
+        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
+        preview = preview_reg.get_preview(clean_repo)
+
+        if active_sandbox is not None and preview is not None and preview.status == PreviewStatus.SERVING:
+            try:
+                commit_sha = _execute_in_sandbox_sync(
+                    active_sandbox,
+                    clean_repo,
+                    bare_repo,
+                    target_branch,
+                    f"Switching branch to {target_branch} and synchronizing Unified Studio Sandbox",
+                )
+                preview_reg.broadcast_branch(clean_repo, target_branch)
+                return {
+                    "success": True,
+                    "branch": target_branch,
+                    "commit": commit_sha,
+                    "updated": True,
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                preview_reg.append_log(clean_repo, f"❌ [SYNC ERROR] {e}\n", flush=True)
+                raise HTTPException(status_code=400, detail=f"Branch switch failed: {e}")
+
+        # Stopped / idle
+        preview_reg.record_target_branch(clean_repo, target_branch)
+        return {
+            "success": True,
+            "branch": target_branch,
+            "commit": None,
+            "updated": False,
+        }
+
+    @app.get("/api/studio/repos/{repo}/branches")
+    async def get_repo_branches_endpoint(repo: str):
+        clean_repo = repo.strip()
+        branches = fetch_repo_branches(clean_repo)
+        return {"repo": clean_repo, "branches": branches}
     @app.get("/api/repos/{repo}/scratch")
     async def get_repo_scratch(repo: str):
         metadata = fetch_repo_scratch_metadata(repo)

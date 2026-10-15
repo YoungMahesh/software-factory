@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+import * as api from "../api";
 import { StudioView } from "./StudioView";
 import { renderWithProviders } from "../test/test-utils";
 import { StudioContextValue } from "../context/StudioContext";
@@ -595,6 +596,89 @@ describe("StudioView", () => {
     await user.click(retryBtn);
 
     expect(handleRetry).toHaveBeenCalledWith("Remove social media links from footer");
+  });
+
+  it("handles trunk synchronization mutation and displays success toast notification", async () => {
+    const syncSpy = vi.spyOn(api, "syncPreview").mockResolvedValue({
+      success: true,
+      branch: "main",
+      commit: "abcdef1",
+      updated: true,
+      message: "Synchronized with origin/main",
+    });
+
+    const { user } = renderStudio({
+      selectedRepo: "test-app",
+      previewState: {
+        repo: "test-app",
+        status: "SERVING",
+        branch: "main",
+        preview_url: "https://preview.modal.host",
+        logs: [],
+        error_message: null,
+      },
+    });
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    await user.click(syncBtn);
+
+    expect(syncSpy).toHaveBeenCalledWith("test-app", "main");
+
+    const toast = await screen.findByTestId("studio-toast");
+    expect(toast).toBeInTheDocument();
+    expect(toast).toHaveTextContent(/Preview synchronized with main \[abcdef1\]/i);
+
+    syncSpy.mockRestore();
+  });
+
+  it("handles trunk synchronization failure and surfaces error alert toast", async () => {
+    const syncSpy = vi.spyOn(api, "syncPreview").mockRejectedValue(
+      new Error("Git remote ref failed: authentication error")
+    );
+
+    const { user } = renderStudio({
+      selectedRepo: "test-app",
+      previewState: {
+        repo: "test-app",
+        status: "SERVING",
+        branch: "main",
+        preview_url: "https://preview.modal.host",
+        logs: [],
+        error_message: null,
+      },
+    });
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    await user.click(syncBtn);
+
+    const toast = await screen.findByTestId("studio-toast");
+    expect(toast).toBeInTheDocument();
+    expect(toast).toHaveTextContent(/Git remote ref failed: authentication error/i);
+
+    syncSpy.mockRestore();
+  });
+
+  it("disables sync button with lock icon when active job is running", () => {
+    renderStudio({
+      selectedRepo: "test-app",
+      activeJob: {
+        id: "job-1",
+        repo: "test-app",
+        feature: "feature-test",
+        issue: null,
+        status: "RUNNING",
+        stage: "CODER",
+        model: "deepseek-v4.1-flash",
+        vm: false,
+        created_at: Date.now(),
+        logs: [],
+        events: [],
+      },
+    });
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    expect(syncBtn).toBeDisabled();
+    expect(screen.getByTestId("sync-lock-icon")).toBeInTheDocument();
   });
 });
 

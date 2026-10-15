@@ -230,4 +230,77 @@ describe("LivePreview", () => {
     await user.click(retryButtons[0]);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
+
+  it("renders dedicated sync button adjacent to branch badge with tooltip", () => {
+    const handleSync = vi.fn();
+    renderWithProviders(
+      <LivePreview
+        status="SERVING"
+        branch="main"
+        onSync={handleSync}
+      />
+    );
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    expect(syncBtn).toBeInTheDocument();
+    expect(syncBtn).toHaveAttribute("title", "Pull latest from remote");
+    expect(screen.getByTestId("sync-icon")).toBeInTheDocument();
+  });
+
+  it("calls onSync when sync button is clicked", async () => {
+    const user = userEvent.setup();
+    const handleSync = vi.fn();
+    renderWithProviders(
+      <LivePreview
+        status="SERVING"
+        branch="main"
+        onSync={handleSync}
+      />
+    );
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    await user.click(syncBtn);
+    expect(handleSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders animated loading spinner and disables clicks when isSyncing is true", async () => {
+    const user = userEvent.setup();
+    const handleSync = vi.fn();
+    renderWithProviders(
+      <LivePreview
+        status="SERVING"
+        branch="main"
+        isSyncing={true}
+        onSync={handleSync}
+      />
+    );
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    expect(syncBtn).toBeDisabled();
+    expect(screen.getByTestId("sync-loading-spinner")).toBeInTheDocument();
+
+    await user.click(syncBtn);
+    expect(handleSync).not.toHaveBeenCalled();
+  });
+
+  it("renders lock icon and disables clicks with concurrency lock tooltip when isJobActive is true", async () => {
+    const user = userEvent.setup();
+    const handleSync = vi.fn();
+    renderWithProviders(
+      <LivePreview
+        status="SERVING"
+        branch="main"
+        isJobActive={true}
+        onSync={handleSync}
+      />
+    );
+
+    const syncBtn = screen.getByTestId("sync-preview-btn");
+    expect(syncBtn).toBeDisabled();
+    expect(screen.getByTestId("sync-lock-icon")).toBeInTheDocument();
+    expect(syncBtn.getAttribute("title")).toMatch(/job/i);
+
+    await user.click(syncBtn);
+    expect(handleSync).not.toHaveBeenCalled();
+  });
 });

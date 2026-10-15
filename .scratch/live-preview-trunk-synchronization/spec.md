@@ -1,7 +1,7 @@
 # Spec: Live Preview Trunk Synchronization and In-Place Resync
 
-Status: ready-for-agent
-Triage: ready-for-agent
+Status: resolved
+Triage: resolved
 
 ## Problem Statement
 

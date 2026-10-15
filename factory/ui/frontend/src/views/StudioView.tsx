@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Lock,
 } from "lucide-react";
+import * as api from "../api";
 import { useQueryClient } from "@tanstack/react-query";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
@@ -68,6 +69,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
   const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
   const [isLocalIssueDrawerOpen, setIsLocalIssueDrawerOpen] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const isIssueDrawerOpen =
     propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
@@ -116,6 +128,27 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
       onReconnectPreview();
     } else if (onLaunchPreview) {
       onLaunchPreview();
+    }
+  };
+
+  const handleSync = async () => {
+    if (!selectedRepo || isSyncing || isExecutingTurn) return;
+    setIsSyncing(true);
+    try {
+      const targetBranch = previewState?.branch || undefined;
+      const res = await api.syncPreview(selectedRepo, targetBranch);
+      const commitStr = res.commit ? ` [${res.commit}]` : "";
+      setToast({
+        type: "success",
+        message: `Preview synchronized with ${res.branch}${commitStr}`,
+      });
+    } catch (err: any) {
+      setToast({
+        type: "error",
+        message: `${err.message || "Failed to synchronize preview"}. Check Dev Server Logs for details.`,
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -576,6 +609,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
             onReconnectPreview={handleReconnect}
             refreshKey={refreshKey}
             isLaunching={isLaunchingPreview}
+            isSyncing={isSyncing}
+            onSync={handleSync}
+            isJobActive={isExecutingTurn}
           />
         </div>
       </div>
@@ -602,6 +638,34 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         onClose={handleCloseIssues}
         repo={selectedRepo}
       />
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          data-testid="studio-toast"
+          role="alert"
+          className={`fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-2.5 rounded-lg border shadow-xl text-xs font-medium transition-all ${
+            toast.type === "success"
+              ? "bg-slate-900 border-emerald-500/50 text-emerald-300 shadow-emerald-950/40"
+              : "bg-slate-900 border-rose-500/50 text-rose-300 shadow-rose-950/40"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-2 text-slate-400 hover:text-slate-200"
+            aria-label="Dismiss notification"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

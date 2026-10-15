@@ -13,6 +13,8 @@ import {
   Terminal,
   ChevronDown,
   AlertTriangle,
+  RefreshCw,
+  Lock,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
 import { PreviewProgressStepper } from "./PreviewProgressStepper";
@@ -32,6 +34,9 @@ interface LivePreviewProps {
   onRefresh?: () => void;
   refreshKey?: number;
   isLaunching?: boolean;
+  isSyncing?: boolean;
+  onSync?: () => void;
+  isJobActive?: boolean;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
@@ -48,6 +53,9 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   onRefresh,
   refreshKey,
   isLaunching = false,
+  isSyncing = false,
+  onSync,
+  isJobActive = false,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -144,17 +152,56 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           </button>
         </div>
 
-        {/* Active Branch Badge */}
-        {branch && (
-          <div
-            data-testid="preview-branch-badge"
-            id="preview-branch-badge"
-            className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
+        {/* Active Branch Badge & Trunk Synchronization Button */}
+        <div className="flex items-center space-x-1.5 shrink-0">
+          {branch && (
+            <div
+              data-testid="preview-branch-badge"
+              id="preview-branch-badge"
+              className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-indigo-300 shrink-0"
+            >
+              <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" />
+              <span className="truncate max-w-[140px]">{branch}</span>
+            </div>
+          )}
+
+          <button
+            data-testid="sync-preview-btn"
+            id="btn-preview-sync"
+            type="button"
+            onClick={onSync}
+            disabled={isSyncing || isJobActive || !onSync}
+            className={`p-1.5 rounded-lg border text-xs transition-colors flex items-center justify-center shrink-0 ${
+              isJobActive
+                ? "bg-slate-950/80 border-slate-800/80 text-slate-500 cursor-not-allowed"
+                : isSyncing
+                ? "bg-indigo-950/40 border-indigo-800/60 text-indigo-400 cursor-wait"
+                : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            } disabled:opacity-50`}
+            title={
+              isJobActive
+                ? "Cannot synchronize while an assembly line job is active"
+                : isSyncing
+                ? "Synchronizing with remote..."
+                : "Pull latest from remote"
+            }
+            aria-label={
+              isJobActive
+                ? "Cannot synchronize while an assembly line job is active"
+                : isSyncing
+                ? "Synchronizing with remote..."
+                : "Pull latest from remote"
+            }
           >
-            <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" />
-            <span className="truncate max-w-[140px]">{branch}</span>
-          </div>
-        )}
+            {isJobActive ? (
+              <Lock className="w-3 h-3 text-amber-500/80" data-testid="sync-lock-icon" />
+            ) : isSyncing ? (
+              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" data-testid="sync-loading-spinner" />
+            ) : (
+              <RefreshCw className="w-3 h-3 text-indigo-400 hover:text-indigo-300" data-testid="sync-icon" />
+            )}
+          </button>
+        </div>
 
         {/* URL Address Bar */}
         <div className="flex-1 max-w-md mx-3">
