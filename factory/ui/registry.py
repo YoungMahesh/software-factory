@@ -10,8 +10,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 import inspect
 import json
+import logging
 import queue
 import re
+
+logger = logging.getLogger(__name__)
 import threading
 import time
 from typing import Any
@@ -976,6 +979,50 @@ class PreviewRegistry:
                 if preview is not None and id(preview) not in seen_previews:
                     seen_previews.add(id(preview))
                     self._broadcast(preview, {"event": "preview_refresh", "repo": r})
+
+    def sync_sandbox_to_main(self, repo: str) -> bool:
+        """Synchronizes active Unified Studio Sandbox to main post-merge.
+
+        Executes git reset --hard && git clean -fd && git checkout main && git pull origin main
+        inside the running sandbox via sandbox.exec, updating preview registry branch state to main.
+        """
+        clean_repo = repo.strip()
+        sandbox, _ = self.get_active_sandbox(clean_repo)
+        if sandbox is None:
+            return False
+
+        bare_repo = clean_repo.split("/")[-1]
+        workspace_dir = f"/root/{bare_repo}"
+        exec_cmd = (
+            f"cd {workspace_dir} && "
+            "git reset --hard && "
+            "git clean -fd && "
+            "git checkout main && "
+            "git pull origin main"
+        )
+
+        exit_code = 0
+        try:
+            process = sandbox.exec("bash", "-c", exec_cmd)
+            if hasattr(process, "wait"):
+                try:
+                    exit_code = process.wait()
+                except TypeError:
+                    process.wait(raise_on_termination=False)
+                    exit_code = getattr(process, "returncode", 0)
+            else:
+                exit_code = getattr(process, "returncode", 0)
+        except Exception as e:
+            logger.warning(f"Failed to sync sandbox for {repo} to main: {e}")
+            return False
+
+        if exit_code != 0:
+            logger.warning(f"Failed to sync sandbox for {clean_repo} to main: command exited with code {exit_code}")
+            return False
+
+        self.update_branch(clean_repo, "main")
+        self.broadcast_refresh(clean_repo)
+        return True
 
     def _set_stage(self, preview: PreviewState, stage: PreviewStage) -> None:
         """Updates preview stage if changed and broadcasts stage transition event."""

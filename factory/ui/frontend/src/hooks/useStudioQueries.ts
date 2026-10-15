@@ -9,6 +9,7 @@ export const studioQueryKeys = {
   milestones: (repo: string) => ["studio", "milestones", repo] as const,
   issues: (repo: string) => ["studio", "issues", repo] as const,
   messages: (repo: string) => ["studio", "messages", repo] as const,
+  pullRequests: (repo: string) => ["studio", "pullRequests", repo] as const,
 };
 
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {
@@ -140,6 +141,39 @@ export function useDispatchStudioMutation() {
       if (vars.repo) {
         queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
       }
+    },
+  });
+}
+
+export function useStudioPullRequestQuery(
+  repo: string,
+  branch?: string,
+  state: string = "all"
+) {
+  return useQuery({
+    queryKey: branch ? [...studioQueryKeys.pullRequests(repo), branch, state] : studioQueryKeys.pullRequests(repo),
+    queryFn: () => api.fetchPullRequests(repo, branch, state),
+    enabled: Boolean(repo),
+  });
+}
+
+export function useMergePullRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      repo,
+      pullNumber,
+      params,
+    }: {
+      repo: string;
+      pullNumber: number;
+      params?: api.MergePullRequestParams;
+    }) => api.mergePullRequest(repo, pullNumber, params),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.pullRequests(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.messages(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
     },
   });
 }

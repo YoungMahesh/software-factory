@@ -11,9 +11,18 @@ import {
   DbChatMessage,
   StudioDispatchParams,
   StudioDispatchResponse,
+  PullRequest,
+  MergePullRequestParams,
+  MergePullRequestResponse,
 } from "./types";
 
-export type { StudioDispatchParams, StudioDispatchResponse } from "./types";
+export type {
+  StudioDispatchParams,
+  StudioDispatchResponse,
+  PullRequest,
+  MergePullRequestParams,
+  MergePullRequestResponse,
+} from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
@@ -266,6 +275,40 @@ export async function clearChatMessages(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to clear chat messages: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchPullRequests(
+  repo: string,
+  branch?: string,
+  state: string = "all"
+): Promise<{ repo: string; pulls: PullRequest[] }> {
+  const params = new URLSearchParams();
+  if (branch) params.set("branch", branch);
+  if (state) params.set("state", state);
+  const queryStr = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/pulls${queryStr}`);
+  if (!res.ok) throw new Error(`Failed to fetch pull requests: ${res.statusText}`);
+  return res.json();
+}
+
+export async function mergePullRequest(
+  repo: string,
+  pullNumber: number,
+  params?: MergePullRequestParams
+): Promise<MergePullRequestResponse> {
+  const res = await fetch(
+    `/api/studio/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/merge`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params || {}),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to merge pull request: ${res.statusText}`);
   }
   return res.json();
 }

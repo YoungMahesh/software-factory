@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { convertDbMessageToChatMessage, formatToolLabel } from "./utils";
+import {
+  convertDbMessageToChatMessage,
+  formatToolLabel,
+  getPullRequestStatus,
+  getPullRequestBadgeConfig,
+} from "./utils";
 import { DbChatMessage } from "./types";
 
 describe("convertDbMessageToChatMessage", () => {
@@ -101,4 +106,159 @@ describe("convertDbMessageToChatMessage", () => {
     expect(chatMsg.jobId).toBe("job-12345");
     expect(chatMsg.timestamp).toBe(1728639203000);
   });
+
+  it("converts delivery_gate db message to ChatMessage with deliveryGate payload", () => {
+    const dbMsg: DbChatMessage = {
+      id: "msg-delivery-gate-1",
+      repo: "my-app",
+      role: "assistant",
+      content: "Merged Feature Pull Request #12 into main. Live preview synchronized.",
+      turn_data: {
+        type: "delivery_gate",
+        status: "merged",
+        merged: true,
+        pull_number: 12,
+        sha: "abc1234",
+        branch: "factory/feature-1",
+        preview_synced: true,
+      },
+      created_at: 1728639204,
+    };
+
+    const chatMsg = convertDbMessageToChatMessage(dbMsg);
+    expect(chatMsg.id).toBe("msg-delivery-gate-1");
+    expect(chatMsg.role).toBe("assistant");
+    expect(chatMsg.text).toBe(
+      "Merged Feature Pull Request #12 into main. Live preview synchronized."
+    );
+    expect(chatMsg.deliveryGate).toEqual(dbMsg.turn_data);
+    expect(chatMsg.turn_data).toEqual(dbMsg.turn_data);
+  });
 });
+
+describe("getPullRequestStatus", () => {
+  it("resolves to 'merged' when merged flag or status is set", () => {
+    expect(
+      getPullRequestStatus({
+        number: 1,
+        title: "PR 1",
+        state: "closed",
+        status: "merged",
+        draft: false,
+        merged: true,
+        head_branch: "factory/feat",
+        base_branch: "main",
+        html_url: "https://github.com",
+      })
+    ).toBe("merged");
+
+    expect(
+      getPullRequestStatus(undefined, {
+        status: "merged",
+        merged: true,
+      })
+    ).toBe("merged");
+  });
+
+  it("resolves to 'closed' when PR is closed without being merged", () => {
+    expect(
+      getPullRequestStatus({
+        number: 2,
+        title: "PR 2",
+        state: "closed",
+        status: "ready_for_review",
+        draft: false,
+        merged: false,
+        head_branch: "factory/feat",
+        base_branch: "main",
+        html_url: "https://github.com",
+      })
+    ).toBe("closed");
+  });
+
+  it("resolves to 'conflict' when mergeable is false or mergeable_state is dirty/conflict", () => {
+    expect(
+      getPullRequestStatus({
+        number: 3,
+        title: "PR 3",
+        state: "open",
+        status: "ready_for_review",
+        draft: false,
+        merged: false,
+        mergeable: false,
+        mergeable_state: "dirty",
+        head_branch: "factory/feat",
+        base_branch: "main",
+        html_url: "https://github.com",
+      })
+    ).toBe("conflict");
+  });
+
+  it("resolves to 'draft' when draft flag or status is set", () => {
+    expect(
+      getPullRequestStatus({
+        number: 4,
+        title: "PR 4",
+        state: "open",
+        status: "draft",
+        draft: true,
+        merged: false,
+        head_branch: "factory/feat",
+        base_branch: "main",
+        html_url: "https://github.com",
+      })
+    ).toBe("draft");
+  });
+
+  it("resolves to 'ready_for_review' for standard open mergeable PRs", () => {
+    expect(
+      getPullRequestStatus({
+        number: 5,
+        title: "PR 5",
+        state: "open",
+        status: "ready_for_review",
+        draft: false,
+        merged: false,
+        mergeable: true,
+        head_branch: "factory/feat",
+        base_branch: "main",
+        html_url: "https://github.com",
+      })
+    ).toBe("ready_for_review");
+  });
+});
+
+describe("getPullRequestBadgeConfig", () => {
+  it("returns correct labels and variants for each PullRequestStatus", () => {
+    expect(getPullRequestBadgeConfig("merged")).toEqual({
+      label: "Merged",
+      variant: "stage",
+      className: "bg-purple-950/80 text-purple-300 border-purple-800",
+    });
+
+    expect(getPullRequestBadgeConfig("conflict")).toEqual({
+      label: "Conflict",
+      variant: "danger",
+      className: "bg-rose-950/80 text-rose-300 border-rose-800",
+    });
+
+    expect(getPullRequestBadgeConfig("draft")).toEqual({
+      label: "Draft",
+      variant: "warning",
+      className: "bg-amber-950/80 text-amber-300 border-amber-800",
+    });
+
+    expect(getPullRequestBadgeConfig("closed")).toEqual({
+      label: "Closed",
+      variant: "neutral",
+      className: "bg-slate-800/80 text-slate-300 border-slate-700",
+    });
+
+    expect(getPullRequestBadgeConfig("ready_for_review")).toEqual({
+      label: "Ready for Review",
+      variant: "success",
+      className: "bg-emerald-950/80 text-emerald-300 border-emerald-800",
+    });
+  });
+});
+

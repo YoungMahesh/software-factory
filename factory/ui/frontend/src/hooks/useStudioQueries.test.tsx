@@ -8,6 +8,8 @@ import {
   useClearChatMessagesMutation,
   useStudioIssuesQuery,
   useDispatchStudioMutation,
+  useStudioPullRequestQuery,
+  useMergePullRequestMutation,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -19,6 +21,8 @@ vi.mock("../api", async (importOriginal) => {
     clearChatMessages: vi.fn(),
     fetchIssues: vi.fn(),
     dispatchStudio: vi.fn(),
+    fetchPullRequests: vi.fn(),
+    mergePullRequest: vi.fn(),
   };
 });
 
@@ -168,5 +172,87 @@ describe("useStudioQueries - Chat Messages", () => {
     });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.issues("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.messages("my-app") });
+  });
+
+  it("defines studioQueryKeys.pullRequests(repo)", () => {
+    expect(studioQueryKeys.pullRequests("my-app")).toEqual(["studio", "pullRequests", "my-app"]);
+  });
+
+  it("fetches pull requests via useStudioPullRequestQuery", async () => {
+    const mockData = {
+      repo: "my-app",
+      pulls: [
+        {
+          id: 101,
+          number: 12,
+          title: "Feature: Add Dark Mode",
+          body: "Fixes #3",
+          state: "open",
+          status: "ready_for_review",
+          draft: false,
+          merged: false,
+          mergeable: true,
+          mergeable_state: "clean",
+          head_branch: "factory/dark-mode",
+          base_branch: "main",
+          html_url: "https://github.com/software-factory-09-test/my-app/pull/12",
+        },
+      ],
+    };
+    vi.mocked(api.fetchPullRequests).mockResolvedValue(mockData);
+
+    const { result } = renderHook(() => useStudioPullRequestQuery("my-app"), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.fetchPullRequests).toHaveBeenCalledWith("my-app", undefined, "all");
+    expect(result.current.data).toEqual(mockData);
+  });
+
+  it("merges pull request and invalidates queries via useMergePullRequestMutation", async () => {
+    const mockMergeRes = {
+      accepted: true,
+      merged: true,
+      result: {
+        sha: "abc1234",
+        branch: "factory/dark-mode",
+        pull_number: 12,
+        branch_deleted: true,
+      },
+      preview_synced: true,
+    };
+    vi.mocked(api.mergePullRequest).mockResolvedValue(mockMergeRes);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useMergePullRequestMutation(), { wrapper });
+
+    let mutateResult;
+    await act(async () => {
+      mutateResult = await result.current.mutateAsync({
+        repo: "my-app",
+        pullNumber: 12,
+        params: { commit_title: "Squash merge PR #12" },
+      });
+    });
+
+    expect(api.mergePullRequest).toHaveBeenCalledWith("my-app", 12, {
+      commit_title: "Squash merge PR #12",
+    });
+    expect(mutateResult).toEqual(mockMergeRes);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: studioQueryKeys.pullRequests("my-app"),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: studioQueryKeys.issues("my-app"),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: studioQueryKeys.messages("my-app"),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: studioQueryKeys.preview("my-app"),
+    });
   });
 });

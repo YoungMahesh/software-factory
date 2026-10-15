@@ -21,11 +21,14 @@ export interface DeliveryGateInitResult {
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   branch: string;
+  title?: string;
 }
 
 export interface DeliveryGateFinalizeResult {
   pullRequestNumber?: number;
   pullRequestUrl?: string;
+  branch?: string;
+  title?: string;
   readyForReview: boolean;
 }
 

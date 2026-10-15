@@ -44,7 +44,8 @@ export function formatToolLabel(toolName: string, data: any): string {
   }
 }
 
-import { ChatMessage, DbChatMessage } from "./types";
+import { ChatMessage, DbChatMessage, PullRequest, PullRequestStatus, DeliveryGateData } from "./types";
+import { BadgeVariant } from "./components/ui/Badge";
 
 export function convertDbMessageToChatMessage(dbMsg: DbChatMessage): ChatMessage {
   const timestamp =
@@ -107,6 +108,18 @@ export function convertDbMessageToChatMessage(dbMsg: DbChatMessage): ChatMessage
     };
   }
 
+  // 4. Delivery Gate card
+  if (turnData && turnData.type === "delivery_gate") {
+    return {
+      id: dbMsg.id,
+      role: "assistant",
+      text: dbMsg.content,
+      timestamp,
+      turn_data: turnData,
+      deliveryGate: turnData,
+    };
+  }
+
   // 4. Default assistant message
   return {
     id: dbMsg.id,
@@ -121,4 +134,81 @@ export function getLastUserPromptBefore(messages: ChatMessage[], currentMsgId: s
   const searchMessages = msgIndex >= 0 ? messages.slice(0, msgIndex) : messages;
   return [...searchMessages].reverse().find((m) => m.role === "user")?.text;
 }
+
+export function getPullRequestStatus(
+  pr?: PullRequest | null,
+  gateData?: DeliveryGateData | null
+): PullRequestStatus {
+  if (
+    gateData?.merged ||
+    pr?.merged ||
+    pr?.status === "merged" ||
+    gateData?.status === "merged"
+  ) {
+    return "merged";
+  }
+
+  if (pr?.state === "closed" || gateData?.status === "closed") {
+    return "closed";
+  }
+
+  if (
+    pr?.status === "conflict" ||
+    pr?.mergeable === false ||
+    pr?.mergeable_state === "dirty" ||
+    pr?.mergeable_state === "conflict" ||
+    gateData?.status === "conflict"
+  ) {
+    return "conflict";
+  }
+
+  if (pr?.draft || pr?.status === "draft" || gateData?.status === "draft") {
+    return "draft";
+  }
+
+  return "ready_for_review";
+}
+
+export interface PullRequestBadgeConfig {
+  label: string;
+  variant: BadgeVariant;
+  className: string;
+}
+
+export function getPullRequestBadgeConfig(status: PullRequestStatus): PullRequestBadgeConfig {
+  switch (status) {
+    case "merged":
+      return {
+        label: "Merged",
+        variant: "stage",
+        className: "bg-purple-950/80 text-purple-300 border-purple-800",
+      };
+    case "conflict":
+      return {
+        label: "Conflict",
+        variant: "danger",
+        className: "bg-rose-950/80 text-rose-300 border-rose-800",
+      };
+    case "draft":
+      return {
+        label: "Draft",
+        variant: "warning",
+        className: "bg-amber-950/80 text-amber-300 border-amber-800",
+      };
+    case "closed":
+      return {
+        label: "Closed",
+        variant: "neutral",
+        className: "bg-slate-800/80 text-slate-300 border-slate-700",
+      };
+    case "ready_for_review":
+    default:
+      return {
+        label: "Ready for Review",
+        variant: "success",
+        className: "bg-emerald-950/80 text-emerald-300 border-emerald-800",
+      };
+  }
+}
+
 

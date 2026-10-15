@@ -39,6 +39,7 @@ export interface StudioContextValue {
   isIssueDrawerOpen?: boolean;
   onInstantDispatch?: (params: StudioDispatchParams) => Promise<StudioDispatchResponse | void>;
   isDispatching?: boolean;
+  onMergeSuccess?: (result?: any) => void;
 }
 
 const StudioContext = createContext<StudioContextValue | undefined>(undefined);

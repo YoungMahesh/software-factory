@@ -13,21 +13,30 @@ import {
   AlertTriangle,
   RotateCcw,
   Lock,
+  GitMerge,
+  ExternalLink,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LivePreview } from "../components/LivePreview";
 import { ThinkingAccordion } from "../components/ThinkingAccordion";
 import { ToolChip } from "../components/ToolChip";
 import { useStudio } from "../context/StudioContext";
-import { useStudioIssuesQuery, studioQueryKeys } from "../hooks/useStudioQueries";
+import {
+  useStudioIssuesQuery,
+  useStudioPullRequestQuery,
+  useMergePullRequestMutation,
+  studioQueryKeys,
+} from "../hooks/useStudioQueries";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { NewAppModal } from "../components/NewAppModal";
 import { DisconnectedModal } from "../components/DisconnectedModal";
 import { PromptComposer } from "../components/PromptComposer";
 import { ApprovalCard } from "../components/ApprovalCard";
+import { DeliveryGateCard } from "../components/DeliveryGateCard";
 import { IssueDrawer } from "../components/IssueDrawer";
-import { getLastUserPromptBefore } from "../utils";
+import { getLastUserPromptBefore, getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
+import { PullRequest, PreviewState } from "../types";
 
 export interface StudioViewProps {
   className?: string;
@@ -62,12 +71,53 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onOpenIssueDrawer,
     onCloseIssueDrawer,
     isIssueDrawerOpen: propIssueDrawerOpen,
+    onMergeSuccess,
   } = useStudio();
 
   const queryClient = useQueryClient();
   const [isNewAppModalOpen, setIsNewAppModalOpen] = useState<boolean>(false);
   const [isDismissedDisconnected, setIsDismissedDisconnected] = useState<boolean>(false);
   const [isLocalIssueDrawerOpen, setIsLocalIssueDrawerOpen] = useState<boolean>(false);
+
+  const [isPRPopoverOpen, setIsPRPopoverOpen] = useState<boolean>(false);
+  const [isConfirmingMerge, setIsConfirmingMerge] = useState<boolean>(false);
+  const [popoverMergeError, setPopoverMergeError] = useState<string | null>(null);
+
+  const prQuery = useStudioPullRequestQuery(selectedRepo);
+  const mergeMutation = useMergePullRequestMutation();
+
+  useEffect(() => {
+    setIsPRPopoverOpen(false);
+    setIsConfirmingMerge(false);
+    setPopoverMergeError(null);
+  }, [selectedRepo]);
+
+  const pullRequests: PullRequest[] = prQuery.data?.pulls || [];
+
+  const activePR: PullRequest | undefined = (() => {
+    if (!pullRequests.length) return undefined;
+    if (activeJob?.feature) {
+      const match = pullRequests.find(
+        (p) =>
+          p.head_branch === `factory/${activeJob.feature}` ||
+          p.head_branch.endsWith(`/${activeJob.feature}`)
+      );
+      if (match) return match;
+    }
+    const openFactoryPR = pullRequests.find(
+      (p) => (p.state === "open" || !p.merged) && p.head_branch.startsWith("factory/")
+    );
+    if (openFactoryPR) return openFactoryPR;
+    const openPR = pullRequests.find((p) => p.state === "open" || !p.merged);
+    if (openPR) return openPR;
+    return pullRequests[0];
+  })();
+
+  const prStatus = getPullRequestStatus(activePR);
+  const prIsMerged = prStatus === "merged";
+  const prHasConflict = prStatus === "conflict";
+  const prIsDraft = prStatus === "draft";
+  const prIsClosed = prStatus === "closed";
 
   const isIssueDrawerOpen =
     propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
@@ -98,6 +148,49 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     }
   };
 
+  const handlePopoverMerge = async () => {
+    if (!activePR || !selectedRepo) return;
+    setPopoverMergeError(null);
+    try {
+      const res = await mergeMutation.mutateAsync({
+        repo: selectedRepo,
+        pullNumber: activePR.number,
+        params: {
+          commit_title: `${activePR.title} (#${activePR.number})`,
+        },
+      });
+
+      queryClient.setQueryData<PreviewState | null>(
+        studioQueryKeys.preview(selectedRepo),
+        (prev) => {
+          if (!prev || prev.status === "IDLE") return prev ?? null;
+          return { ...prev, branch: "main" };
+        }
+      );
+
+      if (onMergeSuccess) {
+        onMergeSuccess(res);
+      }
+      setIsConfirmingMerge(false);
+      setIsPRPopoverOpen(false);
+    } catch (err: any) {
+      setPopoverMergeError(err.message || "Failed to merge pull request");
+    }
+  };
+
+  const handleMergeSuccess = (res?: any) => {
+    queryClient.setQueryData<PreviewState | null>(
+      studioQueryKeys.preview(selectedRepo),
+      (prev) => {
+        if (!prev || prev.status === "IDLE") return prev ?? null;
+        return { ...prev, branch: "main" };
+      }
+    );
+    if (onMergeSuccess) {
+      onMergeSuccess(res);
+    }
+  };
+
   useEffect(() => {
     if (previewState?.status !== "STOPPED") {
       setIsDismissedDisconnected(false);
@@ -117,6 +210,20 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     } else if (onLaunchPreview) {
       onLaunchPreview();
     }
+  };
+
+  const renderPRControlBadge = () => {
+    const config = getPullRequestBadgeConfig(prStatus);
+    const testIdStatus = prStatus === "ready_for_review" ? "ready" : prStatus;
+    return (
+      <Badge
+        data-testid={`studio-pr-badge-${testIdStatus}`}
+        variant={config.variant}
+        className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${config.className}`}
+      >
+        {config.label}
+      </Badge>
+    );
   };
 
   return (
@@ -183,6 +290,179 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                   {openIssuesCount}
                 </span>
               </Button>
+
+              {/* Feature Pull Request Status Button & Popover */}
+              {activePR && (
+                <div className="relative">
+                  <Button
+                    id="btn-studio-pr-status"
+                    data-testid="studio-pr-control-btn"
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsPRPopoverOpen((prev) => !prev);
+                      setIsConfirmingMerge(false);
+                      setPopoverMergeError(null);
+                    }}
+                    icon={<GitPullRequest className="w-3.5 h-3.5 text-indigo-400" />}
+                    title={`Feature Pull Request #${activePR.number} status`}
+                    className="relative"
+                  >
+                    <span>PR #{activePR.number}</span>
+                    {renderPRControlBadge()}
+                  </Button>
+
+                  {isPRPopoverOpen && (
+                    <div
+                      data-testid="studio-pr-popover"
+                      className="absolute left-0 top-full mt-2 w-80 p-3.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-30 space-y-3 animate-in fade-in zoom-in-95 duration-150"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-xs font-semibold text-slate-100 truncate">
+                              {activePR.title}
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                              #{activePR.number}
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400">
+                            {activePR.head_branch} <span className="text-slate-500">➔</span> main
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          {renderPRControlBadge()}
+                          {activePR.html_url && (
+                            <a
+                              data-testid="studio-pr-gh-link"
+                              href={activePR.html_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-slate-400 hover:text-indigo-300 transition-colors p-1"
+                              title="View Pull Request on GitHub"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {prHasConflict && (
+                        <div
+                          data-testid="studio-popover-conflict-warning"
+                          className="p-2.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs space-y-1.5"
+                        >
+                          <div className="font-semibold text-rose-200 flex items-center space-x-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>Merge Conflict</span>
+                          </div>
+                          <div className="text-[11px] text-rose-300/90">
+                            Resolve conflicts on GitHub before merging.
+                          </div>
+                          {activePR.html_url && (
+                            <a
+                              data-testid="studio-popover-conflict-link"
+                              href={activePR.html_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center space-x-1 text-[11px] font-medium text-rose-300 underline hover:text-white"
+                            >
+                              <span>Resolve conflicts on GitHub</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {popoverMergeError && (
+                        <div className="p-2 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
+                          {popoverMergeError}
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-slate-800">
+                        {prIsMerged ? (
+                          <div className="flex items-center space-x-2 py-1 px-2.5 rounded bg-purple-950/40 border border-purple-900/50 text-purple-300 text-xs font-medium">
+                            <GitMerge className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <span>Merged into main</span>
+                          </div>
+                        ) : isConfirmingMerge ? (
+                          <div className="space-y-2">
+                            <div className="text-[11px] text-slate-300 font-medium">
+                              Squash merge PR #{activePR.number} into main?
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                data-testid="btn-studio-popover-confirm-merge"
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                onClick={handlePopoverMerge}
+                                isLoading={mergeMutation.isPending}
+                                disabled={mergeMutation.isPending}
+                                icon={<GitMerge className="w-3 h-3" />}
+                              >
+                                Confirm Squash Merge
+                              </Button>
+                              <Button
+                                data-testid="btn-studio-popover-cancel-merge"
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setIsConfirmingMerge(false)}
+                                disabled={mergeMutation.isPending}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-slate-400">
+                              {isExecutingTurn ? (
+                                <span className="text-amber-400">Job running</span>
+                              ) : prIsDraft ? (
+                                <span>Draft status</span>
+                              ) : prHasConflict ? (
+                                <span className="text-rose-400">Conflict</span>
+                              ) : prIsClosed ? (
+                                <span className="text-slate-400">Closed</span>
+                              ) : (
+                                <span>Ready to merge</span>
+                              )}
+                            </span>
+
+                            <Button
+                              data-testid="btn-studio-popover-merge"
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              disabled={prIsDraft || isExecutingTurn || prHasConflict || prIsMerged || prIsClosed}
+                              onClick={() => setIsConfirmingMerge(true)}
+                              icon={<GitMerge className="w-3 h-3" />}
+                              title={
+                                isExecutingTurn
+                                  ? "Cannot merge while assembly line job is executing"
+                                  : prIsDraft
+                                  ? "Cannot merge PR in Draft status"
+                                  : prHasConflict
+                                  ? "Cannot merge due to conflicts"
+                                  : prIsClosed
+                                  ? "Cannot merge a closed pull request"
+                                  : "Squash merge into main"
+                              }
+                            >
+                              Merge into main
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <Button
                 id="btn-studio-preview-app"
@@ -526,6 +806,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
                             isApproved={Boolean(activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))}
                           />
                         )
+                      ) : msg.deliveryGate || msg.turn_data?.type === "delivery_gate" ? (
+                        <DeliveryGateCard
+                          repo={selectedRepo}
+                          data={msg.deliveryGate || msg.turn_data}
+                          activeJobRunning={Boolean(
+                            activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED")
+                          )}
+                          onMergeSuccess={handleMergeSuccess}
+                        />
                       ) : (
                         /* Text content if present */
                         msg.text && (

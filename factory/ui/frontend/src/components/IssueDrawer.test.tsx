@@ -12,6 +12,7 @@ vi.mock("../api", async (importOriginal) => {
     ...actual,
     fetchIssues: vi.fn(),
     dispatchStudio: vi.fn(),
+    fetchPullRequests: vi.fn(),
   };
 });
 
@@ -80,6 +81,10 @@ describe("IssueDrawer", () => {
     vi.mocked(api.fetchIssues).mockResolvedValue({
       repo: "test-repo",
       issues: mockIssues,
+    });
+    vi.mocked(api.fetchPullRequests).mockResolvedValue({
+      repo: "test-repo",
+      pulls: [],
     });
   });
 
@@ -366,5 +371,39 @@ describe("IssueDrawer", () => {
     await user.click(refreshBtn);
 
     expect(handleRefresh).toHaveBeenCalled();
+  });
+
+  it("displays associated PR status badge on milestone headers with an external link", async () => {
+    vi.mocked(api.fetchPullRequests).mockResolvedValue({
+      repo: "test-repo",
+      pulls: [
+        {
+          id: 55,
+          number: 10,
+          title: "Feature: Core Feature",
+          state: "open",
+          status: "ready_for_review",
+          draft: false,
+          merged: false,
+          head_branch: "factory/v1-core-feature",
+          base_branch: "main",
+          html_url: "https://github.com/software-factory-09-test/test-repo/pull/10",
+        },
+      ],
+    });
+
+    renderDrawer();
+
+    await waitFor(() => {
+      const prBadge = screen.getByTestId("milestone-pr-badge-v1-core-feature");
+      expect(prBadge).toBeInTheDocument();
+      expect(prBadge).toHaveTextContent(/Ready for Review/i);
+    });
+
+    const prLink = screen.getByTestId("milestone-pr-link-v1-core-feature");
+    expect(prLink).toHaveAttribute(
+      "href",
+      "https://github.com/software-factory-09-test/test-repo/pull/10"
+    );
   });
 });
