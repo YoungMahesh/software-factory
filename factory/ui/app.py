@@ -39,6 +39,8 @@ from factory.ui.github import (
     PullRequestMergeError,
     fetch_repo_branches,
     fetch_repo_branches_with_diagnostics,
+    reopen_repo_issue_for_rollback,
+    update_local_markdown_issue_for_rollback,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.grill import GrillingAssistant
@@ -67,7 +69,9 @@ class PreviewBranchRequest(BaseModel):
     branch: str = Field(..., description="Target branch to switch to")
 
 
-UpdatePreviewBranchRequest = PreviewBranchRequest
+class RollbackTurnRequest(BaseModel):
+    message_id: str | None = Field(None, description="Optional target assistant message ID to roll back")
+    branch: str | None = Field(None, description="Optional target branch to roll back (defaults to active preview branch)")
 
 
 class LaunchJobRequest(BaseModel):
@@ -135,6 +139,7 @@ def create_app(
             db = StudioDatabase()
         else:
             db = StudioDatabase(":memory:")
+    assert db is not None
     registry.db = db
     preview_reg.db = db
     registry.rehydrate()
@@ -858,6 +863,296 @@ def create_app(
         )
         preview_reg.broadcast_refresh(clean_repo)
         return commit_sha
+
+    def _execute_in_sandbox_rollback(
+        active_sandbox: Any,
+        clean_repo: str,
+        bare_repo: str,
+        target_branch: str,
+        commit_sha: str | None,
+    ) -> tuple[str, str]:
+        """Executes in-container git revert --no-edit, pushes to remote, and runs diff-aware pnpm install."""
+        import concurrent.futures
+
+        target_commit_expr = shlex.quote(commit_sha) if commit_sha else "$OLD_SHA"
+        revert_script = (
+            f"cd /root/{bare_repo} && "
+            f"git fetch origin {shlex.quote(target_branch)} && "
+            f"(git checkout {shlex.quote(target_branch)} 2>/dev/null || git checkout -B {shlex.quote(target_branch)} origin/{shlex.quote(target_branch)}) && "
+            f"git reset --hard origin/{shlex.quote(target_branch)} && "
+            "git clean -fd && "
+            'OLD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "") && '
+            f'TARGET_COMMIT={target_commit_expr} && '
+            'echo "ORIGINAL_COMMIT_SHA:$TARGET_COMMIT" && '
+            'if ! git revert --no-edit "$TARGET_COMMIT"; then '
+            'echo "Revert conflict encountered. Aborting..." >&2; '
+            'git revert --abort; '
+            'exit 1; '
+            'fi && '
+            'if [ -d ".scratch" ]; then '
+            'find .scratch -path "*/issues/*.md" -type f -exec sed -i -E \'s/(Status:[[:space:]]*)[a-zA-Z0-9_-]+/\\1ready-for-agent/g\' {} + 2>/dev/null || true; '
+            'find .scratch -path "*/issues/*.md" -type f -exec sed -i -E \'/^[[:space:]]*Commit:/d\' {} + 2>/dev/null || true; '
+            'if ! git diff --quiet 2>/dev/null; then '
+            'git commit -am "chore(tracker): reset issue status for rollback" 2>/dev/null || true; '
+            'fi; '
+            'fi && '
+            f"git push origin {shlex.quote(target_branch)} && "
+            'NEW_SHA=$(git rev-parse HEAD) && '
+            'echo "REVERT_COMMIT_SHA:$(git rev-parse --short HEAD)" && '
+            'if [ -n "$OLD_SHA" ] && git diff --name-only "$OLD_SHA" "$NEW_SHA" | grep -E \'^(package\\.json|pnpm-lock\\.yaml)$\' >/dev/null; then '
+            'pnpm install --prefer-offline; '
+            'fi'
+        )
+
+        preview_reg.append_log(
+            clean_repo,
+            f"↩️ [ROLLBACK] Reverting commit {commit_sha or 'HEAD'} on origin/{target_branch}...\n",
+            flush=True,
+        )
+
+        proc = active_sandbox.exec("bash", "-c", revert_script)
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def stream_pipe(reader, is_err=False):
+            if reader is None:
+                return
+            try:
+                for chunk in reader:
+                    text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+                    if is_err:
+                        stderr_lines.append(text)
+                    else:
+                        stdout_lines.append(text)
+                    for subline in text.splitlines(keepends=True):
+                        if subline.startswith("ORIGINAL_COMMIT_SHA:") or subline.startswith("REVERT_COMMIT_SHA:"):
+                            continue
+                        prefix = "❌ [ROLLBACK ERROR] " if is_err else "↩️ [ROLLBACK] "
+                        preview_reg.append_log(clean_repo, f"{prefix}{subline}", flush=True)
+            except Exception:
+                pass
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            f_out = executor.submit(stream_pipe, getattr(proc, "stdout", None), False)
+            f_err = executor.submit(stream_pipe, getattr(proc, "stderr", None), True)
+            concurrent.futures.wait([f_out, f_err])
+
+        exit_code = 0
+        if hasattr(proc, "wait"):
+            try:
+                exit_code = proc.wait()
+            except TypeError:
+                proc.wait(raise_on_termination=False)
+                exit_code = getattr(proc, "returncode", 0)
+        elif hasattr(proc, "returncode"):
+            exit_code = proc.returncode
+
+        if exit_code is None:
+            exit_code = getattr(proc, "returncode", 0)
+
+        if exit_code != 0:
+            err_msg = "".join(stderr_lines).strip() or "".join(stdout_lines).strip() or f"Process exited with code {exit_code}"
+            preview_reg.append_log(clean_repo, f"❌ [ROLLBACK ERROR] {err_msg}\n", flush=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Turn rollback failed: {err_msg}",
+            )
+
+        full_output = "".join(stdout_lines)
+        orig_sha_match = re.search(r"ORIGINAL_COMMIT_SHA:([^\r\n]+)", full_output)
+        original_sha = orig_sha_match.group(1).strip() if orig_sha_match else (commit_sha or "HEAD")
+
+        rev_sha_match = re.search(r"REVERT_COMMIT_SHA:([^\r\n]+)", full_output)
+        revert_sha = rev_sha_match.group(1).strip() if rev_sha_match else "unknown"
+
+        preview_reg.append_log(
+            clean_repo,
+            f"↩️ [ROLLBACK] Successfully reverted {original_sha} (revert commit {revert_sha}) on {target_branch}.\n",
+            flush=True,
+        )
+        return original_sha, revert_sha
+
+    @app.post("/api/studio/repos/{repo}/turns/rollback")
+    async def rollback_turn_endpoint(repo: str, req: RollbackTurnRequest | None = None):
+        clean_repo = repo.strip()
+        if not clean_repo:
+            raise HTTPException(status_code=400, detail="Repository name is required.")
+
+        # 1. Concurrency safety guard: strictly reject if an assembly line job is active
+        if registry.is_job_active(clean_repo):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot rollback turn while an Assembly Line Pipeline job is active or queued for repository '{clean_repo}'.",
+            )
+
+        # 2. Resolve target branch and merge safety guard early if branch provided
+        preview = preview_reg.get_preview(clean_repo)
+        target_branch = req.branch.strip() if req and req.branch and req.branch.strip() else None
+
+        # 3. Resolve target message and turn data from SQLite chat history
+        messages = db.get_chat_messages(clean_repo)
+        target_msg: dict[str, Any] | None = None
+
+        if req and req.message_id:
+            for m in messages:
+                if m.get("id") == req.message_id:
+                    target_msg = m
+                    break
+            if not target_msg:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Turn message '{req.message_id}' not found for repository '{clean_repo}'.",
+                )
+            if target_msg.get("turn_data", {}).get("reverted"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Turn message '{req.message_id}' has already been reverted.",
+                )
+        else:
+            # Find latest completed code-producing turn in reverse order
+            for m in reversed(messages):
+                t_data = m.get("turn_data")
+                if not isinstance(t_data, dict):
+                    continue
+                if t_data.get("reverted"):
+                    continue
+                if t_data.get("refusal") or t_data.get("type") == "turn_rollback":
+                    continue
+                if (
+                    m.get("role") == "assistant"
+                    and (
+                        t_data.get("commit_sha")
+                        or t_data.get("sha")
+                        or t_data.get("job_id")
+                        or t_data.get("issue")
+                        or t_data.get("issue_number")
+                        or m.get("issue_number") is not None
+                    )
+                ):
+                    target_msg = m
+                    break
+
+        if not target_branch:
+            if target_msg:
+                fallback_branch = preview.branch if preview is not None and preview.branch else "main"
+                target_branch = target_msg.get("turn_data", {}).get("branch") or fallback_branch
+            elif preview is not None and preview.branch:
+                target_branch = preview.branch
+
+        if not target_branch or target_branch == "main":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot roll back turn: target branch is 'main' or has already been merged into main.",
+            )
+
+        # Merge safety guard: strictly reject if PR has already been merged into main
+        prs = fetch_repo_pull_requests(clean_repo, branch=target_branch, state="all")
+        for pr in prs:
+            if pr.get("merged") or pr.get("status") == "merged":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot roll back turn: Feature Pull Request #{pr.get('number')} for branch '{target_branch}' has already been merged into main.",
+                )
+
+        if not target_msg and not messages and not req.branch:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No completed code-producing turn found to roll back for repository '{clean_repo}'.",
+            )
+
+        # 4. Auto-boot fallback: ensure Unified Studio Sandbox is running
+        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
+        preview_state = preview_reg.get_preview(clean_repo)
+
+        if active_sandbox is None or preview_state is None or preview_state.status != PreviewStatus.SERVING:
+            if not preview_state or preview_state.status in (PreviewStatus.STOPPED, PreviewStatus.FAILED, PreviewStatus.IDLE):
+                preview_state = preview_reg.launch_preview(clean_repo, branch=target_branch)
+
+            active_sandbox, _ = await preview_reg.wait_for_serving(clean_repo)
+            preview_state = preview_reg.get_preview(clean_repo)
+            if active_sandbox is None and preview_state and preview_state.status == PreviewStatus.FAILED:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Unified Studio Sandbox failed to start: {preview_state.error_message or 'Unknown error'}",
+                )
+
+        if active_sandbox is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Unified Studio Sandbox is not available to execute turn rollback.",
+            )
+
+        bare_repo = clean_repo.split("/")[-1]
+        target_commit = (
+            (target_msg.get("turn_data", {}).get("commit_sha") or target_msg.get("turn_data", {}).get("sha"))
+            if target_msg is not None
+            else None
+        )
+
+        original_sha, revert_sha = _execute_in_sandbox_rollback(
+            active_sandbox=active_sandbox,
+            clean_repo=clean_repo,
+            bare_repo=bare_repo,
+            target_branch=target_branch,
+            commit_sha=target_commit,
+        )
+
+        # 5. Broadcast SSE preview_refresh
+        preview_reg.broadcast_refresh(clean_repo)
+
+        # 6. Coordinate issue tracker
+        issue_num = None
+        if target_msg is not None:
+            issue_num = target_msg.get("issue_number")
+            if issue_num is None:
+                t_issue = target_msg.get("turn_data", {}).get("issue_number") or target_msg.get("turn_data", {}).get("issue")
+                if isinstance(t_issue, dict):
+                    issue_num = t_issue.get("number")
+                elif t_issue is not None:
+                    issue_num = t_issue
+
+        if issue_num is not None:
+            try:
+                parsed_issue_num = int(issue_num)
+                reopen_repo_issue_for_rollback(
+                    repo_name=clean_repo,
+                    issue_number=parsed_issue_num,
+                    original_commit_sha=original_sha,
+                    revert_commit_sha=revert_sha,
+                )
+            except Exception as e:
+                preview_reg.append_log(clean_repo, f"⚠️ [ROLLBACK] Issue tracker reopen notice: {e}\n", flush=True)
+
+        update_local_markdown_issue_for_rollback(
+            repo_name=clean_repo,
+            feature=target_branch.removeprefix("factory/") if target_branch.startswith("factory/") else None,
+            issue_number=issue_num,
+        )
+
+        # 7. SQLite database persistence
+        if target_msg is not None:
+            db.mark_chat_message_reverted(
+                message_id=target_msg["id"],
+                revert_commit=revert_sha,
+            )
+        db.save_rollback_message(
+            repo=clean_repo,
+            original_message_id=target_msg["id"] if target_msg is not None else None,
+            original_commit_sha=original_sha,
+            revert_commit_sha=revert_sha,
+            issue_number=issue_num,
+            branch=target_branch,
+        )
+
+        issue_display = f" for Issue #{issue_num}" if issue_num else ""
+        return {
+            "success": True,
+            "branch": target_branch,
+            "original_commit": original_sha,
+            "revert_commit": revert_sha,
+            "issue_number": issue_num,
+            "message": f"Rolled back turn{issue_display} (commit {original_sha} ➔ {revert_sha}).",
+        }
 
     @app.post("/api/studio/repos/{repo}/preview/sync")
     async def sync_preview_endpoint(repo: str, req: PreviewSyncRequest | None = None):

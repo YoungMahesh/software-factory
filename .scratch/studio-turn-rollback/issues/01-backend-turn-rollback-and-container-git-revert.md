@@ -16,16 +16,16 @@ Implement the backend REST endpoint and in-container git revert engine for Turn 
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Add `mark_chat_message_reverted` and `save_rollback_message` methods in `factory/ui/db.py` to update original turn metadata and persist append-only rollback event.
-- [ ] Implement `POST /api/studio/repos/{repo}/turns/rollback` in `factory/ui/app.py`.
-- [ ] Enforce concurrency safety guard rejecting with HTTP 409 when `registry.is_job_active(repo)` is true.
-- [ ] Enforce merge guard rejecting with HTTP 400 when the turn's Feature PR is merged into `main`.
-- [ ] Implement in-container git revert execution via `sandbox.exec`, pushing the revert commit to remote.
-- [ ] Implement automatic `git revert --abort` on conflict, preserving clean workspace state and raising HTTP 400.
-- [ ] Implement diff-aware `pnpm install --prefer-offline` when dependency files differ between HEAD and parent.
-- [ ] Broadcast SSE `preview_refresh` to reload preview iframe.
-- [ ] Coordinate issue tracker: reopen GitHub Issue with label reset and comment; update local tracker if applicable.
-- [ ] Add comprehensive tests in `tests/test_ui.py` covering success, conflict abort, concurrency lock, merged PR rejection, and DB rehydration.
+- [x] Add `mark_chat_message_reverted` and `save_rollback_message` methods in `factory/ui/db.py` to update original turn metadata and persist append-only rollback event.
+- [x] Implement `POST /api/studio/repos/{repo}/turns/rollback` in `factory/ui/app.py`.
+- [x] Enforce concurrency safety guard rejecting with HTTP 409 when `registry.is_job_active(repo)` is true.
+- [x] Enforce merge guard rejecting with HTTP 400 when the turn's Feature PR is merged into `main`.
+- [x] Implement in-container git revert execution via `sandbox.exec`, pushing the revert commit to remote.
+- [x] Implement automatic `git revert --abort` on conflict, preserving clean workspace state and raising HTTP 400.
+- [x] Implement diff-aware `pnpm install --prefer-offline` when dependency files differ between HEAD and parent.
+- [x] Broadcast SSE `preview_refresh` to reload preview iframe.
+- [x] Coordinate issue tracker: reopen GitHub Issue with label reset and comment; update local tracker if applicable.
+- [x] Add comprehensive tests in `tests/test_ui.py` covering success, conflict abort, concurrency lock, merged PR rejection, and DB rehydration.

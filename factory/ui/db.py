@@ -333,6 +333,102 @@ class StudioDatabase:
             )
         return messages
 
+    def mark_chat_message_reverted(
+        self,
+        message_id: str,
+        revert_commit: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Marks a chat message as reverted with timestamp and revert commit SHA."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, repo, milestone_slug, issue_number, role, content, turn_data_json, created_at
+                FROM chat_messages
+                WHERE id = ?;
+                """,
+                (message_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            turn_data: dict[str, Any] = {}
+            if row["turn_data_json"]:
+                try:
+                    loaded = json.loads(row["turn_data_json"])
+                    if isinstance(loaded, dict):
+                        turn_data = loaded
+                except Exception:
+                    turn_data = {}
+
+            now = time.time()
+            turn_data["reverted"] = True
+            turn_data["reverted_at"] = now
+            if revert_commit is not None:
+                turn_data["revert_commit"] = revert_commit
+
+            turn_data_json = json.dumps(turn_data)
+            cur.execute(
+                """
+                UPDATE chat_messages
+                SET turn_data_json = ?
+                WHERE id = ?;
+                """,
+                (turn_data_json, message_id),
+            )
+
+        return {
+            "id": row["id"],
+            "repo": row["repo"],
+            "milestone_slug": row["milestone_slug"],
+            "issue_number": row["issue_number"],
+            "role": row["role"],
+            "content": row["content"],
+            "turn_data": turn_data,
+            "created_at": row["created_at"],
+        }
+
+    def save_rollback_message(
+        self,
+        repo: str,
+        original_message_id: str | None = None,
+        original_commit_sha: str | None = None,
+        revert_commit_sha: str | None = None,
+        issue_number: int | str | None = None,
+        branch: str | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any]:
+        """Persists an append-only turn rollback event to chat messages."""
+        if content is None:
+            issue_str = f" for Issue #{issue_number}" if issue_number is not None else ""
+            orig_s = original_commit_sha or "unknown"
+            rev_s = revert_commit_sha or "unknown"
+            content = f"↩️ Rolled back turn{issue_str} (commit {orig_s} ➔ {rev_s}). Live Preview restored to previous version."
+
+        turn_data: dict[str, Any] = {
+            "type": "turn_rollback",
+            "original_message_id": original_message_id,
+            "original_commit_sha": original_commit_sha,
+            "revert_commit_sha": revert_commit_sha,
+            "issue_number": issue_number,
+            "branch": branch,
+        }
+
+        parsed_issue_num: int | None = None
+        if issue_number is not None:
+            try:
+                parsed_issue_num = int(issue_number)
+            except (ValueError, TypeError):
+                parsed_issue_num = None
+
+        return self.save_chat_message(
+            repo=repo,
+            role="assistant",
+            content=content,
+            issue_number=parsed_issue_num,
+            turn_data=turn_data,
+        )
+
     def delete_chat_messages(self, repo: str) -> int:
         """Deletes chat messages for a repository while keeping jobs and logs."""
         with self._cursor() as cur:
