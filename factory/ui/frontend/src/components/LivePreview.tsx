@@ -16,6 +16,7 @@ import {
   Check,
   RefreshCw,
   Lock,
+  RotateCcw,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus, PreviewStage } from "../types";
 import { PreviewProgressStepper } from "./PreviewProgressStepper";
@@ -45,6 +46,10 @@ interface LivePreviewProps {
   isLaunching?: boolean;
   isSyncing?: boolean;
   onSync?: () => void;
+  onRollbackLastTurn?: () => void;
+  isRollingBack?: boolean;
+  isRollbackDisabled?: boolean;
+  rollbackDisabledReason?: string;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
@@ -71,6 +76,10 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   isLaunching = false,
   isSyncing = false,
   onSync,
+  onRollbackLastTurn,
+  isRollingBack = false,
+  isRollbackDisabled = false,
+  rollbackDisabledReason,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -411,6 +420,39 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
                 <Loader2 className="w-3 h-3 animate-spin text-indigo-400" data-testid="sync-loading-spinner" />
               ) : (
                 <RefreshCw className="w-3 h-3 text-indigo-400 hover:text-indigo-300" data-testid="sync-icon" />
+              )}
+            </button>
+          )}
+
+          {/* Undo Last Turn Action Button */}
+          {onRollbackLastTurn && (
+            <button
+              data-testid="preview-rollback-btn"
+              id="btn-preview-rollback"
+              type="button"
+              onClick={onRollbackLastTurn}
+              disabled={isLocked || isRollingBack || isSyncing || isSwitching || isRollbackDisabled}
+              className={`p-1.5 rounded-lg border text-xs transition-colors flex items-center justify-center shrink-0 ${
+                isLocked || isSyncing || isSwitching || isRollbackDisabled
+                  ? "bg-slate-950/80 border-slate-800/80 text-slate-500 cursor-not-allowed"
+                  : isRollingBack
+                  ? "bg-indigo-950/40 border-indigo-800/60 text-indigo-400 cursor-wait"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              } disabled:opacity-50`}
+              title={
+                isLocked
+                  ? "Cannot roll back turn while job is active"
+                  : rollbackDisabledReason ||
+                    (isRollingBack ? "Rolling back last turn..." : "Roll Back Last Turn")
+              }
+              aria-label="Roll Back Last Turn"
+            >
+              {isRollingBack ? (
+                <Loader2 className="w-3 h-3 animate-spin text-indigo-400" data-testid="rollback-loading-spinner" />
+              ) : isLocked || isRollbackDisabled ? (
+                <Lock className="w-3 h-3 text-slate-500" data-testid="rollback-lock-icon" />
+              ) : (
+                <RotateCcw className="w-3 h-3 text-indigo-400 hover:text-indigo-300" data-testid="rollback-icon" />
               )}
             </button>
           )}

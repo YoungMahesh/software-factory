@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Send, Loader2, Trash2, Check } from "lucide-react";
+import { Send, Loader2, Trash2, Check, RotateCcw, Lock } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Textarea } from "./ui/Textarea";
 
@@ -13,6 +13,10 @@ export interface PromptComposerProps {
   onClearChat?: () => void;
   isClearingChat?: boolean;
   isChatCleared?: boolean;
+  onRollbackLastTurn?: () => void;
+  isRollingBack?: boolean;
+  isRollbackDisabled?: boolean;
+  rollbackDisabledReason?: string;
 }
 
 export const PromptComposer: React.FC<PromptComposerProps> = ({
@@ -25,6 +29,10 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
   onClearChat,
   isClearingChat = false,
   isChatCleared = false,
+  onRollbackLastTurn,
+  isRollingBack = false,
+  isRollbackDisabled = false,
+  rollbackDisabledReason,
 }) => {
   const [prompt, setPrompt] = useState<string>("");
   const [grillMode, setGrillMode] = useState<boolean>(defaultGrillMode);
@@ -123,6 +131,34 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 title="Clear chat history for this repository"
               >
                 Clear Chat
+              </Button>
+            )}
+
+            {onRollbackLastTurn && (
+              <Button
+                id="btn-composer-rollback"
+                data-testid="composer-rollback-btn"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onRollbackLastTurn}
+                disabled={isInputLocked || isRollingBack || isRollbackDisabled}
+                isLoading={isRollingBack}
+                icon={
+                  isInputLocked || isRollbackDisabled ? (
+                    <Lock className="w-3.5 h-3.5 text-slate-500" data-testid="composer-rollback-lock-icon" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                  )
+                }
+                className="text-xs text-slate-400 hover:text-indigo-300 hover:bg-indigo-950/40 px-2 py-1"
+                title={
+                  isExecutingTurn
+                    ? "Cannot roll back turn while job is active"
+                    : rollbackDisabledReason || "Roll back last turn on active branch"
+                }
+              >
+                Roll Back Last Turn
               </Button>
             )}
 

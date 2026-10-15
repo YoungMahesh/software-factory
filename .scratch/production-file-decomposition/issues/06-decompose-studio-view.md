@@ -15,10 +15,10 @@ Decompose `factory/ui/frontend/src/views/StudioView.tsx` (1,052 physical lines) 
 
 **Blocked by:** 05-decompose-factory-ui-app
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Create `factory/ui/frontend/src/views/studio/` directory and implement sub-components (`StudioHeader.tsx`, `StudioChatPane.tsx`, `StudioPreviewPane.tsx`, `StudioModals.tsx`).
-- [ ] Refactor `StudioView.tsx` to orchestrate these modular components.
-- [ ] Ensure all sub-components and `StudioView.tsx` are $\le 500$ physical lines.
-- [ ] Run `pnpm test` in `factory/ui/frontend` and confirm all tests pass.
+- [x] Create `factory/ui/frontend/src/views/studio/` directory and implement sub-components (`StudioHeader.tsx`, `StudioChatPane.tsx`, `StudioPreviewPane.tsx`, `StudioModals.tsx`).
+- [x] Refactor `StudioView.tsx` to orchestrate these modular components.
+- [x] Ensure all sub-components and `StudioView.tsx` are $\le 500$ physical lines.
+- [x] Run `pnpm test` in `factory/ui/frontend` and confirm all tests pass.

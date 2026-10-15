@@ -30,6 +30,7 @@ from factory.ui.github import (
     instantiate_repo_from_template,
     merge_repo_pull_request,
     normalize_milestone_slug,
+    reopen_repo_issue_for_rollback,
     resolve_or_create_milestone,
     synthesize_and_create_issue,
     validate_github_repo_name,
@@ -61,6 +62,11 @@ from factory.ui.routes.studio_pulls import (
     MergePullRequestRequest,
     router as studio_pulls_router,
 )
+from factory.ui.routes.studio_rollback import (
+    RollbackTurnRequest,
+    router as studio_rollback_router,
+)
+from factory.ui.tracker import update_local_markdown_issue_for_rollback
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
@@ -161,5 +167,6 @@ def create_app(
     app.include_router(studio_preview_router)
     app.include_router(studio_chat_router)
     app.include_router(studio_pulls_router)
+    app.include_router(studio_rollback_router)
 
     return app

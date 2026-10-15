@@ -6,6 +6,8 @@ import {
   GitMerge,
   AlertTriangle,
   ShieldCheck,
+  RotateCcw,
+  Lock,
 } from "lucide-react";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -15,9 +17,12 @@ import { getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 
 export interface DeliveryGateCardProps {
   repo: string;
-  data: DeliveryGateData;
+  data: DeliveryGateData & { reverted?: boolean; [key: string]: any };
   activeJobRunning?: boolean;
   onMergeSuccess?: (result: any) => void;
+  onRollbackTurn?: (data?: DeliveryGateData) => void;
+  isRollingBack?: boolean;
+  isReverted?: boolean;
   className?: string;
 }
 
@@ -26,6 +31,9 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   data,
   activeJobRunning = false,
   onMergeSuccess,
+  onRollbackTurn,
+  isRollingBack = false,
+  isReverted: isRevertedProp,
   className = "",
 }) => {
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
@@ -48,6 +56,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   const hasConflict = status === "conflict";
   const isDraft = status === "draft";
   const isClosed = status === "closed";
+  const isReverted = Boolean(isRevertedProp || data.reverted);
 
   const isTestPassed =
     !data.test_verdict ||
@@ -108,12 +117,16 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
     );
   };
 
-  const isMergeDisabled = isDraft || activeJobRunning || hasConflict || isMerged || isClosed;
+  const isMergeDisabled = isDraft || activeJobRunning || hasConflict || isMerged || isClosed || isReverted || isRollingBack;
 
   return (
     <div
       data-testid="delivery-gate-card"
-      className={`rounded-xl border border-indigo-900/60 bg-slate-900/80 p-4 space-y-3.5 shadow-sm text-xs ${className}`}
+      className={`rounded-xl border ${
+        isReverted
+          ? "border-slate-800 bg-slate-900/40 opacity-75"
+          : "border-indigo-900/60 bg-slate-900/80"
+      } p-4 space-y-3.5 shadow-sm text-xs ${className}`}
     >
       {/* Header: Title & Badges */}
       <div className="flex items-start justify-between gap-2">
@@ -135,6 +148,15 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
+          {isReverted && (
+            <Badge
+              data-testid="turn-reverted-badge"
+              variant="neutral"
+              className="bg-slate-800 text-slate-400 border-slate-700"
+            >
+              Reverted
+            </Badge>
+          )}
           {getStatusBadge()}
           {pr?.html_url && (
             <a
@@ -225,16 +247,31 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       {/* In-Studio Merge Control Action Area */}
       <div className="pt-1 border-t border-slate-800/80">
         {isMerged ? (
-          <div
-            data-testid="delivery-gate-merged-banner"
-            className="flex items-center space-x-2 py-1.5 px-3 rounded bg-purple-950/40 border border-purple-900/50 text-purple-300 font-medium"
-          >
-            <GitMerge className="w-4 h-4 text-purple-400 shrink-0" />
-            <span>Merged into main</span>
-            {pr?.base_branch && (
-              <span className="text-slate-400 text-[11px] font-mono">
-                ({pr.base_branch})
-              </span>
+          <div className="flex items-center justify-between">
+            <div
+              data-testid="delivery-gate-merged-banner"
+              className="flex items-center space-x-2 py-1.5 px-3 rounded bg-purple-950/40 border border-purple-900/50 text-purple-300 font-medium"
+            >
+              <GitMerge className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>Merged into main</span>
+              {pr?.base_branch && (
+                <span className="text-slate-400 text-[11px] font-mono">
+                  ({pr.base_branch})
+                </span>
+              )}
+            </div>
+            {onRollbackTurn && (
+              <Button
+                data-testid="delivery-gate-rollback-btn"
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={true}
+                icon={<RotateCcw className="w-3.5 h-3.5" />}
+                title="Cannot roll back turn for a merged pull request"
+              >
+                Roll Back Turn
+              </Button>
             )}
           </div>
         ) : isConfirming ? (
@@ -273,7 +310,9 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
         ) : (
           <div className="flex items-center justify-between">
             <div className="text-[11px] text-slate-400">
-              {activeJobRunning ? (
+              {isReverted ? (
+                <span className="text-slate-400 font-medium">Turn has been reverted</span>
+              ) : activeJobRunning ? (
                 <span className="text-amber-400 font-medium">Job Actively Executing</span>
               ) : isDraft ? (
                 <span>PR is currently in Draft</span>
@@ -286,28 +325,61 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
               )}
             </div>
 
-            <Button
-              data-testid="btn-delivery-gate-merge"
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={isMergeDisabled}
-              onClick={() => setIsConfirming(true)}
-              icon={<GitMerge className="w-3.5 h-3.5" />}
-              title={
-                activeJobRunning
-                  ? "Cannot merge while job is running"
-                  : isDraft
-                  ? "Cannot merge while PR is in Draft"
-                  : hasConflict
-                  ? "Cannot merge due to conflicts"
-                  : isClosed
-                  ? "Cannot merge a closed pull request"
-                  : "Squash merge Feature Pull Request into main"
-              }
-            >
-              Merge into main
-            </Button>
+            <div className="flex items-center space-x-2">
+              {onRollbackTurn && (
+                <Button
+                  data-testid="delivery-gate-rollback-btn"
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={activeJobRunning || isMerged || isClosed || isReverted || isRollingBack}
+                  isLoading={isRollingBack}
+                  onClick={() => onRollbackTurn(data)}
+                  icon={
+                    activeJobRunning ? (
+                      <Lock className="w-3.5 h-3.5" data-testid="delivery-gate-lock-icon" />
+                    ) : (
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    )
+                  }
+                  title={
+                    activeJobRunning
+                      ? "Cannot roll back turn while job is running"
+                      : isMerged
+                      ? "Cannot roll back turn for a merged pull request"
+                      : isReverted
+                      ? "This turn has already been reverted"
+                      : "Roll back this turn"
+                  }
+                >
+                  Roll Back Turn
+                </Button>
+              )}
+              <Button
+                data-testid="btn-delivery-gate-merge"
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={isMergeDisabled}
+                onClick={() => setIsConfirming(true)}
+                icon={<GitMerge className="w-3.5 h-3.5" />}
+                title={
+                  activeJobRunning
+                    ? "Cannot merge while job is running"
+                    : isDraft
+                    ? "Cannot merge while PR is in Draft"
+                    : hasConflict
+                    ? "Cannot merge due to conflicts"
+                    : isClosed
+                    ? "Cannot merge a closed pull request"
+                    : isReverted
+                    ? "Cannot merge a reverted turn"
+                    : "Squash merge Feature Pull Request into main"
+                }
+              >
+                Merge into main
+              </Button>
+            </div>
           </div>
         )}
       </div>

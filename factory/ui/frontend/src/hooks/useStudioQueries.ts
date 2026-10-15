@@ -233,3 +233,16 @@ export function useUpdatePreviewBranchMutation() {
   });
 }
 
+export function useRollbackTurnMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: api.RollbackTurnParams) => api.rollbackTurn(params),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.messages(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.pullRequests(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
+    },
+  });
+}
+

@@ -5,6 +5,7 @@ from factory.ui.routes.repos import router as repos_router
 from factory.ui.routes.studio_chat import router as studio_chat_router
 from factory.ui.routes.studio_preview import router as studio_preview_router
 from factory.ui.routes.studio_pulls import router as studio_pulls_router
+from factory.ui.routes.studio_rollback import router as studio_rollback_router
 
 __all__ = [
     "jobs_router",
@@ -12,4 +13,5 @@ __all__ = [
     "studio_chat_router",
     "studio_preview_router",
     "studio_pulls_router",
+    "studio_rollback_router",
 ]

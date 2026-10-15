@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DeliveryGateCard } from "./DeliveryGateCard";
@@ -244,4 +245,63 @@ describe("DeliveryGateCard Component", () => {
     expect(screen.getByTestId("delivery-gate-merged-banner")).toBeInTheDocument();
     expect(screen.queryByTestId("btn-delivery-gate-merge")).not.toBeInTheDocument();
   });
+
+  it("renders inline 'Undo Turn' button and calls onRollbackTurn when clicked", async () => {
+    const user = userEvent.setup();
+    const handleRollback = vi.fn();
+    renderCard({ onRollbackTurn: handleRollback });
+
+    const undoBtn = screen.getByTestId("delivery-gate-rollback-btn");
+    expect(undoBtn).toBeInTheDocument();
+    expect(undoBtn).not.toBeDisabled();
+    expect(undoBtn).toHaveTextContent(/(?:Roll Back|Undo) Turn/i);
+
+    await user.click(undoBtn);
+    expect(handleRollback).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables 'Undo Turn' button and displays lock icon when activeJobRunning is true", () => {
+    const handleRollback = vi.fn();
+    renderCard({ activeJobRunning: true, onRollbackTurn: handleRollback });
+
+    const undoBtn = screen.getByTestId("delivery-gate-rollback-btn");
+    expect(undoBtn).toBeDisabled();
+    expect(screen.getByTestId("delivery-gate-lock-icon")).toBeInTheDocument();
+  });
+
+  it("disables 'Undo Turn' button when PR is merged", () => {
+    const mergedPR: PullRequest = {
+      ...mockPR,
+      merged: true,
+      status: "merged",
+    };
+    renderCard({
+      data: {
+        ...mockDeliveryGateData,
+        merged: true,
+        pull_request: mergedPR,
+      },
+      onRollbackTurn: vi.fn(),
+    });
+
+    const undoBtn = screen.getByTestId("delivery-gate-rollback-btn");
+    expect(undoBtn).toBeDisabled();
+  });
+
+  it("renders Reverted badge and disables merge button when reverted is true", () => {
+    renderCard({
+      data: {
+        ...mockDeliveryGateData,
+        reverted: true,
+      },
+      onRollbackTurn: vi.fn(),
+    });
+
+    expect(screen.getByTestId("turn-reverted-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("turn-reverted-badge")).toHaveTextContent(/Reverted/i);
+
+    const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
+    expect(mergeBtn).toBeDisabled();
+  });
 });
+

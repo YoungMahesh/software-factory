@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { NewAppModal } from "./NewAppModal";
 import { DisconnectedModal } from "./DisconnectedModal";
@@ -291,6 +292,57 @@ describe("Decoupled Modals and PromptComposer", () => {
       expect(screen.getByTestId("clear-chat-confirmation")).toBeInTheDocument();
       expect(screen.getByText(/Chat cleared/i)).toBeInTheDocument();
     });
+
+    it("renders 'Undo Last Turn' button shortcut and triggers onRollbackLastTurn", async () => {
+      const user = userEvent.setup();
+      const handleRollback = vi.fn();
+      render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          onSendPrompt={vi.fn()}
+          onRollbackLastTurn={handleRollback}
+        />
+      );
+
+      const undoBtn = screen.getByTestId("composer-rollback-btn");
+      expect(undoBtn).toBeInTheDocument();
+      expect(undoBtn).not.toBeDisabled();
+      expect(undoBtn).toHaveTextContent(/(?:Roll Back|Undo) Last Turn/i);
+
+      await user.click(undoBtn);
+      expect(handleRollback).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables 'Undo Last Turn' button and shows lock icon when isExecutingTurn is true or isRollingBack is true", () => {
+      const { rerender } = render(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={true}
+          isDisconnected={false}
+          onSendPrompt={vi.fn()}
+          onRollbackLastTurn={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId("composer-rollback-btn")).toBeDisabled();
+      expect(screen.getByTestId("composer-rollback-lock-icon")).toBeInTheDocument();
+
+      rerender(
+        <PromptComposer
+          selectedRepo="test-repo"
+          isExecutingTurn={false}
+          isDisconnected={false}
+          isRollingBack={true}
+          onSendPrompt={vi.fn()}
+          onRollbackLastTurn={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId("composer-rollback-btn")).toBeDisabled();
+    });
   });
 });
+
 

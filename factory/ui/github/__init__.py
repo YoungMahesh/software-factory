@@ -49,6 +49,12 @@ from factory.ui.github._prs import (
     fetch_repo_pull_requests,
     merge_repo_pull_request,
 )
+from factory.ui.github._rollback import (
+    reopen_repo_issue_for_rollback,
+)
+from factory.ui.tracker import (
+    update_local_markdown_issue_for_rollback,
+)
 
 __all__ = [
     "CANONICAL_TEMPLATE_ORG",
@@ -81,10 +87,12 @@ __all__ = [
     "merge_repo_pull_request",
     "normalize_milestone_slug",
     "parse_github_blocked_by",
+    "reopen_repo_issue_for_rollback",
     "resolve_or_create_milestone",
     "resolve_repo_root",
     "strip_repo_owner",
     "synthesize_and_create_issue",
     "synthesize_ticket_content",
+    "update_local_markdown_issue_for_rollback",
     "validate_github_repo_name",
 ]
