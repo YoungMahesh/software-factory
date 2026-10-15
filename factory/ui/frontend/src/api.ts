@@ -305,9 +305,17 @@ export async function switchPreviewBranch(
   return res.json();
 }
 
+export interface RepoBranchesResponse {
+  repo: string;
+  branches: string[];
+  org?: string;
+  default_branch?: string;
+  error?: string;
+}
+
 export async function fetchRepoBranches(
   repo: string
-): Promise<{ repo: string; branches: string[] }> {
+): Promise<RepoBranchesResponse> {
   const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/branches`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -371,19 +379,7 @@ export async function mergePullRequest(
   return res.json();
 }
 
-export interface RepoBranchesResponse {
-  repo: string;
-  org: string;
-  branches: string[];
-  default_branch: string;
-  error?: string;
-}
 
-export async function fetchRepoBranches(repo: string): Promise<RepoBranchesResponse> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/branches`);
-  if (!res.ok) throw new Error(`Failed to fetch branches: ${res.statusText}`);
-  return res.json();
-}
 
 export interface UpdatePreviewBranchResponse {
   repo: string;

@@ -679,64 +679,6 @@ def create_app(
         preview = preview_reg.launch_preview(clean_repo, branch=branch)
         return JSONResponse(status_code=201, content=preview.to_dict())
 
-    @app.post("/api/studio/repos/{repo}/preview/branch")
-    @app.post("/api/repos/{repo}/preview/branch")
-    async def update_preview_branch_endpoint(repo: str, req: UpdatePreviewBranchRequest):
-        clean_repo = repo.strip()
-        if not clean_repo:
-            raise HTTPException(status_code=400, detail="Repository name is required.")
-
-        branch = req.branch.strip()
-        if not branch:
-            raise HTTPException(status_code=400, detail="Branch name cannot be empty.")
-
-        # Target branch format validation: must be 'main' or start with 'factory/'
-        if not (branch == "main" or branch.startswith("factory/")):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid target branch '{branch}'. Target branch must be 'main' or start with 'factory/'.",
-            )
-
-        # Concurrency safety guard: cannot switch branches while an Assembly Line job is active
-        if registry.is_job_active(clean_repo):
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot change branch: an Assembly Line Pipeline job is currently active for {clean_repo}.",
-            )
-
-        preview = preview_reg.get_preview(clean_repo)
-        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
-
-        # Provisioning state guard: cannot switch in place while container is bootstrapping
-        if preview and preview.status == PreviewStatus.PROVISIONING:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Unified Studio Sandbox for '{clean_repo}' is currently provisioning. Please wait until provisioning completes before switching branches.",
-            )
-
-        # In-place branch switching for active Unified Studio Sandbox
-        if active_sandbox is not None or (preview and preview.status == PreviewStatus.SERVING and preview.sandbox is not None):
-            try:
-                updated_preview = await asyncio.to_thread(preview_reg.switch_preview_branch, clean_repo, branch)
-                in_place = True
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to switch preview branch: {e}",
-                ) from e
-        else:
-            # Idle or stopped preview: persist pre-selected branch for subsequent container launch
-            updated_preview = preview_reg.update_branch(clean_repo, branch)
-            in_place = False
-
-        return {
-            "repo": clean_repo,
-            "branch": updated_preview.branch,
-            "status": updated_preview.status.value,
-            "preview_url": updated_preview.preview_url,
-            "in_place": in_place,
-            "success": True,
-        }
 
     @app.get("/api/studio/repos/{repo}/preview")
     async def get_preview_endpoint(repo: str):
@@ -1006,16 +948,19 @@ def create_app(
 
         in_place = False
         commit_sha = None
-        if active_sandbox is not None and preview is not None and preview.status == PreviewStatus.SERVING:
+        sb = active_sandbox if active_sandbox is not None else (preview.sandbox if (preview and preview.sandbox is not None and preview.status == PreviewStatus.SERVING) else None)
+        if sb is not None and preview is not None and preview.status == PreviewStatus.SERVING:
             try:
-                commit_sha = _execute_in_sandbox_sync(
-                    active_sandbox,
-                    clean_repo,
-                    bare_repo,
-                    target_branch,
-                    f"Switching branch to {target_branch} and synchronizing Unified Studio Sandbox",
-                )
-                preview_reg.broadcast_branch(clean_repo, target_branch)
+                if target_branch == "main":
+                    commit_sha = _execute_in_sandbox_sync(
+                        sb,
+                        clean_repo,
+                        bare_repo,
+                        "main",
+                        f"Switching branch to main and synchronizing Unified Studio Sandbox",
+                    )
+                else:
+                    await asyncio.to_thread(preview_reg.switch_preview_branch, clean_repo, target_branch)
                 in_place = True
             except HTTPException:
                 raise
@@ -1027,11 +972,12 @@ def create_app(
             preview_reg.record_target_branch(clean_repo, target_branch)
             preview_reg.update_branch(clean_repo, target_branch)
 
+        updated_preview = preview_reg.get_preview(clean_repo) or preview
         return {
             "repo": clean_repo,
             "branch": target_branch,
-            "status": preview.status.value if preview else "IDLE",
-            "preview_url": preview.preview_url if preview else None,
+            "status": updated_preview.status.value if updated_preview else "IDLE",
+            "preview_url": updated_preview.preview_url if updated_preview else None,
             "commit": commit_sha,
             "in_place": in_place,
             "updated": in_place,

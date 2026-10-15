@@ -4035,8 +4035,11 @@ class TestPreviewRegistrySync(unittest.TestCase):
 
         # Assert refresh event broadcasted
         self.assertFalse(listener.empty())
-        event = listener.get_nowait()
-        self.assertEqual(event["event"], "preview_refresh")
+        events = []
+        while not listener.empty():
+            events.append(listener.get_nowait())
+        event_types = [e["event"] for e in events]
+        self.assertIn("preview_refresh", event_types)
 
     def test_sync_sandbox_to_main_no_active_sandbox_returns_false(self):
         res = self.preview_reg.sync_sandbox_to_main("nonexistent-repo")

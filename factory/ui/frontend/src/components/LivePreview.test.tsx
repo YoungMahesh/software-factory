@@ -462,6 +462,5 @@ describe("LivePreview", () => {
       expect(handleSync).not.toHaveBeenCalled();
     });
   });
-  });
 });
 

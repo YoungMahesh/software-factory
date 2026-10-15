@@ -1125,7 +1125,6 @@ describe("StudioView", () => {
       expect(screen.getByTestId("sync-lock-icon")).toBeInTheDocument();
     });
   });
-  });
 });
 
 

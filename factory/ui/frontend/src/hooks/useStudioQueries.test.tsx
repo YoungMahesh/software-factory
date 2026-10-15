@@ -306,6 +306,5 @@ describe("useStudioQueries - Chat Messages", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.branches("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.preview("my-app") });
   });
-  });
 });
 
