@@ -20,6 +20,10 @@ To align user intent, eliminate silent assumptions, and maintain architectural i
   - The UI renders an interactive **"Approve Plan & Build"** card in the chat timeline (or accepts text commands `/proceed` / `approve`).
 - **Target Repository Scaffolding**:
   - Target applications created from `tanstack-start-template` (and existing repositories synced via `scripts/sync_target_repo_skills.py`) include `.agents/skills/` (Matt Pocock engineering skills), `CONTEXT.md`, `docs/agents/`, and `docs/adr/0001-tanstack-start-spa-architecture.md`.
+  - **Template Provisioning Readiness & Polling**:
+    - GitHub's template repository instantiation endpoint (`POST /repos/{template_org}/{template_repo}/generate`) replicates template files asynchronously on GitHub's backend.
+    - To prevent Git database 409 errors ("Git Repository is empty"), `scaffold_target_repo` polls the default branch ref (`/git/ref/heads/{branch}`) and base commit (`/git/commits/{sha}`) with 1.0s ticks up to `timeout_secs` until **Template Provisioning Readiness** is established before creating the Git tree and commit.
+    - If readiness is not established within the timeout window, `scaffold_target_repo` raises an explicit `RepoScaffoldingError` (HTTP 504) rather than attempting unrooted tree operations.
   - Upon user approval of a grilled plan, Factory Studio commits the approved ADR (e.g. `docs/adr/0002-<slug>.md`) and updated `CONTEXT.md` to GitHub on branch `factory/<feature>` before assembly line execution begins.
 - **Assembly Line In-Sandbox Enforcement**:
   - **Pre-flight Guard (`preflight.ts`)**: Verifies that `docs/adr/` exists and contains at least one accepted ADR file in addition to `CONTEXT.md`.

@@ -7,12 +7,16 @@ Scaffolds newly created and existing target repositories with:
 - .agents/skills/ (Matt Pocock engineering skills)
 """
 
+import logging
 import os
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
 import httpx
 
 from factory.ui.github import DEFAULT_TEST_ORG, get_test_org_token, resolve_repo_root, strip_repo_owner
+
+logger = logging.getLogger(__name__)
 
 
 CONTEXT_TEMPLATE = """# Target Application Domain Context
@@ -173,9 +177,14 @@ def scaffold_target_repo(
     org: str = DEFAULT_TEST_ORG,
     branch: str = "main",
     timeout_secs: float = 20.0,
+    poll_interval_secs: float = 1.0,
     repo_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Scaffolds target repository with skills, domain glossary, and baseline ADR via GitHub API."""
+    """Scaffolds target repository with skills, domain glossary, and baseline ADR via GitHub API.
+
+    Guarantees Template Provisioning Readiness by polling for the default branch reference
+    and base tree SHA before attempting Git tree or commit operations.
+    """
     clean_repo = strip_repo_owner(repo_name, org)
     auth_token = token or get_test_org_token(repo_root=repo_root)
 
@@ -207,24 +216,56 @@ def scaffold_target_repo(
 
     try:
         with httpx.Client(timeout=timeout_secs) as client:
-            # 1. Fetch current commit and base tree on branch
+            # 1. Poll for Template Provisioning Readiness (commit and base tree on branch)
             commit_sha: str | None = None
             base_tree_sha: str | None = None
+            deadline = monotonic() + timeout_secs
+            poll_count = 0
 
-            ref_resp = client.get(f"{base_url}/git/ref/heads/{branch}", headers=headers)
-            if ref_resp.status_code != 200:
-                ref_resp = client.get(f"{base_url}/git/refs/heads/{branch}", headers=headers)
-            if ref_resp.status_code == 200:
-                commit_sha = ref_resp.json().get("object", {}).get("sha")
-                if commit_sha:
-                    commit_resp = client.get(f"{base_url}/git/commits/{commit_sha}", headers=headers)
-                    if commit_resp.status_code == 200:
-                        base_tree_sha = commit_resp.json().get("tree", {}).get("sha")
+            while True:
+                poll_count += 1
+                ref_resp = client.get(f"{base_url}/git/ref/heads/{branch}", headers=headers)
+                if ref_resp.status_code == 200:
+                    commit_sha = ref_resp.json().get("object", {}).get("sha")
+                    if commit_sha:
+                        commit_resp = client.get(f"{base_url}/git/commits/{commit_sha}", headers=headers)
+                        if commit_resp.status_code == 200:
+                            base_tree_sha = commit_resp.json().get("tree", {}).get("sha")
+                            if base_tree_sha:
+                                logger.info(
+                                    "Template Provisioning Readiness established for %s/%s (branch: %s, commit: %s, base_tree: %s) after %d poll(s)",
+                                    org, clean_repo, branch, commit_sha, base_tree_sha, poll_count,
+                                )
+                                break
+                elif ref_resp.status_code not in (404, 409):
+                    raise RepoScaffoldingError(
+                        f"Failed to check branch reference '{branch}' ({ref_resp.status_code}): {ref_resp.text}",
+                        status_code=ref_resp.status_code,
+                    )
+
+                time_remaining = deadline - monotonic()
+                if time_remaining <= 0:
+                    break
+
+                logger.info(
+                    "Waiting for Template Provisioning Readiness on %s/%s (branch: %s, attempt %d)...",
+                    org, clean_repo, branch, poll_count,
+                )
+                sleep_secs = min(poll_interval_secs, time_remaining)
+                sleep(sleep_secs)
+
+            if not commit_sha or not base_tree_sha:
+                raise RepoScaffoldingError(
+                    f"Timed out waiting for repository template replication on '{org}/{clean_repo}' after {timeout_secs:.1f}s. "
+                    "Template Provisioning Readiness was not established (default branch reference or base tree SHA unavailable).",
+                    status_code=504,
+                )
 
             # 2. Create new tree
-            tree_payload: dict[str, Any] = {"tree": tree_items}
-            if base_tree_sha:
-                tree_payload["base_tree"] = base_tree_sha
+            tree_payload: dict[str, Any] = {
+                "tree": tree_items,
+                "base_tree": base_tree_sha,
+            }
 
             tree_resp = client.post(f"{base_url}/git/trees", headers=headers, json=tree_payload)
             if tree_resp.status_code not in (200, 201):
@@ -238,7 +279,7 @@ def scaffold_target_repo(
             commit_payload: dict[str, Any] = {
                 "message": "Scaffold target repository with engineering skills, domain docs, and baseline ADR",
                 "tree": new_tree_sha,
-                "parents": [commit_sha] if commit_sha else [],
+                "parents": [commit_sha],
             }
             new_commit_resp = client.post(f"{base_url}/git/commits", headers=headers, json=commit_payload)
             if new_commit_resp.status_code not in (200, 201):
@@ -248,29 +289,17 @@ def scaffold_target_repo(
                 )
             new_commit_sha = new_commit_resp.json()["sha"]
 
-            # 4. Update or create branch ref
-            if commit_sha:
-                ref_update_resp = client.patch(
-                    f"{base_url}/git/refs/heads/{branch}",
-                    headers=headers,
-                    json={"sha": new_commit_sha, "force": False},
+            # 4. Update branch ref
+            ref_update_resp = client.patch(
+                f"{base_url}/git/refs/heads/{branch}",
+                headers=headers,
+                json={"sha": new_commit_sha, "force": False},
+            )
+            if ref_update_resp.status_code not in (200, 201):
+                raise RepoScaffoldingError(
+                    f"Failed to update branch ref ({ref_update_resp.status_code}): {ref_update_resp.text}",
+                    status_code=ref_update_resp.status_code,
                 )
-                if ref_update_resp.status_code not in (200, 201):
-                    raise RepoScaffoldingError(
-                        f"Failed to update branch ref ({ref_update_resp.status_code}): {ref_update_resp.text}",
-                        status_code=ref_update_resp.status_code,
-                    )
-            else:
-                ref_create_resp = client.post(
-                    f"{base_url}/git/refs",
-                    headers=headers,
-                    json={"ref": f"refs/heads/{branch}", "sha": new_commit_sha},
-                )
-                if ref_create_resp.status_code not in (200, 201):
-                    raise RepoScaffoldingError(
-                        f"Failed to create branch ref ({ref_create_resp.status_code}): {ref_create_resp.text}",
-                        status_code=ref_create_resp.status_code,
-                    )
 
             return {
                 "repo": clean_repo,

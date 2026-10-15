@@ -240,7 +240,8 @@ def instantiate_repo_from_template(
     org: str = DEFAULT_TEST_ORG,
     template_org: str = CANONICAL_TEMPLATE_ORG,
     template_repo: str = CANONICAL_TEMPLATE_REPO,
-    timeout_secs: float = 15.0,
+    timeout_secs: float = 20.0,
+    poll_interval_secs: float = 1.0,
 ) -> dict[str, Any]:
     """Creates a new repository in the test organization instantiated from the canonical TanStack Start template."""
     # 1. Slug validation
@@ -302,12 +303,14 @@ def instantiate_repo_from_template(
                 token=auth_token,
                 org=org,
                 timeout_secs=timeout_secs,
+                poll_interval_secs=poll_interval_secs,
             )
         except Exception as e:
             logger.error("Failed to scaffold repository %s/%s: %s", org, clean_name, e)
+            status_code = getattr(e, "status_code", 500)
             raise RepoCreationError(
                 f"Repository '{clean_name}' was created from template but failed to scaffold skills and ADRs: {e}",
-                status_code=500,
+                status_code=status_code,
             ) from e
 
         return {

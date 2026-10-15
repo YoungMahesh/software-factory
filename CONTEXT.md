@@ -275,6 +275,10 @@ _Avoid_: Silent fallback, mock error, failed message
 The suite of Matt Pocock engineering skills (`.agents/skills/`), domain glossary (`CONTEXT.md`), architectural records (`docs/adr/`), and agent configurations (`docs/agents/`) scaffolded into every application developed on the Software Factory.
 _Avoid_: Target skills, repo configs, agent templates
 
+**Template Provisioning Readiness**:
+The operational state of a newly generated GitHub repository where asynchronous template file replication has completed, establishing a valid HEAD commit and default branch reference (`main`) before Target Project Skills and architectural decision records are committed.
+_Avoid_: Repo ready, git sync, template wait, repo bootstrap status
+
 **ADR Quality Gate**:
 A mandatory verification check during the Pre-flight Guard and Reviewer Agent stage ensuring that `docs/adr/` exists and that implementation diffs strictly adhere to all accepted architectural decisions.
 _Avoid_: ADR check, architecture test
