@@ -92,3 +92,15 @@ python sandbox/main.py -s <secret-name> [--vm] [--opencode] [--agy] [--modal]
 ```
 
 See [`sandbox/readme.md`](sandbox/readme.md) for secrets configuration (`share0`, `fetch.env`, `env.map`) and runner options.
+
+---
+
+## 5. Prompt Templates
+
+Externalized system prompt templates used across Factory Studio and the Assembly Line:
+
+- (grilling_assistant.md)[factory/ui/grill/prompts/grilling_assistant.md]
+- (planner_system.md)[sandbox/factory/harness/prompts/planner_system.md]
+- (coder_system.md)[sandbox/factory/harness/prompts/coder_system.md]
+- (reviewer_system.md)[sandbox/factory/harness/prompts/reviewer_system.md]
+
