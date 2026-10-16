@@ -51,7 +51,22 @@ export function useCreateRepoMutation() {
     mutationFn: (params: { name: string; description?: string; private?: boolean }) =>
       api.createRepo(params),
     onSuccess: (newRepo: Repo) => {
-      queryClient.invalidateQueries({ queryKey: studioQueryKeys.repos });
+      queryClient.setQueryData<{ org: string; repos: Repo[] }>(
+        studioQueryKeys.repos,
+        (old) => {
+          if (!old) return old;
+          const exists = old.repos.some((r) => r.name === newRepo.name);
+          const updated = exists ? old.repos : [...old.repos, newRepo];
+          return {
+            ...old,
+            repos: [...updated].sort((a, b) => a.name.localeCompare(b.name)),
+          };
+        }
+      );
+      queryClient.invalidateQueries({
+        queryKey: studioQueryKeys.repos,
+        refetchType: "none",
+      });
       return newRepo;
     },
   });

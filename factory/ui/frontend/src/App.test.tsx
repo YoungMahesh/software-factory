@@ -939,6 +939,106 @@ describe("App Root Component", () => {
     });
     expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
   });
+
+  it("redirects to newly created repository instead of falling back to top alphabetical repo (calculator-app)", async () => {
+    window.history.replaceState(null, "", "/?repo=counter-2");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+    vi.mocked(api.createRepo).mockResolvedValue({
+      name: "zen-notes",
+      is_tanstack_compatible: true,
+      private: true,
+    });
+    vi.mocked(api.fetchPreview).mockResolvedValue({
+      repo: "zen-notes",
+      status: "STOPPED",
+      stage: "IDLE",
+      branch: "main",
+      preview_url: null,
+      sandbox_id: "sb-2",
+      created_at: Date.now(),
+      started_at: null,
+      ended_at: null,
+      error_message: null,
+      logs: [],
+      log_count: 0,
+    });
+    vi.mocked(api.fetchChatMessages).mockResolvedValue({
+      repo: "zen-notes",
+      messages: [],
+    });
+    vi.mocked(api.fetchRepoBranches).mockResolvedValue({
+      repo: "zen-notes",
+      org: "software-factory-09-test",
+      branches: ["main"],
+      default_branch: "main",
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+
+    // Open New App modal
+    const newAppBtn = screen.getByRole("button", { name: /New App/i });
+    fireEvent.click(newAppBtn);
+
+    // Modal is rendered
+    expect(screen.getByText("Create New App")).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText(/e\.g\. inventory-tracker/i);
+    fireEvent.change(nameInput, { target: { value: "zen-notes" } });
+
+    const submitBtn = screen.getByRole("button", { name: /^Create App$/i });
+    fireEvent.click(submitBtn);
+
+    // Should redirect to zen-notes, NOT calculator-app
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("zen-notes");
+    });
+
+    expect(window.location.search).toBe("?repo=zen-notes");
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("zen-notes");
+  });
+
+  it("does not prematurely fall back to repos[0].name while repos query is fetching", async () => {
+    window.history.replaceState(null, "", "/?repo=in-flight-app");
+
+    let resolveRepos!: (val: any) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolveRepos = resolve;
+    });
+    vi.mocked(api.fetchStudioRepos).mockReturnValue(pendingPromise as any);
+
+    render(<App />);
+
+    // Since query is loading, selectedRepo should remain in-flight-app in URL
+    expect(window.location.search).toBe("?repo=in-flight-app");
+
+    // Now resolve with repos that include in-flight-app
+    await act(async () => {
+      resolveRepos({
+        org: "software-factory-09-test",
+        repos: [
+          { name: "calculator-app", is_tanstack_compatible: true },
+          { name: "in-flight-app", is_tanstack_compatible: true },
+        ],
+      });
+    });
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("in-flight-app");
+    });
+    expect(window.location.search).toBe("?repo=in-flight-app");
+  });
 });
 
 

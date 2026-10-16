@@ -205,6 +205,7 @@ export const AppContent: React.FC = () => {
   // Validate and synchronize selectedRepo when repos load
   useEffect(() => {
     if (repos.length === 0) return;
+    if (reposQuery.isFetching || reposQuery.isLoading) return;
 
     const repoExists = repos.some((r) => r.name === selectedRepo);
     if (!selectedRepo || !repoExists) {
@@ -214,7 +215,7 @@ export const AppContent: React.FC = () => {
     } else {
       updateUrlAndStorage(selectedRepo, "replace");
     }
-  }, [repos, selectedRepo, updateUrlAndStorage]);
+  }, [repos, selectedRepo, reposQuery.isFetching, reposQuery.isLoading, updateUrlAndStorage]);
 
   // Sync preview query data into preview state
   useEffect(() => {

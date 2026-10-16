@@ -13,6 +13,7 @@ import {
   useRepoBranchesQuery,
   useUpdatePreviewBranchMutation,
   useRollbackTurnMutation,
+  useCreateRepoMutation,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -29,6 +30,7 @@ vi.mock("../api", async (importOriginal) => {
     fetchRepoBranches: vi.fn(),
     updatePreviewBranch: vi.fn(),
     rollbackTurn: vi.fn(),
+    createRepo: vi.fn(),
   };
 });
 
@@ -333,6 +335,48 @@ describe("useStudioQueries - Chat Messages", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.issues("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.pullRequests("my-app") });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: studioQueryKeys.preview("my-app") });
+  });
+
+  it("creates a new repo, optimistically updates cache in alphabetical order, and invalidates query", async () => {
+    const existingRepos = [
+      { name: "calculator-app", is_tanstack_compatible: true },
+      { name: "zebra-app", is_tanstack_compatible: true },
+    ];
+    queryClient.setQueryData(studioQueryKeys.repos, {
+      org: "software-factory-09-test",
+      repos: existingRepos,
+    });
+
+    const newRepo = {
+      name: "mimo-notes",
+      is_tanstack_compatible: true,
+      private: true,
+    };
+    vi.mocked(api.createRepo).mockResolvedValue(newRepo);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useCreateRepoMutation(), { wrapper });
+
+    let createdResult;
+    await act(async () => {
+      createdResult = await result.current.mutateAsync({ name: "mimo-notes", private: true });
+    });
+
+    expect(api.createRepo).toHaveBeenCalledWith({ name: "mimo-notes", private: true });
+    expect(createdResult).toEqual(newRepo);
+
+    const cachedData = queryClient.getQueryData<{ org: string; repos: any[] }>(studioQueryKeys.repos);
+    expect(cachedData).toBeDefined();
+    expect(cachedData?.repos.map((r) => r.name)).toEqual([
+      "calculator-app",
+      "mimo-notes",
+      "zebra-app",
+    ]);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: studioQueryKeys.repos,
+      refetchType: "none",
+    });
   });
 });
 
