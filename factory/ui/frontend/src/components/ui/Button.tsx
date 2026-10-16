@@ -1,7 +1,14 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "pill-outline";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "danger"
+  | "ghost"
+  | "pill-outline"
+  | "inverted"
+  | "success";
 export type ButtonSize = "sm" | "md";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -15,6 +22,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
     "bg-primary hover:bg-cohere-black text-white rounded-pill shadow-sm disabled:bg-primary/50",
+  inverted:
+    "bg-white hover:bg-soft-stone text-primary rounded-pill shadow-sm disabled:opacity-50",
   secondary:
     "bg-transparent text-ink underline underline-offset-4 hover:text-black font-medium disabled:opacity-50",
   danger:
@@ -23,6 +32,8 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-transparent hover:bg-soft-stone text-muted hover:text-ink rounded-pill transition-colors disabled:opacity-50",
   "pill-outline":
     "bg-transparent hover:bg-soft-stone/70 text-primary border border-hairline rounded-pill font-medium disabled:opacity-50",
+  success:
+    "bg-pale-green border border-deep-green/30 text-deep-green rounded-pill font-medium disabled:opacity-50",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -42,10 +53,12 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const isButtonDisabled = disabled || isLoading;
-  const baseVariant =
-    inverted && variant === "primary"
-      ? "bg-white hover:bg-soft-stone text-primary rounded-pill shadow-sm disabled:opacity-50"
-      : variantClasses[variant];
+  const isExplicitInverted =
+    (inverted && variant === "primary") ||
+    variant === "inverted" ||
+    (variant === "primary" && className.includes("bg-white") && className.includes("text-primary"));
+  const effectiveVariant = isExplicitInverted ? "inverted" : variant;
+  const baseVariant = variantClasses[effectiveVariant];
 
   return (
     <button

@@ -129,7 +129,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
           id="btn-approve-build"
           data-testid="approve-plan-build-btn"
           type="button"
-          variant="primary"
+          variant={isReverted ? "ghost" : isApproved ? "success" : "inverted"}
           size="md"
           onClick={() => onApprove(turn)}
           isLoading={isApproving}
@@ -145,10 +145,10 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
           }
           className={
             isReverted
-              ? "bg-white/10 border border-white/10 text-muted cursor-not-allowed rounded-pill"
+              ? "bg-white/10 border border-white/10 text-muted cursor-not-allowed"
               : isApproved
-              ? "bg-pale-green border border-deep-green/30 text-deep-green cursor-default rounded-pill"
-              : "bg-white hover:bg-soft-stone text-primary font-semibold shadow-sm rounded-pill"
+              ? "cursor-default"
+              : "font-semibold"
           }
         >
           {isReverted ? "Plan Reverted" : isApproved ? "Plan Approved" : "Approve Plan & Build"}

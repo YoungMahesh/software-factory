@@ -287,13 +287,13 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
               <Button
                 data-testid="btn-delivery-gate-confirm-merge"
                 type="button"
-                variant="primary"
+                variant="inverted"
                 size="sm"
                 onClick={handleConfirmMerge}
                 isLoading={mergeMutation.isPending}
                 disabled={mergeMutation.isPending}
                 icon={<GitMerge className="w-3.5 h-3.5" />}
-                className="bg-white hover:bg-soft-stone text-primary rounded-pill font-medium shadow-sm"
+                className="font-medium"
               >
                 Confirm Squash Merge
               </Button>
@@ -362,7 +362,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
               <Button
                 data-testid="btn-delivery-gate-merge"
                 type="button"
-                variant="primary"
+                variant="inverted"
                 size="sm"
                 disabled={isMergeDisabled}
                 onClick={() => setIsConfirming(true)}
@@ -380,7 +380,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                     ? "Cannot merge a reverted turn"
                     : "Squash merge Feature Pull Request into main"
                 }
-                className="bg-white hover:bg-soft-stone text-primary rounded-pill font-medium shadow-sm"
+                className="font-medium"
               >
                 Merge into main
               </Button>

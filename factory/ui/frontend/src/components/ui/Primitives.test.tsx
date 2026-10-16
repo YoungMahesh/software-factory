@@ -38,6 +38,17 @@ describe("Cohere Editorial Design System Micro-UI Primitives", () => {
       const ghostBtn = screen.getByRole("button");
       expect(ghostBtn.className).not.toContain("bg-primary");
       expect(ghostBtn.className).toContain("bg-transparent");
+
+      rerender(<Button variant="inverted">Inverted CTA</Button>);
+      const invertedBtn = screen.getByRole("button");
+      expect(invertedBtn.className).toContain("bg-white");
+      expect(invertedBtn.className).toContain("text-primary");
+      expect(invertedBtn.className).not.toContain("text-white");
+
+      rerender(<Button variant="success">Success Action</Button>);
+      const successBtn = screen.getByRole("button");
+      expect(successBtn.className).toContain("bg-pale-green");
+      expect(successBtn.className).toContain("text-deep-green");
     });
 
     it("renders sizes: sm, md with pill geometry", () => {
