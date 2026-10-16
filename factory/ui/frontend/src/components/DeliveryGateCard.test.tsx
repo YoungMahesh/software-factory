@@ -13,6 +13,7 @@ vi.mock("../api", async (importOriginal) => {
     ...actual,
     fetchPullRequests: vi.fn(),
     mergePullRequest: vi.fn(),
+    markPullRequestReadyForReview: vi.fn(),
   };
 });
 
@@ -302,6 +303,64 @@ describe("DeliveryGateCard Component", () => {
 
     const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
     expect(mergeBtn).toBeDisabled();
+  });
+
+  it("resolves pullNumber from pull_request_number when pull_number is undefined", () => {
+    renderCard({
+      data: {
+        pull_request_number: 42,
+        branch: "factory/v1",
+        title: "feat(v1): test",
+      },
+    });
+
+    expect(screen.getByText("Feature Pull Request #42")).toBeInTheDocument();
+  });
+
+  it("renders Mark Ready for Review button when PR is in draft and calls markPullRequestReadyForReview on click", async () => {
+    vi.mocked(api.markPullRequestReadyForReview).mockResolvedValue({
+      success: true,
+      ready_for_review: true,
+      pull_number: 12,
+      pull: { ...mockPR, draft: false, status: "ready_for_review" },
+    });
+
+    renderCard({
+      data: {
+        ...mockDeliveryGateData,
+        draft: true,
+        status: "draft",
+        pull_request: {
+          ...mockPR,
+          draft: true,
+          status: "draft",
+        },
+      },
+    });
+
+    const markReadyBtn = screen.getByTestId("btn-delivery-gate-mark-ready");
+    expect(markReadyBtn).toBeInTheDocument();
+    expect(screen.getByText(/PR is currently in Draft/i)).toBeInTheDocument();
+
+    const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
+    expect(mergeBtn).toBeDisabled();
+
+    fireEvent.click(markReadyBtn);
+    await waitFor(() => {
+      expect(api.markPullRequestReadyForReview).toHaveBeenCalledWith("test1", 12);
+    });
+  });
+
+  it("disables merge button and displays warning when pullNumber is completely missing", () => {
+    renderCard({
+      data: {
+        branch: "factory/unknown",
+      },
+    });
+
+    const mergeBtn = screen.getByTestId("btn-delivery-gate-merge");
+    expect(mergeBtn).toBeDisabled();
+    expect(screen.getByText(/Pull Request number not found/i)).toBeInTheDocument();
   });
 });
 

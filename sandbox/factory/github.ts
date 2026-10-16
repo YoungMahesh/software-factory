@@ -153,10 +153,18 @@ export class GitHubClient {
 
   public async getMilestone(titleOrSlug: string): Promise<GitHubMilestone | null> {
     const milestones = await this.listMilestones("all");
-    const normalizedTarget = titleOrSlug.trim().toLowerCase().replace(/[\s_]+/g, "-");
+    const normalizedTarget = titleOrSlug
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
     const matched = milestones.find((m) => {
-      const normalizedTitle = m.title.trim().toLowerCase().replace(/[\s_]+/g, "-");
+      const normalizedTitle = m.title
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
       return (
         m.title.toLowerCase() === titleOrSlug.toLowerCase() ||
         normalizedTitle === normalizedTarget ||

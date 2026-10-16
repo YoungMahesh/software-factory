@@ -170,6 +170,23 @@ export function useMergePullRequestMutation() {
   });
 }
 
+export function useMarkPullRequestReadyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      repo,
+      pullNumber,
+    }: {
+      repo: string;
+      pullNumber: number;
+    }) => api.markPullRequestReadyForReview(repo, pullNumber),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.pullRequests(vars.repo) });
+      queryClient.invalidateQueries({ queryKey: studioQueryKeys.messages(vars.repo) });
+    },
+  });
+}
+
 export function useRepoBranchesQuery(repo: string) {
   return useQuery({
     queryKey: studioQueryKeys.branches(repo),

@@ -136,3 +136,29 @@ async def merge_studio_pull_request(
         "result": merge_res,
         "preview_synced": preview_synced,
     }
+
+
+@router.post("/api/studio/repos/{repo}/pulls/{pull_number}/ready_for_review")
+async def mark_studio_pull_request_ready(
+    repo: str,
+    pull_number: int,
+):
+    clean_repo = repo.strip() if repo else ""
+    if not clean_repo:
+        raise HTTPException(status_code=400, detail="Repository name is required.")
+
+    pull_error_cls = _gh("PullRequestMergeError")
+    try:
+        res = _gh("mark_pull_request_ready_for_review")(
+            repo_name=clean_repo,
+            pull_number=pull_number,
+        )
+        return res
+    except pull_error_cls as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to mark pull request #{pull_number} ready for review: {e}",
+        )
+

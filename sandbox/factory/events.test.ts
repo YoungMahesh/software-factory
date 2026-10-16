@@ -965,6 +965,7 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       const parsed = parseTelemetryEnvelope<DeliveryGateEventData>(chunks[0]);
       assert.ok(parsed);
       assert.equal(parsed.type, "delivery_gate");
+      assert.equal(parsed.data.pull_number, 42);
       assert.equal(parsed.data.pullRequestNumber, 42);
       assert.equal(parsed.data.pull_request_number, 42);
       assert.equal(parsed.data.pullRequestUrl, "https://github.com/org/repo/pull/42");
@@ -995,6 +996,7 @@ describe("Agent Event Stream Telemetry Emitter", () => {
       const parsed = parseTelemetryEnvelope<DeliveryGateEventData>(chunks[0]);
       assert.ok(parsed);
       assert.equal(parsed.type, "delivery_gate");
+      assert.equal(parsed.data.pull_number, 42);
       assert.equal(parsed.data.pullRequestNumber, 42);
       assert.equal(parsed.data.pull_request_number, 42);
       assert.equal(parsed.data.pullRequestUrl, "https://github.com/org/repo/pull/42");

@@ -29,3 +29,16 @@ To close the visibility gap where the Assembly Line manages GitHub Feature Pull 
 - **Merge Gate Safety**:
   - Merging is strictly disabled while the PR is in `Draft` state or while the Assembly Line is actively executing.
   - If GitHub reports `mergeable: false`, the control indicates a `Conflict` badge with a direct link to GitHub's conflict resolution interface.
+
+## Addendum: Telemetry Contract Normalization, Mode A Gate Finalization, and In-Studio Draft PR Promotion
+
+- **Telemetry Contract Normalization**:
+  - `delivery_gate` telemetry events emitted over the `Agent Event Stream` canonicalize `pull_number` alongside backward-compatible aliases (`pull_request_number`, `pullRequestNumber`).
+  - `DeliveryGateCard` resolves pull request identifiers across all supported aliases (`pull_number`, `pull_request?.number`, `pull_request_number`, `pullRequestNumber`), rendering explicit warning banners if the identifier is unresolvable and preventing silent interaction failures.
+- **Mode A Single-Issue Gate Finalization**:
+  - When the Assembly Line Pipeline executes in Mode A targeting a specific issue (`--issue <id>`), gate finalization evaluates the targeted issue resolution rather than requiring the entire milestone, converting the Feature Pull Request from Draft to Ready for Review once verification and review pass.
+  - Milestone slugification in `GitHubClient.getMilestone` enforces alphanumeric normalization (`replace(/[^a-z0-9]+/g, "-")`) to reliably match complex milestone titles (e.g. `v1: Initial App` matching `v1-initial-app`).
+- **In-Studio Draft PR Promotion**:
+  - While a PR remains in Draft, `getPullRequestStatus` strictly evaluates `gateData?.draft`, preventing premature presentation of merge controls.
+  - An inline `"Mark Ready for Review"` action on the `DeliveryGateCard` executes GitHub GraphQL mutation `markPullRequestReadyForReview` via `POST /api/studio/repos/{repo}/pulls/{pull_number}/ready_for_review`, allowing developers to promote draft pull requests directly within Factory Studio without switching to GitHub.
+

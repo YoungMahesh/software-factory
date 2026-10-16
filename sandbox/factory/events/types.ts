@@ -73,6 +73,7 @@ export interface ToolResultOptions extends EmitOptions {
 }
 
 export interface DeliveryGateEventData {
+  pull_number?: number;
   pullRequestNumber?: number;
   pull_request_number?: number;
   pullRequestUrl?: string;

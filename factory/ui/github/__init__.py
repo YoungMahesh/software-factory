@@ -46,6 +46,7 @@ from factory.ui.github._models import (
 from factory.ui.github._prs import (
     _normalize_github_pull_request,
     fetch_repo_pull_requests,
+    mark_pull_request_ready_for_review,
     merge_repo_pull_request,
 )
 from factory.ui.github._rollback import (
@@ -82,6 +83,7 @@ __all__ = [
     "get_test_org_token",
     "instantiate_repo_from_template",
     "map_github_issue_status",
+    "mark_pull_request_ready_for_review",
     "merge_repo_pull_request",
     "normalize_milestone_slug",
     "parse_github_blocked_by",

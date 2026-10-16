@@ -12,7 +12,7 @@ import {
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { DeliveryGateData, PullRequest } from "../types";
-import { useStudioPullRequestQuery, useMergePullRequestMutation } from "../hooks/useStudioQueries";
+import { useStudioPullRequestQuery, useMergePullRequestMutation, useMarkPullRequestReadyMutation } from "../hooks/useStudioQueries";
 import { getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 
 export interface DeliveryGateCardProps {
@@ -38,12 +38,18 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
 }) => {
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [markReadyError, setMarkReadyError] = useState<string | null>(null);
 
   const prQuery = useStudioPullRequestQuery(repo);
   const mergeMutation = useMergePullRequestMutation();
+  const markReadyMutation = useMarkPullRequestReadyMutation();
 
   // Find live PR from query cache if available for reactive updates
-  const pullNumber = data.pull_number || data.pull_request?.number;
+  const pullNumber =
+    data.pull_number ||
+    data.pull_request?.number ||
+    data.pull_request_number ||
+    data.pullRequestNumber;
   const livePR: PullRequest | undefined = prQuery.data?.pulls?.find(
     (p) => p.number === pullNumber
   );
@@ -84,7 +90,10 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   })();
 
   const handleConfirmMerge = async () => {
-    if (!pullNumber) return;
+    if (!pullNumber) {
+      setMergeError("Cannot merge: Pull request number could not be resolved.");
+      return;
+    }
     setMergeError(null);
     try {
       const res = await mergeMutation.mutateAsync({
@@ -104,6 +113,19 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
     }
   };
 
+  const handleMarkReadyForReview = async () => {
+    if (!pullNumber) {
+      setMarkReadyError("Cannot mark ready for review: Pull request number could not be resolved.");
+      return;
+    }
+    setMarkReadyError(null);
+    try {
+      await markReadyMutation.mutateAsync({ repo, pullNumber });
+    } catch (err: any) {
+      setMarkReadyError(err.message || "Failed to mark pull request ready for review.");
+    }
+  };
+
   const getStatusBadge = () => {
     const config = getPullRequestBadgeConfig(status);
     return (
@@ -117,7 +139,15 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
     );
   };
 
-  const isMergeDisabled = isDraft || activeJobRunning || hasConflict || isMerged || isClosed || isReverted || isRollingBack;
+  const isMergeDisabled =
+    !pullNumber ||
+    isDraft ||
+    activeJobRunning ||
+    hasConflict ||
+    isMerged ||
+    isClosed ||
+    isReverted ||
+    isRollingBack;
 
   return (
     <div
@@ -134,11 +164,11 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
           <div className="flex items-center space-x-2">
             <GitPullRequest className="w-4 h-4 text-coral shrink-0" />
             <span className="font-semibold text-white text-sm">
-              {pr?.title || `Feature Pull Request #${pullNumber}`}
+              {pr?.title || (pullNumber ? `Feature Pull Request #${pullNumber}` : "Feature Pull Request")}
             </span>
-            {pullNumber && (
+            {pullNumber ? (
               <span className="text-slate-400 font-mono text-xs">#{pullNumber}</span>
-            )}
+            ) : null}
           </div>
           {pr?.head_branch && (
             <div className="text-[11px] font-mono text-slate-400 pl-6">
@@ -243,6 +273,11 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
           {mergeError}
         </div>
       )}
+      {markReadyError && (
+        <div className="p-2.5 rounded-lg bg-coral/10 border border-coral/30 text-coral text-xs">
+          {markReadyError}
+        </div>
+      )}
 
       {/* In-Studio Merge Control Action Area */}
       <div className="pt-1 border-t border-white/10">
@@ -317,6 +352,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 <span className="text-slate-400 font-medium">Turn has been reverted</span>
               ) : activeJobRunning ? (
                 <span className="text-amber-400 font-medium">Job Actively Executing</span>
+              ) : !pullNumber ? (
+                <span className="text-coral">Pull Request number not found</span>
               ) : isDraft ? (
                 <span>PR is currently in Draft</span>
               ) : hasConflict ? (
@@ -329,6 +366,22 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
+              {isDraft && !isMerged && !isClosed && !isReverted && (
+                <Button
+                  data-testid="btn-delivery-gate-mark-ready"
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!pullNumber || activeJobRunning || markReadyMutation.isPending}
+                  isLoading={markReadyMutation.isPending}
+                  onClick={handleMarkReadyForReview}
+                  icon={<CheckCircle2 className="w-3.5 h-3.5 text-pale-green" />}
+                  title="Mark this Pull Request as Ready for Review on GitHub"
+                  className="text-slate-200"
+                >
+                  Mark Ready for Review
+                </Button>
+              )}
               {onRollbackTurn && (
                 <Button
                   data-testid="delivery-gate-rollback-btn"
@@ -368,7 +421,9 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 onClick={() => setIsConfirming(true)}
                 icon={<GitMerge className="w-3.5 h-3.5" />}
                 title={
-                  activeJobRunning
+                  !pullNumber
+                    ? "Cannot merge: Pull request number could not be resolved"
+                    : activeJobRunning
                     ? "Cannot merge while job is running"
                     : isDraft
                     ? "Cannot merge while PR is in Draft"

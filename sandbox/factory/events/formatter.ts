@@ -346,10 +346,15 @@ export function formatReviewerRejectionData(
 export function formatDeliveryGateData(
   data: DeliveryGateEventData
 ): DeliveryGateEventData {
+  const prNum = data.pull_number ?? data.pull_request_number ?? data.pullRequestNumber;
   return {
     ...data,
-    ...(data.pullRequestNumber !== undefined && data.pull_request_number === undefined
-      ? { pull_request_number: data.pullRequestNumber }
+    ...(prNum !== undefined
+      ? {
+          pull_number: prNum,
+          pull_request_number: prNum,
+          pullRequestNumber: prNum,
+        }
       : {}),
     ...(data.pullRequestUrl !== undefined
       ? {

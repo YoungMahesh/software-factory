@@ -4133,6 +4133,30 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
         self.assertIn("active or queued", resp.json()["detail"].lower())
 
+    def test_post_mark_pull_request_ready_for_review_success(self):
+        mock_result = {
+            "success": True,
+            "ready_for_review": True,
+            "pull_number": 42,
+            "pull": {"number": 42, "draft": False, "status": "ready_for_review"},
+        }
+        with patch("factory.ui.routes.studio_pulls.gh.mark_pull_request_ready_for_review", return_value=mock_result):
+            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/ready_for_review")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["success"])
+            self.assertTrue(data["ready_for_review"])
+            self.assertEqual(data["pull_number"], 42)
+
+    def test_post_mark_pull_request_ready_for_review_not_found(self):
+        with patch(
+            "factory.ui.routes.studio_pulls.gh.mark_pull_request_ready_for_review",
+            side_effect=PullRequestMergeError("Pull request #42 not found.", status_code=404),
+        ):
+            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/ready_for_review")
+            self.assertEqual(resp.status_code, 404)
+            self.assertIn("not found", resp.json()["detail"])
+
 
 class TestTrunkSynchronization(unittest.TestCase):
     """Test suite for Trunk Synchronization and in-place resync."""

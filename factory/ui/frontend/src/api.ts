@@ -13,6 +13,7 @@ import {
   PullRequest,
   MergePullRequestParams,
   MergePullRequestResponse,
+  MarkPullRequestReadyResponse,
   RollbackTurnParams,
   RollbackTurnResponse,
 } from "./types";
@@ -23,6 +24,7 @@ export type {
   PullRequest,
   MergePullRequestParams,
   MergePullRequestResponse,
+  MarkPullRequestReadyResponse,
   TurnRollbackData,
   RollbackTurnParams,
   RollbackTurnResponse,
@@ -374,6 +376,24 @@ export async function mergePullRequest(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to merge pull request: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function markPullRequestReadyForReview(
+  repo: string,
+  pullNumber: number
+): Promise<MarkPullRequestReadyResponse> {
+  const res = await fetch(
+    `/api/studio/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/ready_for_review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to mark pull request ready for review: ${res.statusText}`);
   }
   return res.json();
 }

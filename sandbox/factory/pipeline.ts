@@ -287,9 +287,9 @@ export async function runAssemblyLinePipeline(
     }
   }
 
-  const allMilestoneOrIssueTickets = options.featureSlug
-    ? await tracker.getTickets(workspaceDir, featureSlug)
-    : await tracker.getTickets(workspaceDir, featureSlug, options.issueId);
+  const allMilestoneOrIssueTickets = options.issueId
+    ? await tracker.getTickets(workspaceDir, featureSlug, options.issueId)
+    : await tracker.getTickets(workspaceDir, featureSlug);
 
   const allResolved =
     !haltedOnError &&

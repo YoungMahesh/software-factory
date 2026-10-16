@@ -111,10 +111,14 @@ export interface MergePullRequestResponse {
 export interface DeliveryGateData {
   phase?: "init" | "finalized" | string;
   pull_number?: number;
+  pull_request_number?: number;
+  pullRequestNumber?: number;
   pull_request?: PullRequest;
   resolved_issues?: Array<string | number>;
   test_verdict?: string;
   status?: string;
+  draft?: boolean;
+  ready_for_review?: boolean;
   merged?: boolean;
   sha?: string;
   branch?: string;
@@ -125,6 +129,13 @@ export interface DeliveryGateData {
   reverted?: boolean;
   reverted_at?: number;
   revert_commit?: string;
+}
+
+export interface MarkPullRequestReadyResponse {
+  success: boolean;
+  ready_for_review: boolean;
+  pull_number: number;
+  pull: PullRequest;
 }
 
 export interface StudioDispatchParams {

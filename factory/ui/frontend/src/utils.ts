@@ -162,7 +162,12 @@ export function getPullRequestStatus(
     return "conflict";
   }
 
-  if (pr?.draft || pr?.status === "draft" || gateData?.status === "draft") {
+  if (
+    pr?.draft ||
+    pr?.status === "draft" ||
+    gateData?.draft ||
+    gateData?.status === "draft"
+  ) {
     return "draft";
   }
 

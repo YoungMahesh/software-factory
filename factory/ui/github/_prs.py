@@ -219,3 +219,59 @@ def merge_repo_pull_request(
             "commit_title": final_commit_title,
             "commit_message": final_commit_message,
         }
+
+
+def mark_pull_request_ready_for_review(repo_name: str, pull_number: int) -> dict[str, Any]:
+    """Converts a draft pull request to ready for review via GitHub GraphQL mutation."""
+    clean_repo = strip_repo_owner(repo_name)
+    org = DEFAULT_TEST_ORG
+    token = get_test_org_token()
+    if not token:
+        raise PullRequestMergeError(
+            "GitHub test organization token is not configured.",
+            status_code=500,
+        )
+
+    headers = _headers(token)
+    with httpx.Client(timeout=20.0) as client:
+        pr_url = f"https://api.github.com/repos/{org}/{clean_repo}/pulls/{pull_number}"
+        pr_resp = client.get(pr_url, headers=headers)
+        if pr_resp.status_code == 404:
+            raise PullRequestMergeError(f"Pull request #{pull_number} not found.", status_code=404)
+        if pr_resp.status_code != 200:
+            raise PullRequestMergeError(
+                f"Failed to fetch pull request #{pull_number}: {pr_resp.text}",
+                status_code=pr_resp.status_code,
+            )
+        pr_data = pr_resp.json()
+        node_id = pr_data.get("node_id")
+        if not node_id:
+            raise PullRequestMergeError("Pull request node_id could not be resolved.", status_code=500)
+
+        graphql_url = "https://api.github.com/graphql"
+        mutation = {
+            "query": "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { id isDraft } } }",
+            "variables": {"id": node_id},
+        }
+        gql_resp = client.post(graphql_url, headers=headers, json=mutation)
+        if gql_resp.status_code != 200:
+            raise PullRequestMergeError(
+                f"Failed to mark pull request #{pull_number} ready for review: {gql_resp.text}",
+                status_code=gql_resp.status_code,
+            )
+
+        refetch_resp = client.get(pr_url, headers=headers)
+        if refetch_resp.status_code == 200:
+            updated_pr = _normalize_github_pull_request(refetch_resp.json())
+        else:
+            updated_pr = _normalize_github_pull_request(pr_data)
+            updated_pr["draft"] = False
+            updated_pr["status"] = "ready_for_review"
+
+        return {
+            "success": True,
+            "ready_for_review": True,
+            "pull_number": pull_number,
+            "pull": updated_pr,
+        }
+
