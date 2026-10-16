@@ -47,18 +47,25 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
       role="dialog"
       aria-modal="true"
     >
+      {/* Backdrop */}
+      <div
+        data-testid="activity-drawer-backdrop"
+        onClick={onClose}
+        className="fixed inset-0 bg-cohere-black/50 backdrop-blur-2xs transition-opacity duration-300 -z-10"
+      />
+
       {/* Slide-over panel */}
-      <div className="w-screen max-w-xl bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+      <div className="w-screen max-w-xl bg-soft-stone border-l border-hairline shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
         {/* Drawer Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-950/70">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-hairline bg-white">
           <div className="flex items-center space-x-2.5">
-            <h2 id="slide-over-title" className="text-sm font-semibold text-slate-100">
+            <h2 id="slide-over-title" className="text-sm font-semibold text-ink font-sans">
               Agent Activity
             </h2>
             {stage && (
               <span
                 id="studio-drawer-stage-badge"
-                className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800"
+                className="px-2.5 py-0.5 rounded-pill text-[10px] font-mono font-bold bg-primary text-white border border-primary"
               >
                 {stage}
               </span>
@@ -66,7 +73,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             {jobId && (
               <span
                 id="studio-drawer-job-id"
-                className="text-[11px] font-mono text-slate-400"
+                className="text-[11px] font-mono text-muted"
               >
                 {jobId}
               </span>
@@ -78,23 +85,23 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             id="btn-close-activity-drawer"
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus:outline-none"
+            className="p-1.5 rounded-pill text-muted hover:text-ink hover:bg-soft-stone transition-colors focus:outline-none cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex items-center justify-between px-5 py-2.5 bg-slate-950/40 border-b border-slate-800/80">
+        <div className="flex items-center justify-between px-5 py-2.5 bg-soft-stone border-b border-hairline">
           <div className="flex items-center space-x-2">
             <button
               id="btn-drawer-tab-timeline"
               type="button"
               onClick={() => setActiveTab("timeline")}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
                 activeTab === "timeline"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
               }`}
             >
               <History className="w-3.5 h-3.5" />
@@ -104,10 +111,10 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               id="btn-drawer-tab-logs"
               type="button"
               onClick={() => setActiveTab("logs")}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
                 activeTab === "logs"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
@@ -120,11 +127,11 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               id="btn-drawer-copy-logs"
               type="button"
               onClick={handleCopyLogs}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors font-mono"
+              className="flex items-center space-x-1 px-3 py-1 rounded-pill text-xs text-muted hover:text-ink bg-white border border-hairline hover:bg-soft-stone transition-colors font-mono cursor-pointer shadow-2xs"
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <Check className="w-3.5 h-3.5 text-deep-green" />
                   <span>Copied</span>
                 </>
               ) : (
@@ -138,7 +145,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
         </div>
 
         {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-4 bg-slate-950/80">
+        <div className="flex-1 overflow-y-auto p-4 bg-canvas">
           {activeTab === "timeline" ? (
             <div id="studio-drawer-timeline" className="space-y-3">
               {events.length === 0 ? (
@@ -262,7 +269,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
           ) : (
             <div
               id="studio-drawer-logs"
-              className="font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text"
+              className="font-mono text-xs text-slate-300 bg-primary border border-white/10 rounded-xl p-4 whitespace-pre-wrap leading-relaxed select-text shadow-sm"
             >
               {logs.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">

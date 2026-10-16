@@ -221,7 +221,7 @@ export const AppContent: React.FC = () => {
 
   return (
     <StudioProvider value={studioContextValue}>
-      <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <div className="flex flex-col min-h-screen bg-white text-ink font-sans">
         <AppNavigation
           activeTab={activeTab}
           onTabChange={switchTab}

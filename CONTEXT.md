@@ -239,6 +239,11 @@ _Avoid_: Factory UI, test dashboard, web runner, factory web app
 An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory. Binds to port 3010 by default (overrideable via `PORT` environment variable) and is protected by HTTP Basic Authentication (`FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`), with a local development fallback (`admin`:`admin`) and startup warning.
 _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 
+**Cohere Editorial Design System**:
+The enterprise design language implemented across Factory Studio and the Factory Testing Console inspired by Cohere's web interface, characterized by a stark white editorial canvas and soft stone secondary surfaces bounded by hairline containment rules, contrasted against high-contrast dark console execution blocks, monospaced technical telemetry, coral taxonomy chips, and pill-centric interactive controls.
+_Avoid_: Dark mode dashboard, generic Tailwind theme, slate UI
+
+
 **Studio Issue Drawer**:
 A slide-over interface within Factory Studio that displays GitHub issues for the active repository, providing controls to inspect specifications, trigger the Grill-Before-Change Protocol, or directly dispatch the Assembly Line Pipeline.
 _Avoid_: Issue panel, issue modal, GitHub view, issue selector

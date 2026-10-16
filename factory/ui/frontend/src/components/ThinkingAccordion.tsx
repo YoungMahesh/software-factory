@@ -25,23 +25,26 @@ export const ThinkingAccordion: React.FC<ThinkingAccordionProps> = ({
     : null;
 
   return (
-    <div className="thinking-accordion my-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 text-xs overflow-hidden transition-all duration-200">
+    <div className="thinking-accordion my-2 rounded-lg border border-white/10 bg-primary text-xs overflow-hidden transition-all duration-200">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-indigo-900/30 transition-colors focus:outline-none"
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/5 transition-colors focus:outline-none cursor-pointer"
       >
         <div className="flex items-center space-x-2">
-          <BrainCircuit
-            className={`w-3.5 h-3.5 ${
-              !done ? "text-indigo-400 animate-pulse" : "text-slate-400"
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              !done
+                ? "bg-emerald-400 animate-pulse ring-2 ring-emerald-400/40"
+                : "bg-muted"
             }`}
           />
-          <span className="font-medium text-indigo-300">
+          <BrainCircuit className="w-3.5 h-3.5 text-slate-400" />
+          <span className="font-medium text-slate-200">
             {!done ? "Thinking..." : "Thought Process"}
           </span>
           {stage && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/50 text-indigo-200 font-mono">
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-slate-300 font-mono">
               {stage}
             </span>
           )}
@@ -62,7 +65,7 @@ export const ThinkingAccordion: React.FC<ThinkingAccordionProps> = ({
       </button>
 
       {isExpanded && (
-        <div className="px-3 py-2 border-t border-indigo-900/30 text-slate-300 font-mono text-[11px] whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed bg-slate-950/40">
+        <div className="px-3 py-2 border-t border-white/10 text-slate-300 font-mono text-[11px] whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed bg-cohere-black/70">
           {text || "No reasoning text available."}
         </div>
       )}

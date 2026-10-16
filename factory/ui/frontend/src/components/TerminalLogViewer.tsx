@@ -52,26 +52,26 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
   const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+    <div className="flex flex-col h-full bg-primary rounded-xl border border-white/10 overflow-hidden shadow-lg">
       {/* Header Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-cohere-black/60 border-b border-white/10">
         <div className="flex items-center space-x-2">
           <Terminal className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-semibold text-slate-200">Execution Output</span>
-          <span id="log-line-count" className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
+          <span className="text-xs font-semibold text-white font-mono">Execution Output</span>
+          <span id="log-line-count" className="px-2 py-0.5 rounded-pill text-[10px] font-mono bg-white/10 text-slate-300 border border-white/10">
             {lines.length} lines
           </span>
         </div>
 
         <div className="flex items-center space-x-2">
           {/* Autoscroll checkbox */}
-          <label className="flex items-center space-x-1.5 text-xs text-slate-400 cursor-pointer hover:text-slate-200">
+          <label className="flex items-center space-x-1.5 text-xs text-slate-400 cursor-pointer hover:text-white select-none">
             <input
               id="check-autoscroll"
               type="checkbox"
               checked={autoscroll}
               onChange={(e) => setAutoscroll(e.target.checked)}
-              className="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded bg-white/10 border-white/20 text-white focus:ring-0 focus:ring-offset-0 cursor-pointer"
             />
             <span className="flex items-center space-x-1">
               <ArrowDownToLine className="w-3 h-3" />
@@ -84,7 +84,7 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
             id="btn-copy-log"
             type="button"
             onClick={handleCopy}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors"
+            className="flex items-center space-x-1 px-3 py-1 rounded-pill text-xs text-white bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
           >
             {copied ? (
               <>
@@ -105,7 +105,7 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
               id="btn-clear-log"
               type="button"
               onClick={onClear}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-rose-300 hover:bg-slate-800 transition-colors"
+              className="flex items-center space-x-1 px-3 py-1 rounded-pill text-xs text-muted hover:text-coral hover:bg-white/10 transition-colors cursor-pointer"
               title="Clear terminal log"
             >
               <Trash2 className="w-3 h-3" />
@@ -119,10 +119,10 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
       <div
         id="terminal-body"
         ref={containerRef}
-        className="flex-1 p-4 font-mono text-[11px] leading-relaxed text-slate-300 overflow-y-auto bg-slate-950/90 whitespace-pre-wrap select-text"
+        className="flex-1 p-4 font-mono text-[11px] leading-relaxed text-slate-300 overflow-y-auto bg-cohere-black/70 whitespace-pre-wrap select-text"
       >
         {lines.length === 0 ? (
-          <div className="text-slate-600 italic select-none">
+          <div className="text-muted italic select-none">
             Awaiting sandbox logs...
           </div>
         ) : (
@@ -144,13 +144,13 @@ export const TerminalLogViewer: React.FC<TerminalLogViewerProps> = ({
                       width: "100%",
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
-                    className="hover:bg-slate-900/40 px-1 rounded -mx-1"
+                    className="hover:bg-white/5 px-1 rounded -mx-1"
                   >
                     {lines[virtualRow.index] || "\u00A0"}
                   </div>
                 ))
               : lines.map((line, idx) => (
-                  <div key={idx} className="hover:bg-slate-900/40 px-1 rounded -mx-1">
+                  <div key={idx} className="hover:bg-white/5 px-1 rounded -mx-1">
                     {line || "\u00A0"}
                   </div>
                 ))}

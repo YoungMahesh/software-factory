@@ -5,13 +5,13 @@ import { PreviewState, RollbackTarget } from "../../types";
 export interface StudioPreviewPaneProps {
   previewState: PreviewState | null;
   branches: string[];
-  onSelectBranch: (branch: string) => Promise<void>;
+  onSelectBranch: (branch: string) => Promise<void> | void;
   isSwitchingBranch: boolean;
   activeJob: any;
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
   onRetryPreview?: () => void;
-  onReconnectPreview: () => void;
+  onReconnectPreview?: () => void;
   refreshKey: number;
   branchRefreshKey: number;
   isLaunchingPreview: boolean;
@@ -46,31 +46,42 @@ export const StudioPreviewPane: React.FC<StudioPreviewPaneProps> = ({
   isLatestTurnMerged,
 }) => {
   return (
-    <div className="flex-1 bg-slate-950 p-4 overflow-hidden">
+    <div className="flex-1 bg-soft-stone/40 p-4 overflow-hidden">
       <LivePreview
-        previewUrl={previewState?.preview_url || null}
-        status={previewState?.status || "IDLE"}
-        stage={previewState?.status === "PROVISIONING" ? previewState.stage : "IDLE"}
-        branch={previewState?.branch || null}
+        previewUrl={(previewState as any)?.preview_url || (previewState as any)?.url || activeJob?.preview_url || null}
+        status={previewState?.status || (activeJob?.dev ? "SERVING" : "IDLE")}
+        stage={(previewState as any)?.stage}
+        branch={previewState?.branch}
         branches={branches}
+        availableBranches={branches}
         onSelectBranch={onSelectBranch}
+        onSwitchBranch={onSelectBranch}
         isSwitchingBranch={isSwitchingBranch}
-        isConcurrencyLocked={Boolean(activeJob && (activeJob.status === "RUNNING" || activeJob.status === "QUEUED"))}
+        isConcurrencyLocked={isExecutingTurn}
+        isJobActive={isExecutingTurn}
+        lockTooltip={
+          isExecutingTurn
+            ? "Branch switching is locked while an assembly line job is actively running."
+            : undefined
+        }
         logs={previewState?.logs || []}
-        errorMessage={previewState?.error_message || null}
+        errorMessage={previewState?.error_message}
         onLaunchPreview={onLaunchPreview}
         onStopPreview={onStopPreview}
-        onRetryPreview={onRetryPreview || onLaunchPreview}
+        onRetryPreview={onRetryPreview}
         onReconnectPreview={onReconnectPreview}
         refreshKey={(refreshKey || 0) + branchRefreshKey}
         isLaunching={isLaunchingPreview}
         isSyncing={isSyncing}
         onSync={onSync}
-        isJobActive={isExecutingTurn}
         onRollbackLastTurn={latestRollbackInfo.target ? () => onOpenRollback() : undefined}
         isRollingBack={isRollingBack}
         isRollbackDisabled={isLatestTurnMerged}
-        rollbackDisabledReason={isLatestTurnMerged ? "Cannot roll back turn for a merged pull request" : undefined}
+        rollbackDisabledReason={
+          isLatestTurnMerged
+            ? "Cannot roll back turn for a merged pull request"
+            : undefined
+        }
       />
     </div>
   );

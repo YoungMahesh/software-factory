@@ -110,7 +110,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   );
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
+    <div className="flex flex-col h-full bg-white rounded-[22px] border border-hairline overflow-hidden shadow-sm">
       {/* Top control bar */}
       <LivePreviewToolbar
         viewport={viewport}
@@ -143,7 +143,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
       {/* Frame Container */}
       <div
         id="preview-frame-wrapper"
-        className="flex-1 flex flex-col items-center justify-center bg-slate-950 p-4 overflow-auto min-h-0"
+        className="flex-1 flex flex-col items-center justify-center bg-soft-stone/30 p-4 overflow-auto min-h-0"
       >
         {isLivePreviewActive ? (
           <LivePreviewFrame
@@ -169,14 +169,14 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
         <div
           data-testid="dev-server-logs-drawer"
           id="dev-server-logs-drawer"
-          className="h-64 border-t border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-hidden"
+          className="h-64 border-t border-hairline bg-primary flex flex-col shrink-0 overflow-hidden"
         >
           {/* Drawer Header */}
-          <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800 text-xs shrink-0">
+          <div className="flex items-center justify-between px-3.5 py-2 bg-primary border-b border-white/10 text-xs shrink-0 text-white">
             <div className="flex items-center space-x-2 text-slate-300">
-              <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="font-semibold text-slate-200 text-xs">Dev Server Logs</span>
-              <span id="dev-logs-line-count" className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
+              <Terminal className="w-3.5 h-3.5 text-coral" />
+              <span className="font-semibold text-white text-xs">Dev Server Logs</span>
+              <span id="dev-logs-line-count" className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white/10 text-slate-300">
                 {logs.length} lines
               </span>
             </div>
@@ -188,7 +188,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
                   id="btn-retry-in-drawer"
                   type="button"
                   onClick={handleRetry}
-                  className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
+                  className="flex items-center space-x-1 px-3 py-1 rounded-pill text-xs font-semibold bg-white hover:bg-soft-stone text-primary shadow-sm transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
                   <span>Retry</span>
@@ -198,7 +198,7 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
                 id="btn-close-logs-drawer"
                 type="button"
                 onClick={() => setIsLogsDrawerOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
                 title="Close terminal drawer"
               >
                 <ChevronDown className="w-4 h-4" />

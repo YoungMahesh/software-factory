@@ -153,21 +153,21 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
       <div
         data-testid="issue-drawer-backdrop"
         onClick={onClose}
-        className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300 -z-10"
+        className="fixed inset-0 bg-cohere-black/50 backdrop-blur-2xs transition-opacity duration-300 -z-10"
       />
 
       {/* Slide-over panel */}
-      <div className="w-screen max-w-2xl bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+      <div className="w-screen max-w-2xl bg-soft-stone border-l border-hairline shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
         {/* Drawer Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-hairline bg-white shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-1.5 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400">
+            <div className="p-1.5 rounded-pill bg-soft-stone border border-hairline text-ink">
               <GitPullRequest className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="issue-drawer-title" className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
+              <h2 id="issue-drawer-title" className="text-sm font-semibold text-ink font-sans flex items-center space-x-2">
                 <span>GitHub Issues</span>
-                <span className="text-xs font-mono font-normal text-slate-400 px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                <span className="text-xs font-mono font-normal text-muted px-2 py-0.5 rounded-pill bg-soft-stone border border-hairline">
                   {repo}
                 </span>
               </h2>
@@ -180,17 +180,17 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
               data-testid="refresh-issues-btn"
               type="button"
               onClick={handleRefresh}
-              className="p-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus:outline-none"
+              className="p-1.5 rounded-pill text-muted hover:text-ink hover:bg-soft-stone transition-colors focus:outline-none cursor-pointer"
               title="Refresh issues from GitHub"
             >
-              <RefreshCw className={`w-4 h-4 ${issuesQuery.isFetching ? "animate-spin text-indigo-400" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${issuesQuery.isFetching ? "animate-spin text-primary" : ""}`} />
             </button>
             <button
               id="btn-close-issue-drawer"
               data-testid="close-issue-drawer-btn"
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus:outline-none"
+              className="p-1.5 rounded-pill text-muted hover:text-ink hover:bg-soft-stone transition-colors focus:outline-none cursor-pointer"
               title="Close drawer"
             >
               <X className="w-5 h-5" />
@@ -207,16 +207,16 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
         />
 
         {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-950/80">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-canvas">
           {issuesQuery.isError ? (
             <div
               data-testid="issues-error-state"
-              className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-3 bg-red-950/20 border border-red-900/40 rounded-lg"
+              className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-3 bg-coral/10 border border-coral/30 rounded-xl"
             >
-              <AlertCircle className="w-8 h-8 text-red-400" />
+              <AlertCircle className="w-8 h-8 text-coral" />
               <div className="space-y-1">
-                <h3 className="text-xs font-semibold text-red-200">Failed to load GitHub issues</h3>
-                <p className="text-[11px] text-slate-400">
+                <h3 className="text-xs font-semibold text-ink">Failed to load GitHub issues</h3>
+                <p className="text-[11px] text-muted">
                   {issuesQuery.error instanceof Error
                     ? issuesQuery.error.message
                     : "The GitHub API request failed. Verify repository permissions or network connection."}
@@ -225,20 +225,20 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="px-3 py-1.5 rounded text-xs bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700/60 transition-colors"
+                className="px-3 py-1.5 rounded-pill text-xs bg-coral text-white hover:bg-coral/90 transition-colors cursor-pointer"
               >
                 Retry Request
               </button>
             </div>
           ) : issuesQuery.isLoading && allIssues.length === 0 ? (
             <div data-testid="issues-loading-skeleton" className="space-y-4 py-4 animate-pulse">
-              <div className="h-12 bg-slate-850 bg-slate-800/60 rounded-lg" />
-              <div className="h-24 bg-slate-850 bg-slate-800/40 rounded-lg" />
-              <div className="h-24 bg-slate-850 bg-slate-800/40 rounded-lg" />
+              <div className="h-12 bg-soft-stone rounded-xl" />
+              <div className="h-24 bg-soft-stone rounded-xl" />
+              <div className="h-24 bg-soft-stone rounded-xl" />
             </div>
           ) : filteredIssues.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-500 space-y-2">
-              <GitPullRequest className="w-8 h-8 text-slate-600" />
+            <div className="flex flex-col items-center justify-center py-16 text-muted space-y-2">
+              <GitPullRequest className="w-8 h-8 text-muted" />
               <span className="text-xs font-mono">No issues match the current filter.</span>
             </div>
           ) : (
@@ -282,14 +282,14 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
               {/* Backlog / Unassigned Issues */}
               {backlogIssues.length > 0 && (
                 <div data-testid="milestone-group-backlog" className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-hairline shadow-2xs">
                     <div className="flex items-center space-x-2">
-                      <Layers className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs font-semibold text-slate-300">
+                      <Layers className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-semibold text-ink font-sans">
                         Backlog / Unassigned
                       </span>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[10px] font-mono text-muted">
                       {backlogIssues.length} tickets
                     </span>
                   </div>

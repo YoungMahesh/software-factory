@@ -64,13 +64,13 @@ export const CommandCard: React.FC<CommandCardProps> = ({
       id={id}
       className={`command-card my-2 rounded-lg border text-xs overflow-hidden transition-all duration-200 ${
         isFailure
-          ? "border-red-800/60 bg-red-950/20"
+          ? "border-coral/40 bg-primary"
           : running
-          ? "border-amber-700/60 bg-amber-950/10"
-          : "border-slate-800 bg-slate-900/40"
+          ? "border-amber-700/60 bg-primary"
+          : "border-white/10 bg-primary"
       }`}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800/60 bg-slate-900/60">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-cohere-black/40">
         <div className="flex items-center space-x-2 truncate">
           <Terminal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span className="font-mono font-semibold text-slate-200 truncate">
@@ -82,7 +82,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
             </span>
           )}
           {stage && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-slate-300 font-mono">
               {stage}
             </span>
           )}
@@ -107,13 +107,13 @@ export const CommandCard: React.FC<CommandCardProps> = ({
                 </span>
               )}
               {code === 0 ? (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-pale-green text-deep-green border border-deep-green/30">
+                  <CheckCircle2 className="w-3 h-3 text-deep-green" />
                   <span>Exit code 0</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-red-950/60 border border-red-500/40 text-red-300">
-                  <AlertCircle className="w-3 h-3 text-red-400" />
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-coral/10 border border-coral/40 text-coral">
+                  <AlertCircle className="w-3 h-3 text-coral" />
                   <span>Exit code {code}</span>
                 </span>
               )}
@@ -123,14 +123,14 @@ export const CommandCard: React.FC<CommandCardProps> = ({
       </div>
 
       {totalLines > 100 && (
-        <div className="flex items-center justify-between px-3 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] text-slate-400">
+        <div className="flex items-center justify-between px-3 py-1 bg-cohere-black/60 border-b border-white/10 text-[10px] text-slate-400">
           <span>
             Showing last 100 of {totalLines} lines
           </span>
           <button
             type="button"
             onClick={() => setShowFullOutput(!showFullOutput)}
-            className="text-indigo-400 hover:text-indigo-300 hover:underline font-mono"
+            className="text-slate-300 hover:text-white underline font-mono"
           >
             {showFullOutput ? "[Show last 100 lines]" : "[View full output]"}
           </button>
@@ -138,7 +138,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
       )}
 
       {totalLines > 0 && (
-        <div className="p-3 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-slate-950/90 text-slate-300">
+        <div className="p-3 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-cohere-black/70 text-slate-300">
           {displayLines.map((line, idx) => {
             const isStderr = isStderrLine(line);
             return (

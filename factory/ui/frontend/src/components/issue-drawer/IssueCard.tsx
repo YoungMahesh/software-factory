@@ -45,15 +45,15 @@ export const IssueCard: React.FC<IssueCardProps> = ({
     <div
       key={issue.number}
       data-testid={`issue-card-${issue.number}`}
-      className="p-3.5 rounded-lg bg-slate-900 border border-slate-800/90 hover:border-slate-700/80 transition-colors space-y-2.5"
+      className="p-3.5 rounded-xl bg-white border border-hairline hover:border-muted/40 transition-colors space-y-2.5 shadow-2xs"
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start space-x-2">
-          <span className="text-xs font-mono font-bold text-indigo-400 shrink-0 mt-0.5">
+          <span className="text-xs font-mono font-bold text-primary shrink-0 mt-0.5">
             #{issue.number}
           </span>
-          <span className="text-xs font-semibold text-slate-200 leading-snug">
+          <span className="text-xs font-semibold text-ink leading-snug">
             {issue.title}
           </span>
         </div>
@@ -63,7 +63,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({
             href={issue.html_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-slate-500 hover:text-slate-300 p-0.5 transition-colors shrink-0"
+            className="text-muted hover:text-ink p-0.5 transition-colors shrink-0"
             title="View on GitHub"
           >
             <ExternalLink className="w-3.5 h-3.5" />
@@ -75,23 +75,23 @@ export const IssueCard: React.FC<IssueCardProps> = ({
       <div className="flex flex-wrap items-center gap-1.5">
         {(issue.labels || []).map((label) => {
           const lowerLabel = label.toLowerCase();
-          let pillStyle = "bg-slate-800 text-slate-400 border-slate-700";
+          let pillStyle = "bg-soft-stone text-ink border-hairline";
 
           if (lowerLabel === "factory:ready") {
-            pillStyle = "bg-emerald-950/80 text-emerald-300 border-emerald-800";
+            pillStyle = "bg-pale-green text-deep-green border-deep-green/20";
           } else if (lowerLabel === "factory:claimed") {
-            pillStyle = "bg-amber-950/80 text-amber-300 border-amber-800";
+            pillStyle = "bg-soft-stone text-ink border-hairline";
           } else if (lowerLabel === "factory:resolved") {
-            pillStyle = "bg-purple-950/80 text-purple-300 border-purple-800";
+            pillStyle = "bg-deep-green text-pale-green border-deep-green";
           } else if (lowerLabel === "factory:ready-for-human") {
-            pillStyle = "bg-red-950/80 text-red-300 border-red-800";
+            pillStyle = "bg-coral/15 text-coral border-coral/30";
           }
 
           return (
             <span
               key={label}
               data-testid={`status-pill-${label}`}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium border ${pillStyle}`}
+              className={`px-2.5 py-0.5 rounded-pill text-[10px] font-mono font-medium border ${pillStyle}`}
             >
               {label}
             </span>
@@ -103,7 +103,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({
       {isBlocked && (
         <div
           data-testid={`blocked-alert-${issue.number}`}
-          className="flex items-center space-x-1.5 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-300 font-mono"
+          className="flex items-center space-x-1.5 p-2 rounded-lg bg-coral/10 border border-coral/30 text-[11px] text-coral font-mono"
         >
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span>Blocked by open issue(s): #{openBlockers.join(", #")}</span>
@@ -112,11 +112,11 @@ export const IssueCard: React.FC<IssueCardProps> = ({
 
       {/* Body preview (expandable) */}
       {issue.body && (
-        <div className="text-[11px] text-slate-400">
+        <div className="text-[11px] text-muted">
           <button
             type="button"
             onClick={() => setIsExpanded((prev) => !prev)}
-            className="flex items-center space-x-1 text-slate-500 hover:text-slate-300 text-[10px] font-mono mb-1"
+            className="flex items-center space-x-1 text-muted hover:text-ink text-[10px] font-mono mb-1 cursor-pointer"
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <span>{isExpanded ? "Hide Details" : "Show Details"}</span>
@@ -124,7 +124,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({
           {isExpanded && (
             <div
               data-testid={`issue-body-${issue.number}`}
-              className="p-2.5 rounded bg-slate-950/70 border border-slate-800/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-300 max-h-48 overflow-y-auto"
+              className="p-2.5 rounded-lg bg-soft-stone border border-hairline whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-ink max-h-48 overflow-y-auto"
             >
               {issue.body}
             </div>
@@ -133,16 +133,16 @@ export const IssueCard: React.FC<IssueCardProps> = ({
       )}
 
       {/* Action Buttons Row */}
-      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800/70">
+      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-hairline">
         {/* Grill & Align button (always enabled) */}
         <button
           data-testid={`grill-align-btn-${issue.number}`}
           type="button"
           onClick={() => onGrillAndAlign(issue)}
-          className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors border border-slate-700"
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-pill bg-soft-stone hover:bg-hairline text-ink text-xs font-medium transition-colors border border-hairline cursor-pointer"
           title="Interview requirements with Grilling Assistant before changing code"
         >
-          <MessageSquareQuote className="w-3.5 h-3.5 text-indigo-400" />
+          <MessageSquareQuote className="w-3.5 h-3.5 text-primary" />
           <span>Grill & Align</span>
         </button>
 
@@ -153,14 +153,14 @@ export const IssueCard: React.FC<IssueCardProps> = ({
           onClick={() => onInstantDispatch(issue)}
           disabled={isInstantDisabled}
           title={disableInstantReason || "Bypass Grilling Assistant and dispatch assembly line directly"}
-          className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-semibold transition-colors ${
             isInstantDisabled
-              ? "bg-slate-800/50 text-slate-500 border border-slate-800 cursor-not-allowed"
-              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs"
+              ? "bg-soft-stone/50 text-muted border border-hairline cursor-not-allowed"
+              : "bg-primary hover:bg-cohere-black text-white shadow-xs cursor-pointer"
           }`}
         >
           {isInstantDisabled ? (
-            <Lock className="w-3 h-3 text-slate-500" />
+            <Lock className="w-3 h-3 text-muted" />
           ) : (
             <Zap className="w-3 h-3 fill-current" />
           )}

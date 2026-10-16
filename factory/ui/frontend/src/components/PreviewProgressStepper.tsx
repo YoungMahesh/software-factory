@@ -42,7 +42,7 @@ export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
       data-testid="preview-progress-stepper"
       className="w-full max-w-xl mx-auto flex flex-col items-center space-y-4"
     >
-      <div className="w-full flex items-center justify-between py-3 px-4 bg-slate-900/80 rounded-xl border border-slate-800 shadow-sm">
+      <div className="w-full flex items-center justify-between py-3 px-4 bg-primary text-slate-200 rounded-xl border border-white/10 shadow-sm">
         {PREVIEW_STEPS.map((step, idx) => {
           let state: "completed" | "active" | "failed" | "pending";
           if (isServing) {
@@ -65,14 +65,14 @@ export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
                 className="preview-step flex items-center space-x-2 shrink-0"
               >
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-200 ${
+                  className={`w-6 h-6 rounded-pill flex items-center justify-center text-[11px] font-bold transition-all duration-200 ${
                     state === "completed"
-                      ? "bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20"
+                      ? "bg-pale-green text-deep-green shadow-xs"
                       : state === "failed"
-                      ? "bg-rose-500 text-white shadow-sm shadow-rose-500/20 ring-2 ring-rose-400/40"
+                      ? "bg-coral text-white shadow-xs"
                       : state === "active"
-                      ? "bg-indigo-600 text-white animate-pulse ring-2 ring-indigo-400/40"
-                      : "bg-slate-800 text-slate-500 border border-slate-700/60"
+                      ? "bg-white text-primary ring-2 ring-white/40"
+                      : "bg-white/10 text-slate-400 border border-white/10"
                   }`}
                 >
                   {state === "completed" ? (
@@ -88,12 +88,12 @@ export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
                 <span
                   className={`text-xs ${
                     state === "active"
-                      ? "text-indigo-300 font-semibold"
+                      ? "text-white font-semibold"
                       : state === "failed"
-                      ? "text-rose-300 font-semibold"
+                      ? "text-coral font-semibold"
                       : state === "completed"
-                      ? "text-slate-200 font-medium"
-                      : "text-slate-500"
+                      ? "text-pale-green font-medium"
+                      : "text-slate-400"
                   }`}
                 >
                   {step.label}
@@ -104,10 +104,10 @@ export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
                 <div
                   className={`flex-1 h-0.5 mx-3 rounded transition-colors duration-200 ${
                     isServing || idx < activeIndex
-                      ? "bg-emerald-500/70"
+                      ? "bg-pale-green/70"
                       : isFailed && idx === activeIndex
-                      ? "bg-rose-500/50"
-                      : "bg-slate-800"
+                      ? "bg-coral/50"
+                      : "bg-white/10"
                   }`}
                 />
               )}
@@ -119,12 +119,12 @@ export const PreviewProgressStepper: React.FC<PreviewProgressStepperProps> = ({
       {isFailed && errorMessage && (
         <div
           data-testid="preview-stepper-error-banner"
-          className="w-full flex items-start space-x-2.5 p-3 rounded-lg bg-rose-950/40 border border-rose-800/80 text-rose-200 text-xs"
+          className="w-full flex items-start space-x-2.5 p-3 rounded-lg bg-coral/10 border border-coral/30 text-coral text-xs"
         >
-          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold block text-rose-300 mb-0.5">Preview Boot Failed</span>
-            <span className="text-[11px] font-mono break-all">{errorMessage}</span>
+            <span className="font-semibold block text-coral mb-0.5 font-sans">Preview Boot Failed</span>
+            <span className="text-[11px] font-mono break-all text-ink">{errorMessage}</span>
           </div>
         </div>
       )}

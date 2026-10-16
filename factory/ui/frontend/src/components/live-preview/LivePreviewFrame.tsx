@@ -26,7 +26,7 @@ export const LivePreviewFrame: React.FC<LivePreviewFrameProps> = ({
 
   return (
     <div
-      className="preview-viewport-wrapper h-full w-full transition-all duration-300 rounded-lg border border-slate-800 shadow-2xl bg-white overflow-hidden flex flex-col mx-auto"
+      className="preview-viewport-wrapper h-full w-full transition-all duration-300 rounded-[22px] border border-hairline shadow-2xl bg-white overflow-hidden flex flex-col mx-auto"
       style={{ width: getViewportWidth() }}
     >
       <iframe

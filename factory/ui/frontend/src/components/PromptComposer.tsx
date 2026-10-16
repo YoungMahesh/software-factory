@@ -64,14 +64,14 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     : "Describe what you want to build... (Enter to send)";
 
   return (
-    <div className="p-3.5 bg-slate-900/80 border-t border-slate-800 space-y-2">
+    <div className="p-3.5 bg-soft-stone border-t border-hairline space-y-2">
       {isExecutingTurn && (
         <div
           data-testid="in-flight-indicator"
           id="studio-in-flight-indicator"
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-xs text-indigo-300 font-medium animate-pulse"
+          className="flex items-center space-x-2 px-3.5 py-1.5 rounded-pill bg-primary border border-white/20 text-xs text-white font-medium animate-pulse shadow-sm"
         >
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400 shrink-0" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-white shrink-0" />
           <span>
             Assembly line turn in progress ({activeStage || "DISPATCHING"})...
           </span>
@@ -89,18 +89,19 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
             placeholder={placeholder}
             disabled={isInputLocked}
             rows={3}
+            className="shadow-2xs"
           />
         </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <span className="text-[10px] text-slate-500">
-              Target: <span className="font-mono text-indigo-300">{selectedRepo || "none"}</span>
+            <span className="text-[10px] text-muted">
+              Target: <span className="font-mono text-ink font-semibold">{selectedRepo || "none"}</span>
             </span>
 
             <label
               htmlFor="studio-grill-toggle"
-              className="inline-flex items-center space-x-1.5 cursor-pointer text-xs text-slate-300 hover:text-white select-none"
+              className="inline-flex items-center space-x-1.5 cursor-pointer text-xs select-none px-2.5 py-1 rounded-pill bg-white border border-hairline hover:bg-soft-stone/70 transition-colors shadow-2xs"
             >
               <input
                 type="checkbox"
@@ -109,10 +110,10 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 checked={grillMode}
                 onChange={(e) => setGrillMode(e.target.checked)}
                 disabled={isInputLocked}
-                className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+                className="w-3.5 h-3.5 rounded border-hairline bg-white text-primary focus:ring-form-focus focus:ring-offset-0 cursor-pointer"
               />
-              <span className="font-medium text-[11px] text-indigo-300">
-                Grill &amp; Align <span className="text-[10px] text-indigo-400/80 font-normal">(Recommended)</span>
+              <span className="font-medium text-[11px] text-ink">
+                Grill &amp; Align <span className="text-[10px] text-coral font-normal">(Recommended)</span>
               </span>
             </label>
 
@@ -126,8 +127,8 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 onClick={onClearChat}
                 disabled={!selectedRepo || isExecutingTurn || isClearingChat}
                 isLoading={isClearingChat}
-                icon={<Trash2 className="w-3.5 h-3.5 text-slate-400" />}
-                className="text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 px-2 py-1"
+                icon={<Trash2 className="w-3.5 h-3.5 text-muted" />}
+                className="text-xs text-muted hover:text-coral px-2 py-1"
                 title="Clear chat history for this repository"
               >
                 Clear Chat
@@ -146,12 +147,12 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
                 isLoading={isRollingBack}
                 icon={
                   isInputLocked || isRollbackDisabled ? (
-                    <Lock className="w-3.5 h-3.5 text-slate-500" data-testid="composer-rollback-lock-icon" />
+                    <Lock className="w-3.5 h-3.5 text-muted" data-testid="composer-rollback-lock-icon" />
                   ) : (
-                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                    <RotateCcw className="w-3.5 h-3.5 text-muted" />
                   )
                 }
-                className="text-xs text-slate-400 hover:text-indigo-300 hover:bg-indigo-950/40 px-2 py-1"
+                className="text-xs text-muted hover:text-ink px-2 py-1"
                 title={
                   isExecutingTurn
                     ? "Cannot roll back turn while job is active"
@@ -165,9 +166,9 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
             {isChatCleared && (
               <span
                 data-testid="clear-chat-confirmation"
-                className="inline-flex items-center space-x-1 text-[11px] text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-900/50 px-2 py-0.5 rounded"
+                className="inline-flex items-center space-x-1 text-[11px] text-deep-green font-medium bg-pale-green border border-deep-green/20 px-2.5 py-0.5 rounded-pill"
               >
-                <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                <Check className="w-3 h-3 text-deep-green shrink-0" />
                 <span>Chat cleared</span>
               </span>
             )}

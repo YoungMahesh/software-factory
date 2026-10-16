@@ -6,7 +6,9 @@ export type BadgeVariant =
   | "success"
   | "danger"
   | "warning"
-  | "neutral";
+  | "neutral"
+  | "coral"
+  | "console";
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
@@ -14,17 +16,21 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 const variantClasses: Record<BadgeVariant, string> = {
   stage:
-    "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 uppercase border border-indigo-800",
+    "px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-primary text-white uppercase border border-hairline/40 tracking-wider",
   status:
-    "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-900 text-slate-300 border border-slate-800",
+    "px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-soft-stone text-ink border border-hairline",
   success:
-    "px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-800",
+    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-pale-green text-deep-green border border-deep-green/20",
   danger:
-    "px-2 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800",
+    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-coral/10 text-coral border border-coral/30",
   warning:
-    "px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800",
+    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200",
   neutral:
-    "px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700",
+    "px-2 py-0.5 rounded-pill text-[10px] font-medium bg-soft-stone text-ink border border-hairline",
+  coral:
+    "px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase bg-coral/10 text-coral border border-coral/30",
+  console:
+    "px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase bg-primary text-slate-200 border border-white/10",
 };
 
 export const Badge: React.FC<BadgeProps> = ({

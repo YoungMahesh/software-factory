@@ -56,19 +56,19 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
   return (
     <div
       id="modal-new-app"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-cohere-black/50 backdrop-blur-2xs p-4"
     >
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
-            <Plus className="w-4 h-4 text-indigo-400" />
+      <div className="w-full max-w-md bg-white border border-hairline rounded-[22px] p-6 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-hairline">
+          <h3 className="text-sm font-semibold text-ink font-sans flex items-center space-x-2">
+            <Plus className="w-4 h-4 text-primary" />
             <span>Create New App</span>
           </h3>
           <button
             id="btn-close-modal-x"
             type="button"
             onClick={handleClose}
-            className="text-slate-400 hover:text-slate-200 cursor-pointer"
+            className="text-muted hover:text-ink p-1 rounded-pill hover:bg-soft-stone transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -76,7 +76,7 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-ink mb-1">
               App Name (Repository) *
             </label>
             <Input
@@ -90,7 +90,7 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-ink mb-1">
               Description (Optional)
             </label>
             <Input
@@ -108,13 +108,13 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
               type="checkbox"
               checked={isPrivate}
               onChange={(e) => setIsPrivate(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer accent-indigo-600"
+              className="mt-0.5 h-4 w-4 rounded border-hairline bg-white text-primary focus:ring-form-focus cursor-pointer accent-primary"
             />
             <label htmlFor="input-new-app-private" className="cursor-pointer select-none">
-              <span className="block text-xs font-medium text-slate-200">
+              <span className="block text-xs font-medium text-ink">
                 Private repository
               </span>
-              <span className="block text-[11px] text-slate-400">
+              <span className="block text-[11px] text-muted">
                 Only accessible to members of the organization
               </span>
             </label>
@@ -123,7 +123,7 @@ export const NewAppModal: React.FC<NewAppModalProps> = ({
           {error && (
             <div
               id="new-app-error"
-              className="text-xs text-rose-400 bg-rose-950/40 border border-rose-900 p-2 rounded"
+              className="text-xs text-coral bg-coral/10 border border-coral/30 p-2.5 rounded-lg"
             >
               {error}
             </div>

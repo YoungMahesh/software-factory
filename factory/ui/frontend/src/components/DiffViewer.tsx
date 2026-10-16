@@ -48,12 +48,12 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   return (
     <div
       id={id}
-      className="diff-preview-card my-2 rounded-lg border border-slate-800 bg-slate-900/50 text-xs overflow-hidden transition-all duration-200"
+      className="diff-preview-card my-2 rounded-xl border border-white/10 bg-primary text-xs overflow-hidden transition-all duration-200 shadow-sm"
     >
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-slate-900/80 hover:bg-slate-800/80 text-left transition-colors border-b border-slate-800/60 focus:outline-none"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 bg-cohere-black/60 hover:bg-cohere-black text-left transition-colors border-b border-white/10 focus:outline-none cursor-pointer"
       >
         <div className="flex items-center space-x-2 truncate">
           <GitCompare className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -61,7 +61,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             {path}
           </span>
           {stage && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">
+            <span className="px-2 py-0.5 rounded-pill text-[10px] bg-cohere-black text-slate-300 font-mono border border-white/10">
               {stage}
             </span>
           )}
@@ -69,10 +69,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
         <div className="flex items-center space-x-3 shrink-0">
           <div className="flex items-center space-x-1.5 font-mono text-[11px]">
-            <span className="diff-additions text-emerald-400 font-medium">
+            <span className="diff-additions text-pale-green font-medium">
               +{additions}
             </span>
-            <span className="diff-deletions text-rose-400 font-medium">
+            <span className="diff-deletions text-coral font-medium">
               -{deletions}
             </span>
           </div>
@@ -85,17 +85,17 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       </button>
 
       {isExpanded && (
-        <div className="p-2 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-slate-950">
+        <div className="p-2 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-primary">
           {parsedLines.map((pl, idx) => {
             let lineClass = "text-slate-300 px-2 py-0.5";
             if (pl.type === "header") {
               lineClass = "text-slate-500 font-bold px-2 py-0.5";
             } else if (pl.type === "hunk") {
-              lineClass = "text-cyan-400/90 bg-cyan-950/20 px-2 py-0.5 my-0.5 rounded";
+              lineClass = "text-cyan-300 bg-white/5 px-2 py-0.5 my-0.5 rounded";
             } else if (pl.type === "addition") {
-              lineClass = "diff-addition text-emerald-400 bg-emerald-950/30 px-2 py-0.5 border-l-2 border-emerald-500";
+              lineClass = "diff-addition text-pale-green bg-pale-green/10 px-2 py-0.5 border-l-2 border-pale-green";
             } else if (pl.type === "deletion") {
-              lineClass = "diff-deletion text-rose-400 bg-rose-950/30 px-2 py-0.5 border-l-2 border-rose-500";
+              lineClass = "diff-deletion text-coral bg-coral/10 px-2 py-0.5 border-l-2 border-coral";
             }
 
             return (

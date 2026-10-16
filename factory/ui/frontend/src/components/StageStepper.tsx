@@ -41,7 +41,7 @@ export const StageStepper: React.FC<StageStepperProps> = ({ currentStage }) => {
   const currentIndex = getStageIndex(normalizedStage);
 
   return (
-    <div id="stage-stepper" className="w-full flex items-center justify-between py-2.5 px-3 bg-slate-900/60 rounded-lg border border-slate-800">
+    <div id="stage-stepper" className="w-full flex items-center justify-between py-2.5 px-3.5 bg-cohere-black/50 rounded-xl border border-white/10">
       {STAGES.map((s, idx) => {
         const isCompleted = currentIndex > idx || (currentIndex === 5 && idx === 5);
         const isActive = currentIndex === idx && currentIndex !== 5;
@@ -52,10 +52,10 @@ export const StageStepper: React.FC<StageStepperProps> = ({ currentStage }) => {
               <div
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-200 ${
                   isCompleted
-                    ? "bg-emerald-500 text-slate-950 font-black"
+                    ? "bg-pale-green text-deep-green font-black shadow-2xs"
                     : isActive
-                    ? "bg-indigo-600 text-white animate-pulse ring-2 ring-indigo-400/40"
-                    : "bg-slate-800 text-slate-400"
+                    ? "bg-white text-primary ring-2 ring-white/40 shadow-sm"
+                    : "bg-white/10 text-slate-400"
                 }`}
               >
                 {isCompleted ? (
@@ -69,10 +69,10 @@ export const StageStepper: React.FC<StageStepperProps> = ({ currentStage }) => {
               <span
                 className={`text-xs font-medium ${
                   isActive
-                    ? "text-indigo-300 font-semibold"
+                    ? "text-white font-semibold"
                     : isCompleted
                     ? "text-slate-200"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 {s.label}
@@ -82,7 +82,7 @@ export const StageStepper: React.FC<StageStepperProps> = ({ currentStage }) => {
             {idx < STAGES.length - 1 && (
               <div
                 className={`flex-1 h-0.5 mx-2 rounded transition-colors duration-200 ${
-                  currentIndex > idx ? "bg-emerald-500/70" : "bg-slate-800"
+                  currentIndex > idx ? "bg-pale-green/70" : "bg-white/10"
                 }`}
               />
             )}

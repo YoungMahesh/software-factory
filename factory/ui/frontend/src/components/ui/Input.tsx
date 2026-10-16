@@ -12,9 +12,11 @@ export const Input: React.FC<InputProps> = ({
   return (
     <input
       {...props}
-      className={`w-full bg-slate-950 border ${
-        error ? "border-rose-800 focus:ring-rose-500" : "border-slate-800 focus:ring-indigo-500"
-      } rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 transition-colors disabled:opacity-50 ${className}`}
+      className={`w-full bg-white border ${
+        error
+          ? "border-error focus:border-error focus:ring-error/20"
+          : "border-hairline focus:border-form-focus focus:ring-form-focus"
+      } rounded-lg px-3 py-2 text-xs text-ink placeholder-muted focus:outline-none focus:ring-1 transition-colors disabled:opacity-50 ${className}`}
     />
   );
 };

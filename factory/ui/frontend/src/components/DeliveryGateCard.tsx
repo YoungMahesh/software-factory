@@ -124,16 +124,16 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       data-testid="delivery-gate-card"
       className={`rounded-xl border ${
         isReverted
-          ? "border-slate-800 bg-slate-900/40 opacity-75"
-          : "border-indigo-900/60 bg-slate-900/80"
+          ? "border-white/10 bg-primary/80 opacity-75 text-slate-300"
+          : "border-white/20 bg-primary text-white"
       } p-4 space-y-3.5 shadow-sm text-xs ${className}`}
     >
       {/* Header: Title & Badges */}
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <GitPullRequest className="w-4 h-4 text-indigo-400 shrink-0" />
-            <span className="font-semibold text-slate-100 text-sm">
+            <GitPullRequest className="w-4 h-4 text-coral shrink-0" />
+            <span className="font-semibold text-white text-sm">
               {pr?.title || `Feature Pull Request #${pullNumber}`}
             </span>
             {pullNumber && (
@@ -152,7 +152,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
             <Badge
               data-testid="turn-reverted-badge"
               variant="neutral"
-              className="bg-slate-800 text-slate-400 border-slate-700"
+              className="bg-white/10 text-slate-400 border-white/10"
             >
               Reverted
             </Badge>
@@ -164,7 +164,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
               href={pr.html_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-slate-400 hover:text-indigo-300 transition-colors p-1"
+              className="text-slate-400 hover:text-white transition-colors p-1"
               title="View Pull Request on GitHub"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -183,7 +183,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
             {resolvedIssues.map((issue, idx) => (
               <span
                 key={idx}
-                className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-300"
+                className="flex items-center space-x-1 px-2.5 py-0.5 rounded-pill bg-cohere-black/70 border border-white/10 text-[11px] text-slate-200 font-mono"
               >
                 <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                 <span>{issue}</span>
@@ -196,12 +196,12 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       {/* Verifier Test Verdict */}
       <div
         data-testid="delivery-gate-verifier-verdict"
-        className="flex items-center space-x-2 p-2 rounded bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-300"
+        className="flex items-center space-x-2 p-2 rounded-lg bg-cohere-black/70 border border-white/10 text-[11px] text-slate-300"
       >
         {isTestPassed ? (
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
         ) : (
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          <AlertTriangle className="w-4 h-4 text-coral shrink-0" />
         )}
         <span className="font-medium text-slate-200">{testVerdictTitle}</span>
         <span className="text-slate-500">•</span>
@@ -214,12 +214,12 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       {hasConflict && (
         <div
           data-testid="delivery-gate-conflict-warning"
-          className="flex items-start space-x-2 p-2.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs"
+          className="flex items-start space-x-2 p-2.5 rounded-lg bg-coral/10 border border-coral/30 text-coral text-xs"
         >
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <div className="font-semibold text-rose-200">Merge Conflict Detected</div>
-            <div className="text-[11px] text-rose-300/90">
+            <div className="font-semibold text-coral">Merge Conflict Detected</div>
+            <div className="text-[11px] text-coral/90">
               Conflicts must be resolved on GitHub before merging into main.
             </div>
             {pr?.html_url && (
@@ -227,7 +227,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 href={pr.html_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center space-x-1 text-[11px] font-medium text-rose-300 underline hover:text-white"
+                className="inline-flex items-center space-x-1 text-[11px] font-medium text-coral underline hover:text-white"
               >
                 <span>Resolve conflicts on GitHub</span>
                 <ExternalLink className="w-3 h-3" />
@@ -239,23 +239,23 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
 
       {/* Error Banner */}
       {mergeError && (
-        <div className="p-2.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs">
+        <div className="p-2.5 rounded-lg bg-coral/10 border border-coral/30 text-coral text-xs">
           {mergeError}
         </div>
       )}
 
       {/* In-Studio Merge Control Action Area */}
-      <div className="pt-1 border-t border-slate-800/80">
+      <div className="pt-1 border-t border-white/10">
         {isMerged ? (
           <div className="flex items-center justify-between">
             <div
               data-testid="delivery-gate-merged-banner"
-              className="flex items-center space-x-2 py-1.5 px-3 rounded bg-purple-950/40 border border-purple-900/50 text-purple-300 font-medium"
+              className="flex items-center space-x-2 py-1.5 px-3 rounded-pill bg-pale-green text-deep-green border border-deep-green/20 font-medium text-xs"
             >
-              <GitMerge className="w-4 h-4 text-purple-400 shrink-0" />
+              <GitMerge className="w-4 h-4 text-deep-green shrink-0" />
               <span>Merged into main</span>
               {pr?.base_branch && (
-                <span className="text-slate-400 text-[11px] font-mono">
+                <span className="text-deep-green/70 text-[11px] font-mono">
                   ({pr.base_branch})
                 </span>
               )}
@@ -269,13 +269,14 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 disabled={true}
                 icon={<RotateCcw className="w-3.5 h-3.5" />}
                 title="Cannot roll back turn for a merged pull request"
+                className="text-slate-400"
               >
                 Roll Back Turn
               </Button>
             )}
           </div>
         ) : isConfirming ? (
-          <div className="p-3 rounded-lg bg-slate-950 border border-indigo-900/70 space-y-2.5">
+          <div className="p-3 rounded-lg bg-cohere-black/90 border border-white/10 space-y-2.5">
             <div className="text-slate-200 font-medium text-xs">
               Squash merge Feature Pull Request #{pullNumber} into main?
             </div>
@@ -292,6 +293,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 isLoading={mergeMutation.isPending}
                 disabled={mergeMutation.isPending}
                 icon={<GitMerge className="w-3.5 h-3.5" />}
+                className="bg-white hover:bg-soft-stone text-primary rounded-pill font-medium shadow-sm"
               >
                 Confirm Squash Merge
               </Button>
@@ -302,6 +304,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 size="sm"
                 onClick={() => setIsConfirming(false)}
                 disabled={mergeMutation.isPending}
+                className="text-slate-300"
               >
                 Cancel
               </Button>
@@ -317,7 +320,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
               ) : isDraft ? (
                 <span>PR is currently in Draft</span>
               ) : hasConflict ? (
-                <span className="text-rose-400">Blocked by merge conflicts</span>
+                <span className="text-coral">Blocked by merge conflicts</span>
               ) : isClosed ? (
                 <span className="text-slate-400">PR is closed</span>
               ) : (
@@ -337,9 +340,9 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                   onClick={() => onRollbackTurn(data)}
                   icon={
                     activeJobRunning ? (
-                      <Lock className="w-3.5 h-3.5" data-testid="delivery-gate-lock-icon" />
+                      <Lock className="w-3.5 h-3.5 text-slate-500" data-testid="delivery-gate-lock-icon" />
                     ) : (
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
                     )
                   }
                   title={
@@ -351,6 +354,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                       ? "This turn has already been reverted"
                       : "Roll back this turn"
                   }
+                  className="text-slate-300"
                 >
                   Roll Back Turn
                 </Button>
@@ -376,6 +380,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                     ? "Cannot merge a reverted turn"
                     : "Squash merge Feature Pull Request into main"
                 }
+                className="bg-white hover:bg-soft-stone text-primary rounded-pill font-medium shadow-sm"
               >
                 Merge into main
               </Button>

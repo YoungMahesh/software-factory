@@ -28,7 +28,7 @@ export const ToolChip: React.FC<ToolChipProps> = ({
       case "grep":
         return <Search className="w-3 h-3 text-purple-400 shrink-0" />;
       case "diff":
-        return <GitCompare className="w-3 h-3 text-indigo-400 shrink-0" />;
+        return <GitCompare className="w-3 h-3 text-coral shrink-0" />;
       case "bash":
       default:
         return <Terminal className="w-3 h-3 text-slate-400 shrink-0" />;
@@ -41,16 +41,15 @@ export const ToolChip: React.FC<ToolChipProps> = ({
     <button
       type="button"
       onClick={() => onClick && onClick(toolCallId)}
-      className="tool-chip inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800/80 hover:border-slate-700 transition-colors shadow-sm focus:outline-none"
+      className="tool-chip inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-primary hover:bg-cohere-black text-slate-200 border border-white/10 hover:border-white/20 transition-colors shadow-sm focus:outline-none cursor-pointer"
     >
       {getIcon()}
       <span className="truncate max-w-[280px]">{label}</span>
       {stage && (
-        <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400">
+        <span className="text-[9px] px-1 py-0.2 rounded bg-white/10 text-slate-300">
           {stage}
         </span>
       )}
     </button>
   );
 };
-

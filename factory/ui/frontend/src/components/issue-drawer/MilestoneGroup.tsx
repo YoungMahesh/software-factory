@@ -61,15 +61,15 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
       className="space-y-3"
     >
       {/* Milestone Header */}
-      <div className="relative flex items-center justify-between p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+      <div className="relative flex items-center justify-between p-3 rounded-xl bg-white border border-hairline shadow-2xs">
         <div className="flex items-center space-x-2.5">
-          <Layers className="w-4 h-4 text-indigo-400" />
+          <Layers className="w-4 h-4 text-primary" />
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-semibold text-slate-200">
+              <span className="text-xs font-semibold text-ink font-sans">
                 {milestone.title}{" "}
                 {milestone.number && (
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <span className="text-[10px] text-muted font-mono">
                     (#{milestone.number})
                   </span>
                 )}
@@ -83,7 +83,7 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
                     <Badge
                       data-testid={`milestone-pr-badge-${milestone.slug}`}
                       variant={badgeConfig.variant}
-                      className={`text-[10px] px-1.5 py-0.2 ${badgeConfig.className}`}
+                      className={`text-[10px] px-2 py-0.5 rounded-pill ${badgeConfig.className}`}
                     >
                       {badgeConfig.label}
                     </Badge>
@@ -93,7 +93,7 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
                         href={associatedPR.html_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-slate-400 hover:text-indigo-300 transition-colors p-0.5"
+                        className="text-muted hover:text-ink transition-colors p-0.5"
                         title={`View Pull Request #${associatedPR.number} on GitHub`}
                       >
                         <ExternalLink className="w-3 h-3" />
@@ -103,7 +103,7 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
                 );
               })()}
             </div>
-            <div className="text-[10px] text-slate-400 font-mono">
+            <div className="text-[10px] text-muted font-mono">
               {resolvedCount} / {totalCount} closed • {readyCount} ready
             </div>
           </div>
@@ -115,7 +115,7 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
             data-testid={`run-milestone-${milestone.slug}`}
             type="button"
             onClick={onTogglePopover}
-            className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-xs"
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-pill bg-primary hover:bg-cohere-black text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             title="Run entire milestone batch"
           >
             <Zap className="w-3 h-3 fill-current" />
@@ -126,32 +126,32 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
           {isPopoverOpen && (
             <div
               data-testid="milestone-batch-popover"
-              className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-20 space-y-3 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-white border border-hairline rounded-xl shadow-2xl z-20 space-y-3 animate-in fade-in zoom-in-95 duration-150 text-ink"
             >
-              <div className="text-xs font-semibold text-slate-200">
+              <div className="text-xs font-semibold text-ink font-sans">
                 Confirm Milestone Batch
               </div>
-              <div className="text-[11px] text-slate-400 space-y-1">
+              <div className="text-[11px] text-muted space-y-1">
                 <div>
                   Target branch:{" "}
-                  <span className="font-mono text-indigo-300 font-semibold">
+                  <span className="font-mono text-primary font-semibold">
                     factory/{milestone.slug}
                   </span>
                 </div>
-                <div className="text-[10px] font-mono text-slate-300 bg-slate-950 p-2 rounded border border-slate-800">
+                <div className="text-[10px] font-mono text-ink bg-soft-stone p-2 rounded-lg border border-hairline">
                   <div>• {totalCount} total</div>
-                  <div className="text-emerald-400">• {readyCount} ready</div>
-                  <div className="text-amber-400">• {blockedCount} blocked</div>
-                  {claimedCount > 0 && <div className="text-amber-300">• {claimedCount} claimed</div>}
-                  <div className="text-purple-400">• {resolvedCount} resolved</div>
+                  <div className="text-deep-green">• {readyCount} ready</div>
+                  <div className="text-coral">• {blockedCount} blocked</div>
+                  {claimedCount > 0 && <div className="text-ink">• {claimedCount} claimed</div>}
+                  <div className="text-primary">• {resolvedCount} resolved</div>
                 </div>
               </div>
-              <div className="flex items-center justify-end space-x-2 pt-1 border-t border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-1 border-t border-hairline">
                 <button
                   data-testid="cancel-batch-btn"
                   type="button"
                   onClick={onClosePopover}
-                  className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  className="px-3 py-1 rounded-pill text-xs text-muted hover:text-ink hover:bg-soft-stone transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -168,7 +168,7 @@ export const MilestoneGroup: React.FC<MilestoneGroupProps> = ({
                       allMilestoneIssues
                     )
                   }
-                  className="px-2.5 py-1 rounded text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+                  className="px-3 py-1 rounded-pill text-xs bg-primary hover:bg-cohere-black text-white font-semibold shadow-xs transition-colors cursor-pointer"
                 >
                   Confirm Batch
                 </button>
