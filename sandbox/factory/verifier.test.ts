@@ -459,3 +459,66 @@ test("verifyWorkspace: in Studio mode, runs discovered test and typecheck if com
   }
 });
 
+test("isDevServerCommand: correctly detects dev and server commands", async () => {
+  const { isDevServerCommand } = await import("./verifier.ts");
+  assert.strictEqual(isDevServerCommand("pnpm dev"), true);
+  assert.strictEqual(isDevServerCommand("pnpm run dev"), true);
+  assert.strictEqual(isDevServerCommand("npm run dev"), true);
+  assert.strictEqual(isDevServerCommand("yarn dev"), true);
+  assert.strictEqual(isDevServerCommand("bun dev"), true);
+  assert.strictEqual(isDevServerCommand("vite dev"), true);
+  assert.strictEqual(isDevServerCommand("npx vite dev"), true);
+  assert.strictEqual(isDevServerCommand("vite"), true);
+  assert.strictEqual(isDevServerCommand("pnpm start"), true);
+  assert.strictEqual(isDevServerCommand("npm start"), true);
+  assert.strictEqual(isDevServerCommand("pnpm serve"), true);
+  assert.strictEqual(isDevServerCommand("npm run serve"), true);
+  assert.strictEqual(isDevServerCommand("python -m http.server"), true);
+
+  assert.strictEqual(isDevServerCommand("pnpm test"), false);
+  assert.strictEqual(isDevServerCommand("pnpm run typecheck"), false);
+  assert.strictEqual(isDevServerCommand("tsc --noEmit"), false);
+  assert.strictEqual(isDevServerCommand("npm run lint"), false);
+  assert.strictEqual(isDevServerCommand("pytest"), false);
+});
+
+test("verifyWorkspace: filters out long-running dev server commands", async () => {
+  const dir = createTempDir();
+  try {
+    const result = await verifyWorkspace({
+      workspacePath: dir,
+      commands: [
+        "echo 'running typecheck'",
+        "echo 'running tests'",
+        "pnpm dev", // dev server command that must be stripped
+      ],
+    });
+
+    assert.strictEqual(result.passed, true);
+    assert.strictEqual(result.totalCommands, 2);
+    assert.strictEqual(result.passedCommands, 2);
+    const cmdList = result.results.map((r) => r.command);
+    assert.ok(cmdList.includes("echo 'running typecheck'"));
+    assert.ok(cmdList.includes("echo 'running tests'"));
+    assert.ok(!cmdList.some((c) => c.includes("pnpm dev")));
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+
+test("runCommand: enforces timeoutMs and terminates long-running process", async () => {
+  const dir = createTempDir();
+  try {
+    const result = await runCommand("sleep 5", {
+      cwd: dir,
+      timeoutMs: 200,
+    });
+
+    assert.strictEqual(result.passed, false);
+    assert.strictEqual(result.timedOut, true);
+    assert.ok(result.error && result.error.includes("timed out after 200ms"));
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+

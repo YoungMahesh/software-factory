@@ -5,6 +5,7 @@ import {
   PlanParseError,
   ReviewParseError,
 } from "./types.ts";
+import { isDevServerCommand } from "../verifier.ts";
 
 /**
  * Parses an implementation plan from JSON or markdown text.
@@ -31,7 +32,11 @@ export function parseImplementationPlan(
           : [];
         const rawCmds = parsed.testCommands ?? parsed.test_commands ?? parsed.tests ?? parsed.commands;
         const testCommands = Array.isArray(rawCmds)
-          ? rawCmds.map(String).map((c: string) => c.trim()).filter(Boolean)
+          ? rawCmds
+              .map(String)
+              .map((c: string) => c.trim())
+              .filter(Boolean)
+              .filter((c: string) => !isDevServerCommand(c))
           : [];
         const rawSteps = parsed.steps ?? parsed.tasks ?? parsed.plan;
         const steps = Array.isArray(rawSteps)
@@ -51,7 +56,7 @@ export function parseImplementationPlan(
             throw new PlanParseError("Implementation plan must specify at least one affected file in affectedFiles.");
           }
           if (testCommands.length === 0) {
-            throw new PlanParseError("Implementation plan must specify at least one test command in testCommands.");
+            throw new PlanParseError("Implementation plan must specify at least one valid non-daemon test command in testCommands.");
           }
           return {
             ticketId,
@@ -123,7 +128,7 @@ export function parseImplementationPlan(
       const lines = blockMatch[1].split("\n");
       for (const line of lines) {
         const cmd = line.trim();
-        if (cmd && !cmd.startsWith("#")) {
+        if (cmd && !cmd.startsWith("#") && !isDevServerCommand(cmd)) {
           testCommands.push(cmd);
         }
       }
@@ -131,7 +136,7 @@ export function parseImplementationPlan(
       const lines = testsMatch[1].split("\n");
       for (const line of lines) {
         const cleaned = line.replace(/^[-*+]\s*/, "").replace(/^`|`$/g, "").trim();
-        if (cleaned && !cleaned.startsWith("#")) {
+        if (cleaned && !cleaned.startsWith("#") && !isDevServerCommand(cleaned)) {
           testCommands.push(cleaned);
         }
       }
@@ -143,7 +148,7 @@ export function parseImplementationPlan(
     const cmdMatches = trimmed.matchAll(/`(npm\s+test|pnpm\s+test|node\s+--[^`]+|pytest[^`]*)`/g);
     for (const match of cmdMatches) {
       const cmd = match[1].trim();
-      if (!testCommands.includes(cmd)) {
+      if (!isDevServerCommand(cmd) && !testCommands.includes(cmd)) {
         testCommands.push(cmd);
       }
     }

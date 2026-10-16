@@ -235,6 +235,7 @@ export async function runTicketLifecycle(
       commands: plan.testCommands && plan.testCommands.length > 0 ? plan.testCommands : undefined,
       logPath: verifierLogPath,
       studioMode: options.studio ?? (process.env.STUDIO_MODE === "1"),
+      timeoutMs: 60_000,
     });
     lastVerification = verification;
 

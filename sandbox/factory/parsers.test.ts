@@ -270,3 +270,38 @@ I reviewed the code, but I am not sure what verdict to give. It looks okay maybe
   );
 });
 
+test("parseImplementationPlan: filters out dev server commands from testCommands", () => {
+  const jsonContent = `
+\`\`\`json
+{
+  "ticketId": "01",
+  "summary": "Build feature",
+  "affectedFiles": ["src/App.tsx"],
+  "testCommands": ["pnpm test", "pnpm dev", "vite dev"],
+  "steps": ["1. Write code"]
+}
+\`\`\`
+`;
+  const plan = parseImplementationPlan(jsonContent, "01");
+  assert.deepEqual(plan.testCommands, ["pnpm test"]);
+});
+
+test("parseImplementationPlan: throws PlanParseError if testCommands only contains dev server commands", () => {
+  const jsonContent = `
+\`\`\`json
+{
+  "ticketId": "01",
+  "summary": "Build feature",
+  "affectedFiles": ["src/App.tsx"],
+  "testCommands": ["pnpm dev", "npm run dev"],
+  "steps": ["1. Write code"]
+}
+\`\`\`
+`;
+  assert.throws(
+    () => parseImplementationPlan(jsonContent, "01"),
+    PlanParseError
+  );
+});
+
+

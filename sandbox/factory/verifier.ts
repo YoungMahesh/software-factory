@@ -65,6 +65,24 @@ export function isBuildCommand(command: string): boolean {
   );
 }
 
+/**
+ * Checks whether a command launches an interactive or long-running development server.
+ * Automated verification stages must never execute dev servers.
+ */
+export function isDevServerCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (/\b(test|jest|vitest|pytest|mocha|playwright|cypress)\b/i.test(trimmed)) {
+    return false;
+  }
+  return (
+    /\b(pnpm|npm|yarn|bun)\s+(run\s+)?(dev|start|serve)(:[a-zA-Z0-9_-]+)?\b/i.test(trimmed) ||
+    /\b(npx\s+)?(vite|next|astro|webpack|turbo|rollup|esbuild)\s+(dev|start|serve)\b/i.test(trimmed) ||
+    /^\s*(pnpm\s+)?vite(\s+--[a-zA-Z0-9_-]+)*\s*$/i.test(trimmed) ||
+    /\b(python|python3)\s+-m\s+http\.server\b/i.test(trimmed) ||
+    /^\s*(dev|serve)\s*$/i.test(trimmed)
+  );
+}
+
 export interface VerificationResult {
   passed: boolean;
   totalCommands: number;
@@ -169,6 +187,7 @@ function attachStreamListener(
 
 export async function runCommand(command: string, options: RunCommandOptions): Promise<CommandResult> {
   const startTime = Date.now();
+  const timeoutMs = options.timeoutMs ?? 60_000;
 
   return new Promise<CommandResult>((resolve) => {
     let stdout = "";
@@ -225,14 +244,14 @@ export async function runCommand(command: string, options: RunCommandOptions): P
       }
     };
 
-    if (options.timeoutMs && options.timeoutMs > 0) {
+    if (timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
         killProcessGroup("SIGTERM");
         killTimer = setTimeout(() => {
           killProcessGroup("SIGKILL");
         }, 500);
-      }, options.timeoutMs);
+      }, timeoutMs);
     }
 
     attachStreamListener(child.stdout, "stdout", options, (text) => {
@@ -273,7 +292,7 @@ export async function runCommand(command: string, options: RunCommandOptions): P
       let error: string | undefined;
 
       if (timedOut) {
-        error = `Command timed out after ${options.timeoutMs}ms`;
+        error = `Command timed out after ${timeoutMs}ms`;
       }
 
       resolve({
@@ -342,13 +361,22 @@ export async function verifyWorkspace(options: VerifyWorkspaceOptions): Promise<
   const startTime = Date.now();
   const failFast = options.failFast ?? true;
   const isStudioMode = options.studioMode ?? (process.env.STUDIO_MODE === "1");
+  const timeoutMs = options.timeoutMs ?? 60_000;
 
   // Determine commands: respect explicit commands array if provided, otherwise discover
   const baseCommands = options.commands !== undefined ? options.commands : discoverCommands(options.workspacePath).all;
-  let commands = isStudioMode ? baseCommands.filter((cmd) => !isBuildCommand(cmd)) : baseCommands;
-  if (isStudioMode && options.commands !== undefined && commands.length === 0) {
-    commands = discoverCommands(options.workspacePath).all.filter((cmd) => !isBuildCommand(cmd));
+  let validCommands = baseCommands.filter((cmd) => !isDevServerCommand(cmd));
+  if (isStudioMode) {
+    validCommands = validCommands.filter((cmd) => !isBuildCommand(cmd));
   }
+  if (options.commands !== undefined && validCommands.length === 0) {
+    let fallback = discoverCommands(options.workspacePath).all.filter((cmd) => !isDevServerCommand(cmd));
+    if (isStudioMode) {
+      fallback = fallback.filter((cmd) => !isBuildCommand(cmd));
+    }
+    validCommands = fallback;
+  }
+  const commands = validCommands;
 
   if (commands.length === 0) {
     const durationMs = Date.now() - startTime;
@@ -390,7 +418,7 @@ export async function verifyWorkspace(options: VerifyWorkspaceOptions): Promise<
 
     const result = await runCommand(command, {
       cwd: options.workspacePath,
-      timeoutMs: options.timeoutMs,
+      timeoutMs,
       env: options.env,
       onStream: options.onStream,
       streamToProcess: options.streamToProcess,

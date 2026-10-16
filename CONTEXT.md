@@ -216,7 +216,7 @@ The execution agent that consumes the plan and ticket, writes implementation and
 _Avoid_: Developer agent, worker agent, programmer
 
 **Deterministic Verifier**:
-A non-agentic test execution stage that runs the target repository's automated test suites and captures exact exit codes and output logs.
+A non-agentic test execution stage that runs the target repository's automated test suites with bounded execution timeouts (60 seconds default) and captures exact exit codes and output logs. Strictly enforces non-interactive execution by filtering out long-running dev servers (`dev`, `serve`, `start`) and production builds that collide with active studio servers.
 _Avoid_: Test agent, verification bot, QA agent
 
 **Reviewer Agent**:
