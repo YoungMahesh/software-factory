@@ -24,9 +24,9 @@ Single-context layout: `CONTEXT.md` and `docs/adr/` at root. See `docs/agents/do
 
 ## Code standards
 
-### Production file line budget and ratchet
+### Universal file line budget and ratchet
 
-- **Limit**: Production code files (`.py`, `.ts`, `.tsx`, `.js`) in this repository must not exceed 500 physical lines (`wc -l`).
-- **Exemptions**: Automated test files (`tests/`, `*.test.ts`, `*.test.tsx`) and shell scripts (`.sh`) are exempt.
-- **Decomposition pattern**: Decompose large files into directory modules with private internal files behind a single small public interface (`__init__.py` or `index.ts`), adhering to deep module principles ([`.agents/skills/codebase-design/SKILL.md`](.agents/skills/codebase-design/SKILL.md)). Do not create shallow pass-through modules.
-- **Ratchet on legacy files**: Any newly created production file must be <= 500 lines. Any modified legacy production file currently > 500 lines must not increase in line count (`net_lines_added <= 0`). See [`docs/adr/0051-production-file-line-budget-and-ratchet.md`](docs/adr/0051-production-file-line-budget-and-ratchet.md).
+- **Limit**: All production code files and executable automated test files (`.py`, `.ts`, `.tsx`, `.js`) in this repository must not exceed 500 physical lines (`wc -l`).
+- **Exemptions**: Shell scripts (`.sh`) and external static fixture data files (e.g. raw JSON fixtures, plain text data files, and environment templates) are exempt.
+- **Decomposition pattern**: Decompose large files into directory modules with private internal files behind a single small public interface (`__init__.py` or `index.ts`), adhering to deep module principles ([`.agents/skills/codebase-design/SKILL.md`](.agents/skills/codebase-design/SKILL.md)). Test suites approaching or exceeding 500 lines must be decomposed into modular directory packages or subsystem test modules. Do not create shallow pass-through modules.
+- **Ratchet on legacy files**: Any newly created production or test file must be <= 500 lines. Any modified legacy file currently > 500 lines must not increase in line count (`net_lines_added <= 0`). See [`docs/adr/0051-production-file-line-budget-and-ratchet.md`](docs/adr/0051-production-file-line-budget-and-ratchet.md) and [`docs/adr/0057-universal-file-line-budget-and-test-suite-decomposition.md`](docs/adr/0057-universal-file-line-budget-and-test-suite-decomposition.md).

@@ -328,3 +328,11 @@ _Avoid_: Auto-pull, git sync daemon, background fetcher, main updater
 The atomic reversal of a completed code-producing conversational turn in Factory Studio, reverting its feature branch commit, synchronizing the Unified Studio Sandbox dev server in place, reopening the associated work item, and recording an append-only rollback event in Studio Chat History.
 _Avoid_: Undo turn, revert version, turn reset, conversational rewind
 
+**Universal File Line Budget**:
+A repository-wide size constraint requiring every production source file and executable automated test file to contain no more than 500 physical lines (`wc -l`).
+_Avoid_: File size limit, code line limit, test budget, 500-line rule
+
+**Test Suite Decomposition**:
+The structural partitioning of a monolithic test file into a modular directory package or focused subsystem test modules adhering to deep module principles without altering test coverage.
+_Avoid_: Test splitting, test refactor, test slicing, test modularization
+
