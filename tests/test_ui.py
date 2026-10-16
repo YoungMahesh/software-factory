@@ -2808,6 +2808,12 @@ class TestTargetRepoScaffolding(unittest.TestCase):
         self.assertTrue(any("tdd" in f for f in skill_files))
         self.assertTrue(any("domain-modeling" in f for f in skill_files))
 
+        # Check routing conventions reference src/routes/ instead of legacy app/routes/
+        self.assertIn("src/routes/", files["CONTEXT.md"])
+        self.assertNotIn("app/routes/", files["CONTEXT.md"])
+        self.assertIn("src/routes/", files["docs/adr/0001-tanstack-start-spa-architecture.md"])
+        self.assertNotIn("app/routes/", files["docs/adr/0001-tanstack-start-spa-architecture.md"])
+
     def test_scaffold_target_repo_success(self):
         from factory.ui.scaffold import scaffold_target_repo
 

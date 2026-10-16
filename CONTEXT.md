@@ -288,6 +288,10 @@ _Avoid_: Silent fallback, mock error, failed message
 The suite of Matt Pocock engineering skills (`.agents/skills/`), domain glossary (`CONTEXT.md`), architectural records (`docs/adr/`), and agent configurations (`docs/agents/`) scaffolded into every application developed on the Software Factory.
 _Avoid_: Target skills, repo configs, agent templates
 
+**Canonical Template Repository**:
+The reference GitHub repository (`software-factory-09-test/tanstack-start-template`) providing a minimal, unencumbered TanStack Start SPA starter used as the baseline for instantiating new applications in Factory Studio.
+_Avoid_: Base repo, default repo, starter repo, app seed
+
 **Template Provisioning Readiness**:
 The operational state of a newly generated GitHub repository where asynchronous template file replication has completed, establishing a valid HEAD commit and default branch reference (`main`) before Target Project Skills and architectural decision records are committed.
 _Avoid_: Repo ready, git sync, template wait, repo bootstrap status

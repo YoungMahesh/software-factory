@@ -30,7 +30,7 @@ A modern single-page frontend application powered by TanStack Start router, Vite
 _Avoid_: Next.js app, Remix app, Vue app
 
 **Route Tree**:
-File-based hierarchical routing defined under `app/routes/` with typed loaders and search parameter validation.
+File-based hierarchical routing defined under `src/routes/` with typed loaders and search parameter validation.
 _Avoid_: React router switch, custom router, dynamic route table
 
 **Client State**:
@@ -60,7 +60,7 @@ To provide a resilient, responsive, and type-safe frontend experience, we decide
 
 ## Consequences
 
-- The application uses TanStack Start file-based routing located under `app/routes/`.
+- The application uses TanStack Start file-based routing located under `src/routes/`.
 - Styling is implemented using Tailwind CSS utility classes.
 - All routing and data fetching must use TanStack Start loaders and type-safe navigation.
 - Code modifications must preserve file-based route conventions and avoid introducing contradictory routing libraries.
