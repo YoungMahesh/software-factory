@@ -11,6 +11,13 @@ import {
   runReviewerAgent,
 } from "./harness.ts";
 import {
+  loadPromptTemplate,
+  renderPromptTemplate,
+  PLANNER_SYSTEM_PROMPT,
+  CODER_SYSTEM_PROMPT,
+  REVIEWER_SYSTEM_PROMPT,
+} from "./harness/prompts.ts";
+import {
   LeastPrivilegeViolationError,
   createRoleTools,
 } from "./tools.ts";
@@ -601,4 +608,42 @@ test("runReviewerAgent: enforces rejection if standardsCompliance failed even if
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("loadPromptTemplate: loads markdown prompt file for planner, coder, and reviewer", () => {
+  assert.ok(PLANNER_SYSTEM_PROMPT.includes("Planner Agent in the Software Factory assembly line"));
+  assert.ok(PLANNER_SYSTEM_PROMPT.includes('"ticketId": "<ticket-id>"'));
+  assert.ok(CODER_SYSTEM_PROMPT.includes("Coder Agent in the Software Factory assembly line"));
+  assert.ok(REVIEWER_SYSTEM_PROMPT.includes("Reviewer Agent in the Software Factory assembly line"));
+  assert.ok(REVIEWER_SYSTEM_PROMPT.includes('"verdict": "approved" | "rejected"'));
+});
+
+test("loadPromptTemplate: caches loaded prompt templates and supports reload", () => {
+  const loaded1 = loadPromptTemplate("planner_system");
+  const loaded2 = loadPromptTemplate("planner_system");
+  assert.equal(loaded1, loaded2);
+
+  const reloaded = loadPromptTemplate("planner_system", true);
+  assert.equal(reloaded, loaded1);
+});
+
+test("loadPromptTemplate: throws descriptive error for missing template", () => {
+  assert.throws(
+    () => loadPromptTemplate("non_existent_prompt_template_xyz"),
+    (err: any) =>
+      err instanceof Error &&
+      err.message.includes("non_existent_prompt_template_xyz") &&
+      err.message.includes("not found")
+  );
+});
+
+test("renderPromptTemplate: substitutes double-curly brace variables and leaves unreferenced/json braces intact", () => {
+  const rendered = renderPromptTemplate("planner_system", {
+    custom_var: "custom_value",
+  });
+  // Unaltered JSON schemas with single curly braces remain intact
+  assert.ok(rendered.includes('"ticketId": "<ticket-id>"'));
+  assert.ok(rendered.includes("Planner Agent"));
+});
+
+
 

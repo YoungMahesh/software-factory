@@ -819,5 +819,121 @@ class TestCodebaseGrounding(unittest.IsolatedAsyncioTestCase):
             self.assertIn("export function Footer()", system_instruction)
 
 
+class TestPromptTemplates(unittest.TestCase):
+    """Test loading and rendering of externalized Markdown prompt templates."""
+
+    def test_load_prompt_template_success(self):
+        from factory.ui.grill._prompts import load_prompt_template
+
+        template = load_prompt_template("grilling_assistant", reload=True)
+        self.assertIn("Factory Studio Grilling Assistant", template)
+        self.assertIn("{{repo}}", template)
+        self.assertIn("{{context_content}}", template)
+        self.assertIn("{{existing_adrs}}", template)
+        self.assertIn("{{formatted_structure}}", template)
+        self.assertIn("{{formatted_sources}}", template)
+        # Ensure raw JSON schemas have unescaped single braces
+        self.assertIn('{\n  "type": "grill_round"', template)
+
+    def test_load_prompt_template_cached(self):
+        from factory.ui.grill._prompts import load_prompt_template
+
+        tmpl1 = load_prompt_template("grilling_assistant", reload=True)
+        with patch("pathlib.Path.read_text") as mock_read:
+            tmpl2 = load_prompt_template("grilling_assistant")
+            mock_read.assert_not_called()
+            self.assertEqual(tmpl1, tmpl2)
+
+    def test_load_prompt_template_reload_bypasses_cache(self):
+        from factory.ui.grill._prompts import load_prompt_template
+
+        load_prompt_template("grilling_assistant", reload=True)
+        with patch("pathlib.Path.read_text", return_value="Reloaded template {{repo}}") as mock_read:
+            reloaded = load_prompt_template("grilling_assistant", reload=True)
+            mock_read.assert_called_once()
+            self.assertEqual(reloaded, "Reloaded template {{repo}}")
+
+    def test_load_prompt_template_missing_file_raises_filenotfound(self):
+        from factory.ui.grill._prompts import load_prompt_template
+
+        with self.assertRaises(FileNotFoundError) as ctx:
+            load_prompt_template("non_existent_prompt_template_xyz", reload=True)
+        self.assertIn("non_existent_prompt_template_xyz", str(ctx.exception))
+
+    def test_render_prompt_template(self):
+        from factory.ui.grill._prompts import render_prompt_template
+
+        rendered = render_prompt_template(
+            "grilling_assistant",
+            {
+                "repo": "sample-repo",
+                "context_content": "Context information",
+                "existing_adrs": '["0001-init.md"]',
+                "formatted_structure": "src/index.ts",
+                "formatted_sources": "console.log('hello');",
+            },
+            reload=True,
+        )
+        self.assertIn("Factory Studio Grilling Assistant for the repository 'sample-repo'", rendered)
+        self.assertIn("Context information", rendered)
+        self.assertIn('["0001-init.md"]', rendered)
+        self.assertIn("src/index.ts", rendered)
+        self.assertIn("console.log('hello');", rendered)
+        # Unescaped JSON schemas remain valid
+        self.assertIn('{\n  "type": "grill_round"', rendered)
+        self.assertNotIn("{{repo}}", rendered)
+
+    def test_build_system_instruction_uses_rendered_template(self):
+        from factory.ui.grill._inference import build_system_instruction
+
+        instruction = build_system_instruction(
+            repo="my-custom-app",
+            context_content="Custom app context",
+            existing_adrs=["0001-setup.md", "0002-feature.md"],
+            formatted_structure="app/routes/index.tsx",
+            formatted_sources="export function Route() {}",
+        )
+        self.assertIn("Factory Studio Grilling Assistant for the repository 'my-custom-app'", instruction)
+        self.assertIn("Custom app context", instruction)
+        self.assertIn('["0001-setup.md", "0002-feature.md"]', instruction)
+        self.assertIn("app/routes/index.tsx", instruction)
+        self.assertIn("export function Route() {}", instruction)
+        self.assertIn('{\n  "type": "grill_round"', instruction)
+        self.assertNotIn("{{repo}}", instruction)
+
+    def test_build_system_instruction_caches_appropriately(self):
+        from factory.ui.grill._inference import build_system_instruction
+        from factory.ui.grill._prompts import load_prompt_template
+
+        load_prompt_template("grilling_assistant", reload=True)
+        with patch("pathlib.Path.read_text") as mock_read:
+            instruction = build_system_instruction(
+                repo="cached-app",
+                context_content="ctx",
+                existing_adrs=[],
+                formatted_structure="",
+                formatted_sources="",
+            )
+            mock_read.assert_not_called()
+            self.assertIn("cached-app", instruction)
+
+    def test_build_system_instruction_missing_template_raises_filenotfound(self):
+        from factory.ui.grill._inference import build_system_instruction
+
+        with patch("factory.ui.grill._prompts.PROMPTS_DIR", Path("/nonexistent/directory/prompts")), \
+             patch("factory.ui.grill._prompts._PROMPT_CACHE", {}):
+            with self.assertRaises(FileNotFoundError) as ctx:
+                build_system_instruction(
+                    repo="my-app",
+                    context_content="ctx",
+                    existing_adrs=[],
+                    formatted_structure="",
+                    formatted_sources="",
+                )
+            self.assertIn("grilling_assistant", str(ctx.exception))
+
+
+
+
 
 

@@ -280,6 +280,10 @@ _Avoid_: Universal ADR, mandatory ADR, indiscriminate ADR
 A classification heuristic (`deletion`, `component_modification`, `styling`, `new_feature`) used by the Grilling Assistant to tailor interview questions to the developer's intent and prevent irrelevant routing or architectural proposals.
 _Avoid_: Prompt category, intent tag, prompt type
 
+**Externalized Prompt Templates**:
+Dedicated, version-controlled markdown files (`.md`) colocated within their execution runtime directories (`factory/ui/grill/prompts/` and `sandbox/factory/harness/prompts/`) that define LLM system personas, operational constraints, and JSON schemas, parsed with double-curly brace (`{{variable}}`) substitution and cached in memory to eliminate string escaping collisions with JSON schemas and prevent code file bloat.
+_Avoid_: Hardcoded prompts, inline prompt strings, prompt constants, raw prompt templates
+
 **Inference Error Turn**:
 An explicit conversational turn emitted when remote LLM inference encounters a network, authentication, or provider failure, persisted to Studio Chat History and rendered with diagnostic details and a retry trigger instead of silently falling back to mock responses.
 _Avoid_: Silent fallback, mock error, failed message

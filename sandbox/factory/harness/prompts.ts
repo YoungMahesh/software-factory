@@ -1,55 +1,60 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROMPTS_DIR = path.resolve(__dirname, "prompts");
+
+const promptCache = new Map<string, string>();
+
+/**
+ * Loads a markdown prompt template from the prompts directory, caching it in memory.
+ *
+ * @param name - Template name (e.g. "planner_system" or "planner_system.md")
+ * @param reload - Whether to bypass the cache and reload from disk
+ * @returns The prompt template string
+ * @throws Error if the template file does not exist
+ */
+export function loadPromptTemplate(name: string, reload: boolean = false): string {
+  const cleanName = name.endsWith(".md") ? name.slice(0, -3) : name;
+  if (!reload && promptCache.has(cleanName)) {
+    return promptCache.get(cleanName)!;
+  }
+
+  const filePath = path.resolve(PROMPTS_DIR, `${cleanName}.md`);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Prompt template '${cleanName}' not found at ${filePath}`);
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  promptCache.set(cleanName, content);
+  return content;
+}
+
+/**
+ * Renders a prompt template with {{variable}} substitution.
+ *
+ * @param name - Template name
+ * @param variables - Variables to interpolate
+ * @param reload - Whether to reload the template from disk
+ * @returns Rendered prompt string
+ */
+export function renderPromptTemplate(
+  name: string,
+  variables?: Record<string, string>,
+  reload: boolean = false
+): string {
+  const template = loadPromptTemplate(name, reload);
+  if (!variables) {
+    return template;
+  }
+  return template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, varName) => {
+    return Object.hasOwn(variables, varName) ? variables[varName] : match;
+  });
+}
+
 // System prompts per specialized role
-export const PLANNER_SYSTEM_PROMPT = `You are the Planner Agent in the Software Factory assembly line.
-Your role is strictly read-only: inspect the target repository workspace using file viewing, search, and directory navigation tools (read, grep, find, ls).
-You must analyze the work item, feature specification, domain documentation (CONTEXT.md), and accepted Architectural Decision Records (docs/adr/).
-You must ensure the planned implementation adheres strictly to all accepted ADRs and repo standards.
-You must generate a clear, structured implementation plan specifying:
-1. Affected files (explicit paths that must be created or modified)
-2. Test commands (explicit automated verification commands, e.g. "pnpm test", "pytest"). Test commands MUST be non-interactive, terminating test/lint/typecheck suites. NEVER specify dev servers, daemon commands, or manual verification steps (e.g. strictly do NOT include "pnpm dev", "npm run dev", "vite", or "python -m http.server").
-3. Step-by-step implementation instructions
-
-Always provide your plan containing a JSON block:
-\`\`\`json
-{
-  "ticketId": "<ticket-id>",
-  "summary": "<high-level summary>",
-  "affectedFiles": ["path/to/file1.ts", "path/to/file2.ts"],
-  "testCommands": ["command to test"],
-  "steps": ["1. ...", "2. ..."],
-  "rationale": "<design decisions and alignment with ADRs>"
-}
-\`\`\``;
-
-export const CODER_SYSTEM_PROMPT = `You are the Coder Agent in the Software Factory assembly line.
-Your role is to implement changes, reproduction tests, and documentation according to the ticket specification and the implementation plan.
-You have read, write, edit, bash, and git diff capabilities.
-Implement minimal, robust changes adhering to the repository's coding standards.
-Execute tests via bash when verifying your work.`;
-
-export const REVIEWER_SYSTEM_PROMPT = `You are the Reviewer Agent in the Software Factory assembly line.
-Your role is strictly read-only: inspect git diffs, tickets, plans, and repository standards using read, grep, find, ls, and diff inspection tools.
-You MUST evaluate whether the changes satisfy the ticket specification and repo standards.
-Under standardsCompliance, you MUST verify that code changes adhere strictly to accepted Architectural Decision Records in docs/adr/. If any code change contradicts or violates an accepted ADR, you MUST mark standardsCompliance as failed and set verdict to "rejected".
-You must emit a structured review verdict in a JSON block:
-\`\`\`json
-{
-  "verdict": "approved" | "rejected",
-  "summary": "<summary of review>",
-  "specCompliance": {
-    "passed": true | false,
-    "details": "<assessment against acceptance criteria>"
-  },
-  "standardsCompliance": {
-    "passed": true | false,
-    "details": "<assessment against coding standards and accepted ADRs in docs/adr/>"
-  },
-  "issues": [
-    {
-      "severity": "blocker" | "warning" | "suggestion",
-      "description": "<issue details>",
-      "file": "<optional file path>"
-    }
-  ],
-  "remediation": "<actionable instructions if rejected>"
-}
-\`\`\``;
+export const PLANNER_SYSTEM_PROMPT = loadPromptTemplate("planner_system");
+export const CODER_SYSTEM_PROMPT = loadPromptTemplate("coder_system");
+export const REVIEWER_SYSTEM_PROMPT = loadPromptTemplate("reviewer_system");
