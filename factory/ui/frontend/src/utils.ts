@@ -180,33 +180,33 @@ export function getPullRequestBadgeConfig(status: PullRequestStatus): PullReques
     case "merged":
       return {
         label: "Merged",
-        variant: "stage",
-        className: "bg-purple-950/80 text-purple-300 border-purple-800",
+        variant: "purple",
+        className: "",
       };
     case "conflict":
       return {
         label: "Conflict",
         variant: "danger",
-        className: "bg-rose-950/80 text-rose-300 border-rose-800",
+        className: "",
       };
     case "draft":
       return {
         label: "Draft",
         variant: "warning",
-        className: "bg-amber-950/80 text-amber-300 border-amber-800",
+        className: "",
       };
     case "closed":
       return {
         label: "Closed",
         variant: "neutral",
-        className: "bg-slate-800/80 text-slate-300 border-slate-700",
+        className: "",
       };
     case "ready_for_review":
     default:
       return {
         label: "Ready for Review",
         variant: "success",
-        className: "bg-emerald-950/80 text-emerald-300 border-emerald-800",
+        className: "",
       };
   }
 }

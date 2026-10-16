@@ -232,32 +232,32 @@ describe("getPullRequestBadgeConfig", () => {
   it("returns correct labels and variants for each PullRequestStatus", () => {
     expect(getPullRequestBadgeConfig("merged")).toEqual({
       label: "Merged",
-      variant: "stage",
-      className: "bg-purple-950/80 text-purple-300 border-purple-800",
+      variant: "purple",
+      className: "",
     });
 
     expect(getPullRequestBadgeConfig("conflict")).toEqual({
       label: "Conflict",
       variant: "danger",
-      className: "bg-rose-950/80 text-rose-300 border-rose-800",
+      className: "",
     });
 
     expect(getPullRequestBadgeConfig("draft")).toEqual({
       label: "Draft",
       variant: "warning",
-      className: "bg-amber-950/80 text-amber-300 border-amber-800",
+      className: "",
     });
 
     expect(getPullRequestBadgeConfig("closed")).toEqual({
       label: "Closed",
       variant: "neutral",
-      className: "bg-slate-800/80 text-slate-300 border-slate-700",
+      className: "",
     });
 
     expect(getPullRequestBadgeConfig("ready_for_review")).toEqual({
       label: "Ready for Review",
       variant: "success",
-      className: "bg-emerald-950/80 text-emerald-300 border-emerald-800",
+      className: "",
     });
   });
 });

@@ -8,7 +8,8 @@ export type BadgeVariant =
   | "warning"
   | "neutral"
   | "coral"
-  | "console";
+  | "console"
+  | "purple";
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
@@ -24,7 +25,9 @@ const variantClasses: Record<BadgeVariant, string> = {
   danger:
     "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-coral/10 text-coral border border-coral/30",
   warning:
-    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200",
+    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-amber-100 text-amber-900 border border-amber-200",
+  purple:
+    "px-2.5 py-0.5 rounded-pill text-[10px] font-medium bg-purple-50 text-purple-800 border border-purple-200",
   neutral:
     "px-2 py-0.5 rounded-pill text-[10px] font-medium bg-soft-stone text-ink border border-hairline",
   coral:

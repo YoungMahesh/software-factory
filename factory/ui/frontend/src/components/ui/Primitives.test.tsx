@@ -140,6 +140,16 @@ describe("Cohere Editorial Design System Micro-UI Primitives", () => {
       const successBadge = screen.getByText("Passing");
       expect(successBadge.className).toContain("bg-pale-green");
       expect(successBadge.className).toContain("text-deep-green");
+
+      rerender(<Badge variant="warning">Draft</Badge>);
+      const warningBadge = screen.getByText("Draft");
+      expect(warningBadge.className).toContain("bg-amber-100");
+      expect(warningBadge.className).toContain("text-amber-900");
+
+      rerender(<Badge variant="purple">Merged</Badge>);
+      const purpleBadge = screen.getByText("Merged");
+      expect(purpleBadge.className).toContain("bg-purple-50");
+      expect(purpleBadge.className).toContain("text-purple-800");
     });
   });
 });
