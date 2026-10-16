@@ -14,7 +14,7 @@ Streamline the Canonical Template Repository (`software-factory-09-test/tanstack
 **Blocked by:** None (can start immediately)
 
 **Status:** resolved
-**Triage:** resolved
+**Triage:** ready-for-agent
 
 - [x] Clone `software-factory-09-test/tanstack-start-template` into a temporary scratch directory using organization credentials.
 - [x] Replace `src/routes/index.tsx` marketing hero and cards with a clean, tasteful application workspace canvas.
