@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import App from "./App";
+import App, { STORAGE_KEY_SELECTED_REPO } from "./App";
 import * as api from "./api";
 
 vi.mock("./api", () => ({
@@ -111,9 +111,13 @@ describe("App Root Component", () => {
         success: true,
       };
     });
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
   });
 
   afterEach(() => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
     global.EventSource = originalEventSource;
   });
 
@@ -793,6 +797,149 @@ describe("App Root Component", () => {
       expect(screen.getByTestId("preview-branch-badge")).toHaveTextContent("main");
     });
   });
+
+  it("hydrates selectedRepo from URL query parameter on page load", async () => {
+    window.history.replaceState(null, "", "/?repo=counter-2");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
+  });
+
+  it("hydrates selectedRepo from localStorage fallback when URL has no query parameter", async () => {
+    window.history.replaceState(null, "", "/");
+    localStorage.setItem(STORAGE_KEY_SELECTED_REPO, "counter-2");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+    expect(window.location.search).toBe("?repo=counter-2");
+  });
+
+  it("falls back to repos[0] when URL query parameter points to an unknown repository", async () => {
+    window.history.replaceState(null, "", "/?repo=deleted-app");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("calculator-app");
+    });
+    expect(window.location.search).toBe("?repo=calculator-app");
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("calculator-app");
+  });
+
+  it("updates URL and localStorage and pushes history when user selects a different repository", async () => {
+    window.history.replaceState(null, "", "/");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("calculator-app");
+    });
+
+    fireEvent.change(repoSelect, { target: { value: "counter-2" } });
+
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+    expect(window.location.search).toBe("?repo=counter-2");
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
+  });
+
+  it("preserves active ?repo= query parameter when switching between Studio and Console tabs", async () => {
+    window.history.replaceState(null, "", "/?repo=counter-2");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+
+    // Switch to Console tab
+    fireEvent.click(screen.getByRole("button", { name: /Factory Testing Console/i }));
+    expect(window.location.pathname).toBe("/console");
+    expect(window.location.search).toBe("?repo=counter-2");
+
+    // Switch back to Studio tab
+    fireEvent.click(screen.getByRole("button", { name: /Factory Studio/i }));
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("?repo=counter-2");
+  });
+
+  it("synchronizes selectedRepo and activeTab on browser popstate navigation", async () => {
+    window.history.replaceState(null, "", "/?repo=calculator-app");
+    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "counter-2", is_tanstack_compatible: true },
+      ],
+    });
+
+    render(<App />);
+
+    const repoSelect = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("calculator-app");
+    });
+
+    // Simulate browser Back navigation to /?repo=counter-2
+    window.history.pushState(null, "", "/?repo=counter-2");
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await waitFor(() => {
+      expect(repoSelect).toHaveValue("counter-2");
+    });
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
+  });
 });
+
 
 

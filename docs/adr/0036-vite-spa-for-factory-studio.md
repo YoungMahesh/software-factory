@@ -16,3 +16,5 @@ To support long-term UI complexity (virtualized log streams, interactive diff vi
 - A dedicated frontend workspace is established under `factory/ui/frontend/` with Vite, React 19, TypeScript, Tailwind CSS, TanStack Router, and TanStack Query.
 - FastAPI (`factory/ui/app.py`) mounts static asset serving for `factory/ui/static/dist/` and serves `index.html` for client-side routing.
 - Existing REST endpoints (`/api/repos`, `/api/jobs`, `/api/studio/prompt`) and SSE streams (`/api/jobs/{id}/stream`) remain unchanged, serving as the stable contract for the React SPA.
+- Target repository selection adheres to a hybrid URL query parameter (`?repo=<name>`) and `localStorage` (`factory_studio_selected_repo`) persistence protocol: deep links via URL query take precedence for bookmarking and sharing, with automatic `localStorage` fallback across page reloads. Tab switching between Studio (`/`) and Console (`/console`) preserves active query parameters, and browser history (`pushState` and `popstate`) is bidirectionally synchronized with React state.
+

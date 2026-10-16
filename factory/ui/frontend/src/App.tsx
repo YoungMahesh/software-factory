@@ -22,16 +22,37 @@ import {
 } from "./hooks/useStudioQueries";
 import { convertDbMessageToChatMessage } from "./utils";
 
-const getInitialTab = (): "studio" | "console" => {
+export const STORAGE_KEY_SELECTED_REPO = "factory_studio_selected_repo";
+
+export const getInitialTab = (): "studio" | "console" => {
   if (typeof window !== "undefined" && window.location.pathname.includes("/console")) {
     return "console";
   }
   return "studio";
 };
 
+export const getInitialRepo = (): string => {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const repoFromUrl = params.get("repo");
+    if (repoFromUrl && repoFromUrl.trim()) {
+      return repoFromUrl.trim();
+    }
+    try {
+      const repoFromStorage = localStorage.getItem(STORAGE_KEY_SELECTED_REPO);
+      if (repoFromStorage && repoFromStorage.trim()) {
+        return repoFromStorage.trim();
+      }
+    } catch {
+      // Ignore localStorage access failures
+    }
+  }
+  return "";
+};
+
 export const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"studio" | "console">(getInitialTab);
-  const [selectedRepo, setSelectedRepo] = useState<string>("");
+  const [selectedRepo, setSelectedRepo] = useState<string>(getInitialRepo);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
@@ -54,6 +75,43 @@ export const AppContent: React.FC = () => {
   const handlePreviewRefresh = useCallback(() => {
     setPreviewRefreshKey((prev) => prev + 1);
   }, []);
+
+  // Helper to synchronize URL query param and localStorage
+  const updateUrlAndStorage = useCallback((repo: string, mode: "push" | "replace" = "push") => {
+    if (typeof window === "undefined") return;
+    try {
+      if (repo) {
+        localStorage.setItem(STORAGE_KEY_SELECTED_REPO, repo);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_SELECTED_REPO);
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+
+    const currentUrl = new URL(window.location.href);
+    if (repo) {
+      currentUrl.searchParams.set("repo", repo);
+    } else {
+      currentUrl.searchParams.delete("repo");
+    }
+    const target = currentUrl.pathname + currentUrl.search;
+    if (window.location.pathname + window.location.search !== target) {
+      if (mode === "push") {
+        window.history.pushState(null, "", target);
+      } else {
+        window.history.replaceState(null, "", target);
+      }
+    }
+  }, []);
+
+  const handleSelectRepo: React.Dispatch<React.SetStateAction<string>> = useCallback((value) => {
+    setSelectedRepo((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      updateUrlAndStorage(next, "push");
+      return next;
+    });
+  }, [updateUrlAndStorage]);
 
   // Telemetry & Job Stream
   const { logs, events, clearLogs } = useAppTelemetry({
@@ -92,7 +150,7 @@ export const AppContent: React.FC = () => {
     isSwitchingBranch,
   } = useStudioActions({
     selectedRepo,
-    setSelectedRepo,
+    setSelectedRepo: handleSelectRepo,
     messages,
     setMessages,
     activeJob,
@@ -144,12 +202,19 @@ export const AppContent: React.FC = () => {
     }
   }, [messagesQuery.data]);
 
-  // Select initial repo when repos load
+  // Validate and synchronize selectedRepo when repos load
   useEffect(() => {
-    if (!selectedRepo && repos.length > 0) {
-      setSelectedRepo(repos[0].name);
+    if (repos.length === 0) return;
+
+    const repoExists = repos.some((r) => r.name === selectedRepo);
+    if (!selectedRepo || !repoExists) {
+      const fallbackRepo = repos[0].name;
+      setSelectedRepo(fallbackRepo);
+      updateUrlAndStorage(fallbackRepo, "replace");
+    } else {
+      updateUrlAndStorage(selectedRepo, "replace");
     }
-  }, [repos, selectedRepo]);
+  }, [repos, selectedRepo, updateUrlAndStorage]);
 
   // Sync preview query data into preview state
   useEffect(() => {
@@ -158,13 +223,18 @@ export const AppContent: React.FC = () => {
     }
   }, [previewQuery.data]);
 
-  // Synchronize activeTab with URL history
+  // Synchronize activeTab with URL history while preserving ?repo=
   const switchTab = (tab: "studio" | "console") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
-      const targetPath = tab === "console" ? "/console" : "/";
-      if (window.location.pathname !== targetPath) {
-        window.history.pushState(null, "", targetPath);
+      const url = new URL(window.location.href);
+      url.pathname = tab === "console" ? "/console" : "/";
+      if (selectedRepo) {
+        url.searchParams.set("repo", selectedRepo);
+      }
+      const target = url.pathname + url.search;
+      if (window.location.pathname + window.location.search !== target) {
+        window.history.pushState(null, "", target);
       }
     }
   };
@@ -172,6 +242,17 @@ export const AppContent: React.FC = () => {
   useEffect(() => {
     const onPopState = () => {
       setActiveTab(getInitialTab());
+      const params = new URLSearchParams(window.location.search);
+      const repoFromUrl = params.get("repo");
+      if (repoFromUrl && repoFromUrl.trim()) {
+        const clean = repoFromUrl.trim();
+        setSelectedRepo(clean);
+        try {
+          localStorage.setItem(STORAGE_KEY_SELECTED_REPO, clean);
+        } catch {
+          // Ignore localStorage errors
+        }
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -180,7 +261,7 @@ export const AppContent: React.FC = () => {
   const studioContextValue: StudioContextValue = {
     repos,
     selectedRepo,
-    onSelectRepo: setSelectedRepo,
+    onSelectRepo: handleSelectRepo,
     onCreateRepo: handleCreateRepo,
     activeJob,
     messages,
@@ -236,7 +317,7 @@ export const AppContent: React.FC = () => {
             <TestingConsoleView
               repos={repos}
               selectedRepo={selectedRepo}
-              onSelectRepo={setSelectedRepo}
+              onSelectRepo={handleSelectRepo}
               onRefreshRepos={() => reposQuery.refetch()}
               activeJob={activeJob}
               logs={logs}
