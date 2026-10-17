@@ -352,4 +352,13 @@ _Avoid_: Slow command log, performance tab, latency viewer, bottleneck tracker
 Pattern-matching categorization rules that classify agent command executions and telemetry events into discrete infrastructure domains (`Package Install`, `Test Suite`, `Build / Compile`, `Git / VCS`, `LLM Thinking`) based on executable binaries, CLI arguments, and pipeline stages to isolate systemic pipeline latency.
 _Avoid_: Command classifier, category heuristics, bottleneck badges, command tagging
 
+**Exa Web Search Tool**:
+A read-only search tool (`web_search`) powered by the Exa AI Search API (`https://api.exa.ai/search`) using `EXA_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to retrieve modern documentation, ecosystem guides, release notes, and error diagnosis with clean text extracts.
+_Avoid_: Web scraper, google search tool, bing tool, generic search
+
+**Context7 Documentation Tool**:
+A read-only documentation lookup tool (`docs_search`) powered by the Context7 API (`https://context7.com/api/v3/search`) using `CONTEXT7_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to query official library documentation, component APIs, CLI commands, and syntax-highlighted code snippets.
+_Avoid_: Doc scraper, library crawler, context tool, c7 tool
+
+
 
