@@ -68,7 +68,7 @@ describe("ActivityDrawer", () => {
     },
   ];
 
-  it("renders 3 tabs (Timeline, Terminal Logs, and History)", () => {
+  it("renders 4 tabs (Timeline, Terminal Logs, History, and Bottlenecks)", () => {
     render(
       <ActivityDrawer
         isOpen={true}
@@ -84,6 +84,28 @@ describe("ActivityDrawer", () => {
     expect(screen.getByRole("button", { name: /Timeline/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Terminal Logs/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /History/i })).toBeInTheDocument();
+    const bottlenecksBtn = screen.getByRole("button", { name: /Bottlenecks/i });
+    expect(bottlenecksBtn).toBeInTheDocument();
+    expect(bottlenecksBtn).toHaveAttribute("id", "btn-drawer-tab-bottlenecks");
+  });
+
+  it("switches to Bottlenecks tab when clicking tab button", () => {
+    render(
+      <ActivityDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        jobId="job-12345"
+        stage="CODER"
+        events={events}
+        logs={["Started job\n"]}
+        jobs={mockJobs}
+      />
+    );
+
+    const bottlenecksBtn = screen.getByRole("button", { name: /Bottlenecks/i });
+    fireEvent.click(bottlenecksBtn);
+
+    expect(document.getElementById("studio-drawer-bottlenecks")).toBeInTheDocument();
   });
 
   it("switches between Timeline tab and Terminal Logs tab", () => {

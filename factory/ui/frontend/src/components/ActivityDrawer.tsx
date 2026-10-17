@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle } from "lucide-react";
-import { AgentEvent, JobStage, Job } from "../types";
+import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, Timer } from "lucide-react";
+import { AgentEvent, JobStage, Job, ActivityDrawerTab } from "../types";
 import { copyToClipboard, formatRelativeTime } from "../utils";
 import { ThinkingAccordion } from "./ThinkingAccordion";
 import { CommandCard } from "./CommandCard";
@@ -8,6 +8,7 @@ import { ToolChip } from "./ToolChip";
 import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
 import { Badge } from "./ui/Badge";
+import { BottlenecksViewer } from "./BottlenecksViewer";
 
 export interface ActivityDrawerProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export interface ActivityDrawerProps {
   selectedRepo?: string;
   onSelectJob?: (job: Job) => void;
   onCancelJob?: (jobId: string) => void;
-  initialTab?: "timeline" | "logs" | "history";
+  initialTab?: ActivityDrawerTab;
 }
 
 export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -36,7 +37,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   onCancelJob,
   initialTab = "timeline",
 }) => {
-  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history">(initialTab);
+  const [activeTab, setActiveTab] = useState<ActivityDrawerTab>(initialTab);
   const [copied, setCopied] = useState<boolean>(false);
 
   const displayedJobs = React.useMemo(() => {
@@ -155,6 +156,19 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               <History className="w-3.5 h-3.5" />
               <span>History</span>
             </button>
+            <button
+              id="btn-drawer-tab-bottlenecks"
+              type="button"
+              onClick={() => setActiveTab("bottlenecks")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === "bottlenecks"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
+              }`}
+            >
+              <Timer className="w-3.5 h-3.5" />
+              <span>Bottlenecks</span>
+            </button>
           </div>
 
           {activeTab === "logs" && (
@@ -181,7 +195,11 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-4 bg-canvas">
-          {activeTab === "timeline" ? (
+          {activeTab === "bottlenecks" ? (
+            <div id="studio-drawer-bottlenecks" className="space-y-4">
+              <BottlenecksViewer events={events} />
+            </div>
+          ) : activeTab === "timeline" ? (
             <div id="studio-drawer-timeline" className="space-y-3">
               {events.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 text-xs font-mono">

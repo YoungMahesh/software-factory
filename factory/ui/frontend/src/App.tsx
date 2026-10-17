@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Job, ChatMessage, PreviewState } from "./types";
+import { Job, ChatMessage, PreviewState, ActivityDrawerTab } from "./types";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
@@ -59,7 +59,7 @@ export const AppContent: React.FC = () => {
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
-  const [drawerTab, setDrawerTab] = useState<"timeline" | "logs" | "history">("timeline");
+  const [drawerTab, setDrawerTab] = useState<ActivityDrawerTab>("timeline");
   const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
@@ -266,7 +266,7 @@ export const AppContent: React.FC = () => {
       setDrawerTab("logs");
       setIsDrawerOpen(true);
     },
-    onOpenDrawer: (_targetToolCallId?: string, tab?: "timeline" | "logs" | "history") => {
+    onOpenDrawer: (_targetToolCallId?: string, tab?: ActivityDrawerTab) => {
       if (tab) setDrawerTab(tab);
       setIsDrawerOpen(true);
     },

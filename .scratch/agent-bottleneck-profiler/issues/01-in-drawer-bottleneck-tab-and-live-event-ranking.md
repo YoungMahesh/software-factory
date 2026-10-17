@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A fourth tab button `Bottlenecks` (`id="btn-drawer-tab-bottlenecks"`) is visible in the Activity Drawer alongside Timeline, Terminal Logs, and History.
-- [ ] A modular component renders the bottleneck list, keeping parent drawer line count strictly <= 500 lines.
-- [ ] Completed bash commands, verifier runs, and LLM thinking sessions are extracted from job telemetry events and sorted in descending order of `durationMs`.
-- [ ] Each bottleneck row displays its rank (#1, #2, ...), operation title, duration in seconds/ms, and relative duration bar.
-- [ ] When a command or tool is actively executing, an active banner with a running spinner is displayed at the top of the tab.
-- [ ] A toggle control allows developers to hide or reveal micro-commands that executed in less than 100ms.
-- [ ] Automated tests verify tab switching, descending duration sorting, active spinner display, and threshold filtering.
+- [x] A fourth tab button `Bottlenecks` (`id="btn-drawer-tab-bottlenecks"`) is visible in the Activity Drawer alongside Timeline, Terminal Logs, and History.
+- [x] A modular component renders the bottleneck list, keeping parent drawer line count strictly <= 500 lines.
+- [x] Completed bash commands, verifier runs, and LLM thinking sessions are extracted from job telemetry events and sorted in descending order of `durationMs`.
+- [x] Each bottleneck row displays its rank (#1, #2, ...), operation title, duration in seconds/ms, and relative duration bar.
+- [x] When a command or tool is actively executing, an active banner with a running spinner is displayed at the top of the tab.
+- [x] A toggle control allows developers to hide or reveal micro-commands that executed in less than 100ms.
+- [x] Automated tests verify tab switching, descending duration sorting, active spinner display, and threshold filtering.

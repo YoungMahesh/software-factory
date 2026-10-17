@@ -7,6 +7,7 @@ import {
   GrillTurnResult,
   StudioDispatchParams,
   StudioDispatchResponse,
+  ActivityDrawerTab,
 } from "../types";
 
 export interface StudioContextValue {
@@ -22,7 +23,7 @@ export interface StudioContextValue {
   isApproving?: boolean;
   onCancelJob: (jobId: string) => void;
   onSwitchToConsole: () => void;
-  onOpenDrawer?: (targetToolCallId?: string) => void;
+  onOpenDrawer?: (targetToolCallId?: string, tab?: ActivityDrawerTab) => void;
   isSending?: boolean;
   previewState?: PreviewState | null;
   onLaunchPreview?: () => void;

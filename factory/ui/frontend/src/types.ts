@@ -26,6 +26,8 @@ export type JobStage =
   | "COMPLETED"
   | "SERVING";
 
+export type ActivityDrawerTab = "timeline" | "logs" | "history" | "bottlenecks";
+
 export interface Repo {
   name: string;
   description?: string | null;
