@@ -432,7 +432,13 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               </div>
             </div>
           ) : (
-            <FailedCommandsTab failedCommands={failedCommands} />
+            <FailedCommandsTab
+              failedCommands={failedCommands}
+              activeJobId={jobId}
+              jobs={jobs}
+              selectedRepo={selectedRepo}
+              onSelectJob={onSelectJob}
+            />
           )}
         </div>
       </div>

@@ -383,5 +383,62 @@ describe("ActivityDrawer", () => {
 
     expect(screen.getByTestId("failed-commands-empty-state")).toBeInTheDocument();
   });
+
+  it("renders stage filter chips and past-run selector in Failed Commands tab header", () => {
+    const failedEvents = [
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "bash",
+          command: "pnpm build",
+          exitCode: 1,
+          output: "tsc: not found",
+          isError: true,
+          toolCallId: "call-c1",
+        },
+      },
+      {
+        type: "tool_result",
+        stage: "VERIFIER",
+        data: {
+          toolName: "bash",
+          command: "pytest tests/",
+          exitCode: 2,
+          output: "FAIL test_api.py",
+          isError: true,
+          toolCallId: "call-v1",
+        },
+      },
+    ];
+
+    render(
+      <ActivityDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        jobId="job-101"
+        stage="CODER"
+        events={failedEvents}
+        jobs={mockJobs}
+        selectedRepo="my-app"
+        initialTab="failed-commands"
+      />
+    );
+
+    expect(screen.getByTestId("failed-commands-tab-header")).toBeInTheDocument();
+    expect(screen.getByTestId("stage-filter-all")).toHaveTextContent("2");
+    expect(screen.getByTestId("stage-filter-coder")).toHaveTextContent("1");
+    expect(screen.getByTestId("stage-filter-verifier")).toHaveTextContent("1");
+
+    const selector = screen.getByTestId("failed-commands-job-selector") as HTMLSelectElement;
+    expect(selector).toBeInTheDocument();
+    expect(selector.value).toBe("job-101");
+
+    // Filter to Coder
+    fireEvent.click(screen.getByTestId("stage-filter-coder"));
+    expect(screen.getByText("pnpm build")).toBeInTheDocument();
+    expect(screen.queryByText("pytest tests/")).not.toBeInTheDocument();
+  });
 });
+
 

@@ -4,10 +4,11 @@
 
 **Blocked by:** 01: Core Command Failure Telemetry API and Activity Drawer Tab
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Implement stage filter chips (`All`, `Coder`, `Verifier`) in the Failed Commands tab header to filter displayed failure cards by stage
-- [ ] Implement a past-run selector dropdown in the tab header listing recent jobs for the current repository
-- [ ] Wire the past-run selector to load historical failed commands via `GET /api/jobs/{job_id}/failed-commands` when viewing a non-active job
-- [ ] Display the count of failures for each stage in the filter chips
-- [ ] Provide automated frontend tests verifying stage filtering interaction and historical job selection
+- [x] Implement stage filter chips (`All`, `Coder`, `Verifier`) in the Failed Commands tab header to filter displayed failure cards by stage
+- [x] Implement a past-run selector dropdown in the tab header listing recent jobs for the current repository
+- [x] Wire the past-run selector to load historical failed commands via `GET /api/jobs/{job_id}/failed-commands` when viewing a non-active job
+- [x] Display the count of failures for each stage in the filter chips
+- [x] Provide automated frontend tests verifying stage filtering interaction and historical job selection
+
