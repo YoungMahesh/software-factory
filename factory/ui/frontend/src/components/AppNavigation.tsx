@@ -5,7 +5,6 @@ import { StudioContext } from "../context/StudioContext";
 
 export interface AppNavigationProps {
   activeJob: Job | null;
-  selectedRepo?: string;
   onOpenDrawer?: (targetToolCallId?: string, tab?: DrawerTabParam) => void;
   failedCommandCount?: number;
   onCancelJob?: (jobId: string) => void;
@@ -13,7 +12,6 @@ export interface AppNavigationProps {
 
 export const AppNavigation: React.FC<AppNavigationProps> = ({
   activeJob,
-  selectedRepo: _selectedRepo,
   onOpenDrawer: propsOnOpenDrawer,
   failedCommandCount: propsFailedCount,
   onCancelJob: propsOnCancelJob,

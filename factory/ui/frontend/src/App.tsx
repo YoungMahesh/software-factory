@@ -307,7 +307,6 @@ export const AppContent: React.FC = () => {
       <div className="flex flex-col min-h-screen bg-white text-ink font-sans">
         <AppNavigation
           activeJob={activeJob}
-          selectedRepo={selectedRepo}
           onOpenDrawer={studioContextValue.onOpenDrawer}
           failedCommandCount={failedCommands.length}
           onCancelJob={handleCancelJob}

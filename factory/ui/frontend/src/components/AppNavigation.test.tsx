@@ -29,7 +29,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={null}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={0}
       />
@@ -46,7 +45,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={3}
       />
@@ -64,7 +62,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={0}
       />
@@ -78,7 +75,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={null}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={5}
       />
@@ -92,7 +88,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={2}
       />
@@ -109,7 +104,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         failedCommandCount={0}
       />
@@ -125,7 +119,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={vi.fn()}
       />
     );
@@ -142,7 +135,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
       />
     );
@@ -159,7 +151,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={dummyJob}
-        selectedRepo="my-app"
         onOpenDrawer={onOpenDrawer}
         onCancelJob={onCancelJob}
       />
@@ -185,7 +176,6 @@ describe("AppNavigation", () => {
     render(
       <AppNavigation
         activeJob={completedJob}
-        selectedRepo="my-app"
         onOpenDrawer={vi.fn()}
         onCancelJob={vi.fn()}
       />
@@ -200,8 +190,7 @@ describe("AppNavigation", () => {
       <StudioContext.Provider value={{ onCancelJob } as any}>
         <AppNavigation
           activeJob={dummyJob}
-          selectedRepo="my-app"
-        />
+          />
       </StudioContext.Provider>
     );
 
