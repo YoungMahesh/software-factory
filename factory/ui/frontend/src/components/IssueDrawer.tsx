@@ -13,6 +13,7 @@ import { useStudio } from "../context/StudioContext";
 import { IssueCard } from "./issue-drawer/IssueCard";
 import { MilestoneGroup } from "./issue-drawer/MilestoneGroup";
 import { IssueFilterBar } from "./issue-drawer/IssueFilterBar";
+import { ExecutionSettingsPanel } from "./issue-drawer/ExecutionSettingsPanel";
 import { useDrawerIssues, isIssueResolved, getOpenBlockers } from "./issue-drawer/useDrawerIssues";
 
 export interface IssueDrawerProps {
@@ -21,11 +22,18 @@ export interface IssueDrawerProps {
   repo: string;
   issues?: Issue[];
   onGrillAndAlign?: (issue: Issue) => void;
-  onInstantDispatch?: (params: { issue: Issue; repo: string }) => Promise<void> | void;
+  onInstantDispatch?: (params: {
+    issue: Issue;
+    repo: string;
+    model?: string;
+    vm?: boolean;
+  }) => Promise<void> | void;
   onRunMilestone?: (params: {
     milestone: { number?: number; title: string; slug: string };
     repo: string;
     issues: Issue[];
+    model?: string;
+    vm?: boolean;
   }) => Promise<void> | void;
   onRefresh?: () => void;
 }
@@ -52,6 +60,8 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
   const [filterState, setFilterState] = useState<"open" | "closed" | "all">("open");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activePopoverMilestone, setActivePopoverMilestone] = useState<string | null>(null);
+  const [model, setModel] = useState<string>("deepseek-v4.1-flash");
+  const [vm, setVm] = useState<boolean>(false);
 
   // Close on Escape key
   useEffect(() => {
@@ -111,12 +121,14 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
   // Handle Instant Dispatch action
   const handleInstantDispatch = async (issue: Issue) => {
     if (propInstantDispatch) {
-      await propInstantDispatch({ issue, repo });
+      await propInstantDispatch({ issue, repo, model, vm });
     } else if (studioContext?.onInstantDispatch) {
       await studioContext.onInstantDispatch({
         repo,
         issue_number: issue.number,
         milestone_slug: issue.milestone?.slug,
+        model,
+        vm,
       });
     }
   };
@@ -127,12 +139,14 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
     milestoneIssues: Issue[]
   ) => {
     if (propRunMilestone) {
-      await propRunMilestone({ milestone, repo, issues: milestoneIssues });
+      await propRunMilestone({ milestone, repo, issues: milestoneIssues, model, vm });
     } else if (studioContext?.onInstantDispatch) {
       await studioContext.onInstantDispatch({
         repo,
         milestone_slug: milestone.slug,
         milestone_title: milestone.title,
+        model,
+        vm,
       });
     }
     setActivePopoverMilestone(null);
@@ -197,6 +211,14 @@ export const IssueDrawer: React.FC<IssueDrawerProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Execution Settings Panel */}
+        <ExecutionSettingsPanel
+          model={model}
+          onModelChange={setModel}
+          vm={vm}
+          onVmChange={setVm}
+        />
 
         {/* Filter & Search Toolbar */}
         <IssueFilterBar

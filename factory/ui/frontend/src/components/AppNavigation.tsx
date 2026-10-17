@@ -1,17 +1,13 @@
 import React from "react";
-import { Boxes, Sparkles, Terminal, GitBranch } from "lucide-react";
+import { Boxes, GitBranch } from "lucide-react";
 import { Job } from "../types";
 
 export interface AppNavigationProps {
-  activeTab: "studio" | "console";
-  onTabChange: (tab: "studio" | "console") => void;
   activeJob: Job | null;
   selectedRepo: string;
 }
 
 export const AppNavigation: React.FC<AppNavigationProps> = ({
-  activeTab,
-  onTabChange,
   activeJob,
   selectedRepo,
 }) => {
@@ -30,34 +26,6 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
             <span className="text-[10px] text-muted font-mono">v0.9.0-modal</span>
           </div>
         </div>
-
-        {/* Navigation Switcher Tabs */}
-        <nav className="flex items-center space-x-1 bg-soft-stone p-1 rounded-pill border border-hairline">
-          <button
-            id="nav-tab-studio"
-            onClick={() => onTabChange("studio")}
-            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-pill text-xs font-medium transition-all ${
-              activeTab === "studio"
-                ? "bg-primary text-white shadow-sm"
-                : "text-muted hover:text-ink hover:bg-white/60"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Factory Studio</span>
-          </button>
-          <button
-            id="nav-tab-console"
-            onClick={() => onTabChange("console")}
-            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-pill text-xs font-medium transition-all ${
-              activeTab === "console"
-                ? "bg-primary text-white shadow-sm"
-                : "text-muted hover:text-ink hover:bg-white/60"
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Factory Testing Console</span>
-          </button>
-        </nav>
       </div>
 
       {/* Header Right Status Indicator */}

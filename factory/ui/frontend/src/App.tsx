@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Job, ChatMessage, PreviewState } from "./types";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
-import { TestingConsoleView } from "./views/TestingConsoleView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
 import { AppNavigation } from "./components/AppNavigation";
 import { useAppTelemetry } from "./hooks/useAppTelemetry";
@@ -24,11 +23,12 @@ import { convertDbMessageToChatMessage } from "./utils";
 
 export const STORAGE_KEY_SELECTED_REPO = "factory_studio_selected_repo";
 
-export const getInitialTab = (): "studio" | "console" => {
-  if (typeof window !== "undefined" && window.location.pathname.includes("/console")) {
-    return "console";
+export const redirectConsolePath = (): void => {
+  if (typeof window !== "undefined" && (window.location.pathname === "/console" || window.location.pathname.startsWith("/console/"))) {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.pathname = "/";
+    window.history.replaceState(null, "", currentUrl.pathname + currentUrl.search);
   }
-  return "studio";
 };
 
 export const getInitialRepo = (): string => {
@@ -51,13 +51,15 @@ export const getInitialRepo = (): string => {
 };
 
 export const AppContent: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"studio" | "console">(getInitialTab);
+  redirectConsolePath();
+
   const [selectedRepo, setSelectedRepo] = useState<string>(getInitialRepo);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [drawerTab, setDrawerTab] = useState<"timeline" | "logs" | "history">("timeline");
   const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
@@ -165,7 +167,7 @@ export const AppContent: React.FC = () => {
   });
 
   // Console Job Handlers
-  const { handleLaunchJob, handleCancelJob, handleSelectJob } = useConsoleJobs({
+  const { handleCancelJob, handleSelectJob } = useConsoleJobs({
     setActiveJobId,
     setActiveJob,
     activeJob,
@@ -224,25 +226,14 @@ export const AppContent: React.FC = () => {
     }
   }, [previewQuery.data]);
 
-  // Synchronize activeTab with URL history while preserving ?repo=
-  const switchTab = (tab: "studio" | "console") => {
-    setActiveTab(tab);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.pathname = tab === "console" ? "/console" : "/";
-      if (selectedRepo) {
-        url.searchParams.set("repo", selectedRepo);
-      }
-      const target = url.pathname + url.search;
-      if (window.location.pathname + window.location.search !== target) {
-        window.history.pushState(null, "", target);
-      }
-    }
-  };
+  // Redirect /console paths to / while preserving search parameters
+  useEffect(() => {
+    redirectConsolePath();
+  }, []);
 
   useEffect(() => {
     const onPopState = () => {
-      setActiveTab(getInitialTab());
+      redirectConsolePath();
       const params = new URLSearchParams(window.location.search);
       const repoFromUrl = params.get("repo");
       if (repoFromUrl && repoFromUrl.trim()) {
@@ -271,8 +262,14 @@ export const AppContent: React.FC = () => {
     onApprovePlan: handleApprovePlan,
     isApproving,
     onCancelJob: handleCancelJob,
-    onSwitchToConsole: () => switchTab("console"),
-    onOpenDrawer: () => setIsDrawerOpen(true),
+    onSwitchToConsole: () => {
+      setDrawerTab("logs");
+      setIsDrawerOpen(true);
+    },
+    onOpenDrawer: (_targetToolCallId?: string, tab?: "timeline" | "logs" | "history") => {
+      if (tab) setDrawerTab(tab);
+      setIsDrawerOpen(true);
+    },
     isSending: isSendingPrompt || isApproving,
     previewState,
     onLaunchPreview: handleLaunchPreview,
@@ -305,30 +302,12 @@ export const AppContent: React.FC = () => {
     <StudioProvider value={studioContextValue}>
       <div className="flex flex-col min-h-screen bg-white text-ink font-sans">
         <AppNavigation
-          activeTab={activeTab}
-          onTabChange={switchTab}
           activeJob={activeJob}
           selectedRepo={selectedRepo}
         />
 
         <main className="flex-1 overflow-auto">
-          {activeTab === "studio" ? (
-            <StudioView />
-          ) : (
-            <TestingConsoleView
-              repos={repos}
-              selectedRepo={selectedRepo}
-              onSelectRepo={handleSelectRepo}
-              onRefreshRepos={() => reposQuery.refetch()}
-              activeJob={activeJob}
-              logs={logs}
-              jobs={jobs}
-              onLaunch={handleLaunchJob}
-              onCancel={handleCancelJob}
-              onSelectJob={handleSelectJob}
-              onClearLogs={clearLogs}
-            />
-          )}
+          <StudioView />
         </main>
 
         <ActivityDrawer
@@ -338,6 +317,11 @@ export const AppContent: React.FC = () => {
           stage={activeJob?.stage}
           events={events}
           logs={logs}
+          jobs={jobs}
+          selectedRepo={selectedRepo}
+          onSelectJob={handleSelectJob}
+          onCancelJob={handleCancelJob}
+          initialTab={drawerTab}
         />
       </div>
     </StudioProvider>

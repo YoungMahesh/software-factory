@@ -4,6 +4,7 @@ import {
   formatToolLabel,
   getPullRequestStatus,
   getPullRequestBadgeConfig,
+  formatRelativeTime,
 } from "./utils";
 import { DbChatMessage } from "./types";
 
@@ -259,6 +260,19 @@ describe("getPullRequestBadgeConfig", () => {
       variant: "success",
       className: "",
     });
+  });
+});
+
+describe("formatRelativeTime", () => {
+  it("formats relative timestamps correctly", () => {
+    const now = Date.now();
+    expect(formatRelativeTime("")).toBe("—");
+    expect(formatRelativeTime("invalid-date")).toBe("—");
+    expect(formatRelativeTime(new Date(now + 10000))).toBe("just now");
+    expect(formatRelativeTime(new Date(now - 15000))).toBe("15s ago");
+    expect(formatRelativeTime(new Date(now - 120000))).toBe("2m ago");
+    expect(formatRelativeTime(new Date(now - 7200000))).toBe("2h ago");
+    expect(formatRelativeTime(new Date(now - 86400000 * 3))).toBe("3d ago");
   });
 });
 

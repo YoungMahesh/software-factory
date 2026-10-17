@@ -205,8 +205,8 @@ describe("App Root - URL Routing & State Hydration", () => {
     expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
   });
 
-  it("preserves active ?repo= query parameter when switching between Studio and Console tabs", async () => {
-    window.history.replaceState(null, "", "/?repo=counter-2");
+  it("redirects direct navigation to /console seamlessly to / while preserving search parameters", async () => {
+    window.history.replaceState(null, "", "/console?repo=counter-2");
     vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
@@ -217,20 +217,16 @@ describe("App Root - URL Routing & State Hydration", () => {
 
     render(<App />);
 
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+      expect(window.location.search).toBe("?repo=counter-2");
+    });
+
     const repoSelect = await screen.findByRole("combobox");
     await waitFor(() => {
       expect(repoSelect).toHaveValue("counter-2");
     });
-
-    // Switch to Console tab
-    fireEvent.click(screen.getByRole("button", { name: /Factory Testing Console/i }));
-    expect(window.location.pathname).toBe("/console");
-    expect(window.location.search).toBe("?repo=counter-2");
-
-    // Switch back to Studio tab
-    fireEvent.click(screen.getByRole("button", { name: /Factory Studio/i }));
-    expect(window.location.pathname).toBe("/");
-    expect(window.location.search).toBe("?repo=counter-2");
+    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
   });
 
   it("synchronizes selectedRepo and activeTab on browser popstate navigation", async () => {

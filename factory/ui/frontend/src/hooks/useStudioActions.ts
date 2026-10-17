@@ -376,6 +376,8 @@ export function useStudioActions({
     milestone_slug?: string;
     milestone_title?: string;
     milestone?: string;
+    model?: string;
+    vm?: boolean;
   }) => {
     const repo = params.repo || selectedRepo;
     if (!repo || dispatchStudioMutation.isPending) return;
@@ -386,8 +388,8 @@ export function useStudioActions({
         issue_number: params.issue_number,
         milestone_slug: params.milestone_slug,
         milestone_title: params.milestone_title,
-        model: "deepseek-v4.1-flash",
-        vm: false,
+        model: params.model || "deepseek-v4.1-flash",
+        vm: params.vm ?? false,
       });
 
       if (res.job) {

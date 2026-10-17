@@ -1,20 +1,26 @@
-import React, { useState } from "react";
-import { X, Copy, Check, Terminal, History } from "lucide-react";
-import { AgentEvent, JobStage } from "../types";
-import { copyToClipboard } from "../utils";
+import React, { useState, useEffect } from "react";
+import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle } from "lucide-react";
+import { AgentEvent, JobStage, Job } from "../types";
+import { copyToClipboard, formatRelativeTime } from "../utils";
 import { ThinkingAccordion } from "./ThinkingAccordion";
 import { CommandCard } from "./CommandCard";
 import { ToolChip } from "./ToolChip";
 import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
+import { Badge } from "./ui/Badge";
 
-interface ActivityDrawerProps {
+export interface ActivityDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   jobId?: string;
   stage?: JobStage | string;
   events?: AgentEvent[];
   logs?: string[];
+  jobs?: Job[];
+  selectedRepo?: string;
+  onSelectJob?: (job: Job) => void;
+  onCancelJob?: (jobId: string) => void;
+  initialTab?: "timeline" | "logs" | "history";
 }
 
 export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -24,9 +30,25 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   stage,
   events = [],
   logs = [],
+  jobs = [],
+  selectedRepo,
+  onSelectJob,
+  onCancelJob,
+  initialTab = "timeline",
 }) => {
-  const [activeTab, setActiveTab] = useState<"timeline" | "logs">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history">(initialTab);
   const [copied, setCopied] = useState<boolean>(false);
+
+  const displayedJobs = React.useMemo(() => {
+    if (!selectedRepo) return jobs;
+    return jobs.filter((j) => !j.repo || j.repo === selectedRepo);
+  }, [jobs, selectedRepo]);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
@@ -104,7 +126,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                   : "text-muted hover:text-ink hover:bg-white"
               }`}
             >
-              <History className="w-3.5 h-3.5" />
+              <Activity className="w-3.5 h-3.5" />
               <span>Timeline</span>
             </button>
             <button
@@ -119,6 +141,19 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             >
               <Terminal className="w-3.5 h-3.5" />
               <span>Terminal Logs</span>
+            </button>
+            <button
+              id="btn-drawer-tab-history"
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === "history"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>History</span>
             </button>
           </div>
 
@@ -266,7 +301,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                 });
               })())}
             </div>
-          ) : (
+          ) : activeTab === "logs" ? (
             <div
               id="studio-drawer-logs"
               className="font-mono text-xs text-slate-300 bg-primary border border-white/10 rounded-xl p-4 whitespace-pre-wrap leading-relaxed select-text shadow-sm"
@@ -278,6 +313,96 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               ) : (
                 logs.join("")
               )}
+            </div>
+          ) : (
+            <div id="studio-drawer-history" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-ink font-sans">
+                  Job History
+                </span>
+                <span id="drawer-history-count" className="text-xs font-mono text-muted">
+                  {displayedJobs.length} {displayedJobs.length === 1 ? "job" : "jobs"}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto bg-white rounded-lg border border-hairline shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-hairline text-[11px] font-mono text-muted bg-soft-stone/40">
+                    <tr>
+                      <th className="py-2.5 px-3">Job ID</th>
+                      <th className="py-2.5 px-3">Repo</th>
+                      <th className="py-2.5 px-3">Feature</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Stage</th>
+                      <th className="py-2.5 px-3">Created</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="drawer-history-table-body" className="divide-y divide-hairline font-mono">
+                    {displayedJobs.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-muted italic">
+                          No jobs recorded.
+                        </td>
+                      </tr>
+                    ) : (
+                      displayedJobs.map((j) => (
+                        <tr key={j.id} className="hover:bg-soft-stone/30 transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-primary">{j.id}</td>
+                          <td className="py-2.5 px-3 text-ink">{j.repo}</td>
+                          <td className="py-2.5 px-3 text-muted">{j.feature || "—"}</td>
+                          <td className="py-2.5 px-3">
+                            <Badge
+                              variant={
+                                j.status === "SUCCESS"
+                                  ? "success"
+                                  : j.status === "FAILED"
+                                  ? "danger"
+                                  : j.status === "RUNNING"
+                                  ? "console"
+                                  : "neutral"
+                              }
+                            >
+                              {j.status}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-3 text-muted">{j.stage}</td>
+                          <td className="py-2.5 px-3 text-muted">
+                            {formatRelativeTime(j.created_at)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                type="button"
+                                data-testid={`inspect-job-logs-${j.id}`}
+                                onClick={() => {
+                                  onSelectJob?.(j);
+                                  setActiveTab("logs");
+                                }}
+                                className="p-1 rounded-pill text-muted hover:text-ink hover:bg-soft-stone transition-colors cursor-pointer"
+                                title="Inspect terminal logs in place"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              {j.status === "RUNNING" && onCancelJob && (
+                                <button
+                                  type="button"
+                                  data-testid={`cancel-job-${j.id}`}
+                                  onClick={() => onCancelJob(j.id)}
+                                  className="p-1 rounded-pill text-coral hover:text-white hover:bg-coral transition-colors cursor-pointer"
+                                  title="Cancel running job"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

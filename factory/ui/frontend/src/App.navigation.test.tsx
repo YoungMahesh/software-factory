@@ -120,38 +120,16 @@ describe("App Root - Navigation & Lifecycle", () => {
     global.EventSource = originalEventSource;
   });
 
-  it("renders navigation header with Studio and Console tabs", async () => {
+  it("renders navigation header with product branding, active job indicator, and repo badge without switcher tabs", async () => {
     render(<App />);
 
     expect(screen.getByText("Software Factory")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Factory Studio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Factory Testing Console/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Factory Studio/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Factory Testing Console/i })).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(api.fetchRepos).toHaveBeenCalled();
+      expect(screen.getAllByText("my-app").length).toBeGreaterThanOrEqual(1);
     });
-  });
-
-  it("switches views between Studio and Testing Console", async () => {
-    render(<App />);
-
-    // Default is Studio view
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/Describe what you want to build/i)).toBeInTheDocument();
-    });
-
-    // Click Console tab
-    const consoleTab = screen.getByRole("button", { name: /Factory Testing Console/i });
-    fireEvent.click(consoleTab);
-
-    // Now Console view is active
-    expect(screen.getByText("Launch Parameters")).toBeInTheDocument();
-
-    // Click Studio tab to switch back
-    const studioTab = screen.getByRole("button", { name: /Factory Studio/i });
-    fireEvent.click(studioTab);
-
-    expect(screen.getByPlaceholderText(/Describe what you want to build/i)).toBeInTheDocument();
   });
 
   it("handles container timeout disconnect, preserves chat history, and reconnects to active branch", async () => {

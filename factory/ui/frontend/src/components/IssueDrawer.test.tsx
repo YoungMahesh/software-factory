@@ -298,6 +298,8 @@ describe("IssueDrawer", () => {
     expect(handleInstantDispatch).toHaveBeenCalledWith({
       repo: "test-repo",
       issue: expect.objectContaining({ number: 1, title: "Setup API routes" }),
+      model: "deepseek-v4.1-flash",
+      vm: false,
     });
   });
 
@@ -360,6 +362,72 @@ describe("IssueDrawer", () => {
           slug: "v1-core-feature",
           title: "v1: Core Feature",
         }),
+        model: "deepseek-v4.1-flash",
+        vm: false,
+      })
+    );
+  });
+
+  it("toggles collapsible execution settings and passes configured model and vm to instant dispatch", async () => {
+    const { user, handleInstantDispatch } = renderDrawer();
+
+    await waitFor(() => {
+      expect(screen.getByText("Setup API routes")).toBeInTheDocument();
+    });
+
+    // Panel is initially collapsed
+    expect(screen.queryByTestId("execution-settings-panel")).not.toBeInTheDocument();
+
+    // Toggle execution settings panel open
+    const toggleBtn = screen.getByTestId("toggle-execution-settings");
+    await user.click(toggleBtn);
+    expect(screen.getByTestId("execution-settings-panel")).toBeInTheDocument();
+
+    // Change model to MiMo-V2.6-Flash
+    const modelSelect = screen.getByTestId("execution-model-select");
+    fireEvent.change(modelSelect, { target: { value: "mimo-v2.6-flash" } });
+
+    // Enable VM Sandbox virtualization
+    const vmCheckbox = screen.getByTestId("execution-vm-toggle");
+    await user.click(vmCheckbox);
+    expect(vmCheckbox).toBeChecked();
+
+    // Instant dispatch issue #1
+    const instantDispatchBtn = screen.getByTestId("instant-dispatch-btn-1");
+    await user.click(instantDispatchBtn);
+
+    expect(handleInstantDispatch).toHaveBeenCalledWith({
+      repo: "test-repo",
+      issue: expect.objectContaining({ number: 1, title: "Setup API routes" }),
+      model: "mimo-v2.6-flash",
+      vm: true,
+    });
+  });
+
+  it("passes configured execution settings to milestone batch dispatch", async () => {
+    const { user, handleRunMilestone } = renderDrawer();
+
+    await waitFor(() => {
+      expect(screen.getByText(/v1: Core Feature/i)).toBeInTheDocument();
+    });
+
+    // Expand settings and set MiMo + VM
+    await user.click(screen.getByTestId("toggle-execution-settings"));
+    fireEvent.change(screen.getByTestId("execution-model-select"), {
+      target: { value: "mimo-v2.6-flash" },
+    });
+    await user.click(screen.getByTestId("execution-vm-toggle"));
+
+    // Trigger milestone batch
+    await user.click(screen.getByTestId("run-milestone-v1-core-feature"));
+    await user.click(screen.getByTestId("confirm-batch-btn"));
+
+    expect(handleRunMilestone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "test-repo",
+        milestone: expect.objectContaining({ slug: "v1-core-feature" }),
+        model: "mimo-v2.6-flash",
+        vm: true,
       })
     );
   });

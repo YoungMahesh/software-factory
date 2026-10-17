@@ -216,4 +216,20 @@ export function getPullRequestBadgeConfig(status: PullRequestStatus): PullReques
   }
 }
 
+export function formatRelativeTime(date: string | number | Date): string {
+  if (!date) return "—";
+  const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
+  const now = Date.now();
+  const diffSec = Math.floor((now - d.getTime()) / 1000);
+  if (diffSec < 0) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 

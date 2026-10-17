@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Job, LaunchJobParams } from "../types";
+import { Job } from "../types";
 import * as api from "../api";
 
 export interface UseConsoleJobsParams {
@@ -30,14 +30,6 @@ export function useConsoleJobs({
     loadJobs();
   }, []);
 
-  const handleLaunchJob = async (params: LaunchJobParams) => {
-    clearLogs();
-    const createdJob = await api.launchJob(params);
-    setActiveJobId(createdJob.id);
-    setActiveJob(createdJob);
-    setJobs((prev) => [createdJob, ...prev]);
-  };
-
   const handleCancelJob = async (jobId: string) => {
     try {
       await api.cancelJob(jobId);
@@ -57,7 +49,6 @@ export function useConsoleJobs({
   };
 
   return {
-    handleLaunchJob,
     handleCancelJob,
     handleSelectJob,
     loadJobs,

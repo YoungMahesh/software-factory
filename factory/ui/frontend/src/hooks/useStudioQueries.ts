@@ -10,6 +10,7 @@ export const studioQueryKeys = {
   issues: (repo: string) => ["studio", "issues", repo] as const,
   messages: (repo: string) => ["studio", "messages", repo] as const,
   pullRequests: (repo: string) => ["studio", "pullRequests", repo] as const,
+  jobs: ["jobs"] as const,
 };
 
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {

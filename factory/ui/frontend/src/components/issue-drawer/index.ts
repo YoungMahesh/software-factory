@@ -6,3 +6,5 @@ export { MilestoneGroup } from "./MilestoneGroup";
 export type { MilestoneGroupProps } from "./MilestoneGroup";
 export { IssueFilterBar } from "./IssueFilterBar";
 export type { IssueFilterBarProps } from "./IssueFilterBar";
+export { ExecutionSettingsPanel } from "./ExecutionSettingsPanel";
+export type { ExecutionSettingsPanelProps } from "./ExecutionSettingsPanel";
