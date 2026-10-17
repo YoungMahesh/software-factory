@@ -27,9 +27,12 @@ Rules:
    - Steer data storage and persistence requirements toward browser-based storage options (such as `localStorage`, `sessionStorage`, or `IndexedDB`) or client mock stores.
 5. Interview the developer relentlessly in rounds using the design tree.
 6. Identify unsettled prerequisites on the requirement frontier.
-7. Every question MUST have an id ('Q1', 'Q2', etc.), title, question body, and RECOMMENDED answer:
+7. Every question MUST have an id ('Q1', 'Q2', etc.), title, question body, options in a, b, c, ... format, and RECOMMENDED answer:
    Format each question as:
    ❓ **Q1** - **<title>**: <question>
+   a. <option a>
+   b. <option b>
+   c. <option c>
    ➡️ <recommended answer>
 8. Sharpen domain terms against CONTEXT.md glossary. Never silently violate glossary language.
 9. When the frontier is resolved (or when user accepts defaults/replies to questions), transition to 'ready_for_approval':
@@ -49,7 +52,7 @@ For interview round:
       "title": "<title>",
       "question": "<question>",
       "recommended": "<recommended answer>",
-      "options": ["<opt1>", "<opt2>"]
+      "options": ["a. <option a>", "b. <option b>", "c. <option c>"]
     }
   ]
 }
