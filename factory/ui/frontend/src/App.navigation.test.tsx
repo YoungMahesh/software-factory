@@ -348,5 +348,92 @@ describe("App Root - Navigation & Lifecycle", () => {
     expect(iframeAfter).toBeInTheDocument();
   });
 
+  it("displays coral error counter badge on navigation Activity Drawer button when active job encounters failed commands and routes to Failed Commands tab", async () => {
+    vi.mocked(api.sendStudioPrompt).mockResolvedValue({
+      accepted: true,
+      job: {
+        id: "job-turn-errors",
+        repo: "my-app",
+        feature: "checkout",
+        issue: "1",
+        model: "deepseek-v4.1-flash",
+        vm: false,
+        dev: true,
+        status: "RUNNING",
+        stage: "CODER",
+        created_at: Date.now(),
+        started_at: Date.now(),
+        ended_at: null,
+        exit_code: null,
+        error_message: null,
+        logs_count: 5,
+      },
+      preview_url: "https://sb-1-3000.modal.host",
+    });
 
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.fetchPreview).toHaveBeenCalledWith("my-app");
+    });
+
+    // Before any job, navigation error badge must be absent
+    expect(screen.queryByTestId("nav-failed-commands-badge")).toBeNull();
+
+    // Submit prompt to launch active job
+    const input = screen.getByTestId("studio-prompt-input");
+    fireEvent.change(input, { target: { value: "Build checkout" } });
+    fireEvent.submit(screen.getByRole("button", { name: /Send/i }));
+
+    await screen.findByText(/Dispatched assembly line/i);
+
+    const jobEs = MockEventSource.instances.find((inst) =>
+      inst.url.includes("/api/jobs/job-turn-errors/stream")
+    );
+    expect(jobEs).toBeDefined();
+
+    // Initially zero failed commands, badge must not be visible
+    expect(screen.queryByTestId("nav-failed-commands-badge")).toBeNull();
+
+    // Stream a failed bash command tool result
+    act(() => {
+      jobEs?.onmessage?.({
+        data: JSON.stringify({
+          event: "agent_event",
+          data: {
+            type: "tool_result",
+            stage: "CODER",
+            data: {
+              toolName: "bash",
+              command: "pnpm add @stripe/stripe-js",
+              cwd: "/root/workspace",
+              exitCode: 1,
+              isError: true,
+              output: "ERR_PNPM_FETCH_404: Package not found",
+              stderr: "ERR_PNPM_FETCH_404: Package not found",
+              durationMs: 1200,
+            },
+          },
+        }),
+      });
+    });
+
+    // Verify navigation badge renders with count 1
+    const badge = await screen.findByTestId("nav-failed-commands-badge");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent("1");
+    expect(badge.className).toContain("bg-coral");
+
+    // Click the navigation Activity button
+    const activityBtn = screen.getByTestId("nav-activity-drawer-btn");
+    fireEvent.click(activityBtn);
+
+    // Verify ActivityDrawer opens directly into Failed Commands tab
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByTestId("failed-commands-job-selector")).toBeInTheDocument();
+      expect(screen.getByText("pnpm add @stripe/stripe-js")).toBeInTheDocument();
+      expect(screen.getByText("ERR_PNPM_FETCH_404: Package not found")).toBeInTheDocument();
+    });
+  });
 });

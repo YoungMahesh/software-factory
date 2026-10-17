@@ -22,7 +22,11 @@ export interface StudioContextValue {
   isApproving?: boolean;
   onCancelJob: (jobId: string) => void;
   onSwitchToConsole: () => void;
-  onOpenDrawer?: (targetToolCallId?: string) => void;
+  onOpenDrawer?: (
+    targetToolCallId?: string,
+    tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
+  ) => void;
+  failedCommandCount?: number;
   isSending?: boolean;
   previewState?: PreviewState | null;
   onLaunchPreview?: () => void;
@@ -45,7 +49,7 @@ export interface StudioContextValue {
   isSwitchingBranch?: boolean;
 }
 
-const StudioContext = createContext<StudioContextValue | undefined>(undefined);
+export const StudioContext = createContext<StudioContextValue | undefined>(undefined);
 
 export interface StudioProviderProps {
   value: StudioContextValue;

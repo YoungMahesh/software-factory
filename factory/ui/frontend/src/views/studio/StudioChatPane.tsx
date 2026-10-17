@@ -34,7 +34,10 @@ export interface StudioChatPaneProps {
   onRetryTurn?: (prompt: string) => void;
   onApprovePlan?: (turn: any) => void;
   isApproving?: boolean;
-  onOpenDrawer?: (toolCallId?: string) => void;
+  onOpenDrawer?: (
+    toolCallId?: string,
+    tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
+  ) => void;
   onMergeSuccess?: (res?: any) => void;
   onOpenRollback: (turnInfo?: RollbackTarget) => void;
 }
@@ -210,7 +213,20 @@ export const StudioChatPane: React.FC<StudioChatPaneProps> = ({
                           toolCallId={chip.toolCallId}
                           stage={chip.stage}
                           data={chip.data}
-                          onClick={() => onOpenDrawer && onOpenDrawer(chip.toolCallId)}
+                          onClick={() => {
+                            if (!onOpenDrawer) return;
+                            const isBash = (chip.toolName || "").toLowerCase() === "bash";
+                            const d = chip.data || {};
+                            const exitCodeRaw = d.exitCode !== undefined ? d.exitCode : d.exit_code;
+                            const isError = Boolean(
+                              d.isError || d.is_error || (exitCodeRaw !== undefined && exitCodeRaw !== 0)
+                            );
+                            if (isBash && isError) {
+                              onOpenDrawer(chip.toolCallId, "failed-commands");
+                            } else {
+                              onOpenDrawer(chip.toolCallId);
+                            }
+                          }}
                         />
                       ))}
                     </div>

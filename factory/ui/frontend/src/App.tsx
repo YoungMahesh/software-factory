@@ -20,6 +20,7 @@ import {
   studioQueryKeys,
 } from "./hooks/useStudioQueries";
 import { convertDbMessageToChatMessage } from "./utils";
+import { extractFailedCommands } from "./utils/failedCommands";
 
 export const STORAGE_KEY_SELECTED_REPO = "factory_studio_selected_repo";
 
@@ -59,7 +60,7 @@ export const AppContent: React.FC = () => {
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
-  const [drawerTab, setDrawerTab] = useState<"timeline" | "logs" | "history">("timeline");
+  const [drawerTab, setDrawerTab] = useState<"timeline" | "logs" | "history" | "failed-commands">("timeline");
   const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
@@ -250,6 +251,10 @@ export const AppContent: React.FC = () => {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  const failedCommands = React.useMemo(() => {
+    return activeJob ? extractFailedCommands(events) : [];
+  }, [activeJob, events]);
+
   const studioContextValue: StudioContextValue = {
     repos,
     selectedRepo,
@@ -266,10 +271,16 @@ export const AppContent: React.FC = () => {
       setDrawerTab("logs");
       setIsDrawerOpen(true);
     },
-    onOpenDrawer: (_targetToolCallId?: string, tab?: "timeline" | "logs" | "history") => {
-      if (tab) setDrawerTab(tab);
+    onOpenDrawer: (
+      _targetToolCallId?: string,
+      tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
+    ) => {
+      if (tab) {
+        setDrawerTab(tab === "failed_commands" ? "failed-commands" : tab);
+      }
       setIsDrawerOpen(true);
     },
+    failedCommandCount: failedCommands.length,
     isSending: isSendingPrompt || isApproving,
     previewState,
     onLaunchPreview: handleLaunchPreview,
@@ -304,6 +315,8 @@ export const AppContent: React.FC = () => {
         <AppNavigation
           activeJob={activeJob}
           selectedRepo={selectedRepo}
+          onOpenDrawer={studioContextValue.onOpenDrawer}
+          failedCommandCount={failedCommands.length}
         />
 
         <main className="flex-1 overflow-auto">

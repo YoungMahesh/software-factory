@@ -16,6 +16,7 @@ import {
   MarkPullRequestReadyResponse,
   RollbackTurnParams,
   RollbackTurnResponse,
+  FailedCommand,
 } from "./types";
 
 export type {
@@ -412,4 +413,22 @@ export async function rollbackTurn(
   }
   return res.json();
 }
+
+export interface FailedCommandsResponse {
+  job_id: string;
+  count: number;
+  failed_commands: FailedCommand[];
+}
+
+export async function fetchFailedCommands(
+  jobId: string
+): Promise<FailedCommandsResponse> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/failed-commands`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch failed commands: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 

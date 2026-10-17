@@ -22,7 +22,7 @@ export interface ActivityDrawerProps {
   selectedRepo?: string;
   onSelectJob?: (job: Job) => void;
   onCancelJob?: (jobId: string) => void;
-  initialTab?: "timeline" | "logs" | "history" | "failed-commands";
+  initialTab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands";
 }
 
 export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -38,7 +38,8 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   onCancelJob,
   initialTab = "timeline",
 }) => {
-  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history" | "failed-commands">(initialTab);
+  const normalizedInitialTab = initialTab === "failed_commands" ? "failed-commands" : (initialTab || "timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history" | "failed-commands">(normalizedInitialTab);
   const [copied, setCopied] = useState<boolean>(false);
 
   const failedCommands = React.useMemo(() => {
@@ -52,7 +53,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
 
   useEffect(() => {
     if (isOpen && initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(initialTab === "failed_commands" ? "failed-commands" : initialTab);
     }
   }, [isOpen, initialTab]);
 
