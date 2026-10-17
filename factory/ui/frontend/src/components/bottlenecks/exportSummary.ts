@@ -44,7 +44,6 @@ export function formatBottlenecksMarkdown(items: BottleneckItem[]): string {
 }
 
 export function formatRepoBottlenecksMarkdown(
-  _repo: string | undefined,
   bottlenecks: RepoBottleneck[]
 ): string {
   const headers = [
@@ -67,7 +66,7 @@ export function formatRepoBottlenecksMarkdown(
     const rank = idx + 1;
     const isThinking = item.category === "LLM Thinking";
     const cleanCmd = sanitizeCell(item.command);
-    const op = isThinking ? cleanCmd : `\`${cleanCmd}\``;
+    const operation = isThinking ? cleanCmd : `\`${cleanCmd}\``;
     const category = item.category || (isThinking ? "LLM Thinking" : "Command");
     const stage = item.stage || "—";
     const total = `${(item.total_duration_ms / 1000).toFixed(2)}s`;
@@ -78,7 +77,7 @@ export function formatRepoBottlenecksMarkdown(
         ? `${(item.max_duration_ms / 1000).toFixed(2)}s`
         : "—";
 
-    return `| ${rank} | ${op} | ${category} | ${stage} | ${total} | ${count} | ${avg} | ${max} |`;
+    return `| ${rank} | ${operation} | ${category} | ${stage} | ${total} | ${count} | ${avg} | ${max} |`;
   });
 
   return [

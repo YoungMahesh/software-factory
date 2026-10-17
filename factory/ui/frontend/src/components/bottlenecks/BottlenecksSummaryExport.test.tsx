@@ -171,7 +171,8 @@ describe("BottlenecksSummaryExport", () => {
 
     render(<RepoBottlenecksTable repo="test-org/test-repo" bottlenecks={bottlenecks} />);
 
-    const copyBtn = screen.getByTestId("btn-copy-bottlenecks-summary");
+    const copyBtn = screen.getByTestId("btn-copy-repo-bottlenecks-summary");
+    expect(copyBtn).toBeInTheDocument();
     expect(copyBtn).toHaveTextContent("Copy Summary");
 
     await act(async () => {

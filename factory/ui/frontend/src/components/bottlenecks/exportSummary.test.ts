@@ -100,7 +100,7 @@ describe("exportSummary", () => {
 
   describe("formatRepoBottlenecksMarkdown", () => {
     it("formats empty repo bottlenecks list", () => {
-      const result = formatRepoBottlenecksMarkdown("my-repo", []);
+      const result = formatRepoBottlenecksMarkdown([]);
       expect(result).toBe(
         "| Rank | Operation | Category | Stage | Total Duration | Invocations | Avg Duration | Max Duration |\n| ---: | :--- | :--- | :--- | ---: | ---: | ---: | ---: |"
       );
@@ -130,7 +130,7 @@ describe("exportSummary", () => {
         },
       ];
 
-      const md = formatRepoBottlenecksMarkdown("test-org/test-repo", bottlenecks);
+      const md = formatRepoBottlenecksMarkdown(bottlenecks);
       const lines = md.split("\n");
 
       expect(lines[0]).toBe("| Rank | Operation | Category | Stage | Total Duration | Invocations | Avg Duration | Max Duration |");

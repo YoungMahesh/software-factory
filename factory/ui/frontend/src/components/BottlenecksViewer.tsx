@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Loader2, Copy, Check } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { fetchRepoBottlenecks } from "../api";
-import { copyToClipboard } from "../utils";
 import { RepoBottleneck } from "../types";
 import {
   BottlenecksViewerProps,
@@ -11,6 +10,7 @@ import {
   classifyBottleneck,
   BottleneckCard,
   RepoBottlenecksTable,
+  CopySummaryButton,
   formatBottlenecksMarkdown,
 } from "./bottlenecks";
 
@@ -57,7 +57,6 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({
   const [selectedStage, setSelectedStage] = useState<StageFilter>("All");
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState<boolean>(false);
 
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -238,15 +237,6 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({
     });
   }, [items, hideMicroCommands, selectedStage, selectedCategory]);
 
-  const handleCopySummary = useCallback(async () => {
-    const md = formatBottlenecksMarkdown(displayedItems);
-    const ok = await copyToClipboard(md);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }, [displayedItems]);
-
   return (
     <div id="bottlenecks-viewer" className="space-y-4">
       {/* Scope Toggle: Current Run vs. Repository Aggregates */}
@@ -392,26 +382,7 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({
         <span className="font-sans font-semibold text-ink">
           Ranked Operations ({displayedItems.length})
         </span>
-        <button
-          id="btn-copy-bottlenecks-summary"
-          data-testid="btn-copy-bottlenecks-summary"
-          type="button"
-          onClick={handleCopySummary}
-          className="flex items-center space-x-1 px-2.5 py-1 rounded-pill text-xs font-mono font-medium text-slate-600 hover:text-ink bg-white border border-hairline hover:bg-soft-stone transition-colors cursor-pointer shadow-2xs"
-          title="Copy markdown summary to clipboard"
-        >
-          {copied ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5 text-muted" />
-              <span>Copy Summary</span>
-            </>
-          )}
-        </button>
+        <CopySummaryButton getText={() => formatBottlenecksMarkdown(displayedItems)} />
       </div>
 
       {/* Empty State */}
