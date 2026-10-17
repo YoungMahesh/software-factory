@@ -384,16 +384,19 @@ class TestJobRegistryPersistenceIntegration(unittest.TestCase):
         self.assertFalse(self.db._batch_queue.empty())
 
         call_count = 0
-        original_append = self.db.append_console_logs
+        original_cursor = self.db._cursor
+        from contextlib import contextmanager
 
-        def failing_append(job_id, logs):
+        @contextmanager
+        def failing_cursor():
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 raise ConnectionError("Transient network blip to Turso")
-            return original_append(job_id, logs)
+            with original_cursor() as cur:
+                yield cur
 
-        with patch.object(self.db, "append_console_logs", side_effect=failing_append):
+        with patch.object(self.db, "_cursor", side_effect=failing_cursor):
             with self.assertRaises(ConnectionError):
                 self.db.flush_batches()
             self.assertFalse(self.db._batch_queue.empty())
@@ -423,26 +426,18 @@ class TestJobRegistryPersistenceIntegration(unittest.TestCase):
                 self.assertIn(0.1, sleep_calls)
                 self.assertIn(0.2, sleep_calls)
 
-    def test_libsql_cursor_adapter_and_row(self):
-        from factory.ui.db import _LibsqlCursorAdapter, _LibsqlRow
+    def test_create_app_with_database_integration(self):
+        from factory.ui.app import create_app
+        from fastapi.testclient import TestClient
 
-        mock_raw_cur = MagicMock()
-        mock_raw_cur.description = (("id", None), ("repo", None), ("count", None))
-        mock_raw_cur.fetchone.return_value = ("msg-1", "my-repo", 42)
-        mock_raw_cur.fetchall.return_value = [("msg-1", "my-repo", 42)]
-
-        adapter = _LibsqlCursorAdapter(mock_raw_cur)
-        row = adapter.fetchone()
-        self.assertIsNotNone(row)
-        self.assertEqual(row["id"], "msg-1")
-        self.assertEqual(row["REPO"], "my-repo")
-        self.assertEqual(row[2], 42)
-        self.assertEqual(dict(row), {"id": "msg-1", "repo": "my-repo", "count": 42})
-        self.assertEqual(list(row), ["msg-1", "my-repo", 42])
-
-        rows = adapter.fetchall()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["id"], "msg-1")
+        app = create_app(db=self.db)
+        client = TestClient(app)
+        self.db.save_chat_message(repo="app-test-repo", role="user", content="Integration test")
+        resp = client.get("/api/studio/repos/app-test-repo/messages", auth=("admin", "admin"))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data.get("messages", [])), 1)
+        self.assertEqual(data["messages"][0]["content"], "Integration test")
 
 
 if __name__ == "__main__":

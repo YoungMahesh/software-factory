@@ -216,7 +216,10 @@ class JobsStorageMixin:
         """Enqueues a console log line to be flushed asynchronously in batches."""
         self._batch_queue.put(("log", job_id, line_num, text, stream_type, time.time()))
         if self._batch_queue.qsize() >= 50:
-            self.flush_batches()
+            try:
+                self.flush_batches()
+            except Exception:
+                pass
 
     def enqueue_event(
         self,
@@ -227,10 +230,13 @@ class JobsStorageMixin:
         """Enqueues a structured telemetry event to be flushed asynchronously in batches."""
         self._batch_queue.put(("event", job_id, seq, event_dict, time.time()))
         if self._batch_queue.qsize() >= 50:
-            self.flush_batches()
+            try:
+                self.flush_batches()
+            except Exception:
+                pass
 
     def flush_batches(self) -> None:
-        """Synchronously drains and writes all pending batch items to the database."""
+        """Synchronously drains and writes all pending batch items atomically to the database."""
         items = []
         while True:
             try:
@@ -240,26 +246,40 @@ class JobsStorageMixin:
         if not items:
             return
 
-        logs_by_job: dict[str, list[tuple[int, str, str]]] = {}
-        events_by_job: dict[str, list[dict[str, Any]]] = {}
-
+        log_params = []
+        event_params = []
         for item in items:
             kind = item[0]
             if kind == "log":
                 _, job_id, line_num, text, stream_type, ts = item
-                logs_by_job.setdefault(job_id, []).append((line_num, text, stream_type))
+                log_id = str(uuid.uuid4())
+                log_params.append((log_id, job_id, line_num, text, stream_type, ts))
             elif kind == "event":
                 _, job_id, seq, event_dict, ts = item
-                evt = dict(event_dict)
-                evt["seq"] = seq
-                evt["created_at"] = ts
-                events_by_job.setdefault(job_id, []).append(evt)
+                evt_id = str(uuid.uuid4())
+                event_type = event_dict.get("type") or event_dict.get("event_type") or "unknown"
+                stage = event_dict.get("stage")
+                data_json = json.dumps(event_dict)
+                event_params.append((evt_id, job_id, seq, event_type, stage, data_json, ts))
 
         try:
-            for j_id, logs in logs_by_job.items():
-                self.append_console_logs(j_id, logs)
-            for j_id, evts in events_by_job.items():
-                self.append_telemetry_events(j_id, evts)
+            with self._cursor() as cur:
+                if log_params:
+                    cur.executemany(
+                        """
+                        INSERT INTO job_console_logs (id, job_id, line_num, text, stream_type, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?);
+                        """,
+                        log_params,
+                    )
+                if event_params:
+                    cur.executemany(
+                        """
+                        INSERT INTO job_telemetry_events (id, job_id, seq, event_type, stage, data_json, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?);
+                        """,
+                        event_params,
+                    )
         except Exception:
             for item in reversed(items):
                 self._batch_queue.put(item)
