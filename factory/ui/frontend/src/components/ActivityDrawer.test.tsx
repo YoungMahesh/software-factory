@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { ActivityDrawer } from "./ActivityDrawer";
 import { Job } from "../types";
@@ -384,7 +384,7 @@ describe("ActivityDrawer", () => {
     expect(screen.getByTestId("failed-commands-empty-state")).toBeInTheDocument();
   });
 
-  it("renders stage filter chips and past-run selector in Failed Commands tab header", () => {
+  it("renders stage filter chips and past-run selector in Failed Commands tab header", async () => {
     const failedEvents = [
       {
         type: "tool_result",
@@ -438,7 +438,34 @@ describe("ActivityDrawer", () => {
     fireEvent.click(screen.getByTestId("stage-filter-coder"));
     expect(screen.getByText("pnpm build")).toBeInTheDocument();
     expect(screen.queryByText("pytest tests/")).not.toBeInTheDocument();
+
+    // Select past job in drawer and verify historical fetch without mutating onSelectJob
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        job_id: "job-100",
+        total_failed: 1,
+        failed_commands: [
+          {
+            id: "hist-100",
+            command: "npm run lint",
+            stage: "CODER",
+            exitCode: 1,
+            output: "eslint error",
+            isError: true,
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    fireEvent.change(selector, { target: { value: "job-100" } });
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs/job-100/failed-commands");
+    await waitFor(() => {
+      expect(screen.getByText("npm run lint")).toBeInTheDocument();
+    });
   });
 });
+
 
 

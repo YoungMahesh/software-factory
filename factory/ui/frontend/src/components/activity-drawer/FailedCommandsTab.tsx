@@ -8,7 +8,6 @@ export interface FailedCommandsTabProps {
   activeJobId?: string;
   jobs?: Job[];
   selectedRepo?: string;
-  onSelectJob?: (job: Job) => void;
 }
 
 export type StageFilter = "ALL" | "CODER" | "VERIFIER";
@@ -18,20 +17,36 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
   activeJobId,
   jobs = [],
   selectedRepo,
-  onSelectJob,
 }) => {
-  const [selectedJobId, setSelectedJobId] = useState<string>(activeJobId || "");
+  // Filter jobs for current repo
+  const repoJobs = useMemo(() => {
+    const list = jobs.filter((job) => !selectedRepo || !job.repo || job.repo === selectedRepo);
+    if (activeJobId && !list.some((job) => job.id === activeJobId)) {
+      return [{ id: activeJobId } as Job, ...list];
+    }
+    return list;
+  }, [jobs, selectedRepo, activeJobId]);
+
+  const defaultJobId = activeJobId || (repoJobs.length > 0 ? repoJobs[0].id : "");
+  const [selectedJobId, setSelectedJobId] = useState<string>(defaultJobId);
   const [stageFilter, setStageFilter] = useState<StageFilter>("ALL");
   const [historicalCommands, setHistoricalCommands] = useState<FailedCommand[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync selectedJobId if activeJobId updates
+  const prevActiveJobIdRef = React.useRef(activeJobId);
+
+  // Sync selectedJobId only when activeJobId prop actually transitions
   useEffect(() => {
-    if (activeJobId) {
-      setSelectedJobId(activeJobId);
+    if (activeJobId !== prevActiveJobIdRef.current) {
+      prevActiveJobIdRef.current = activeJobId;
+      if (activeJobId) {
+        setSelectedJobId(activeJobId);
+      }
+    } else if (!selectedJobId && repoJobs.length > 0 && !activeJobId) {
+      setSelectedJobId(repoJobs[0].id);
     }
-  }, [activeJobId]);
+  }, [activeJobId, repoJobs, selectedJobId]);
 
   // Fetch historical failed commands when inspecting a non-active past job
   useEffect(() => {
@@ -71,43 +86,30 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
     };
   }, [selectedJobId, activeJobId]);
 
-  // Filter jobs by current repo
-  const repoJobs = useMemo(() => {
-    const list = jobs.filter((j) => !selectedRepo || !j.repo || j.repo === selectedRepo);
-    if (activeJobId && !list.some((j) => j.id === activeJobId)) {
-      return [{ id: activeJobId, status: "RUNNING", stage: "CODER" } as Job, ...list];
-    }
-    return list;
-  }, [jobs, selectedRepo, activeJobId]);
-
   const isViewingActive = !selectedJobId || selectedJobId === activeJobId;
   const currentCommands = isViewingActive ? failedCommands : historicalCommands;
 
   // Calculate failure counts per stage
   const totalCount = currentCommands.length;
-  const coderCount = currentCommands.filter((c) => (c.stage || "").toUpperCase() === "CODER").length;
-  const verifierCount = currentCommands.filter((c) => (c.stage || "").toUpperCase() === "VERIFIER").length;
+  const coderCount = currentCommands.filter((cmd) => (cmd.stage || "").toUpperCase() === "CODER").length;
+  const verifierCount = currentCommands.filter((cmd) => (cmd.stage || "").toUpperCase() === "VERIFIER").length;
+
+  const stageFilters: { id: StageFilter; label: string; count: number }[] = [
+    { id: "ALL", label: "All", count: totalCount },
+    { id: "CODER", label: "Coder", count: coderCount },
+    { id: "VERIFIER", label: "Verifier", count: verifierCount },
+  ];
 
   // Filter commands by active stage filter chip
   const displayedCommands = useMemo(() => {
     if (stageFilter === "CODER") {
-      return currentCommands.filter((c) => (c.stage || "").toUpperCase() === "CODER");
+      return currentCommands.filter((cmd) => (cmd.stage || "").toUpperCase() === "CODER");
     }
     if (stageFilter === "VERIFIER") {
-      return currentCommands.filter((c) => (c.stage || "").toUpperCase() === "VERIFIER");
+      return currentCommands.filter((cmd) => (cmd.stage || "").toUpperCase() === "VERIFIER");
     }
     return currentCommands;
   }, [currentCommands, stageFilter]);
-
-  const handleJobChange = (jobId: string) => {
-    setSelectedJobId(jobId);
-    if (onSelectJob) {
-      const targetJob = repoJobs.find((j) => j.id === jobId);
-      if (targetJob) {
-        onSelectJob(targetJob);
-      }
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -119,68 +121,29 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
       >
         {/* Stage Filter Chips */}
         <div className="flex items-center space-x-1.5" role="group" aria-label="Stage filters">
-          <button
-            type="button"
-            id="stage-filter-all"
-            data-testid="stage-filter-all"
-            onClick={() => setStageFilter("ALL")}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
-              stageFilter === "ALL"
-                ? "bg-primary text-white shadow-xs"
-                : "bg-white text-muted hover:text-ink border border-hairline hover:bg-soft-stone"
-            }`}
-          >
-            <span>All</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                stageFilter === "ALL" ? "bg-white/20 text-white" : "bg-soft-stone text-muted"
+          {stageFilters.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              id={`stage-filter-${filter.id.toLowerCase()}`}
+              data-testid={`stage-filter-${filter.id.toLowerCase()}`}
+              onClick={() => setStageFilter(filter.id)}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                stageFilter === filter.id
+                  ? "bg-primary text-white shadow-xs"
+                  : "bg-white text-muted hover:text-ink border border-hairline hover:bg-soft-stone"
               }`}
             >
-              {totalCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            id="stage-filter-coder"
-            data-testid="stage-filter-coder"
-            onClick={() => setStageFilter("CODER")}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
-              stageFilter === "CODER"
-                ? "bg-primary text-white shadow-xs"
-                : "bg-white text-muted hover:text-ink border border-hairline hover:bg-soft-stone"
-            }`}
-          >
-            <span>Coder</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                stageFilter === "CODER" ? "bg-white/20 text-white" : "bg-soft-stone text-muted"
-              }`}
-            >
-              {coderCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            id="stage-filter-verifier"
-            data-testid="stage-filter-verifier"
-            onClick={() => setStageFilter("VERIFIER")}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
-              stageFilter === "VERIFIER"
-                ? "bg-primary text-white shadow-xs"
-                : "bg-white text-muted hover:text-ink border border-hairline hover:bg-soft-stone"
-            }`}
-          >
-            <span>Verifier</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                stageFilter === "VERIFIER" ? "bg-white/20 text-white" : "bg-soft-stone text-muted"
-              }`}
-            >
-              {verifierCount}
-            </span>
-          </button>
+              <span>{filter.label}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                  stageFilter === filter.id ? "bg-white/20 text-white" : "bg-soft-stone text-muted"
+                }`}
+              >
+                {filter.count}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Past-Run Selector Dropdown */}
@@ -195,17 +158,17 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
             id="failed-commands-job-selector"
             data-testid="failed-commands-job-selector"
             value={selectedJobId}
-            onChange={(e) => handleJobChange(e.target.value)}
+            onChange={(e) => setSelectedJobId(e.target.value)}
             className="bg-white border border-hairline rounded-pill px-2.5 py-1 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-form-focus shadow-2xs max-w-[220px] truncate"
           >
             {repoJobs.length === 0 ? (
               <option value="">No runs available</option>
             ) : (
-              repoJobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.id}
-                  {j.id === activeJobId ? " (Active)" : ""}
-                  {j.status ? ` - ${j.status}` : ""}
+              repoJobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.id}
+                  {job.id === activeJobId ? " (Active)" : ""}
+                  {job.status ? ` - ${job.status}` : ""}
                 </option>
               ))
             )}
@@ -272,7 +235,7 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
               exitCode={cmd.exitCode ?? cmd.exit_code}
               isError={cmd.isError ?? cmd.is_error}
               durationMs={cmd.durationMs ?? cmd.duration_ms}
-              output={cmd.output || cmd.stdout || ""}
+              output={cmd.output || cmd.stderr || cmd.stdout || ""}
               stderr={cmd.stderr}
             />
           ))}

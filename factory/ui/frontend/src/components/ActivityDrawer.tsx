@@ -437,7 +437,6 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               activeJobId={jobId}
               jobs={jobs}
               selectedRepo={selectedRepo}
-              onSelectJob={onSelectJob}
             />
           )}
         </div>

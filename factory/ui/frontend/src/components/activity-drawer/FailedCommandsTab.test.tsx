@@ -71,6 +71,24 @@ describe("FailedCommandsTab", () => {
     },
   ];
 
+  const mockHistoricalFailedResponse = {
+    job_id: "job-past-1",
+    total_failed: 1,
+    failed_commands: [
+      {
+        id: "hist-cmd-1",
+        command: "cargo check",
+        cwd: "/app/rust",
+        stage: "CODER",
+        exitCode: 101,
+        isError: true,
+        durationMs: 850,
+        stderr: "error[E0432]: unresolved import",
+        output: "error[E0432]: unresolved import\nbuild failed",
+      },
+    ],
+  };
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -167,27 +185,9 @@ describe("FailedCommandsTab", () => {
   });
 
   it("loads historical failed commands via GET /api/jobs/{job_id}/failed-commands when viewing a non-active job", async () => {
-    const historicalFailedResponse = {
-      job_id: "job-past-1",
-      total_failed: 1,
-      failed_commands: [
-        {
-          id: "hist-cmd-1",
-          command: "cargo check",
-          cwd: "/app/rust",
-          stage: "CODER",
-          exitCode: 101,
-          isError: true,
-          durationMs: 850,
-          stderr: "error[E0432]: unresolved import",
-          output: "error[E0432]: unresolved import\nbuild failed",
-        },
-      ],
-    };
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => historicalFailedResponse,
+      json: async () => mockHistoricalFailedResponse,
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -229,27 +229,9 @@ describe("FailedCommandsTab", () => {
   });
 
   it("restores active stream failed commands when switching back to active job", async () => {
-    const historicalFailedResponse = {
-      job_id: "job-past-1",
-      total_failed: 1,
-      failed_commands: [
-        {
-          id: "hist-cmd-1",
-          command: "cargo check",
-          cwd: "/app/rust",
-          stage: "CODER",
-          exitCode: 101,
-          isError: true,
-          durationMs: 850,
-          stderr: "error[E0432]: unresolved import",
-          output: "error[E0432]: unresolved import\nbuild failed",
-        },
-      ],
-    };
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => historicalFailedResponse,
+      json: async () => mockHistoricalFailedResponse,
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -277,5 +259,31 @@ describe("FailedCommandsTab", () => {
     expect(screen.getByText("pnpm test")).toBeInTheDocument();
     expect(screen.getByText("pytest tests/test_api.py")).toBeInTheDocument();
     expect(screen.queryByText("cargo check")).not.toBeInTheDocument();
+  });
+
+  it("defaults to the first past job and fetches failures when activeJobId is not provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockHistoricalFailedResponse,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <FailedCommandsTab
+        failedCommands={[]}
+        jobs={mockJobs.filter((job) => job.id !== "job-active")}
+        selectedRepo="my-app"
+      />
+    );
+
+    const selector = screen.getByTestId("failed-commands-job-selector") as HTMLSelectElement;
+    expect(selector.value).toBe("job-past-1");
+
+    // Should fetch failures for job-past-1
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs/job-past-1/failed-commands");
+
+    await waitFor(() => {
+      expect(screen.getByText("cargo check")).toBeInTheDocument();
+    });
   });
 });
