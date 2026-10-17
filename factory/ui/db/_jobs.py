@@ -255,15 +255,23 @@ class JobsStorageMixin:
                 evt["created_at"] = ts
                 events_by_job.setdefault(job_id, []).append(evt)
 
-        for j_id, logs in logs_by_job.items():
-            self.append_console_logs(j_id, logs)
-        for j_id, evts in events_by_job.items():
-            self.append_telemetry_events(j_id, evts)
+        try:
+            for j_id, logs in logs_by_job.items():
+                self.append_console_logs(j_id, logs)
+            for j_id, evts in events_by_job.items():
+                self.append_telemetry_events(j_id, evts)
+        except Exception:
+            for item in reversed(items):
+                self._batch_queue.put(item)
+            raise
 
     def _run_batch_flusher(self) -> None:
         while not self._batch_stop_event.is_set():
             time.sleep(0.25)
-            try:
-                self.flush_batches()
-            except Exception:
-                pass
+            for attempt in range(3):
+                try:
+                    self.flush_batches()
+                    break
+                except Exception:
+                    if attempt < 2 and not self._batch_stop_event.is_set():
+                        time.sleep(0.1 * (2 ** attempt))

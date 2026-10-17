@@ -13,3 +13,5 @@ node_modules/
 .pytest_cache/
 *.db
 factory/ui/data/
+.env*
+!.env.example

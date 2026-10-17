@@ -309,7 +309,7 @@ A mandatory verification check during the Pre-flight Guard and Reviewer Agent st
 _Avoid_: ADR check, architecture test
 
 **Studio Database**:
-An embedded persistent SQLite database (`factory/ui/data/factory_studio.db`) operating with Write-Ahead Logging (WAL) that stores Factory Studio Chat History, Job records, and Agent Telemetry Logs.
+A cloud-hosted libSQL database (backed by Turso) connected directly over TLS that stores Factory Studio Chat History, Job records, and Agent Telemetry Logs in development and production environments, while utilizing an in-memory SQLite database (`:memory:`) for automated test isolation.
 _Avoid_: Local DB, chat database, studio cache
 
 **Studio Chat History**:

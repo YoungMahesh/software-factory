@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import MagicMock, patch
 
 from factory.ui.db import StudioDatabase
 
@@ -358,6 +359,90 @@ class TestJobRegistryPersistenceIntegration(unittest.TestCase):
         self.assertIsNotNone(rehydrated)
         self.assertEqual(rehydrated.branch, "factory/preview-repo")
         self.assertEqual(rehydrated.preview_url, "https://preview.dev")
+
+    def test_fail_fast_missing_all_credentials_raises_runtime_error(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(RuntimeError) as ctx:
+                StudioDatabase(env_file="/nonexistent/.env")
+            self.assertIn("TURSO_DATABASE_URL", str(ctx.exception))
+            self.assertIn("TURSO_AUTH_TOKEN", str(ctx.exception))
+
+    def test_fail_fast_missing_auth_token_raises_runtime_error(self):
+        with patch.dict(os.environ, {"TURSO_DATABASE_URL": "libsql://test.turso.io"}, clear=True):
+            with self.assertRaises(RuntimeError) as ctx:
+                StudioDatabase(env_file="/nonexistent/.env")
+            self.assertIn("TURSO_AUTH_TOKEN", str(ctx.exception))
+
+    def test_hermetic_memory_mode_requires_no_credentials(self):
+        with patch.dict(os.environ, {}, clear=True):
+            db = StudioDatabase(":memory:", env_file="/nonexistent/.env")
+            self.assertTrue(db._is_memory)
+            db.close()
+
+    def test_batch_flusher_retains_items_and_retries(self):
+        self.db.enqueue_log("retry-job", 1, "Attempting connection\n", "stdout")
+        self.assertFalse(self.db._batch_queue.empty())
+
+        call_count = 0
+        original_append = self.db.append_console_logs
+
+        def failing_append(job_id, logs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Transient network blip to Turso")
+            return original_append(job_id, logs)
+
+        with patch.object(self.db, "append_console_logs", side_effect=failing_append):
+            with self.assertRaises(ConnectionError):
+                self.db.flush_batches()
+            self.assertFalse(self.db._batch_queue.empty())
+
+            self.db.flush_batches()
+            self.assertTrue(self.db._batch_queue.empty())
+
+        logs = self.db.get_console_logs("retry-job")
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0]["text"], "Attempting connection\n")
+
+    def test_run_batch_flusher_retries_transient_errors(self):
+        attempts = 0
+        def flusher_side_effect():
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                raise ConnectionError("Transient network error")
+            self.db._batch_stop_event.set()
+
+        with patch.object(self.db, "flush_batches", side_effect=flusher_side_effect):
+            with patch("time.sleep") as mock_sleep:
+                self.db._batch_stop_event.clear()
+                self.db._run_batch_flusher()
+                self.assertEqual(attempts, 3)
+                sleep_calls = [call[0][0] for call in mock_sleep.call_args_list if call[0]]
+                self.assertIn(0.1, sleep_calls)
+                self.assertIn(0.2, sleep_calls)
+
+    def test_libsql_cursor_adapter_and_row(self):
+        from factory.ui.db import _LibsqlCursorAdapter, _LibsqlRow
+
+        mock_raw_cur = MagicMock()
+        mock_raw_cur.description = (("id", None), ("repo", None), ("count", None))
+        mock_raw_cur.fetchone.return_value = ("msg-1", "my-repo", 42)
+        mock_raw_cur.fetchall.return_value = [("msg-1", "my-repo", 42)]
+
+        adapter = _LibsqlCursorAdapter(mock_raw_cur)
+        row = adapter.fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["id"], "msg-1")
+        self.assertEqual(row["REPO"], "my-repo")
+        self.assertEqual(row[2], 42)
+        self.assertEqual(dict(row), {"id": "msg-1", "repo": "my-repo", "count": 42})
+        self.assertEqual(list(row), ["msg-1", "my-repo", 42])
+
+        rows = adapter.fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "msg-1")
 
 
 if __name__ == "__main__":
