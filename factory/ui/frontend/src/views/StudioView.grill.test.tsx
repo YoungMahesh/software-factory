@@ -84,6 +84,69 @@ describe("StudioView - Grilling & Issues", () => {
     expect(screen.getByTestId("grill-question-Q2")).toBeInTheDocument();
     expect(screen.getByText("How should chart metrics data be cached?")).toBeInTheDocument();
     expect(screen.getByTestId("recommended-answer-Q2")).toHaveTextContent("TanStack Query cache");
+
+    // 4. Verify radio buttons and custom option are rendered with recommended pre-selected
+    expect(screen.getByTestId("grill-option-radio-Q1-0")).toBeChecked();
+    expect(screen.getByTestId("grill-option-radio-Q1-custom")).toBeInTheDocument();
+  });
+
+  it("renders interactive radio buttons, allows custom input, and submits answers upon clicking 'Submit Answers'", async () => {
+    const handleSendPrompt = vi.fn();
+    const messages = [
+      {
+        id: "m-user-1",
+        role: "user" as const,
+        text: "Add an analytics chart",
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: "m-assistant-grill-1",
+        role: "assistant" as const,
+        timestamp: Date.now() - 30000,
+        grillTurn: {
+          type: "grill_round" as const,
+          round: 1,
+          summary: "Clarifying chart placement and state cache strategy.",
+          questions: [
+            {
+              id: "Q1",
+              title: "Route Placement",
+              question: "Where should the analytics route be located?",
+              recommended: "app/routes/analytics.tsx",
+              options: ["app/routes/analytics.tsx", "app/routes/dashboard/analytics.tsx"],
+            },
+          ],
+        },
+      },
+    ];
+
+    const { user } = renderStudio({
+      messages,
+      onSendPrompt: handleSendPrompt,
+    });
+
+    // 1. Verify recommended radio option is pre-checked
+    const defaultRadio = screen.getByTestId("grill-option-radio-Q1-0") as HTMLInputElement;
+    expect(defaultRadio.checked).toBe(true);
+
+    // 2. Select 'Other / Custom' radio option
+    const customRadio = screen.getByTestId("grill-option-radio-Q1-custom") as HTMLInputElement;
+    await user.click(customRadio);
+    expect(customRadio.checked).toBe(true);
+
+    // 3. Verify custom input appears and type into it
+    const customInput = screen.getByTestId("grill-custom-input-Q1");
+    expect(customInput).toBeInTheDocument();
+    await user.type(customInput, "mount under app/routes/reports/analytics.tsx");
+
+    // 4. Click Submit Answers
+    const submitBtn = screen.getByTestId("grilling-submit-answers-btn");
+    await user.click(submitBtn);
+
+    expect(handleSendPrompt).toHaveBeenCalledWith(
+      "Q1: Other - mount under app/routes/reports/analytics.tsx",
+      false
+    );
   });
 
   it("renders interactive 'Approve Plan & Build' card upon ready_for_approval and triggers onApprovePlan", async () => {

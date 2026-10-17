@@ -219,7 +219,18 @@ export const StudioChatPane: React.FC<StudioChatPaneProps> = ({
                   {/* Grilling Turn: Interview Round, Error, or Approval */}
                   {msg.grillTurn ? (
                     msg.grillTurn.type === "grill_round" ? (
-                      <GrillRoundCard grillTurn={msg.grillTurn} />
+                      <GrillRoundCard
+                        grillTurn={msg.grillTurn}
+                        onSubmitAnswers={(answers) => onSendPrompt(answers, false)}
+                        isExecutingTurn={isExecutingTurn}
+                        isAnswered={
+                          Boolean(msg.turn_data?.reverted) ||
+                          isExecutingTurn ||
+                          messages.slice(messages.findIndex((m) => m.id === msg.id) + 1).some(
+                            (m) => m.role === "user" || m.grillTurn || m.deliveryGate
+                          )
+                        }
+                      />
                     ) : msg.grillTurn.type === "error" ? (
                       <GrillErrorCard
                         grillTurn={msg.grillTurn}

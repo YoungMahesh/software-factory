@@ -268,6 +268,10 @@ _Avoid_: Chat bot, prompt helper, grilling bot, interview agent
 An interactive requirement alignment workflow where user chat prompts in Factory Studio undergo interview rounds, codebase grounding, and domain terminology sharpening before synthesizing issues and dispatching the Assembly Line Pipeline.
 _Avoid_: Manual interview, prompt delay, question loop
 
+**Interactive Question Frontier**:
+An interactive chat card in Factory Studio rendering Grilling Assistant questions with mutually exclusive option radio groups, custom override inputs, and an inline submission control that serializes developer decisions into chat history.
+_Avoid_: Grill form, radio question card, option picker
+
 **Repository Codebase Grounding**:
 The autonomous discovery and inspection of target repository file trees and candidate component source code by the Grilling Assistant before generating interview questions, grounding requirement alignment in verified code facts rather than speculative assumptions.
 _Avoid_: Static analysis, repo scanning, vector search
