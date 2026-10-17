@@ -79,4 +79,25 @@ describe("CommandCard", () => {
     expect(screen.getByText("Log line 1")).toBeInTheDocument();
     expect(screen.getByText(/\[Show last 100 lines\]/i)).toBeInTheDocument();
   });
+
+  it("allows collapsing and expanding output using toggle button", () => {
+    render(
+      <CommandCard
+        command="pnpm test"
+        exitCode={1}
+        output="FAIL src/app.test.ts"
+      />
+    );
+
+    expect(screen.getByText("FAIL src/app.test.ts")).toBeInTheDocument();
+    const toggleBtn = screen.getByTestId("toggle-output-btn");
+
+    // Collapse
+    fireEvent.click(toggleBtn);
+    expect(screen.queryByText("FAIL src/app.test.ts")).not.toBeInTheDocument();
+
+    // Re-expand
+    fireEvent.click(toggleBtn);
+    expect(screen.getByText("FAIL src/app.test.ts")).toBeInTheDocument();
+  });
 });

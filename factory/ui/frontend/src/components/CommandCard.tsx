@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Terminal, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Terminal, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 
 interface CommandCardProps {
   id?: string;
@@ -29,6 +29,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
   const code = exitCode !== undefined && exitCode !== null ? exitCode : isError ? 1 : 0;
   const isFailure = !running && (code !== 0 || isError);
 
+  const [isOutputExpanded, setIsOutputExpanded] = useState<boolean>(true);
   const [showFullOutput, setShowFullOutput] = useState<boolean>(false);
 
   // Split lines
@@ -57,7 +58,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
     return /^(FAIL|FAILED|Error:|Exception:|AssertionError|Traceback|STDERR:)/i.test(trimmed);
   };
 
-  const formattedDuration = durationMs ? `${(durationMs / 1000).toFixed(2)}s` : null;
+  const formattedDuration = durationMs !== undefined && durationMs !== null ? `${(durationMs / 1000).toFixed(2)}s` : null;
 
   return (
     <div
@@ -117,44 +118,63 @@ export const CommandCard: React.FC<CommandCardProps> = ({
                   <span>Exit code {code}</span>
                 </span>
               )}
+              {totalLines > 0 && (
+                <button
+                  type="button"
+                  data-testid="toggle-output-btn"
+                  onClick={() => setIsOutputExpanded(!isOutputExpanded)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  title={isOutputExpanded ? "Collapse output" : "Expand output"}
+                >
+                  {isOutputExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
-      {totalLines > 100 && (
-        <div className="flex items-center justify-between px-3 py-1 bg-cohere-black/60 border-b border-white/10 text-[10px] text-slate-400">
-          <span>
-            Showing last 100 of {totalLines} lines
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowFullOutput(!showFullOutput)}
-            className="text-slate-300 hover:text-white underline font-mono"
-          >
-            {showFullOutput ? "[Show last 100 lines]" : "[View full output]"}
-          </button>
-        </div>
-      )}
-
-      {totalLines > 0 && (
-        <div className="p-3 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-cohere-black/70 text-slate-300">
-          {displayLines.map((line, idx) => {
-            const isStderr = isStderrLine(line);
-            return (
-              <div
-                key={idx}
-                className={
-                  isStderr
-                    ? "stderr-line text-red-400 font-semibold bg-red-950/30 px-1 rounded my-0.5"
-                    : "text-slate-300"
-                }
+      {isOutputExpanded && (
+        <>
+          {totalLines > 100 && (
+            <div className="flex items-center justify-between px-3 py-1 bg-cohere-black/60 border-b border-white/10 text-[10px] text-slate-400">
+              <span>
+                Showing last 100 of {totalLines} lines
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowFullOutput(!showFullOutput)}
+                className="text-slate-300 hover:text-white underline font-mono"
               >
-                {line || "\u00A0"}
-              </div>
-            );
-          })}
-        </div>
+                {showFullOutput ? "[Show last 100 lines]" : "[View full output]"}
+              </button>
+            </div>
+          )}
+
+          {totalLines > 0 && (
+            <div className="p-3 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto bg-cohere-black/70 text-slate-300">
+              {displayLines.map((line, idx) => {
+                const isStderr = isStderrLine(line);
+                return (
+                  <div
+                    key={idx}
+                    className={
+                      isStderr
+                        ? "stderr-line text-red-400 font-semibold bg-red-950/30 px-1 rounded my-0.5"
+                        : "text-slate-300"
+                    }
+                  >
+                    {line || "\u00A0"}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
