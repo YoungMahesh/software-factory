@@ -340,3 +340,8 @@ _Avoid_: File size limit, code line limit, test budget, 500-line rule
 The structural partitioning of a monolithic test file into a modular directory package or focused subsystem test modules adhering to deep module principles without altering test coverage.
 _Avoid_: Test splitting, test refactor, test slicing, test modularization
 
+**Command Failure Diagnostics**:
+A dedicated telemetry inspection surface in Factory Studio's Activity Drawer that captures, isolates, and displays non-zero exit code shell executions from both the Coder Agent and Deterministic Verifier stages to facilitate diagnosing missing environment dependencies and refining agent system prompts.
+_Avoid_: Error tab, failed bash tab, debug view, command log
+
+
