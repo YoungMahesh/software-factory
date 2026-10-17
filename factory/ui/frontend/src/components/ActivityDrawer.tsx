@@ -197,7 +197,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
         <div className="flex-1 overflow-y-auto p-4 bg-canvas">
           {activeTab === "bottlenecks" ? (
             <div id="studio-drawer-bottlenecks" className="space-y-4">
-              <BottlenecksViewer events={events} />
+              <BottlenecksViewer events={events} repo={selectedRepo} />
             </div>
           ) : activeTab === "timeline" ? (
             <div id="studio-drawer-timeline" className="space-y-3">

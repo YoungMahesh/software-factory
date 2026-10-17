@@ -309,3 +309,23 @@ export interface RollbackTarget {
   issueTitle?: string | null;
 }
 
+export interface RepoBottleneck {
+  command: string;
+  category: string;
+  stage?: string;
+  count: number;
+  invocation_count?: number;
+  total_duration_ms: number;
+  total_time?: number;
+  avg_duration_ms: number;
+  avg_time?: number;
+  max_duration_ms: number;
+  max_time?: number;
+}
+
+export interface RepoBottlenecksResponse {
+  repo: string;
+  bottlenecks: RepoBottleneck[];
+}
+
+

@@ -1,5 +1,7 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { fetchRepoBottlenecks } from "../api";
+import { RepoBottleneck } from "../types";
 import {
   BottlenecksViewerProps,
   BottleneckItem,
@@ -7,6 +9,7 @@ import {
   CategoryFilter,
   classifyBottleneck,
   BottleneckCard,
+  RepoBottlenecksTable,
 } from "./bottlenecks";
 
 export type { BottlenecksViewerProps, BottleneckItem };
@@ -14,7 +17,40 @@ export type { BottlenecksViewerProps, BottleneckItem };
 const STAGE_FILTERS: StageFilter[] = ["All", "Planner", "Coder", "Verifier", "Reviewer"];
 const CATEGORY_FILTERS: CategoryFilter[] = ["All", "Commands", "Thinking"];
 
-export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [] }) => {
+export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({
+  events = [],
+  repo,
+  initialScope = "current",
+}) => {
+  const [scope, setScope] = useState<"current" | "repo">(initialScope);
+  const [repoBottlenecks, setRepoBottlenecks] = useState<RepoBottleneck[]>([]);
+  const [isLoadingRepo, setIsLoadingRepo] = useState<boolean>(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+
+  const loadRepoBottlenecks = useCallback(async (targetRepo?: string) => {
+    const clean = (targetRepo || "").trim();
+    if (!clean) {
+      setRepoBottlenecks([]);
+      return;
+    }
+    setIsLoadingRepo(true);
+    setRepoError(null);
+    try {
+      const res = await fetchRepoBottlenecks(clean);
+      setRepoBottlenecks(res.bottlenecks || []);
+    } catch (err: any) {
+      setRepoError(err?.message || "Failed to load repository bottlenecks.");
+    } finally {
+      setIsLoadingRepo(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (scope === "repo" && repo) {
+      loadRepoBottlenecks(repo);
+    }
+  }, [scope, repo, loadRepoBottlenecks]);
+
   const [hideMicroCommands, setHideMicroCommands] = useState<boolean>(false);
   const [selectedStage, setSelectedStage] = useState<StageFilter>("All");
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
@@ -201,7 +237,47 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
 
   return (
     <div id="bottlenecks-viewer" className="space-y-4">
-      {/* Active Running Banner */}
+      {/* Scope Toggle: Current Run vs. Repository Aggregates */}
+      <div className="flex items-center justify-between p-1 bg-soft-stone/60 rounded-xl border border-hairline/80">
+        <div className="flex items-center space-x-1 w-full" data-testid="scope-toggles">
+          <button
+            type="button"
+            data-testid="scope-toggle-current-run"
+            onClick={() => setScope("current")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer text-center ${
+              scope === "current"
+                ? "bg-white text-ink shadow-xs font-semibold"
+                : "text-muted hover:text-ink hover:bg-white/50"
+            }`}
+          >
+            Current Run
+          </button>
+          <button
+            type="button"
+            data-testid="scope-toggle-repo-aggregates"
+            onClick={() => setScope("repo")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer text-center ${
+              scope === "repo"
+                ? "bg-white text-ink shadow-xs font-semibold"
+                : "text-muted hover:text-ink hover:bg-white/50"
+            }`}
+          >
+            Repository Aggregates
+          </button>
+        </div>
+      </div>
+
+      {scope === "repo" ? (
+        <RepoBottlenecksTable
+          repo={repo}
+          bottlenecks={repoBottlenecks}
+          isLoading={isLoadingRepo}
+          error={repoError}
+          onRetry={() => loadRepoBottlenecks(repo)}
+        />
+      ) : (
+        <>
+          {/* Active Running Banner */}
       {activeTool && (
         <div
           data-testid="active-execution-banner"
@@ -336,6 +412,8 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
           })}
         </div>
       )}
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 };

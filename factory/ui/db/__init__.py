@@ -18,10 +18,11 @@ from ._models import _row_to_job_dict, _row_to_preview_dict
 from ._chat import ChatStorageMixin
 from ._jobs import JobsStorageMixin
 from ._preview import PreviewStorageMixin
+from ._bottlenecks import BottlenecksStorageMixin
 from ._adapter import _load_env_file, _LibsqlRow, _LibsqlCursorAdapter
 
 
-class StudioDatabase(ChatStorageMixin, JobsStorageMixin, PreviewStorageMixin):
+class StudioDatabase(ChatStorageMixin, JobsStorageMixin, PreviewStorageMixin, BottlenecksStorageMixin):
     """Database persistence service supporting cloud Turso and in-memory SQLite."""
 
     def __init__(

@@ -28,4 +28,6 @@ export interface BottleneckItem {
 
 export interface BottlenecksViewerProps {
   events?: AgentEvent[];
+  repo?: string;
+  initialScope?: "current" | "repo";
 }

@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: In-Drawer Bottleneck Tab and Live Event Ranking
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Database storage layer includes an aggregation query grouping `job_telemetry_events` by normalized command or thinking phase for a given repository.
-- [ ] Canonical endpoint `GET /api/repos/{repo}/bottlenecks` returns aggregated metrics (total time, count, average time, max time, stage, and category).
-- [ ] Frontend API client includes `fetchRepoBottlenecks(repo: string)` with appropriate TypeScript types.
-- [ ] Scope toggle in the Bottlenecks tab switches between "Current Run" and "Repository Aggregates".
-- [ ] The aggregated view renders a table showing rank, normalized command/phase, total duration, invocation count, and average execution time.
-- [ ] Automated tests cover backend route aggregation and frontend scope toggling.
+- [x] Database storage layer includes an aggregation query grouping `job_telemetry_events` by normalized command or thinking phase for a given repository.
+- [x] Canonical endpoint `GET /api/repos/{repo}/bottlenecks` returns aggregated metrics (total time, count, average time, max time, stage, and category).
+- [x] Frontend API client includes `fetchRepoBottlenecks(repo: string)` with appropriate TypeScript types.
+- [x] Scope toggle in the Bottlenecks tab switches between "Current Run" and "Repository Aggregates".
+- [x] The aggregated view renders a table showing rank, normalized command/phase, total duration, invocation count, and average execution time.
+- [x] Automated tests cover backend route aggregation and frontend scope toggling.
