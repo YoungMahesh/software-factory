@@ -13,7 +13,8 @@ import { ApprovalCard } from "../../components/ApprovalCard";
 import { DeliveryGateCard } from "../../components/DeliveryGateCard";
 import { PromptComposer } from "../../components/PromptComposer";
 import { getLastUserPromptBefore } from "../../utils";
-import { ChatMessage, RollbackTarget, PreviewState } from "../../types";
+import { ChatMessage, RollbackTarget, PreviewState, DrawerTabParam } from "../../types";
+import { isFailedBashTool } from "../../utils/failedCommands";
 import { GrillRoundCard, GrillErrorCard } from "./StudioGrillCards";
 
 export interface StudioChatPaneProps {
@@ -34,10 +35,7 @@ export interface StudioChatPaneProps {
   onRetryTurn?: (prompt: string) => void;
   onApprovePlan?: (turn: any) => void;
   isApproving?: boolean;
-  onOpenDrawer?: (
-    toolCallId?: string,
-    tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
-  ) => void;
+  onOpenDrawer?: (toolCallId?: string, tab?: DrawerTabParam) => void;
   onMergeSuccess?: (res?: any) => void;
   onOpenRollback: (turnInfo?: RollbackTarget) => void;
 }
@@ -215,13 +213,7 @@ export const StudioChatPane: React.FC<StudioChatPaneProps> = ({
                           data={chip.data}
                           onClick={() => {
                             if (!onOpenDrawer) return;
-                            const isBash = (chip.toolName || "").toLowerCase() === "bash";
-                            const d = chip.data || {};
-                            const exitCodeRaw = d.exitCode !== undefined ? d.exitCode : d.exit_code;
-                            const isError = Boolean(
-                              d.isError || d.is_error || (exitCodeRaw !== undefined && exitCodeRaw !== 0)
-                            );
-                            if (isBash && isError) {
+                            if (isFailedBashTool(chip.toolName, chip.data)) {
                               onOpenDrawer(chip.toolCallId, "failed-commands");
                             } else {
                               onOpenDrawer(chip.toolCallId);

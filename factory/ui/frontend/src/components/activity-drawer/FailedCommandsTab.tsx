@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { FailedCommand, Job } from "../../types";
 import { CommandCard } from "../CommandCard";
+import { fetchFailedCommands } from "../../api";
 
 export interface FailedCommandsTabProps {
   failedCommands: FailedCommand[];
@@ -61,13 +62,7 @@ export const FailedCommandsTab: React.FC<FailedCommandsTabProps> = ({
     setIsLoading(true);
     setError(null);
 
-    fetch(`/api/jobs/${encodeURIComponent(selectedJobId)}/failed-commands`)
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`Failed to load historical failed commands: HTTP ${res.status}`);
-        }
-        return res.json();
-      })
+    fetchFailedCommands(selectedJobId)
       .then((data) => {
         if (isMounted) {
           setHistoricalCommands(data.failed_commands || []);

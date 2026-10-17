@@ -11,6 +11,7 @@ export const studioQueryKeys = {
   messages: (repo: string) => ["studio", "messages", repo] as const,
   pullRequests: (repo: string) => ["studio", "pullRequests", repo] as const,
   jobs: ["jobs"] as const,
+  failedCommands: (jobId: string) => ["jobs", jobId, "failed-commands"] as const,
 };
 
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {
@@ -269,4 +270,13 @@ export function useRollbackTurnMutation() {
     },
   });
 }
+
+export function useJobFailedCommandsQuery(jobId?: string | null) {
+  return useQuery({
+    queryKey: studioQueryKeys.failedCommands(jobId || ""),
+    queryFn: () => api.fetchFailedCommands(jobId || ""),
+    enabled: Boolean(jobId),
+  });
+}
+
 

@@ -77,3 +77,19 @@ export function extractFailedCommands(events: AgentEvent[] = []): FailedCommand[
 
   return failed;
 }
+
+/**
+ * Checks whether a given tool invocation represents a failed bash command execution.
+ */
+export function isFailedBashTool(toolName?: string, data?: any): boolean {
+  if (!toolName || toolName.toLowerCase() !== "bash") return false;
+  if (!data) return false;
+  const exitCodeRaw = data.exitCode !== undefined && data.exitCode !== null ? data.exitCode : data.exit_code;
+  const isError = Boolean(data.isError || data.is_error || false);
+  if (exitCodeRaw !== undefined && exitCodeRaw !== null) {
+    const code = Number(exitCodeRaw);
+    if (!isNaN(code) && code !== 0) return true;
+  }
+  return isError;
+}
+

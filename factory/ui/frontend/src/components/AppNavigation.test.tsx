@@ -103,7 +103,7 @@ describe("AppNavigation", () => {
     expect(onOpenDrawer).toHaveBeenCalledWith(undefined, "failed-commands");
   });
 
-  it("routes to timeline tab when clicking Activity button with zero failed commands", () => {
+  it("opens Activity Drawer preserving current tab when clicking Activity button with zero failed commands", () => {
     const onOpenDrawer = vi.fn();
     render(
       <AppNavigation
@@ -117,6 +117,6 @@ describe("AppNavigation", () => {
     const btn = screen.getByTestId("nav-activity-drawer-btn");
     fireEvent.click(btn);
 
-    expect(onOpenDrawer).toHaveBeenCalledWith(undefined, "timeline");
+    expect(onOpenDrawer).toHaveBeenCalledWith(undefined, undefined);
   });
 });

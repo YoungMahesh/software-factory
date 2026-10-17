@@ -1,15 +1,12 @@
 import React from "react";
 import { Boxes, GitBranch, Activity } from "lucide-react";
-import { Job } from "../types";
+import { Job, DrawerTabParam } from "../types";
 import { StudioContext } from "../context/StudioContext";
 
 export interface AppNavigationProps {
   activeJob: Job | null;
   selectedRepo: string;
-  onOpenDrawer?: (
-    targetToolCallId?: string,
-    tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
-  ) => void;
+  onOpenDrawer?: (targetToolCallId?: string, tab?: DrawerTabParam) => void;
   failedCommandCount?: number;
 }
 
@@ -27,7 +24,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
 
   const handleOpenActivity = () => {
     if (onOpenDrawer) {
-      onOpenDrawer(undefined, hasFailedCommands ? "failed-commands" : "timeline");
+      onOpenDrawer(undefined, hasFailedCommands ? "failed-commands" : undefined);
     }
   };
 
@@ -69,7 +66,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
                   e.stopPropagation();
                   onOpenDrawer(undefined, "failed-commands");
                 }}
-                className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-coral text-white"
+                className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-coral text-white"
               >
                 {failedCommandCount}
               </span>

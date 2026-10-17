@@ -324,4 +324,8 @@ export interface FailedCommand {
   timestamp?: number;
 }
 
+export type DrawerTab = "timeline" | "logs" | "history" | "failed-commands";
+export type DrawerTabParam = DrawerTab | "failed_commands";
+
+
 

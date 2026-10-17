@@ -7,6 +7,7 @@ import {
   GrillTurnResult,
   StudioDispatchParams,
   StudioDispatchResponse,
+  DrawerTabParam,
 } from "../types";
 
 export interface StudioContextValue {
@@ -22,10 +23,7 @@ export interface StudioContextValue {
   isApproving?: boolean;
   onCancelJob: (jobId: string) => void;
   onSwitchToConsole: () => void;
-  onOpenDrawer?: (
-    targetToolCallId?: string,
-    tab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands"
-  ) => void;
+  onOpenDrawer?: (targetToolCallId?: string, tab?: DrawerTabParam) => void;
   failedCommandCount?: number;
   isSending?: boolean;
   previewState?: PreviewState | null;

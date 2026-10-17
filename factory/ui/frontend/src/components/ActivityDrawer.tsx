@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle } from "lucide-react";
-import { AgentEvent, JobStage, Job } from "../types";
+import { AgentEvent, JobStage, Job, DrawerTab, DrawerTabParam } from "../types";
 import { copyToClipboard, formatRelativeTime } from "../utils";
 import { extractFailedCommands } from "../utils/failedCommands";
 import { ThinkingAccordion } from "./ThinkingAccordion";
@@ -22,7 +22,7 @@ export interface ActivityDrawerProps {
   selectedRepo?: string;
   onSelectJob?: (job: Job) => void;
   onCancelJob?: (jobId: string) => void;
-  initialTab?: "timeline" | "logs" | "history" | "failed-commands" | "failed_commands";
+  initialTab?: DrawerTabParam;
 }
 
 export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -39,7 +39,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   initialTab = "timeline",
 }) => {
   const normalizedInitialTab = initialTab === "failed_commands" ? "failed-commands" : (initialTab || "timeline");
-  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history" | "failed-commands">(normalizedInitialTab);
+  const [activeTab, setActiveTab] = useState<DrawerTab>(normalizedInitialTab);
   const [copied, setCopied] = useState<boolean>(false);
 
   const failedCommands = React.useMemo(() => {
