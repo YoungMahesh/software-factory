@@ -99,7 +99,10 @@ def create_app(
         if getattr(registry, "db", None) is not None:
             db = registry.db
         elif registry is job_registry:
-            db = StudioDatabase()
+            try:
+                db = StudioDatabase()
+            except RuntimeError:
+                db = StudioDatabase(":memory:")
         else:
             db = StudioDatabase(":memory:")
     registry.db = db

@@ -3,10 +3,11 @@
 import sys
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from factory.ui.db import StudioDatabase
 import factory.ui.github as gh
 
 router = APIRouter()
@@ -88,3 +89,31 @@ async def get_repo_issue_detail(repo: str, issue_number: int):
     if issue is None:
         raise HTTPException(status_code=404, detail=f"Issue #{issue_number} not found in {repo}.")
     return issue
+
+
+def _get_db(request: Request) -> StudioDatabase:
+    db = getattr(request.app.state, "db", None)
+    if db is not None:
+        return db
+    reg = getattr(request.app.state, "registry", None)
+    if reg is not None and getattr(reg, "db", None) is not None:
+        return reg.db
+    return StudioDatabase()
+
+
+@router.get("/api/repos/{repo}/bottlenecks")
+async def get_repo_bottlenecks_endpoint(
+    repo: str,
+    request: Request,
+    limit: int = 50,
+):
+    clean_repo = (repo or "").strip()
+    if not clean_repo:
+        raise HTTPException(status_code=400, detail="Repository name is required.")
+    db = _get_db(request)
+    bottlenecks = db.get_repo_bottlenecks(clean_repo, limit=limit)
+    return {
+        "repo": clean_repo,
+        "bottlenecks": bottlenecks,
+    }
+

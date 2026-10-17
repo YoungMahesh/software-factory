@@ -68,7 +68,7 @@ describe("ActivityDrawer", () => {
     },
   ];
 
-  it("renders 4 tabs (Timeline, Terminal Logs, History, and Failed Commands)", () => {
+  it("renders 5 tabs (Timeline, Terminal Logs, Bottlenecks, Failed Commands, and History)", () => {
     render(
       <ActivityDrawer
         isOpen={true}
@@ -83,8 +83,9 @@ describe("ActivityDrawer", () => {
 
     expect(screen.getByRole("button", { name: /Timeline/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Terminal Logs/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /History/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bottlenecks/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Failed Commands/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /History/i })).toBeInTheDocument();
   });
 
   it("switches between Timeline tab and Terminal Logs tab", () => {

@@ -18,6 +18,7 @@ import {
   RollbackTurnResponse,
   FailedCommand,
 } from "./types";
+import type { RepoBottlenecksResponse } from "./types";
 
 export type {
   StudioDispatchParams,
@@ -30,6 +31,8 @@ export type {
   RollbackTurnParams,
   RollbackTurnResponse,
   RollbackTarget,
+  RepoBottleneck,
+  RepoBottlenecksResponse,
 } from "./types";
 
 export interface StudioPromptResponse {
@@ -427,6 +430,21 @@ export async function fetchFailedCommands(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to fetch failed commands: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchRepoBottlenecks(
+  repo: string,
+  limit?: number
+): Promise<RepoBottlenecksResponse> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set("limit", String(limit));
+  const queryStr = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/bottlenecks${queryStr}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch repo bottlenecks: ${res.statusText}`);
   }
   return res.json();
 }

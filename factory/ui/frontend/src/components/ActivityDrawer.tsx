@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle } from "lucide-react";
+import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle, Timer } from "lucide-react";
 import { AgentEvent, JobStage, Job, DrawerTab, DrawerTabParam } from "../types";
 import { copyToClipboard, formatRelativeTime } from "../utils";
 import { extractFailedCommands } from "../utils/failedCommands";
@@ -10,6 +10,7 @@ import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
 import { FailedCommandsTab } from "./activity-drawer/FailedCommandsTab";
 import { Badge } from "./ui/Badge";
+import { BottlenecksViewer } from "./BottlenecksViewer";
 
 export interface ActivityDrawerProps {
   isOpen: boolean;
@@ -150,17 +151,17 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               <span>Terminal Logs</span>
             </button>
             <button
-              id="btn-drawer-tab-history"
+              id="btn-drawer-tab-bottlenecks"
               type="button"
-              onClick={() => setActiveTab("history")}
+              onClick={() => setActiveTab("bottlenecks")}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === "history"
+                activeTab === "bottlenecks"
                   ? "bg-primary text-white shadow-xs"
                   : "text-muted hover:text-ink hover:bg-white"
               }`}
             >
-              <History className="w-3.5 h-3.5" />
-              <span>History</span>
+              <Timer className="w-3.5 h-3.5" />
+              <span>Bottlenecks</span>
             </button>
             <button
               id="btn-drawer-tab-failed-commands"
@@ -182,6 +183,19 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                   {failedCommands.length}
                 </span>
               )}
+            </button>
+            <button
+              id="btn-drawer-tab-history"
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === "history"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>History</span>
             </button>
           </div>
 
@@ -209,7 +223,11 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-4 bg-canvas">
-          {activeTab === "timeline" ? (
+          {activeTab === "bottlenecks" ? (
+            <div id="studio-drawer-bottlenecks" className="space-y-4">
+              <BottlenecksViewer events={events} repo={selectedRepo} />
+            </div>
+          ) : activeTab === "timeline" ? (
             <div id="studio-drawer-timeline" className="space-y-3">
               {events.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 text-xs font-mono">

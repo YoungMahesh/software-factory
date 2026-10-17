@@ -344,4 +344,12 @@ _Avoid_: Test splitting, test refactor, test slicing, test modularization
 A dedicated telemetry inspection surface in Factory Studio's Activity Drawer that captures, isolates, and displays non-zero exit code shell executions from both the Coder Agent and Deterministic Verifier stages to facilitate diagnosing missing environment dependencies and refining agent system prompts.
 _Avoid_: Error tab, failed bash tab, debug view, command log
 
+**Agent Bottleneck Profiler**:
+A dedicated performance profiling surface in Factory Studio's Activity Drawer and REST API that measures, ranks, and categorizes execution durations across agent shell commands, verifier test runs, and LLM thinking phases within an active job and aggregated across historical repository runs.
+_Avoid_: Slow command log, performance tab, latency viewer, bottleneck tracker
+
+**Infrastructure Bottleneck Heuristics**:
+Pattern-matching categorization rules that classify agent command executions and telemetry events into discrete infrastructure domains (`Package Install`, `Test Suite`, `Build / Compile`, `Git / VCS`, `LLM Thinking`) based on executable binaries, CLI arguments, and pipeline stages to isolate systemic pipeline latency.
+_Avoid_: Command classifier, category heuristics, bottleneck badges, command tagging
+
 
