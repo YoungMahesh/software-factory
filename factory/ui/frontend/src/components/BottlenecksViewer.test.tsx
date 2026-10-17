@@ -417,5 +417,38 @@ describe("BottlenecksViewer", () => {
     fireEvent.click(cardHeader);
     expect(screen.queryByTestId("expanded-thinking-text")).not.toBeInTheDocument();
   });
+
+  it("renders standalone stderr and exit code indicator when tool_result specifies isError without exitCode", () => {
+    const stderrEvents: AgentEvent[] = [
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "bash",
+          command: "pnpm dlx prisma migrate",
+          stderr: "Prisma schema parse error\nFAIL validation",
+          isError: true,
+          durationMs: 750,
+          toolCallId: "p-err",
+        },
+      },
+    ];
+
+    render(<BottlenecksViewer events={stderrEvents} />);
+
+    // Exit code indicator is present and shows exit 1
+    const exitIndicator = screen.getByTestId("exit-code-indicator");
+    expect(exitIndicator).toBeInTheDocument();
+    expect(exitIndicator).toHaveTextContent("exit 1");
+
+    // Expand card and verify stderr is rendered with highlighted error line
+    const cardHeader = screen.getByTestId("bottleneck-card-header");
+    fireEvent.click(cardHeader);
+
+    const outputContainer = screen.getByTestId("expanded-output");
+    expect(outputContainer).toBeInTheDocument();
+    expect(outputContainer).toHaveTextContent("Prisma schema parse error");
+    expect(within(outputContainer).getByText("FAIL validation")).toHaveClass("stderr-line");
+  });
 });
 

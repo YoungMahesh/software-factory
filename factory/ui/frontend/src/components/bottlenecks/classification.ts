@@ -26,18 +26,22 @@ export function classifyBottleneck({
     .replace(/^sudo\s+/i, "")
     .trim();
 
-  // 1. Test Suite: test runners, framework runners, or VERIFIER stage
-  if (
-    /^(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?test\b/i.test(normalized) ||
-    /^(?:npx\s+|pnpm\s+dlx\s+)?(?:vitest|jest|pytest|playwright|cypress)\b/i.test(normalized) ||
-    /^(?:python3?|py)\s+-m\s+pytest\b/i.test(normalized) ||
-    /^(?:go|cargo)\s+test\b/i.test(normalized) ||
-    stage?.toUpperCase() === "VERIFIER"
-  ) {
-    return "Test Suite";
+  // 1. Git / VCS: git commands
+  if (/^git(?:\.exe)?(?:\s+.*)?$/i.test(normalized)) {
+    return "Git / VCS";
   }
 
-  // 2. Build / Compile: bundlers, compilers, build scripts
+  // 2. Package Install: dependency managers
+  if (
+    /^(?:pnpm|npm|yarn|bun)\s+(?:install|add|i)\b/i.test(normalized) ||
+    /^(?:pip|pip3|uv\s+pip)\s+install\b/i.test(normalized) ||
+    /^poetry\s+(?:install|add)\b/i.test(normalized) ||
+    /^cargo\s+(?:add|install)\b/i.test(normalized)
+  ) {
+    return "Package Install";
+  }
+
+  // 3. Build / Compile: bundlers, compilers, build scripts
   if (
     /^(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b/i.test(normalized) ||
     /^(?:npx\s+|pnpm\s+dlx\s+)?(?:tsc|vite\s+build|webpack|esbuild|rollup|next\s+build|turbo\s+build)\b/i.test(
@@ -48,19 +52,15 @@ export function classifyBottleneck({
     return "Build / Compile";
   }
 
-  // 3. Package Install: dependency managers
+  // 4. Test Suite: test runners, framework runners, or fallback for VERIFIER stage
   if (
-    /^(?:pnpm|npm|yarn|bun)\s+(?:install|add|i)\b/i.test(normalized) ||
-    /^(?:pip|pip3|uv\s+pip)\s+install\b/i.test(normalized) ||
-    /^poetry\s+(?:install|add)\b/i.test(normalized) ||
-    /^cargo\s+(?:add|install)\b/i.test(normalized)
+    /^(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?test\b/i.test(normalized) ||
+    /^(?:npx\s+|pnpm\s+dlx\s+)?(?:vitest|jest|pytest|playwright|cypress)\b/i.test(normalized) ||
+    /^(?:python3?|py)\s+-m\s+pytest\b/i.test(normalized) ||
+    /^(?:go|cargo)\s+test\b/i.test(normalized) ||
+    stage?.toUpperCase() === "VERIFIER"
   ) {
-    return "Package Install";
-  }
-
-  // 4. Git / VCS: git commands
-  if (/^git(?:\.exe)?(?:\s+.*)?$/i.test(normalized)) {
-    return "Git / VCS";
+    return "Test Suite";
   }
 
   return "Command";

@@ -261,7 +261,7 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-hairline/40">
           <div className="flex items-center space-x-1.5" data-testid="category-toggles">
             <span className="text-[10px] font-mono uppercase tracking-wider text-muted font-bold shrink-0">
-              Type
+              Category
             </span>
             {CATEGORY_FILTERS.map((cat) => {
               const isSelected = selectedCategory === cat;

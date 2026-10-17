@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Terminal,
   BrainCircuit,
@@ -53,7 +53,17 @@ export const BottleneckCard: React.FC<BottleneckCardProps> = ({
     );
   };
 
-  const outputLines = item.output ? item.output.split(/\r?\n/) : [];
+  // Unify stdout and stderr so stderr is never omitted if emitted separately
+  const fullOutput = useMemo(() => {
+    const out = item.output || "";
+    const err = item.stderr || "";
+    if (out && err) {
+      return out.includes(err) ? out : `${out}\n${err}`;
+    }
+    return out || err;
+  }, [item.output, item.stderr]);
+
+  const outputLines = fullOutput ? fullOutput.split(/\r?\n/) : [];
   if (outputLines.length > 0 && outputLines[outputLines.length - 1] === "") {
     outputLines.pop();
   }
@@ -114,7 +124,7 @@ export const BottleneckCard: React.FC<BottleneckCardProps> = ({
 
         <div className="flex items-center space-x-2 shrink-0">
           {/* Exit Code Indicator */}
-          {item.exitCode !== undefined && (
+          {item.type === "command" && (item.exitCode !== undefined || item.isError) && (
             <span
               data-testid="exit-code-indicator"
               className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${
@@ -128,7 +138,7 @@ export const BottleneckCard: React.FC<BottleneckCardProps> = ({
               ) : (
                 <CheckCircle2 className="w-2.5 h-2.5 text-deep-green" />
               )}
-              <span>exit {item.exitCode}</span>
+              <span>exit {item.exitCode ?? 1}</span>
             </span>
           )}
 

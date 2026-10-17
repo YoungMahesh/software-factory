@@ -63,7 +63,7 @@ describe("classifyBottleneck", () => {
       });
     });
 
-    it("classifies operations in VERIFIER stage as 'Test Suite'", () => {
+    it("classifies operations in VERIFIER stage as 'Test Suite' when unclassified", () => {
       expect(
         classifyBottleneck({
           type: "command",
@@ -71,6 +71,23 @@ describe("classifyBottleneck", () => {
           stage: "VERIFIER",
         })
       ).toBe("Test Suite");
+    });
+
+    it("preserves Git / VCS and Package Install for specific commands run in VERIFIER stage", () => {
+      expect(
+        classifyBottleneck({
+          type: "command",
+          command: "git diff HEAD~1",
+          stage: "VERIFIER",
+        })
+      ).toBe("Git / VCS");
+      expect(
+        classifyBottleneck({
+          type: "command",
+          command: "pnpm install",
+          stage: "VERIFIER",
+        })
+      ).toBe("Package Install");
     });
   });
 
