@@ -315,5 +315,27 @@ describe("StudioView - Core", () => {
     expect(streamReloadedIframe).not.toBe(reloadedIframe);
   });
 
+  it("renders StudioHeader cleanly without floating status badge or duplicate telemetry buttons even when active job is present", () => {
+    const { container } = renderStudio({
+      activeJob: {
+        id: "job-studio-badge-test",
+        repo: "cool-app",
+        feature: "auth",
+        issue: "1",
+        model: "deepseek-v4.1-flash",
+        vm: false,
+        dev: true,
+        status: "RUNNING",
+        stage: "CODER",
+        created_at: "2026-10-11T00:00:00Z",
+        log_count: 10,
+        event_count: 5,
+      },
+    });
 
+    expect(container.querySelector("#studio-floating-status-badge")).toBeNull();
+    expect(container.querySelector("#btn-studio-activity")).toBeNull();
+    expect(container.querySelector("#btn-inspect-logs")).toBeNull();
+    expect(container.querySelector("#btn-studio-cancel")).toBeNull();
+  });
 });

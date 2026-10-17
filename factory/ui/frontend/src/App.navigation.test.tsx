@@ -130,6 +130,8 @@ describe("App Root - Navigation & Lifecycle", () => {
     await waitFor(() => {
       expect(screen.getAllByText("my-app").length).toBeGreaterThanOrEqual(1);
     });
+    const navHeader = screen.getByRole("banner");
+    expect(within(navHeader).queryByText("my-app")).toBeNull();
   });
 
   it("handles container timeout disconnect, preserves chat history, and reconnects to active branch", async () => {
@@ -436,4 +438,48 @@ describe("App Root - Navigation & Lifecycle", () => {
       expect(screen.getByText("ERR_PNPM_FETCH_404: Package not found")).toBeInTheDocument();
     });
   });
+
+  it("renders clickable active job pill in navigation, opens drawer on pill click, and triggers cancelJob on inline cancel click", async () => {
+    vi.mocked(api.sendStudioPrompt).mockResolvedValue({
+      accepted: true,
+      job: {
+        id: "job-cancel-test",
+        repo: "my-app",
+        feature: "checkout",
+        issue: "1",
+        model: "deepseek-v4.1-flash",
+        vm: false,
+        dev: true,
+        status: "RUNNING",
+        stage: "CODER",
+        created_at: Date.now(),
+        started_at: Date.now(),
+        ended_at: null,
+        exit_code: null,
+        error_message: null,
+        logs_count: 0,
+      },
+      preview_url: "https://sb-1-3000.modal.host",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(api.fetchPreview).toHaveBeenCalledWith("my-app"));
+
+    const input = screen.getByTestId("studio-prompt-input");
+    fireEvent.change(input, { target: { value: "Run cancel test" } });
+    fireEvent.submit(screen.getByRole("button", { name: /Send/i }));
+
+    const pill = await screen.findByTestId("nav-active-job-indicator");
+    expect(pill).toHaveTextContent("CODER");
+    expect(pill).toHaveTextContent("job-cancel-test");
+
+    const cancelBtn = within(pill).getByTestId("nav-cancel-job-btn");
+    fireEvent.click(cancelBtn);
+    expect(api.cancelJob).toHaveBeenCalledWith("job-cancel-test");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(pill);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
 });
+

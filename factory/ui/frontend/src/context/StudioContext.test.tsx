@@ -20,7 +20,6 @@ describe("StudioContext", () => {
       messages: [],
       onSendPrompt: () => {},
       onCancelJob: () => {},
-      onSwitchToConsole: () => {},
       previewState: {
         repo: "test-repo",
         status: "SERVING",

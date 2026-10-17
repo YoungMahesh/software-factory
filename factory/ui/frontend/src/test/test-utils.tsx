@@ -22,7 +22,6 @@ export const createDefaultStudioContext = (
   messages: [],
   onSendPrompt: vi.fn(),
   onCancelJob: vi.fn(),
-  onSwitchToConsole: vi.fn(),
   onOpenDrawer: vi.fn(),
   isSending: false,
   previewState: null,

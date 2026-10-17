@@ -22,7 +22,6 @@ export interface StudioContextValue {
   onApprovePlan?: (turn: GrillTurnResult) => Promise<void> | void;
   isApproving?: boolean;
   onCancelJob: (jobId: string) => void;
-  onSwitchToConsole: () => void;
   onOpenDrawer?: (targetToolCallId?: string, tab?: DrawerTabParam) => void;
   failedCommandCount?: number;
   isSending?: boolean;

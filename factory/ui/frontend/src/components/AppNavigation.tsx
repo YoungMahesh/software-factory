@@ -1,23 +1,26 @@
 import React from "react";
-import { Boxes, GitBranch, Activity } from "lucide-react";
+import { Boxes, Activity, XCircle } from "lucide-react";
 import { Job, DrawerTabParam } from "../types";
 import { StudioContext } from "../context/StudioContext";
 
 export interface AppNavigationProps {
   activeJob: Job | null;
-  selectedRepo: string;
+  selectedRepo?: string;
   onOpenDrawer?: (targetToolCallId?: string, tab?: DrawerTabParam) => void;
   failedCommandCount?: number;
+  onCancelJob?: (jobId: string) => void;
 }
 
 export const AppNavigation: React.FC<AppNavigationProps> = ({
   activeJob,
-  selectedRepo,
+  selectedRepo: _selectedRepo,
   onOpenDrawer: propsOnOpenDrawer,
   failedCommandCount: propsFailedCount,
+  onCancelJob: propsOnCancelJob,
 }) => {
   const studioContext = React.useContext(StudioContext);
   const onOpenDrawer = propsOnOpenDrawer || studioContext?.onOpenDrawer;
+  const onCancelJob = propsOnCancelJob || studioContext?.onCancelJob;
   const rawCount = propsFailedCount !== undefined ? propsFailedCount : (studioContext?.failedCommandCount || 0);
   const failedCommandCount = Math.max(0, rawCount);
   const hasFailedCommands = Boolean(activeJob && failedCommandCount > 0);
@@ -74,19 +77,40 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
           </button>
         )}
         {activeJob && (
-          <div className="flex items-center space-x-2 bg-primary px-3 py-1 rounded-pill border border-hairline/40 text-white shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-white font-mono text-[11px]">{activeJob.stage}</span>
+          <div
+            id="nav-active-job-indicator"
+            data-testid="nav-active-job-indicator"
+            onClick={() => onOpenDrawer && onOpenDrawer()}
+            className="flex items-center space-x-2 bg-primary hover:bg-primary/90 px-3 py-1 rounded-pill border border-hairline/40 text-white shadow-xs cursor-pointer transition-colors"
+            title="Open Activity Drawer"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-white font-mono text-[11px] font-medium uppercase">{activeJob.stage}</span>
             <span className="text-white/40">•</span>
             <span className="text-slate-300 truncate max-w-[120px]">
               {activeJob.feature || activeJob.repo}
             </span>
+            <span className="text-white/40">•</span>
+            <span className="font-mono text-slate-400 text-[10px] truncate max-w-[80px]">
+              {activeJob.id}
+            </span>
+            {activeJob.status === "RUNNING" && onCancelJob && (
+              <button
+                id="btn-nav-cancel-job"
+                data-testid="nav-cancel-job-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelJob(activeJob.id);
+                }}
+                className="p-0.5 text-coral hover:text-white hover:bg-coral/20 rounded-pill transition-colors ml-0.5 focus:outline-none"
+                title="Cancel running assembly line"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
-        <div className="flex items-center space-x-1.5 text-muted font-mono text-[11px] bg-soft-stone px-2.5 py-1 rounded-pill border border-hairline">
-          <GitBranch className="w-3 h-3 text-slate-500" />
-          <span className="text-ink">{selectedRepo || "no-repo"}</span>
-        </div>
       </div>
     </header>
   );

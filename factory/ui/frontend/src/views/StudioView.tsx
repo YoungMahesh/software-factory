@@ -38,8 +38,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onRetryTurn,
     onApprovePlan,
     isApproving = false,
-    onCancelJob,
-    onSwitchToConsole,
     onOpenDrawer,
     isSending = false,
     previewState = null,
@@ -387,10 +385,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         isLaunchingPreview={isLaunchingPreview}
         onLaunchPreview={onLaunchPreview}
         onStopPreview={onStopPreview}
-        activeJob={activeJob}
-        onOpenDrawer={onOpenDrawer}
-        onSwitchToConsole={onSwitchToConsole}
-        onCancelJob={onCancelJob}
       />
 
       {/* Main Split Layout: Chat Conversation Left, Live Preview Right */}

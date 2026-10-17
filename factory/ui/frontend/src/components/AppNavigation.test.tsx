@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { AppNavigation } from "./AppNavigation";
+import { StudioContext } from "../context/StudioContext";
 import { Job } from "../types";
 
 describe("AppNavigation", () => {
@@ -23,7 +24,7 @@ describe("AppNavigation", () => {
     logs_count: 0,
   };
 
-  it("renders navigation branding, repo pill, and Activity Drawer trigger button", () => {
+  it("renders navigation branding and Activity Drawer trigger button without static repo pill", () => {
     const onOpenDrawer = vi.fn();
     render(
       <AppNavigation
@@ -35,7 +36,7 @@ describe("AppNavigation", () => {
     );
 
     expect(screen.getByText("Software Factory")).toBeInTheDocument();
-    expect(screen.getByText("my-app")).toBeInTheDocument();
+    expect(screen.queryByText("my-app")).toBeNull();
     expect(screen.getByTestId("nav-activity-drawer-btn")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Activity/i })).toBeInTheDocument();
   });
@@ -119,4 +120,95 @@ describe("AppNavigation", () => {
 
     expect(onOpenDrawer).toHaveBeenCalledWith(undefined, undefined);
   });
+
+  it("renders enriched active job pill with stage, feature, and job ID", () => {
+    render(
+      <AppNavigation
+        activeJob={dummyJob}
+        selectedRepo="my-app"
+        onOpenDrawer={vi.fn()}
+      />
+    );
+
+    const indicator = screen.getByTestId("nav-active-job-indicator");
+    expect(indicator).toBeInTheDocument();
+    expect(screen.getByText("CODER")).toBeInTheDocument();
+    expect(screen.getByText("feature-test")).toBeInTheDocument();
+    expect(screen.getByText("job-test-1")).toBeInTheDocument();
+  });
+
+  it("triggers onOpenDrawer when clicking anywhere on the active job pill", () => {
+    const onOpenDrawer = vi.fn();
+    render(
+      <AppNavigation
+        activeJob={dummyJob}
+        selectedRepo="my-app"
+        onOpenDrawer={onOpenDrawer}
+      />
+    );
+
+    const indicator = screen.getByTestId("nav-active-job-indicator");
+    fireEvent.click(indicator);
+
+    expect(onOpenDrawer).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders inline Cancel button when job status is RUNNING and stops propagation on click", () => {
+    const onOpenDrawer = vi.fn();
+    const onCancelJob = vi.fn();
+    render(
+      <AppNavigation
+        activeJob={dummyJob}
+        selectedRepo="my-app"
+        onOpenDrawer={onOpenDrawer}
+        onCancelJob={onCancelJob}
+      />
+    );
+
+    const cancelBtn = screen.getByTestId("nav-cancel-job-btn");
+    expect(cancelBtn).toBeInTheDocument();
+
+    fireEvent.click(cancelBtn);
+
+    expect(onCancelJob).toHaveBeenCalledTimes(1);
+    expect(onCancelJob).toHaveBeenCalledWith("job-test-1");
+    // Crucial: Drawer should NOT have been opened because propagation stopped
+    expect(onOpenDrawer).not.toHaveBeenCalled();
+  });
+
+  it("omits inline Cancel button when active job status is not RUNNING", () => {
+    const completedJob: Job = {
+      ...dummyJob,
+      status: "SUCCESS",
+    };
+
+    render(
+      <AppNavigation
+        activeJob={completedJob}
+        selectedRepo="my-app"
+        onOpenDrawer={vi.fn()}
+        onCancelJob={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("nav-cancel-job-btn")).toBeNull();
+  });
+
+  it("falls back to StudioContext.onCancelJob if onCancelJob prop is not provided", () => {
+    const onCancelJob = vi.fn();
+    render(
+      <StudioContext.Provider value={{ onCancelJob } as any}>
+        <AppNavigation
+          activeJob={dummyJob}
+          selectedRepo="my-app"
+        />
+      </StudioContext.Provider>
+    );
+
+    const cancelBtn = screen.getByTestId("nav-cancel-job-btn");
+    fireEvent.click(cancelBtn);
+
+    expect(onCancelJob).toHaveBeenCalledWith("job-test-1");
+  });
 });
+

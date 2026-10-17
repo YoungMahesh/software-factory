@@ -267,10 +267,6 @@ export const AppContent: React.FC = () => {
     onApprovePlan: handleApprovePlan,
     isApproving,
     onCancelJob: handleCancelJob,
-    onSwitchToConsole: () => {
-      setDrawerTab("logs");
-      setIsDrawerOpen(true);
-    },
     onOpenDrawer: (_targetToolCallId?: string, tab?: DrawerTabParam) => {
       if (tab) {
         setDrawerTab(tab === "failed_commands" ? "failed-commands" : tab);
@@ -314,6 +310,7 @@ export const AppContent: React.FC = () => {
           selectedRepo={selectedRepo}
           onOpenDrawer={studioContextValue.onOpenDrawer}
           failedCommandCount={failedCommands.length}
+          onCancelJob={handleCancelJob}
         />
 
         <main className="flex-1 overflow-auto">

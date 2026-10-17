@@ -6,12 +6,8 @@ import {
   GitPullRequest,
   Play,
   Square,
-  Activity,
-  Terminal,
-  XCircle,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { Badge } from "../../components/ui/Badge";
 import { PullRequest, PreviewState } from "../../types";
 import { StudioPRPopover } from "./StudioPRPopover";
 
@@ -42,10 +38,6 @@ export interface StudioHeaderProps {
   isLaunchingPreview: boolean;
   onLaunchPreview?: () => void;
   onStopPreview?: () => void;
-  activeJob: any;
-  onOpenDrawer?: (toolCallId?: string) => void;
-  onSwitchToConsole?: () => void;
-  onCancelJob: (jobId: string) => void;
 }
 
 export const StudioHeader: React.FC<StudioHeaderProps> = ({
@@ -74,10 +66,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   isLaunchingPreview,
   onLaunchPreview,
   onStopPreview,
-  activeJob,
-  onOpenDrawer,
-  onSwitchToConsole,
-  onCancelJob,
 }) => {
   return (
     <div className="flex items-center justify-between px-6 py-2.5 bg-soft-stone border-b border-hairline shrink-0">
@@ -234,62 +222,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           </div>
         )}
       </div>
-
-      {/* Floating / Top Status Badge for Active Job */}
-      {activeJob && (
-        <div
-          id="studio-floating-status-badge"
-          className="flex items-center space-x-2 bg-primary px-3 py-1.5 rounded-pill border border-hairline/40 shadow-md text-xs text-white"
-        >
-          <Badge id="studio-badge-stage-text" variant="stage">
-            {activeJob.stage}
-          </Badge>
-          <span id="studio-badge-job-detail" className="font-mono text-slate-300 text-[11px] truncate max-w-[150px]">
-            {activeJob.id}
-          </span>
-
-          {onOpenDrawer && (
-            <Button
-              id="btn-studio-activity"
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenDrawer()}
-              icon={<Activity className="w-3 h-3" />}
-              className="px-2.5 py-0.5 text-[11px] text-white hover:text-white bg-white/10 hover:bg-white/20 rounded-pill"
-              title="Open Agent Activity Drawer"
-            >
-              Activity
-            </Button>
-          )}
-
-          <Button
-            id="btn-inspect-logs"
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onSwitchToConsole}
-            icon={<Terminal className="w-3 h-3" />}
-            className="px-2.5 py-0.5 text-[11px] text-slate-300 hover:text-white rounded-pill"
-            title="Inspect terminal logs in Console"
-          >
-            Logs
-          </Button>
-
-          {activeJob.status === "RUNNING" && (
-            <Button
-              id="btn-studio-cancel"
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onCancelJob(activeJob.id)}
-              icon={<XCircle className="w-3.5 h-3.5" />}
-              className="p-1 text-coral hover:text-white hover:bg-coral/20 rounded-pill"
-              title="Cancel running assembly line"
-            />
-          )}
-        </div>
-      )}
     </div>
   );
 };
