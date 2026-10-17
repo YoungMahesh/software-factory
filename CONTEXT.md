@@ -160,7 +160,7 @@ An abstraction interface within the assembly line harness that decouples ticket 
 _Avoid_: Ticket provider, tracker backend, issue driver
 
 **GitHub Issue Tracker**:
-A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests. In Factory Studio and the Factory Testing Console, this serves as the sole convention for web UI operations.
+A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests. In Factory Studio, this serves as the sole convention for web UI operations.
 _Avoid_: GitHub project, issue board, repo issues
 
 **Local Markdown Issue Tracker**:
@@ -232,7 +232,7 @@ A validation check executed upon repository checkout in the sandbox verifying th
 _Avoid_: Healthcheck, bootstrap check, repo validator
 
 **Factory Testing Console**:
-An interactive local web interface running on the developer workstation used to discover repositories under the Test Organization (`software-factory-09-test`), configure and dispatch ephemeral software factory sandboxes with test parameters, and monitor real-time assembly line stage transitions and execution logs.
+_Deprecated_: Superseded by Factory Studio. Formerly an interactive local web interface running on the developer workstation used to configure and dispatch test parameters across ephemeral sandboxes. Consolidated into Factory Studio with the Studio Issue Drawer for execution controls and the Activity Drawer for multi-run history and telemetry.
 _Avoid_: Factory UI, test dashboard, web runner, factory web app
 
 **Factory Studio**:
@@ -240,12 +240,12 @@ An interactive web workspace providing a conversational prompt interface and liv
 _Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
 
 **Cohere Editorial Design System**:
-The enterprise design language implemented across Factory Studio and the Factory Testing Console inspired by Cohere's web interface, characterized by a stark white editorial canvas and soft stone secondary surfaces bounded by hairline containment rules, contrasted against high-contrast dark console execution blocks, monospaced technical telemetry, coral taxonomy chips, and pill-centric interactive controls.
+The enterprise design language implemented across Factory Studio inspired by Cohere's web interface, characterized by a stark white editorial canvas and soft stone secondary surfaces bounded by hairline containment rules, contrasted against high-contrast dark console execution blocks, monospaced technical telemetry, coral taxonomy chips, and pill-centric interactive controls.
 _Avoid_: Dark mode dashboard, generic Tailwind theme, slate UI
 
 
 **Studio Issue Drawer**:
-A slide-over interface within Factory Studio that displays GitHub issues for the active repository, providing controls to inspect specifications, trigger the Grill-Before-Change Protocol, or directly dispatch the Assembly Line Pipeline.
+A slide-over interface within Factory Studio that displays GitHub issues for the active repository, providing controls to inspect specifications, configure execution settings (model selection and VM sandbox virtualization), trigger the Grill-Before-Change Protocol, or directly dispatch the Assembly Line Pipeline.
 _Avoid_: Issue panel, issue modal, GitHub view, issue selector
 
 **Delivery Gate Card**:
@@ -257,7 +257,7 @@ An interactive control in Factory Studio that triggers a squash merge of a Featu
 _Avoid_: Merge button, quick merge, direct merge
 
 **Agent Event Stream**:
-A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into the Factory Testing Console and Factory Studio.
+A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into Factory Studio.
 _Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
 
 **Grilling Assistant**:
