@@ -307,3 +307,21 @@ export interface RollbackTarget {
   issueTitle?: string | null;
 }
 
+export interface FailedCommand {
+  id: string;
+  command: string;
+  cwd?: string;
+  stage: string;
+  exitCode: number;
+  exit_code?: number;
+  durationMs?: number;
+  duration_ms?: number;
+  stdout?: string;
+  stderr?: string;
+  output?: string;
+  isError?: boolean;
+  is_error?: boolean;
+  timestamp?: number;
+}
+
+

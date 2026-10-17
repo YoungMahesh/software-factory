@@ -4,6 +4,8 @@ import asyncio
 import json
 import queue as pyqueue
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -128,3 +130,121 @@ async def stream_job(job_id: str, request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _get_db(request: Request):
+    db = getattr(request.app.state, "db", None)
+    if db is not None:
+        return db
+    reg = _get_registry(request)
+    if getattr(reg, "db", None) is not None:
+        return reg.db
+    try:
+        from factory.ui.db import StudioDatabase
+        return StudioDatabase()
+    except Exception:
+        return None
+
+
+def _extract_failed_commands(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    failed_commands: list[dict[str, Any]] = []
+    allowed_stages = {"CODER", "VERIFIER"}
+
+    for idx, evt in enumerate(events):
+        evt_type = evt.get("type") or evt.get("event_type")
+        if evt_type != "tool_result":
+            continue
+
+        raw_stage = evt.get("stage") or ""
+        stage = raw_stage.upper()
+        if stage not in allowed_stages:
+            continue
+
+        data = evt.get("data")
+        if not isinstance(data, dict):
+            data = evt
+
+        tool_name = (data.get("toolName") or data.get("tool_name") or "").lower()
+        if tool_name != "bash":
+            continue
+
+        exit_code_raw = data.get("exitCode") if data.get("exitCode") is not None else data.get("exit_code")
+        is_error = bool(data.get("isError") or data.get("is_error") or False)
+
+        if exit_code_raw is not None:
+            try:
+                exit_code = int(exit_code_raw)
+            except (ValueError, TypeError):
+                exit_code = 1 if is_error else 0
+        else:
+            exit_code = 1 if is_error else 0
+
+        # Only isolate failed commands
+        if exit_code == 0 and not is_error:
+            continue
+
+        args = data.get("args") if isinstance(data.get("args"), dict) else {}
+        command = data.get("command") or args.get("command") or "bash"
+        cwd = data.get("cwd") or args.get("cwd")
+        duration_ms = data.get("durationMs") if data.get("durationMs") is not None else data.get("duration_ms")
+        stdout = data.get("stdout") or ""
+        stderr = data.get("stderr") or ""
+        output = data.get("output") or stdout or stderr or ""
+        tool_call_id = data.get("toolCallId") or data.get("tool_call_id") or evt.get("id") or f"failed-cmd-{idx}"
+        timestamp = evt.get("created_at") or evt.get("timestamp")
+
+        failed_commands.append({
+            "id": str(tool_call_id),
+            "command": command,
+            "cwd": cwd,
+            "stage": stage,
+            "exit_code": exit_code,
+            "exitCode": exit_code,
+            "duration_ms": duration_ms,
+            "durationMs": duration_ms,
+            "stdout": stdout,
+            "stderr": stderr,
+            "output": output,
+            "is_error": is_error or (exit_code != 0),
+            "isError": is_error or (exit_code != 0),
+            "timestamp": timestamp,
+        })
+
+    return failed_commands
+
+
+@router.get("/api/jobs/{job_id}/failed-commands")
+async def get_failed_commands(job_id: str, request: Request):
+    registry = _get_registry(request)
+    job = registry.get_job(job_id)
+    db = _get_db(request)
+
+    events: list[dict[str, Any]] = []
+    job_found = False
+
+    if job is not None:
+        job_found = True
+        events = list(job.events)
+
+    if not events and db is not None:
+        try:
+            db_job = db.get_job(job_id)
+            if db_job:
+                job_found = True
+            db_events = db.get_telemetry_events(job_id)
+            if db_events:
+                job_found = True
+                events = db_events
+        except Exception:
+            pass
+
+    if not job_found:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+
+    failed_commands = _extract_failed_commands(events)
+    return {
+        "job_id": job_id,
+        "total_failed": len(failed_commands),
+        "failed_commands": failed_commands,
+    }
+

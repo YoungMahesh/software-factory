@@ -68,7 +68,7 @@ describe("ActivityDrawer", () => {
     },
   ];
 
-  it("renders 3 tabs (Timeline, Terminal Logs, and History)", () => {
+  it("renders 4 tabs (Timeline, Terminal Logs, History, and Failed Commands)", () => {
     render(
       <ActivityDrawer
         isOpen={true}
@@ -84,6 +84,7 @@ describe("ActivityDrawer", () => {
     expect(screen.getByRole("button", { name: /Timeline/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Terminal Logs/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /History/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Failed Commands/i })).toBeInTheDocument();
   });
 
   it("switches between Timeline tab and Terminal Logs tab", () => {
@@ -244,6 +245,143 @@ describe("ActivityDrawer", () => {
     expect(within(table).getByText("job-repo-1")).toBeInTheDocument();
     expect(within(table).queryByText("job-repo-2")).not.toBeInTheDocument();
     expect(screen.getByText("1 job")).toBeInTheDocument();
+  });
+
+  it("isolates and renders structured command cards for failed commands in CODER and VERIFIER stages", () => {
+    const mixedEvents = [
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "bash",
+          command: "pnpm install",
+          cwd: "/app",
+          exitCode: 0,
+          output: "Dependencies installed",
+        },
+      },
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "bash",
+          command: "pnpm build",
+          cwd: "/app/client",
+          exitCode: 1,
+          durationMs: 450,
+          output: "tsc: not found",
+          stderr: "tsc: not found",
+          isError: true,
+          toolCallId: "call-fail-1",
+        },
+      },
+      {
+        type: "tool_result",
+        stage: "VERIFIER",
+        data: {
+          toolName: "bash",
+          command: "pytest tests/",
+          cwd: "/app/backend",
+          exitCode: 2,
+          durationMs: 1200,
+          output: "FAIL test_api.py",
+          stderr: "FAIL test_api.py",
+          isError: true,
+          toolCallId: "call-fail-2",
+        },
+      },
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "read",
+          path: "/app/src/index.ts",
+          exitCode: 1,
+          isError: true,
+        },
+      },
+    ];
+
+    render(
+      <ActivityDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        jobId="job-999"
+        stage="CODER"
+        events={mixedEvents}
+      />
+    );
+
+    // Coral counter badge on tab button
+    const failedTabBtn = screen.getByRole("button", { name: /Failed Commands/i });
+    expect(failedTabBtn).toBeInTheDocument();
+    expect(within(failedTabBtn).getByText("2")).toBeInTheDocument();
+
+    // Click Failed Commands tab
+    fireEvent.click(failedTabBtn);
+
+    // Verify isolated failed commands are rendered
+    expect(screen.getByText("pnpm build")).toBeInTheDocument();
+    expect(screen.getByText("/app/client")).toBeInTheDocument();
+    expect(screen.getByText("pytest tests/")).toBeInTheDocument();
+    expect(screen.getByText("/app/backend")).toBeInTheDocument();
+
+    // Verify exit codes and stderr lines
+    expect(screen.getByText("Exit code 1")).toBeInTheDocument();
+    expect(screen.getByText("Exit code 2")).toBeInTheDocument();
+    expect(screen.getByText("tsc: not found")).toBeInTheDocument();
+    expect(screen.getByText("FAIL test_api.py")).toBeInTheDocument();
+
+    // Verify successful bash command is not in the failed commands view
+    expect(screen.queryByText("pnpm install")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dependencies installed")).not.toBeInTheDocument();
+  });
+
+  it("renders clean empty state with confirmation message when zero commands failed", () => {
+    const cleanEvents = [
+      {
+        type: "tool_result",
+        stage: "CODER",
+        data: {
+          toolName: "bash",
+          command: "pnpm test",
+          exitCode: 0,
+          output: "All tests pass",
+        },
+      },
+    ];
+
+    render(
+      <ActivityDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        jobId="job-clean"
+        stage="COMPLETED"
+        events={cleanEvents}
+      />
+    );
+
+    const failedTabBtn = screen.getByRole("button", { name: /Failed Commands/i });
+    fireEvent.click(failedTabBtn);
+
+    expect(screen.getByTestId("failed-commands-empty-state")).toBeInTheDocument();
+    expect(screen.getByText("No Failed Commands")).toBeInTheDocument();
+    expect(screen.getByText(/All shell commands executed successfully/i)).toBeInTheDocument();
+  });
+
+  it("supports initialTab='failed-commands' to open directly into Failed Commands tab", () => {
+    render(
+      <ActivityDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        jobId="job-direct"
+        stage="CODER"
+        events={[]}
+        initialTab="failed-commands"
+      />
+    );
+
+    expect(screen.getByTestId("failed-commands-empty-state")).toBeInTheDocument();
   });
 });
 

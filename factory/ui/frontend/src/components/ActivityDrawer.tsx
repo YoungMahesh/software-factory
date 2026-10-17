@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle } from "lucide-react";
+import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle } from "lucide-react";
 import { AgentEvent, JobStage, Job } from "../types";
 import { copyToClipboard, formatRelativeTime } from "../utils";
+import { extractFailedCommands } from "../utils/failedCommands";
 import { ThinkingAccordion } from "./ThinkingAccordion";
 import { CommandCard } from "./CommandCard";
 import { ToolChip } from "./ToolChip";
 import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
+import { FailedCommandsTab } from "./activity-drawer/FailedCommandsTab";
 import { Badge } from "./ui/Badge";
 
 export interface ActivityDrawerProps {
@@ -20,7 +22,7 @@ export interface ActivityDrawerProps {
   selectedRepo?: string;
   onSelectJob?: (job: Job) => void;
   onCancelJob?: (jobId: string) => void;
-  initialTab?: "timeline" | "logs" | "history";
+  initialTab?: "timeline" | "logs" | "history" | "failed-commands";
 }
 
 export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -36,8 +38,12 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   onCancelJob,
   initialTab = "timeline",
 }) => {
-  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history">(initialTab);
+  const [activeTab, setActiveTab] = useState<"timeline" | "logs" | "history" | "failed-commands">(initialTab);
   const [copied, setCopied] = useState<boolean>(false);
+
+  const failedCommands = React.useMemo(() => {
+    return extractFailedCommands(events);
+  }, [events]);
 
   const displayedJobs = React.useMemo(() => {
     if (!selectedRepo) return jobs;
@@ -154,6 +160,27 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             >
               <History className="w-3.5 h-3.5" />
               <span>History</span>
+            </button>
+            <button
+              id="btn-drawer-tab-failed-commands"
+              type="button"
+              onClick={() => setActiveTab("failed-commands")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === "failed-commands"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Failed Commands</span>
+              {failedCommands.length > 0 && (
+                <span
+                  id="failed-commands-counter-badge"
+                  className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-coral text-white"
+                >
+                  {failedCommands.length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -314,7 +341,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                 logs.join("")
               )}
             </div>
-          ) : (
+          ) : activeTab === "history" ? (
             <div id="studio-drawer-history" className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-ink font-sans">
@@ -404,6 +431,8 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                 </table>
               </div>
             </div>
+          ) : (
+            <FailedCommandsTab failedCommands={failedCommands} />
           )}
         </div>
       </div>
