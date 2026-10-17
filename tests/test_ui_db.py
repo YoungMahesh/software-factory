@@ -433,7 +433,7 @@ class TestJobRegistryPersistenceIntegration(unittest.TestCase):
         app = create_app(db=self.db)
         client = TestClient(app)
         self.db.save_chat_message(repo="app-test-repo", role="user", content="Integration test")
-        resp = client.get("/api/studio/repos/app-test-repo/messages", auth=("admin", "admin"))
+        resp = client.get("/api/repos/app-test-repo/messages", auth=("admin", "admin"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(len(data.get("messages", [])), 1)

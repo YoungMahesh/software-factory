@@ -62,18 +62,18 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         )
 
     def test_prompt_endpoint_missing_repo_returns_400(self):
-        resp = self.client.post("/api/studio/prompt", json={"repo": "", "prompt": "Build a calculator"})
+        resp = self.client.post("/api/prompt", json={"repo": "", "prompt": "Build a calculator"})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Repository name is required", resp.json()["detail"])
 
     def test_prompt_endpoint_missing_prompt_returns_400(self):
-        resp = self.client.post("/api/studio/prompt", json={"repo": "test3", "prompt": "   "})
+        resp = self.client.post("/api/prompt", json={"repo": "test3", "prompt": "   "})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Prompt is required", resp.json()["detail"])
 
     def test_prompt_endpoint_accepts_database_prompt_for_grilling(self):
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Build a user login app with a PostgreSQL database and Prisma migrations",
@@ -94,7 +94,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         ]
         for p in prompts:
             resp = self.client.post(
-                "/api/studio/prompt",
+                "/api/prompt",
                 json={
                     "repo": "test3",
                     "prompt": p,
@@ -143,7 +143,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
 
         with patch.object(self.registry, "start_job") as mock_start_job:
             resp = self.client.post(
-                "/api/studio/prompt",
+                "/api/prompt",
                 json={
                     "repo": "test3",
                     "prompt": "Build a responsive calculator app with arithmetic history and dark mode",
@@ -214,7 +214,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
 
         with patch.object(self.registry, "start_job") as mock_start_job:
             resp = self.client.post(
-                "/api/studio/prompt",
+                "/api/prompt",
                 json={
                     "repo": "test-inactive",
                     "prompt": "Build an auto-provisioned preview feature",
@@ -260,7 +260,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         mock_create_preview.side_effect = RuntimeError("Modal provisioning timeout")
 
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test-fail-provision",
                 "prompt": "Build a feature that fails sandbox provisioning",
@@ -313,7 +313,7 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
         self.preview_registry._previews["test-reuse"] = preview
 
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test-reuse",
                 "prompt": "Add navigation header",
@@ -400,7 +400,15 @@ class TestConversationalPromptOrchestration(unittest.TestCase):
     def test_prompt_endpoint_unauthenticated_returns_401(self):
         unauth_client = TestClient(self.app)
         resp = unauth_client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={"repo": "test3", "prompt": "Build a calculator"},
         )
         self.assertEqual(resp.status_code, 401)
+
+    def test_legacy_studio_prompt_returns_404(self):
+        resp = self.client.post(
+            "/api/studio/prompt",
+            json={"repo": "test3", "prompt": "Build a calculator"},
+        )
+        self.assertEqual(resp.status_code, 404)
+

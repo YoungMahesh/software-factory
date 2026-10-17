@@ -143,7 +143,7 @@ def _execute_in_sandbox_sync(
     return commit_sha
 
 
-@router.post("/api/studio/repos/{repo}/preview", status_code=201)
+@router.post("/api/repos/{repo}/preview", status_code=201)
 async def launch_preview_endpoint(repo: str, request: Request, req: LaunchPreviewRequest | None = None):
     clean_repo = repo.strip()
     if not clean_repo:
@@ -154,7 +154,7 @@ async def launch_preview_endpoint(repo: str, request: Request, req: LaunchPrevie
     return JSONResponse(status_code=201, content=preview.to_dict())
 
 
-@router.get("/api/studio/repos/{repo}/preview")
+@router.get("/api/repos/{repo}/preview")
 async def get_preview_endpoint(repo: str, request: Request):
     clean_repo = repo.strip()
     if not clean_repo:
@@ -166,7 +166,7 @@ async def get_preview_endpoint(repo: str, request: Request):
     return preview.to_dict()
 
 
-@router.delete("/api/studio/repos/{repo}/preview")
+@router.delete("/api/repos/{repo}/preview")
 async def stop_preview_endpoint(repo: str, request: Request):
     clean_repo = repo.strip()
     if not clean_repo:
@@ -181,7 +181,7 @@ async def stop_preview_endpoint(repo: str, request: Request):
     return {"message": f"Preview for {clean_repo} stopped.", "success": True, "repo": clean_repo}
 
 
-@router.get("/api/studio/repos/{repo}/preview/stream")
+@router.get("/api/repos/{repo}/preview/stream")
 async def stream_preview_endpoint(repo: str, request: Request):
     clean_repo = repo.strip()
     if not clean_repo:
@@ -243,7 +243,7 @@ async def stream_preview_endpoint(repo: str, request: Request):
     )
 
 
-@router.post("/api/studio/repos/{repo}/preview/sync")
+@router.post("/api/repos/{repo}/preview/sync")
 async def sync_preview_endpoint(repo: str, request: Request, req: PreviewSyncRequest | None = None):
     clean_repo = repo.strip()
     bare_repo = clean_repo.split("/")[-1]
@@ -299,7 +299,6 @@ async def sync_preview_endpoint(repo: str, request: Request, req: PreviewSyncReq
     }
 
 
-@router.post("/api/studio/repos/{repo}/preview/branch")
 @router.post("/api/repos/{repo}/preview/branch")
 async def switch_preview_branch_endpoint(repo: str, req: PreviewBranchRequest, request: Request):
     clean_repo = repo.strip()

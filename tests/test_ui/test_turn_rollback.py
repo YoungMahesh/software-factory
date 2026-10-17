@@ -105,7 +105,7 @@ class TestStudioTurnRollback(unittest.TestCase):
         with self.registry._lock:
             job.status = JobStatus.RUNNING
 
-        resp = self.client.post("/api/studio/repos/active-repo/turns/rollback", json={})
+        resp = self.client.post("/api/repos/active-repo/rollback", json={})
         self.assertEqual(resp.status_code, 409)
         self.assertIn("active or queued", resp.json()["detail"].lower())
         mock_sandbox.exec.assert_not_called()
@@ -116,7 +116,7 @@ class TestStudioTurnRollback(unittest.TestCase):
         with self.registry._lock:
             job.status = JobStatus.QUEUED
 
-        resp = self.client.post("/api/studio/repos/queued-repo/turns/rollback", json={})
+        resp = self.client.post("/api/repos/queued-repo/rollback", json={})
         self.assertEqual(resp.status_code, 409)
         self.assertIn("active or queued", resp.json()["detail"].lower())
         mock_sandbox.exec.assert_not_called()
@@ -136,7 +136,7 @@ class TestStudioTurnRollback(unittest.TestCase):
         ]
 
         resp = self.client.post(
-            "/api/studio/repos/merged-repo/turns/rollback",
+            "/api/repos/merged-repo/rollback",
             json={"branch": "factory/feat-1"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -161,7 +161,7 @@ class TestStudioTurnRollback(unittest.TestCase):
         )
 
         resp = self.client.post(
-            "/api/studio/repos/conflict-repo/turns/rollback",
+            "/api/repos/conflict-repo/rollback",
             json={"branch": "factory/feat-1"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -202,7 +202,7 @@ class TestStudioTurnRollback(unittest.TestCase):
 
         # 3. Call rollback
         resp = self.client.post(
-            "/api/studio/repos/happy-repo/turns/rollback",
+            "/api/repos/happy-repo/rollback",
             json={
                 "message_id": orig_msg["id"],
                 "branch": "factory/feat-1",
@@ -280,7 +280,7 @@ class TestStudioTurnRollback(unittest.TestCase):
             exit_code=0,
         )
 
-        resp = self.client.post("/api/studio/repos/auto-repo/turns/rollback", json={})
+        resp = self.client.post("/api/repos/auto-repo/rollback", json={})
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["original_commit"], "sha002")
@@ -304,7 +304,7 @@ class TestStudioTurnRollback(unittest.TestCase):
         state, _ = self._register_serving_preview("re-rollback-repo")
 
         resp = self.client.post(
-            "/api/studio/repos/re-rollback-repo/turns/rollback",
+            "/api/repos/re-rollback-repo/rollback",
             json={"message_id": msg["id"]},
         )
         self.assertEqual(resp.status_code, 400)
@@ -362,13 +362,20 @@ class TestStudioTurnRollback(unittest.TestCase):
         with patch.object(self.preview_registry, "wait_for_serving", side_effect=fake_wait_for_serving) as mock_wait, \
              patch.object(self.preview_registry, "launch_preview", side_effect=fake_launch_preview) as mock_launch:
             resp = self.client.post(
-                "/api/studio/repos/stopped-repo/turns/rollback",
+                "/api/repos/stopped-repo/rollback",
                 json={"branch": "factory/feat-stopped"},
             )
             self.assertEqual(resp.status_code, 200)
             mock_launch.assert_called_once()
             mock_wait.assert_called_once()
             mock_sandbox.exec.assert_called_once()
+
+    def test_legacy_studio_rollback_returns_404(self):
+        resp = self.client.post(
+            "/api/studio/repos/any-repo/turns/rollback",
+            json={"branch": "factory/feat-stopped"},
+        )
+        self.assertEqual(resp.status_code, 404)
 
     def test_update_local_markdown_issue_for_rollback(self):
         import tempfile

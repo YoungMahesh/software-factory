@@ -26,7 +26,6 @@ def _gh(attr: str):
 
 
 @router.get("/api/repos")
-@router.get("/api/studio/repos")
 async def get_repos():
     detailed_repos = _gh("fetch_test_org_repos_detailed")()
     default_org = _gh("DEFAULT_TEST_ORG")
@@ -37,7 +36,6 @@ async def get_repos():
 
 
 @router.post("/api/repos", status_code=201)
-@router.post("/api/studio/repos", status_code=201)
 async def create_repo(req: CreateRepoRequest):
     repo_name = req.name.strip()
     valid, err_msg = _gh("validate_github_repo_name")(repo_name)
@@ -52,7 +50,6 @@ async def create_repo(req: CreateRepoRequest):
     return JSONResponse(status_code=201, content=result)
 
 
-@router.get("/api/studio/repos/{repo}/branches")
 @router.get("/api/repos/{repo}/branches")
 async def get_repo_branches_endpoint(repo: str):
     clean_repo = repo.strip()

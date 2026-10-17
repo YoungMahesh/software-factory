@@ -52,7 +52,7 @@ from factory.ui.registry import (
 
 
 class TestStudioDispatchEndpoint(unittest.TestCase):
-    """Test suite for POST /api/studio/dispatch endpoint."""
+    """Test suite for POST /api/dispatch endpoint."""
 
     def setUp(self):
         from factory.ui.db import StudioDatabase
@@ -85,14 +85,14 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
     def test_dispatch_endpoint_unauthenticated_returns_401(self):
         unauth_client = TestClient(self.app)
         resp = unauth_client.post(
-            "/api/studio/dispatch",
+            "/api/dispatch",
             json={"repo": "test3", "milestone_slug": "v1-core"},
         )
         self.assertEqual(resp.status_code, 401)
 
     def test_dispatch_endpoint_missing_repo_returns_400(self):
         resp = self.client.post(
-            "/api/studio/dispatch",
+            "/api/dispatch",
             json={"repo": "", "milestone_slug": "v1-core"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -100,7 +100,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
 
     def test_dispatch_endpoint_missing_milestone_and_issue_returns_400(self):
         resp = self.client.post(
-            "/api/studio/dispatch",
+            "/api/dispatch",
             json={"repo": "test3"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -111,7 +111,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
 
         with patch.object(self.registry, "start_job") as mock_start_job:
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "test3",
                     "milestone_title": "v1: Initial App",
@@ -145,7 +145,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
 
         with patch.object(self.registry, "start_job") as mock_start_job:
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "test3",
                     "issue_number": 42,
@@ -183,7 +183,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
         with patch("factory.ui.app.fetch_repo_issue", return_value=fake_github_issue) as mock_fetch, \
              patch.object(self.registry, "start_job"):
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "test3",
                     "issue_number": 15,
@@ -213,7 +213,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
         with patch("factory.ui.app.fetch_repo_issue", return_value=fake_standalone_issue) as mock_fetch, \
              patch.object(self.registry, "start_job"):
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "test3",
                     "issue_number": 88,
@@ -236,7 +236,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
 
         with patch.object(self.registry, "start_job"):
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "chat-repo",
                     "issue_number": 10,
@@ -262,7 +262,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
             self.assertEqual(card["turn_data"]["preview_url"], "https://preview-chat.modal.host")
 
             # Query messages endpoint
-            msg_resp = self.client.get("/api/studio/repos/chat-repo/messages")
+            msg_resp = self.client.get("/api/repos/chat-repo/messages")
             self.assertEqual(msg_resp.status_code, 200)
             endpoint_messages = msg_resp.json()["messages"]
             self.assertEqual(len(endpoint_messages), 1)
@@ -273,7 +273,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
 
         with patch.object(self.registry, "start_job"):
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "batch-repo",
                     "milestone_slug": "release-v1",
@@ -299,7 +299,7 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
         with patch("factory.ui.app.fetch_repo_issue", return_value=None), \
              patch.object(self.registry, "start_job"):
             resp = self.client.post(
-                "/api/studio/dispatch",
+                "/api/dispatch",
                 json={
                     "repo": "standalone-repo",
                     "issue_number": 77,
@@ -318,3 +318,11 @@ class TestStudioDispatchEndpoint(unittest.TestCase):
             self.assertEqual(card["turn_data"]["issue_number"], 77)
             self.assertIsNone(card["turn_data"]["milestone_slug"])
             self.assertEqual(card["turn_data"]["target_branch"], "factory/issue-77")
+
+    def test_legacy_studio_dispatch_returns_404(self):
+        resp = self.client.post(
+            "/api/studio/dispatch",
+            json={"repo": "test3", "milestone_slug": "v1-core"},
+        )
+        self.assertEqual(resp.status_code, 404)
+

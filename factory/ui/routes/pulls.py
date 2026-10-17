@@ -47,7 +47,7 @@ def _gh(attr: str):
     return getattr(gh, attr)
 
 
-@router.get("/api/studio/repos/{repo}/pulls")
+@router.get("/api/repos/{repo}/pulls")
 async def get_studio_pull_requests(
     repo: str,
     branch: str | None = None,
@@ -63,7 +63,7 @@ async def get_studio_pull_requests(
     }
 
 
-@router.post("/api/studio/repos/{repo}/pulls/{pull_number}/merge")
+@router.post("/api/repos/{repo}/pulls/{pull_number}/merge")
 async def merge_studio_pull_request(
     repo: str,
     pull_number: int,
@@ -138,7 +138,7 @@ async def merge_studio_pull_request(
     }
 
 
-@router.post("/api/studio/repos/{repo}/pulls/{pull_number}/ready_for_review")
+@router.post("/api/repos/{repo}/pulls/{pull_number}/ready")
 async def mark_studio_pull_request_ready(
     repo: str,
     pull_number: int,

@@ -4,7 +4,6 @@ import App, { STORAGE_KEY_SELECTED_REPO } from "./App";
 import * as api from "./api";
 
 vi.mock("./api", () => ({
-  fetchStudioRepos: vi.fn(),
   fetchRepos: vi.fn(),
   createRepo: vi.fn(),
   fetchMilestones: vi.fn(),
@@ -18,7 +17,7 @@ vi.mock("./api", () => ({
   fetchPreview: vi.fn(),
   launchPreview: vi.fn(),
   stopPreview: vi.fn(),
-  getPreviewStreamUrl: vi.fn((repo: string) => `/api/studio/repos/${repo}/preview/stream`),
+  getPreviewStreamUrl: vi.fn((repo: string) => `/api/repos/${repo}/preview/stream`),
   fetchChatMessages: vi.fn(),
   clearChatMessages: vi.fn(),
   dispatchStudio: vi.fn(),
@@ -51,7 +50,7 @@ describe("App Root - Instant Dispatch & Branches", () => {
     MockEventSource.instances = [];
     (global as any).EventSource = MockEventSource;
 
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [{ name: "my-app", is_tanstack_compatible: true }],
     });

@@ -64,7 +64,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
 
     def test_prompt_endpoint_grill_mode_default_returns_grill_round_without_sandbox(self):
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Build an interactive analytics chart dashboard",
@@ -102,7 +102,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
             },
         ]
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Accept recommended defaults and build the feature",
@@ -134,7 +134,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
 
     def test_prompt_endpoint_grill_mode_sharpens_domain_terms(self):
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Add a customer orders list with a redux store",
@@ -152,7 +152,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
     def test_prompt_endpoint_inference_failure_returns_structured_error_turn_and_saves_to_db(self):
         with patch("httpx.AsyncClient.post", side_effect=httpx.ConnectError("Connection failed to opencode.ai")):
             resp = self.client.post(
-                "/api/studio/prompt",
+                "/api/prompt",
                 json={
                     "repo": "test3",
                     "prompt": "Build an interactive analytics chart dashboard",
@@ -170,7 +170,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
             self.assertIn("OpenCode Go", turn["error_details"])
 
             # Verify persisted in Studio Chat History (Studio Database)
-            get_resp = self.client.get("/api/studio/repos/test3/messages")
+            get_resp = self.client.get("/api/repos/test3/messages")
             self.assertEqual(get_resp.status_code, 200)
             messages = get_resp.json()["messages"]
             self.assertEqual(len(messages), 2)
@@ -236,7 +236,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
              patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
 
             resp = self.client.post(
-                "/api/studio/prompt",
+                "/api/prompt",
                 json={
                     "repo": "test3",
                     "prompt": "remove social media links like github, x.com, etc",
@@ -267,7 +267,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
     def test_prompt_endpoint_mock_mode_archetype_aware_questions_and_conditional_adr(self):
         # Round 1: Deletion prompt in mock mode
         resp1 = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "remove social media links like github, x.com, etc",
@@ -291,7 +291,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
 
         # Round 2: Accept recommended defaults / proceed
         resp2 = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "/proceed",
@@ -315,7 +315,7 @@ class TestConversationalPromptGrilling(unittest.TestCase):
 
     def test_prompt_endpoint_grill_mode_accepts_database_prompts(self):
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test3",
                 "prompt": "Create a backend PostgreSQL database with custom SQL tables",

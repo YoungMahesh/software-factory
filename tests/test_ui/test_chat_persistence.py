@@ -71,7 +71,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.db.close()
 
     def test_get_chat_messages_empty(self):
-        resp = self.client.get("/api/studio/repos/empty-repo/messages")
+        resp = self.client.get("/api/repos/empty-repo/messages")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["repo"], "empty-repo")
@@ -79,7 +79,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
 
     def test_prompt_submission_with_backend_prompt_recorded_in_db(self):
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "test-repo",
                 "prompt": "Set up a PostgreSQL database with schema migrations",
@@ -91,7 +91,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.assertTrue(data["accepted"])
 
         # Check recorded messages in DB via endpoint
-        get_resp = self.client.get("/api/studio/repos/test-repo/messages")
+        get_resp = self.client.get("/api/repos/test-repo/messages")
         self.assertEqual(get_resp.status_code, 200)
         messages = get_resp.json()["messages"]
         self.assertEqual(len(messages), 2)
@@ -109,7 +109,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
             },
         ]
         resp = self.client.post(
-            "/api/studio/prompt",
+            "/api/prompt",
             json={
                 "repo": "auth-app",
                 "prompt": "Accept recommended defaults and build the feature",
@@ -124,7 +124,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.assertIsNotNone(data["turn"])
 
         # Check recorded messages
-        get_resp = self.client.get("/api/studio/repos/auth-app/messages")
+        get_resp = self.client.get("/api/repos/auth-app/messages")
         self.assertEqual(get_resp.status_code, 200)
         messages = get_resp.json()["messages"]
         self.assertEqual(len(messages), 2)
@@ -162,7 +162,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
             }
 
             resp = self.client.post(
-                "/api/studio/approve",
+                "/api/approve",
                 json={
                     "repo": "auth-app",
                     "prompt": "Approved OAuth 2.0 architecture",
@@ -176,7 +176,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
             job_id = data["job"]["id"]
 
             # Check recorded message
-            get_resp = self.client.get("/api/studio/repos/auth-app/messages")
+            get_resp = self.client.get("/api/repos/auth-app/messages")
             self.assertEqual(get_resp.status_code, 200)
             messages = get_resp.json()["messages"]
             self.assertGreaterEqual(len(messages), 1)
@@ -205,7 +205,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
             content="Keep this",
         )
 
-        resp = self.client.delete("/api/studio/repos/clean-repo/messages")
+        resp = self.client.delete("/api/repos/clean-repo/messages")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["repo"], "clean-repo")
@@ -213,11 +213,11 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         self.assertTrue(data["success"])
 
         # Verify clean-repo messages are gone
-        get_resp = self.client.get("/api/studio/repos/clean-repo/messages")
+        get_resp = self.client.get("/api/repos/clean-repo/messages")
         self.assertEqual(len(get_resp.json()["messages"]), 0)
 
         # Verify other-repo messages remain
-        other_resp = self.client.get("/api/studio/repos/other-repo/messages")
+        other_resp = self.client.get("/api/repos/other-repo/messages")
         self.assertEqual(len(other_resp.json()["messages"]), 1)
 
     def test_rehydration_after_simulated_server_restart(self):
@@ -246,7 +246,7 @@ class TestStudioChatPersistenceAndEndpoints(unittest.TestCase):
         new_client.auth = ("admin", "admin")
 
         # Chat history is retained
-        chat_resp = new_client.get("/api/studio/repos/persist-repo/messages")
+        chat_resp = new_client.get("/api/repos/persist-repo/messages")
         self.assertEqual(chat_resp.status_code, 200)
         messages = chat_resp.json()["messages"]
         self.assertEqual(len(messages), 1)

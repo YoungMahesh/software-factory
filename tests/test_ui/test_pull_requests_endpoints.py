@@ -147,7 +147,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
 
     def test_get_pull_requests_endpoint_unauthenticated(self):
         unauth_client = TestClient(self.app)
-        resp = unauth_client.get("/api/studio/repos/test-repo/pulls")
+        resp = unauth_client.get("/api/repos/test-repo/pulls")
         self.assertEqual(resp.status_code, 401)
 
     def test_get_pull_requests_endpoint_success(self):
@@ -165,7 +165,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
             }
         ]
         with patch("factory.ui.app.fetch_repo_pull_requests", return_value=fake_prs) as mock_fetch:
-            resp = self.client.get("/api/studio/repos/test-repo/pulls?branch=factory/init")
+            resp = self.client.get("/api/repos/test-repo/pulls?branch=factory/init")
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
             self.assertEqual(data["repo"], "test-repo")
@@ -189,7 +189,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
         with patch("factory.ui.app.merge_repo_pull_request", return_value=fake_merge_result) as mock_merge, \
              patch.object(self.preview_registry, "sync_sandbox_to_main", return_value=True) as mock_sync:
 
-            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+            resp = self.client.post("/api/repos/test-repo/pulls/42/merge", json={})
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
             self.assertTrue(data["accepted"])
@@ -217,7 +217,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
             "factory.ui.app.merge_repo_pull_request",
             side_effect=PullRequestMergeError("Pull request has merge conflicts with base branch.", status_code=409),
         ):
-            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+            resp = self.client.post("/api/repos/test-repo/pulls/42/merge", json={})
             self.assertEqual(resp.status_code, 409)
             self.assertIn("merge conflicts", resp.json()["detail"])
 
@@ -227,7 +227,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
         with self.registry._lock:
             job.status = JobStatus.RUNNING
 
-        resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+        resp = self.client.post("/api/repos/test-repo/pulls/42/merge", json={})
         self.assertEqual(resp.status_code, 409)
         self.assertIn("active or queued", resp.json()["detail"].lower())
 
@@ -237,7 +237,7 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
         with self.registry._lock:
             job.status = JobStatus.QUEUED
 
-        resp = self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={})
+        resp = self.client.post("/api/repos/test-repo/pulls/42/merge", json={})
         self.assertEqual(resp.status_code, 409)
         self.assertIn("active or queued", resp.json()["detail"].lower())
 
@@ -248,8 +248,8 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
             "pull_number": 42,
             "pull": {"number": 42, "draft": False, "status": "ready_for_review"},
         }
-        with patch("factory.ui.routes.studio_pulls.gh.mark_pull_request_ready_for_review", return_value=mock_result):
-            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/ready_for_review")
+        with patch("factory.ui.routes.pulls.gh.mark_pull_request_ready_for_review", return_value=mock_result):
+            resp = self.client.post("/api/repos/test-repo/pulls/42/ready")
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
             self.assertTrue(data["success"])
@@ -258,9 +258,16 @@ class TestStudioPullRequestEndpoints(unittest.TestCase):
 
     def test_post_mark_pull_request_ready_for_review_not_found(self):
         with patch(
-            "factory.ui.routes.studio_pulls.gh.mark_pull_request_ready_for_review",
+            "factory.ui.routes.pulls.gh.mark_pull_request_ready_for_review",
             side_effect=PullRequestMergeError("Pull request #42 not found.", status_code=404),
         ):
-            resp = self.client.post("/api/studio/repos/test-repo/pulls/42/ready_for_review")
+            resp = self.client.post("/api/repos/test-repo/pulls/42/ready")
             self.assertEqual(resp.status_code, 404)
             self.assertIn("not found", resp.json()["detail"])
+
+    def test_legacy_studio_pulls_returns_404(self):
+        self.assertEqual(self.client.get("/api/studio/repos/test-repo/pulls").status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test-repo/pulls/42/merge", json={}).status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test-repo/pulls/42/ready").status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test-repo/pulls/42/ready_for_review").status_code, 404)
+

@@ -4,7 +4,6 @@ import App, { STORAGE_KEY_SELECTED_REPO } from "./App";
 import * as api from "./api";
 
 vi.mock("./api", () => ({
-  fetchStudioRepos: vi.fn(),
   fetchRepos: vi.fn(),
   createRepo: vi.fn(),
   fetchMilestones: vi.fn(),
@@ -18,7 +17,7 @@ vi.mock("./api", () => ({
   fetchPreview: vi.fn(),
   launchPreview: vi.fn(),
   stopPreview: vi.fn(),
-  getPreviewStreamUrl: vi.fn((repo: string) => `/api/studio/repos/${repo}/preview/stream`),
+  getPreviewStreamUrl: vi.fn((repo: string) => `/api/repos/${repo}/preview/stream`),
   fetchChatMessages: vi.fn(),
   clearChatMessages: vi.fn(),
   dispatchStudio: vi.fn(),
@@ -51,7 +50,7 @@ describe("App Root - Navigation & Lifecycle", () => {
     MockEventSource.instances = [];
     (global as any).EventSource = MockEventSource;
 
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [{ name: "my-app", is_tanstack_compatible: true }],
     });
@@ -129,7 +128,7 @@ describe("App Root - Navigation & Lifecycle", () => {
     expect(screen.getByRole("button", { name: /Factory Testing Console/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(api.fetchStudioRepos).toHaveBeenCalled();
+      expect(api.fetchRepos).toHaveBeenCalled();
     });
   });
 
@@ -235,7 +234,7 @@ describe("App Root - Navigation & Lifecycle", () => {
 
     // Find the preview SSE connection instance
     const previewEs = MockEventSource.instances.find((inst) =>
-      inst.url.includes("/api/studio/repos/my-app/preview/stream")
+      inst.url.includes("/api/repos/my-app/preview/stream")
     );
     expect(previewEs).toBeDefined();
 
@@ -292,7 +291,7 @@ describe("App Root - Navigation & Lifecycle", () => {
 
     // Find preview SSE instance
     const previewEs = MockEventSource.instances.find((inst) =>
-      inst.url.includes("/api/studio/repos/my-app/preview/stream")
+      inst.url.includes("/api/repos/my-app/preview/stream")
     );
     expect(previewEs).toBeDefined();
 

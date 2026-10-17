@@ -14,6 +14,7 @@ import {
   useUpdatePreviewBranchMutation,
   useRollbackTurnMutation,
   useCreateRepoMutation,
+  useStudioRepos,
 } from "./useStudioQueries";
 import * as api from "../api";
 
@@ -21,6 +22,7 @@ vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
   return {
     ...actual,
+    fetchRepos: vi.fn(),
     fetchChatMessages: vi.fn(),
     clearChatMessages: vi.fn(),
     fetchIssues: vi.fn(),
@@ -377,6 +379,44 @@ describe("useStudioQueries - Chat Messages", () => {
       queryKey: studioQueryKeys.repos,
       refetchType: "none",
     });
+  });
+});
+
+describe("useStudioQueries - Repos Query", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+  });
+
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+
+  it("fetches repos using canonical fetchRepos api via useStudioRepos", async () => {
+    const mockReposResponse = {
+      org: "software-factory-09-test",
+      repos: [
+        { name: "calculator-app", is_tanstack_compatible: true },
+        { name: "zen-notes", is_tanstack_compatible: false },
+      ],
+    };
+    vi.mocked(api.fetchRepos).mockResolvedValue(mockReposResponse);
+
+    const { result } = renderHook(() => useStudioRepos(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.fetchRepos).toHaveBeenCalled();
+    expect(result.current.data).toEqual(mockReposResponse);
   });
 });
 

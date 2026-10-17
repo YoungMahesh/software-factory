@@ -42,28 +42,28 @@ from factory.ui.registry import (
     PreviewState,
     PreviewStatus,
 )
-from factory.ui.routes.jobs import LaunchJobRequest, router as jobs_router
-from factory.ui.routes.repos import CreateRepoRequest, router as repos_router
-from factory.ui.routes.studio_chat import (
+from factory.ui.routes.chat import (
     ApprovePlanRequest,
     StudioDispatchRequest,
     StudioPromptRequest,
-    router as studio_chat_router,
+    router as chat_router,
 )
-from factory.ui.routes.studio_preview import (
+from factory.ui.routes.jobs import LaunchJobRequest, router as jobs_router
+from factory.ui.routes.preview import (
     LaunchPreviewRequest,
     PreviewBranchRequest,
     PreviewSyncRequest,
     UpdatePreviewBranchRequest,
-    router as studio_preview_router,
+    router as preview_router,
 )
-from factory.ui.routes.studio_pulls import (
+from factory.ui.routes.pulls import (
     MergePullRequestRequest,
-    router as studio_pulls_router,
+    router as pulls_router,
 )
-from factory.ui.routes.studio_rollback import (
+from factory.ui.routes.repos import CreateRepoRequest, router as repos_router
+from factory.ui.routes.rollback import (
     RollbackTurnRequest,
-    router as studio_rollback_router,
+    router as rollback_router,
 )
 from factory.ui.tracker import update_local_markdown_issue_for_rollback
 
@@ -163,9 +163,9 @@ def create_app(
     # Mount decomposed route modules
     app.include_router(repos_router)
     app.include_router(jobs_router)
-    app.include_router(studio_preview_router)
-    app.include_router(studio_chat_router)
-    app.include_router(studio_pulls_router)
-    app.include_router(studio_rollback_router)
+    app.include_router(preview_router)
+    app.include_router(chat_router)
+    app.include_router(pulls_router)
+    app.include_router(rollback_router)
 
     return app

@@ -53,18 +53,12 @@ export async function fetchRepos(): Promise<{ org: string; repos: Repo[] }> {
   return res.json();
 }
 
-export async function fetchStudioRepos(): Promise<{ org: string; repos: Repo[] }> {
-  const res = await fetch("/api/studio/repos");
-  if (!res.ok) throw new Error(`Failed to fetch studio repos: ${res.statusText}`);
-  return res.json();
-}
-
 export async function createRepo(params: {
   name: string;
   description?: string;
   private?: boolean;
 }): Promise<Repo> {
-  const res = await fetch("/api/studio/repos", {
+  const res = await fetch("/api/repos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -110,7 +104,7 @@ export async function dispatchStudio(
     vm: false,
     ...params,
   };
-  const res = await fetch("/api/studio/dispatch", {
+  const res = await fetch("/api/dispatch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -155,7 +149,7 @@ export async function sendStudioPrompt(
     history: [],
     ...params,
   };
-  const res = await fetch("/api/studio/prompt", {
+  const res = await fetch("/api/prompt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -185,7 +179,7 @@ export async function approvePlan(
     vm: false,
     ...params,
   };
-  const res = await fetch("/api/studio/approve", {
+  const res = await fetch("/api/approve", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -221,7 +215,7 @@ export async function cancelJob(jobId: string): Promise<{ success: boolean; mess
 }
 
 export async function fetchPreview(repo: string): Promise<PreviewState> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/preview`);
   if (!res.ok) throw new Error(`Failed to fetch preview: ${res.statusText}`);
   return res.json();
 }
@@ -230,7 +224,7 @@ export async function launchPreview(
   repo: string,
   branch?: string
 ): Promise<PreviewState> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ branch }),
@@ -245,7 +239,7 @@ export async function launchPreview(
 export async function stopPreview(
   repo: string
 ): Promise<{ success: boolean; message: string; repo?: string }> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/preview`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -256,7 +250,7 @@ export async function stopPreview(
 }
 
 export function getPreviewStreamUrl(repo: string): string {
-  return `/api/studio/repos/${encodeURIComponent(repo)}/preview/stream`;
+  return `/api/repos/${encodeURIComponent(repo)}/preview/stream`;
 }
 
 export interface PreviewSyncResult {
@@ -271,7 +265,7 @@ export async function syncPreview(
   repo: string,
   branch?: string
 ): Promise<PreviewSyncResult> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/sync`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/preview/sync`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ branch }),
@@ -283,28 +277,6 @@ export async function syncPreview(
   return res.json();
 }
 
-export interface PreviewBranchResult {
-  success: boolean;
-  branch: string;
-  commit?: string | null;
-  updated: boolean;
-}
-
-export async function switchPreviewBranch(
-  repo: string,
-  branch: string
-): Promise<PreviewBranchResult> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/branch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ branch }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Failed to switch preview branch: ${res.statusText}`);
-  }
-  return res.json();
-}
 
 export interface RepoBranchesResponse {
   repo: string;
@@ -317,7 +289,7 @@ export interface RepoBranchesResponse {
 export async function fetchRepoBranches(
   repo: string
 ): Promise<RepoBranchesResponse> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/branches`);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/branches`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Failed to fetch branches: ${res.statusText}`);
@@ -328,7 +300,7 @@ export async function fetchRepoBranches(
 export async function fetchChatMessages(
   repo: string
 ): Promise<{ repo: string; messages: DbChatMessage[] }> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/messages`);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/messages`);
   if (!res.ok) throw new Error(`Failed to fetch chat messages: ${res.statusText}`);
   return res.json();
 }
@@ -336,7 +308,7 @@ export async function fetchChatMessages(
 export async function clearChatMessages(
   repo: string
 ): Promise<{ repo: string; deleted: number; success: boolean }> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/messages`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/messages`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -355,7 +327,7 @@ export async function fetchPullRequests(
   if (branch) params.set("branch", branch);
   if (state) params.set("state", state);
   const queryStr = params.toString() ? `?${params.toString()}` : "";
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/pulls${queryStr}`);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/pulls${queryStr}`);
   if (!res.ok) throw new Error(`Failed to fetch pull requests: ${res.statusText}`);
   return res.json();
 }
@@ -366,7 +338,7 @@ export async function mergePullRequest(
   params?: MergePullRequestParams
 ): Promise<MergePullRequestResponse> {
   const res = await fetch(
-    `/api/studio/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/merge`,
+    `/api/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/merge`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -385,7 +357,7 @@ export async function markPullRequestReadyForReview(
   pullNumber: number
 ): Promise<MarkPullRequestReadyResponse> {
   const res = await fetch(
-    `/api/studio/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/ready_for_review`,
+    `/api/repos/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}/ready`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -413,7 +385,7 @@ export async function updatePreviewBranch(
   repo: string,
   branch: string
 ): Promise<UpdatePreviewBranchResponse> {
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/preview/branch`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/preview/branch`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ branch }),
@@ -429,7 +401,7 @@ export async function rollbackTurn(
   params: RollbackTurnParams
 ): Promise<RollbackTurnResponse> {
   const { repo, message_id, branch } = params;
-  const res = await fetch(`/api/studio/repos/${encodeURIComponent(repo)}/turns/rollback`, {
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/rollback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message_id, branch }),

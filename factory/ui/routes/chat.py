@@ -123,7 +123,6 @@ async def _ensure_sandbox_and_dispatch_job(
     return job, preview_state, effective_preview_url
 
 
-@router.post("/api/studio/prompt")
 @router.post("/api/prompt")
 async def studio_prompt(req: StudioPromptRequest, request: Request):
     repo = req.repo.strip() if req.repo else ""
@@ -234,7 +233,7 @@ async def studio_prompt(req: StudioPromptRequest, request: Request):
     }
 
 
-@router.post("/api/studio/approve")
+@router.post("/api/approve")
 async def approve_plan_endpoint(req: ApprovePlanRequest, request: Request):
     repo = req.repo.strip()
     if not repo:
@@ -314,7 +313,7 @@ async def approve_plan_endpoint(req: ApprovePlanRequest, request: Request):
     }
 
 
-@router.post("/api/studio/dispatch")
+@router.post("/api/dispatch")
 async def studio_dispatch_endpoint(req: StudioDispatchRequest, request: Request):
     repo = req.repo.strip() if req.repo else ""
     if not repo:
@@ -414,7 +413,7 @@ async def studio_dispatch_endpoint(req: StudioDispatchRequest, request: Request)
     }
 
 
-@router.get("/api/studio/repos/{repo}/messages")
+@router.get("/api/repos/{repo}/messages")
 async def get_studio_messages(repo: str, request: Request):
     clean_repo = repo.strip()
     if not clean_repo:
@@ -424,7 +423,7 @@ async def get_studio_messages(repo: str, request: Request):
     return {"repo": clean_repo, "messages": messages}
 
 
-@router.delete("/api/studio/repos/{repo}/messages")
+@router.delete("/api/repos/{repo}/messages")
 async def delete_studio_messages(repo: str, request: Request):
     clean_repo = repo.strip()
     if not clean_repo:

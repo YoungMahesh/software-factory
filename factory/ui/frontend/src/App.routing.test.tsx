@@ -4,7 +4,6 @@ import App, { STORAGE_KEY_SELECTED_REPO } from "./App";
 import * as api from "./api";
 
 vi.mock("./api", () => ({
-  fetchStudioRepos: vi.fn(),
   fetchRepos: vi.fn(),
   createRepo: vi.fn(),
   fetchMilestones: vi.fn(),
@@ -18,7 +17,7 @@ vi.mock("./api", () => ({
   fetchPreview: vi.fn(),
   launchPreview: vi.fn(),
   stopPreview: vi.fn(),
-  getPreviewStreamUrl: vi.fn((repo: string) => `/api/studio/repos/${repo}/preview/stream`),
+  getPreviewStreamUrl: vi.fn((repo: string) => `/api/repos/${repo}/preview/stream`),
   fetchChatMessages: vi.fn(),
   clearChatMessages: vi.fn(),
   dispatchStudio: vi.fn(),
@@ -51,7 +50,7 @@ describe("App Root - URL Routing & State Hydration", () => {
     MockEventSource.instances = [];
     (global as any).EventSource = MockEventSource;
 
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [{ name: "my-app", is_tanstack_compatible: true }],
     });
@@ -123,7 +122,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("hydrates selectedRepo from URL query parameter on page load", async () => {
     window.history.replaceState(null, "", "/?repo=counter-2");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -143,7 +142,7 @@ describe("App Root - URL Routing & State Hydration", () => {
   it("hydrates selectedRepo from localStorage fallback when URL has no query parameter", async () => {
     window.history.replaceState(null, "", "/");
     localStorage.setItem(STORAGE_KEY_SELECTED_REPO, "counter-2");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -162,7 +161,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("falls back to repos[0] when URL query parameter points to an unknown repository", async () => {
     window.history.replaceState(null, "", "/?repo=deleted-app");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -182,7 +181,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("updates URL and localStorage and pushes history when user selects a different repository", async () => {
     window.history.replaceState(null, "", "/");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -208,7 +207,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("preserves active ?repo= query parameter when switching between Studio and Console tabs", async () => {
     window.history.replaceState(null, "", "/?repo=counter-2");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -236,7 +235,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("synchronizes selectedRepo and activeTab on browser popstate navigation", async () => {
     window.history.replaceState(null, "", "/?repo=calculator-app");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -265,7 +264,7 @@ describe("App Root - URL Routing & State Hydration", () => {
 
   it("redirects to newly created repository instead of falling back to top alphabetical repo (calculator-app)", async () => {
     window.history.replaceState(null, "", "/?repo=counter-2");
-    vi.mocked(api.fetchStudioRepos).mockResolvedValue({
+    vi.mocked(api.fetchRepos).mockResolvedValue({
       org: "software-factory-09-test",
       repos: [
         { name: "calculator-app", is_tanstack_compatible: true },
@@ -338,7 +337,7 @@ describe("App Root - URL Routing & State Hydration", () => {
     const pendingPromise = new Promise((resolve) => {
       resolveRepos = resolve;
     });
-    vi.mocked(api.fetchStudioRepos).mockReturnValue(pendingPromise as any);
+    vi.mocked(api.fetchRepos).mockReturnValue(pendingPromise as any);
 
     render(<App />);
 

@@ -95,7 +95,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         state, mock_sandbox = self._register_serving_preview("sync-active-repo", branch="main")
 
         resp = self.client.post(
-            "/api/studio/repos/sync-active-repo/preview/sync",
+            "/api/repos/sync-active-repo/preview/sync",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -122,7 +122,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         state, mock_sandbox = self._register_serving_preview("sync-feature-repo", branch="factory/nav-tabs")
 
         resp = self.client.post(
-            "/api/studio/repos/sync-feature-repo/preview/sync",
+            "/api/repos/sync-feature-repo/preview/sync",
             json={},
         )
         self.assertEqual(resp.status_code, 200)
@@ -135,7 +135,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         state, mock_sandbox = self._register_serving_preview("sync-dep-repo", branch="main")
 
         resp = self.client.post(
-            "/api/studio/repos/sync-dep-repo/preview/sync",
+            "/api/repos/sync-dep-repo/preview/sync",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -155,7 +155,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         self.preview_registry._previews["idle-repo"] = preview
 
         resp = self.client.post(
-            "/api/studio/repos/idle-repo/preview/sync",
+            "/api/repos/idle-repo/preview/sync",
             json={"branch": "factory/new-design"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -171,7 +171,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         q = self.preview_registry.add_listener("sse-sync-repo")
 
         resp = self.client.post(
-            "/api/studio/repos/sse-sync-repo/preview/sync",
+            "/api/repos/sse-sync-repo/preview/sync",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -193,7 +193,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         job.status = JobStatus.RUNNING
 
         resp = self.client.post(
-            "/api/studio/repos/locked-repo/preview/sync",
+            "/api/repos/locked-repo/preview/sync",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 409)
@@ -222,7 +222,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         self.preview_registry._previews["fail-repo"] = state
 
         resp = self.client.post(
-            "/api/studio/repos/fail-repo/preview/sync",
+            "/api/repos/fail-repo/preview/sync",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -236,7 +236,7 @@ class TestTrunkSynchronization(unittest.TestCase):
         state, mock_sandbox = self._register_serving_preview("switch-repo", branch="factory/feat-a")
 
         resp = self.client.post(
-            "/api/studio/repos/switch-repo/preview/branch",
+            "/api/repos/switch-repo/preview/branch",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -261,8 +261,16 @@ class TestTrunkSynchronization(unittest.TestCase):
         job.status = JobStatus.RUNNING
 
         resp = self.client.post(
-            "/api/studio/repos/locked-switch-repo/preview/branch",
+            "/api/repos/locked-switch-repo/preview/branch",
             json={"branch": "main"},
         )
         self.assertEqual(resp.status_code, 409)
         mock_sandbox.exec.assert_not_called()
+
+    def test_legacy_studio_sync_returns_404(self):
+        resp = self.client.post(
+            "/api/studio/repos/sync-repo/preview/sync",
+            json={"branch": "main"},
+        )
+        self.assertEqual(resp.status_code, 404)
+

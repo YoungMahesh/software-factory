@@ -52,7 +52,7 @@ from factory.ui.registry import (
 
 
 class TestStudioApproveEndpoint(unittest.TestCase):
-    """Test suite for POST /api/studio/approve endpoint."""
+    """Test suite for POST /api/approve endpoint."""
 
     def setUp(self):
         self.registry = JobRegistry()
@@ -66,14 +66,14 @@ class TestStudioApproveEndpoint(unittest.TestCase):
     def test_approve_endpoint_unauthenticated_returns_401(self):
         unauth_client = TestClient(self.app)
         resp = unauth_client.post(
-            "/api/studio/approve",
+            "/api/approve",
             json={"repo": "test3", "prompt": "Build dark mode"},
         )
         self.assertEqual(resp.status_code, 401)
 
     def test_approve_endpoint_missing_repo_returns_400(self):
         resp = self.client.post(
-            "/api/studio/approve",
+            "/api/approve",
             json={"repo": "", "prompt": "Build dark mode"},
         )
         self.assertEqual(resp.status_code, 400)
@@ -81,7 +81,7 @@ class TestStudioApproveEndpoint(unittest.TestCase):
 
     def test_approve_endpoint_missing_prompt_returns_400(self):
         resp = self.client.post(
-            "/api/studio/approve",
+            "/api/approve",
             json={"repo": "test3", "prompt": "   "},
         )
         self.assertEqual(resp.status_code, 400)
@@ -123,7 +123,7 @@ class TestStudioApproveEndpoint(unittest.TestCase):
             }
 
             resp = self.client.post(
-                "/api/studio/approve",
+                "/api/approve",
                 json={
                     "repo": "test3",
                     "prompt": "Build dark mode toggle with theme persistence",
@@ -190,7 +190,7 @@ class TestStudioApproveEndpoint(unittest.TestCase):
             }
 
             resp = self.client.post(
-                "/api/studio/approve",
+                "/api/approve",
                 json={
                     "repo": "test3",
                     "prompt": "Remove social media links from Footer.tsx",
@@ -223,6 +223,13 @@ class TestStudioApproveEndpoint(unittest.TestCase):
                 milestone_slug="v1-initial-app",
             )
             mock_start_job.assert_called_once()
+
+    def test_legacy_studio_approve_returns_404(self):
+        resp = self.client.post(
+            "/api/studio/approve",
+            json={"repo": "test3", "prompt": "Build dark mode"},
+        )
+        self.assertEqual(resp.status_code, 404)
 
 
 class TestCommitApprovedAdrToBranch(unittest.TestCase):
@@ -288,3 +295,4 @@ class TestCommitApprovedAdrToBranch(unittest.TestCase):
         )
         self.assertEqual(result["status"], "skipped")
         self.assertEqual(len(result["files"]), 0)
+

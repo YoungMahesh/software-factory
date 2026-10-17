@@ -98,12 +98,9 @@ class TestFastApiApp(unittest.TestCase):
         self.assertEqual(data["repos"][1]["name"], "cool-app")
         self.assertTrue(data["repos"][1]["is_tanstack_compatible"])
 
-        # Studio dedicated endpoint
+        # Studio legacy endpoint returns 404
         resp_studio = self.client.get("/api/studio/repos")
-        self.assertEqual(resp_studio.status_code, 200)
-        data_studio = resp_studio.json()
-        self.assertEqual(len(data_studio["repos"]), 2)
-        self.assertTrue(data_studio["repos"][1]["is_tanstack_compatible"])
+        self.assertEqual(resp_studio.status_code, 404)
 
     def test_create_repo_endpoint_validation_invalid_slug(self):
         resp = self.client.post("/api/repos", json={"name": "invalid slug!"})
@@ -183,26 +180,9 @@ class TestFastApiApp(unittest.TestCase):
             private=False,
         )
 
-    @patch("factory.ui.app.instantiate_repo_from_template")
-    def test_create_repo_endpoint_studio_alias(self, mock_instantiate):
-        mock_instantiate.return_value = {
-            "name": "studio-app",
-            "full_name": "software-factory-09-test/studio-app",
-            "html_url": "https://github.com/software-factory-09-test/studio-app",
-            "description": None,
-            "private": True,
-            "is_tanstack_compatible": True,
-            "template_repository": "software-factory-09-test/tanstack-start-template",
-        }
+    def test_create_repo_endpoint_studio_legacy_returns_404(self):
         resp = self.client.post("/api/studio/repos", json={"name": "studio-app"})
-        self.assertEqual(resp.status_code, 201)
-        data = resp.json()
-        self.assertEqual(data["name"], "studio-app")
-        mock_instantiate.assert_called_once_with(
-            repo_name="studio-app",
-            description=None,
-            private=True,
-        )
+        self.assertEqual(resp.status_code, 404)
 
     def test_get_repo_scratch_endpoint_returns_404(self):
         resp = self.client.get("/api/repos/test3/scratch")
@@ -347,20 +327,7 @@ class TestFastApiApp(unittest.TestCase):
             self.assertEqual(lines[0]["job"]["id"], job.id)
 
 
-    @patch("factory.ui.app.instantiate_repo_from_template")
-    def test_route_aliases_return_identical_responses(self, mock_instantiate):
-        mock_instantiate.return_value = {"name": "sample-repo", "html_url": "https://github.com/test/sample-repo"}
-
-        # GET alias equivalence
-        get_repos = self.client.get("/api/repos")
-        get_studio_repos = self.client.get("/api/studio/repos")
-        self.assertEqual(get_repos.status_code, 200)
-        self.assertEqual(get_studio_repos.status_code, 200)
-        self.assertEqual(get_repos.json(), get_studio_repos.json())
-
-        # POST alias equivalence
-        post_repos = self.client.post("/api/repos", json={"name": "sample-repo"})
-        post_studio_repos = self.client.post("/api/studio/repos", json={"name": "sample-repo"})
-        self.assertEqual(post_repos.status_code, 201)
-        self.assertEqual(post_studio_repos.status_code, 201)
-        self.assertEqual(post_repos.json(), post_studio_repos.json())
+    def test_legacy_studio_routes_return_404(self):
+        self.assertEqual(self.client.get("/api/studio/repos").status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos", json={"name": "sample-repo"}).status_code, 404)
+        self.assertEqual(self.client.get("/api/studio/repos/test-repo/branches").status_code, 404)

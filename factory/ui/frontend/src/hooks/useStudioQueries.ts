@@ -25,7 +25,7 @@ export function createStoppedPreviewState(prev: PreviewState): PreviewState {
 export function useStudioRepos() {
   return useQuery({
     queryKey: studioQueryKeys.repos,
-    queryFn: () => api.fetchStudioRepos(),
+    queryFn: () => api.fetchRepos(),
   });
 }
 

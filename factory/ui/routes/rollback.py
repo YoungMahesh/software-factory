@@ -156,7 +156,7 @@ def _execute_in_sandbox_rollback(
     return original_sha, revert_sha
 
 
-@router.post("/api/studio/repos/{repo}/turns/rollback")
+@router.post("/api/repos/{repo}/rollback")
 async def rollback_turn_endpoint(repo: str, request: Request, req: RollbackTurnRequest | None = None):
     clean_repo = repo.strip()
     if not clean_repo:

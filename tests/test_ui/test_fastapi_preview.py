@@ -60,17 +60,17 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
     def test_preview_endpoints_require_auth(self):
         unauth_client = TestClient(self.app)
-        resp_branches = unauth_client.get("/api/studio/repos/test3/branches")
+        resp_branches = unauth_client.get("/api/repos/test3/branches")
         self.assertEqual(resp_branches.status_code, 401)
-        resp = unauth_client.get("/api/studio/repos/test3/preview")
+        resp = unauth_client.get("/api/repos/test3/preview")
         self.assertEqual(resp.status_code, 401)
-        resp_post = unauth_client.post("/api/studio/repos/test3/preview")
+        resp_post = unauth_client.post("/api/repos/test3/preview")
         self.assertEqual(resp_post.status_code, 401)
-        resp_post_branch = unauth_client.post("/api/studio/repos/test3/preview/branch", json={"branch": "factory/feat"})
+        resp_post_branch = unauth_client.post("/api/repos/test3/preview/branch", json={"branch": "factory/feat"})
         self.assertEqual(resp_post_branch.status_code, 401)
-        resp_del = unauth_client.delete("/api/studio/repos/test3/preview")
+        resp_del = unauth_client.delete("/api/repos/test3/preview")
         self.assertEqual(resp_del.status_code, 401)
-        resp_stream = unauth_client.get("/api/studio/repos/test3/preview/stream")
+        resp_stream = unauth_client.get("/api/repos/test3/preview/stream")
         self.assertEqual(resp_stream.status_code, 401)
 
     @patch("factory.ui.registry.create_preview_sandbox")
@@ -90,7 +90,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         mock_create.return_value = (mock_sandbox, "https://sb-preview-999-3000.modal.host")
 
         # 1. Initial status is IDLE
-        resp_get_init = self.client.get("/api/studio/repos/test3/preview")
+        resp_get_init = self.client.get("/api/repos/test3/preview")
         self.assertEqual(resp_get_init.status_code, 200)
         init_data = resp_get_init.json()
         self.assertEqual(init_data["repo"], "test3")
@@ -100,7 +100,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         # 2. Launch preview via POST
         resp_post = self.client.post(
-            "/api/studio/repos/test3/preview",
+            "/api/repos/test3/preview",
             json={"branch": "factory/test-ui-feat"},
         )
         self.assertIn(resp_post.status_code, (200, 201))
@@ -111,7 +111,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         # 3. Check status until SERVING
         serving_data = None
         for _ in range(20):
-            r = self.client.get("/api/studio/repos/test3/preview")
+            r = self.client.get("/api/repos/test3/preview")
             if r.status_code == 200 and r.json().get("status") == "SERVING":
                 serving_data = r.json()
                 break
@@ -125,19 +125,19 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         self.assertIsInstance(serving_data["logs"], list)
 
         # 4. Stop preview via DELETE
-        resp_del = self.client.delete("/api/studio/repos/test3/preview")
+        resp_del = self.client.delete("/api/repos/test3/preview")
         self.assertEqual(resp_del.status_code, 200)
         del_data = resp_del.json()
         self.assertTrue(del_data["success"])
         mock_sandbox.terminate.aio.assert_awaited_once()
 
         # 5. Subsequent DELETE returns 400 or 404
-        resp_del_again = self.client.delete("/api/studio/repos/test3/preview")
+        resp_del_again = self.client.delete("/api/repos/test3/preview")
         self.assertIn(resp_del_again.status_code, (400, 404))
 
     def test_preview_stream_sse_endpoint(self):
         # 1. 404 when preview does not exist
-        resp_404 = self.client.get("/api/studio/repos/unknown-repo/preview/stream")
+        resp_404 = self.client.get("/api/repos/unknown-repo/preview/stream")
         self.assertEqual(resp_404.status_code, 404)
 
         # 2. When preview exists, streams init event and real-time logs
@@ -162,7 +162,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
             return q
 
         with patch.object(preview_registry, "add_listener", side_effect=mock_add_listener):
-            with self.client.stream("GET", "/api/studio/repos/stream-repo/preview/stream") as response:
+            with self.client.stream("GET", "/api/repos/stream-repo/preview/stream") as response:
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("text/event-stream", response.headers["content-type"])
                 events = []
@@ -187,29 +187,11 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
                 self.assertTrue(len(stage_events) >= 1)
                 self.assertEqual(stage_events[0]["stage"], "STARTING_DEV")
 
-    @patch("factory.ui.app.fetch_repo_branches")
-    def test_get_repo_branches_endpoint(self, mock_fetch_branches):
-        mock_fetch_branches.return_value = ["main", "factory/feature-a", "factory/feature-b"]
-
-        resp = self.client.get("/api/studio/repos/test3/branches")
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(data["repo"], "test3")
-        self.assertEqual(data["org"], "software-factory-09-test")
-        self.assertEqual(data["branches"], ["main", "factory/feature-a", "factory/feature-b"])
-        self.assertEqual(data["default_branch"], "main")
-        mock_fetch_branches.assert_called_once_with("test3")
-
-        # Also verify /api/repos/{repo}/branches alias works
-        resp_alias = self.client.get("/api/repos/test3/branches")
-        self.assertEqual(resp_alias.status_code, 200)
-        self.assertEqual(resp_alias.json()["branches"], ["main", "factory/feature-a", "factory/feature-b"])
-
     @patch("factory.ui.app.fetch_repo_branches_with_diagnostics")
     def test_get_repo_branches_endpoint(self, mock_fetch_branches):
         mock_fetch_branches.return_value = (["main", "factory/feature-a", "factory/feature-b"], None)
 
-        resp = self.client.get("/api/studio/repos/test3/branches")
+        resp = self.client.get("/api/repos/test3/branches")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["repo"], "test3")
@@ -219,16 +201,11 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         self.assertNotIn("error", data)
         mock_fetch_branches.assert_called_once_with("test3")
 
-        # Also verify /api/repos/{repo}/branches alias works
-        resp_alias = self.client.get("/api/repos/test3/branches")
-        self.assertEqual(resp_alias.status_code, 200)
-        self.assertEqual(resp_alias.json()["branches"], ["main", "factory/feature-a", "factory/feature-b"])
-
     @patch("factory.ui.app.fetch_repo_branches_with_diagnostics")
     def test_get_repo_branches_endpoint_graceful_error_handling(self, mock_fetch_branches):
         mock_fetch_branches.return_value = (["main"], "GitHub API error (status 401)")
 
-        resp = self.client.get("/api/studio/repos/test3/branches")
+        resp = self.client.get("/api/repos/test3/branches")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["repo"], "test3")
@@ -247,7 +224,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         # 1. Update target branch when preview is idle (no preview started yet)
         resp = self.client.post(
-            "/api/studio/repos/branch-test-repo/preview/branch",
+            "/api/repos/branch-test-repo/preview/branch",
             json={"branch": "factory/feature-preselected"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -259,7 +236,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         self.assertTrue(data["success"])
 
         # 2. Launch preview without specifying branch -> boots on preselected branch!
-        resp_launch = self.client.post("/api/studio/repos/branch-test-repo/preview", json={})
+        resp_launch = self.client.post("/api/repos/branch-test-repo/preview", json={})
         self.assertIn(resp_launch.status_code, (200, 201))
         launch_data = resp_launch.json()
         self.assertEqual(launch_data["branch"], "factory/feature-preselected")
@@ -271,21 +248,21 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
     def test_post_preview_branch_validation(self):
         # Empty branch
         resp_empty = self.client.post(
-            "/api/studio/repos/test3/preview/branch",
+            "/api/repos/test3/preview/branch",
             json={"branch": ""},
         )
         self.assertEqual(resp_empty.status_code, 400)
 
         # Missing branch
         resp_missing = self.client.post(
-            "/api/studio/repos/test3/preview/branch",
+            "/api/repos/test3/preview/branch",
             json={},
         )
         self.assertEqual(resp_missing.status_code, 422)
 
         # Invalid branch format (not main and doesn't start with factory/)
         resp_invalid = self.client.post(
-            "/api/studio/repos/test3/preview/branch",
+            "/api/repos/test3/preview/branch",
             json={"branch": "random-branch-name"},
         )
         self.assertEqual(resp_invalid.status_code, 400)
@@ -297,7 +274,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         job.status = JobStatus.RUNNING
 
         resp = self.client.post(
-            "/api/studio/repos/busy-repo/preview/branch",
+            "/api/repos/busy-repo/preview/branch",
             json={"branch": "factory/new-branch"},
         )
         self.assertEqual(resp.status_code, 409)
@@ -326,7 +303,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         try:
             resp = self.client.post(
-                "/api/studio/repos/active-switcher-repo/preview/branch",
+                "/api/repos/active-switcher-repo/preview/branch",
                 json={"branch": "factory/active-feature"},
             )
             self.assertEqual(resp.status_code, 200)
@@ -370,7 +347,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         try:
             resp = self.client.post(
-                "/api/studio/repos/active-fail-repo/preview/branch",
+                "/api/repos/active-fail-repo/preview/branch",
                 json={"branch": "factory/nonexistent"},
             )
             self.assertEqual(resp.status_code, 400)
@@ -395,7 +372,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         try:
             resp = self.client.post(
-                "/api/studio/repos/prov-repo/preview/branch",
+                "/api/repos/prov-repo/preview/branch",
                 json={"branch": "factory/some-target"},
             )
             self.assertEqual(resp.status_code, 409)
@@ -427,7 +404,7 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
 
         try:
             resp = self.client.post(
-                "/api/studio/repos/sse-broadcast-repo/preview/branch",
+                "/api/repos/sse-broadcast-repo/preview/branch",
                 json={"branch": "factory/sse-feature"},
             )
             self.assertEqual(resp.status_code, 200)
@@ -447,3 +424,13 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
             self.assertEqual(refresh_events[0]["repo"], "sse-broadcast-repo")
         finally:
             preview_registry._previews.pop("sse-broadcast-repo", None)
+
+    def test_legacy_studio_preview_routes_return_404(self):
+        self.assertEqual(self.client.get("/api/studio/repos/test3/preview").status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test3/preview", json={}).status_code, 404)
+        self.assertEqual(self.client.delete("/api/studio/repos/test3/preview").status_code, 404)
+        self.assertEqual(self.client.get("/api/studio/repos/test3/preview/stream").status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test3/preview/sync", json={}).status_code, 404)
+        self.assertEqual(self.client.post("/api/studio/repos/test3/preview/branch", json={"branch": "factory/feat"}).status_code, 404)
+        self.assertEqual(self.client.get("/api/studio/repos/test3/branches").status_code, 404)
+
