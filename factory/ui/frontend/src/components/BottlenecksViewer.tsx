@@ -1,25 +1,36 @@
-import React, { useState, useMemo } from "react";
-import { Loader2, Terminal, BrainCircuit, ShieldAlert, CheckCircle2 } from "lucide-react";
-import { AgentEvent } from "../types";
+import React, { useState, useMemo, useCallback } from "react";
+import { Loader2 } from "lucide-react";
+import {
+  BottlenecksViewerProps,
+  BottleneckItem,
+  StageFilter,
+  CategoryFilter,
+  classifyBottleneck,
+  BottleneckCard,
+} from "./bottlenecks";
 
-export interface BottlenecksViewerProps {
-  events?: AgentEvent[];
-}
+export type { BottlenecksViewerProps, BottleneckItem };
 
-export interface BottleneckItem {
-  id: string;
-  type: "command" | "thinking";
-  title: string;
-  durationMs: number;
-  stage?: string;
-  exitCode?: number;
-  isError?: boolean;
-  output?: string;
-  cwd?: string;
-}
+const STAGE_FILTERS: StageFilter[] = ["All", "Planner", "Coder", "Verifier", "Reviewer"];
+const CATEGORY_FILTERS: CategoryFilter[] = ["All", "Commands", "Thinking"];
 
 export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [] }) => {
   const [hideMicroCommands, setHideMicroCommands] = useState<boolean>(false);
+  const [selectedStage, setSelectedStage] = useState<StageFilter>("All");
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   // Detect actively executing command or tool
   const activeTool = useMemo(() => {
@@ -60,7 +71,7 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
     const extracted: BottleneckItem[] = [];
 
     // Map tool_start events for command and argument lookups
-    const toolStartMap = new Map<string, AgentEvent>();
+    const toolStartMap = new Map<string, (typeof events)[number]>();
     events.forEach((evt) => {
       if (evt.type === "tool_start" && evt.data?.toolCallId) {
         toolStartMap.set(evt.data.toolCallId, evt);
@@ -68,8 +79,13 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
     });
 
     // 1. Fold thinking events by stage until marked done
-    const thinkingBlocks: { stage?: string; text: string; durationMs?: number; done?: boolean }[] =
-      [];
+    const thinkingBlocks: {
+      stage?: string;
+      text: string;
+      durationMs?: number;
+      done?: boolean;
+    }[] = [];
+
     events.forEach((evt) => {
       if (evt.type === "thinking") {
         const last = thinkingBlocks[thinkingBlocks.length - 1];
@@ -98,6 +114,7 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
           durationMs: thinkingBlock.durationMs,
           stage: thinkingBlock.stage,
           output: thinkingBlock.text,
+          category: "LLM Thinking",
         });
       }
     });
@@ -128,11 +145,17 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
             exitCode: evt.data?.exitCode,
             isError: Boolean(evt.data?.isError),
             output: evt.data?.output || evt.data?.stdout || "",
+            stderr: evt.data?.stderr || startEvt?.data?.stderr,
             cwd:
               evt.data?.cwd ||
               evt.data?.args?.cwd ||
               startEvt?.data?.cwd ||
               startEvt?.data?.args?.cwd,
+            category: classifyBottleneck({
+              type: "command",
+              command: cmd,
+              stage,
+            }),
           });
         }
       }
@@ -148,14 +171,33 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
     return Math.max(...items.map((i) => i.durationMs), 1);
   }, [items]);
 
+  // Apply stage, category, and micro-command filters
   const displayedItems = useMemo(() => {
-    if (!hideMicroCommands) return items;
-    return items.filter((item) => item.type !== "command" || item.durationMs >= 100);
-  }, [items, hideMicroCommands]);
+    return items.filter((item) => {
+      // Micro-command threshold filter
+      if (hideMicroCommands && item.type === "command" && item.durationMs < 100) {
+        return false;
+      }
 
-  const formatDurationDisplay = (ms: number): string => {
-    return `${(ms / 1000).toFixed(2)}s (${ms}ms)`;
-  };
+      // Stage pill filter
+      if (
+        selectedStage !== "All" &&
+        item.stage?.toUpperCase() !== selectedStage.toUpperCase()
+      ) {
+        return false;
+      }
+
+      // Category toggle filter
+      if (selectedCategory === "Commands" && item.type !== "command") {
+        return false;
+      }
+      if (selectedCategory === "Thinking" && item.type !== "thinking") {
+        return false;
+      }
+
+      return true;
+    });
+  }, [items, hideMicroCommands, selectedStage, selectedCategory]);
 
   return (
     <div id="bottlenecks-viewer" className="space-y-4">
@@ -186,24 +228,82 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
         </div>
       )}
 
-      {/* Controls & Filter Bar */}
+      {/* Filter and Exploration Controls */}
+      <div className="space-y-2 bg-soft-stone/30 p-2.5 rounded-xl border border-hairline/60">
+        {/* Stage Filter Pills */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-muted font-bold shrink-0">
+            Stage
+          </span>
+          <div className="flex items-center space-x-1 overflow-x-auto" data-testid="stage-filter-pills">
+            {STAGE_FILTERS.map((stage) => {
+              const isSelected = selectedStage === stage;
+              return (
+                <button
+                  key={stage}
+                  type="button"
+                  data-testid={`stage-filter-${stage.toLowerCase()}`}
+                  onClick={() => setSelectedStage(stage)}
+                  className={`px-2 py-0.5 rounded-pill text-[10px] font-mono transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-primary text-white font-semibold shadow-xs"
+                      : "bg-white text-slate-600 hover:text-ink hover:bg-soft-stone border border-hairline/80"
+                  }`}
+                >
+                  {stage}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Category Toggles & Micro-command Threshold */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-hairline/40">
+          <div className="flex items-center space-x-1.5" data-testid="category-toggles">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted font-bold shrink-0">
+              Type
+            </span>
+            {CATEGORY_FILTERS.map((cat) => {
+              const isSelected = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  data-testid={`category-toggle-${cat.toLowerCase()}`}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-2 py-0.5 rounded-pill text-[10px] font-mono transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-primary text-white font-semibold shadow-xs"
+                      : "bg-white text-slate-600 hover:text-ink hover:bg-soft-stone border border-hairline/80"
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+
+          <label
+            htmlFor="toggle-hide-micro-commands"
+            className="flex items-center space-x-1.5 text-muted hover:text-ink cursor-pointer select-none text-[10px] font-mono shrink-0"
+          >
+            <input
+              id="toggle-hide-micro-commands"
+              type="checkbox"
+              checked={hideMicroCommands}
+              onChange={(e) => setHideMicroCommands(e.target.checked)}
+              className="rounded border-hairline text-primary focus:ring-primary h-3 w-3 cursor-pointer"
+            />
+            <span>Hide micro-commands (&lt;100ms)</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Header bar displaying count */}
       <div className="flex items-center justify-between px-1 text-xs">
         <span className="font-sans font-semibold text-ink">
           Ranked Operations ({displayedItems.length})
         </span>
-        <label
-          htmlFor="toggle-hide-micro-commands"
-          className="flex items-center space-x-2 text-muted hover:text-ink cursor-pointer select-none text-[11px] font-mono"
-        >
-          <input
-            id="toggle-hide-micro-commands"
-            type="checkbox"
-            checked={hideMicroCommands}
-            onChange={(e) => setHideMicroCommands(e.target.checked)}
-            className="rounded border-hairline text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
-          />
-          <span>Hide micro-commands (&lt;100ms)</span>
-        </label>
       </div>
 
       {/* Empty State */}
@@ -211,95 +311,27 @@ export const BottlenecksViewer: React.FC<BottlenecksViewerProps> = ({ events = [
         <div className="text-center py-12 text-slate-500 text-xs font-mono bg-white rounded-xl border border-hairline p-6">
           {items.length === 0
             ? "No bottlenecks recorded yet."
-            : "No operations matched filter (all commands executed under 100ms)."}
+            : hideMicroCommands &&
+              items.every((it) => it.type === "command" && it.durationMs < 100)
+            ? "No operations matched filter (all commands executed under 100ms)."
+            : "No operations match the selected stage and category filters."}
         </div>
       ) : (
         /* Ranked Bottlenecks List */
         <div className="space-y-2.5">
           {displayedItems.map((item, index) => {
             const rank = index + 1;
-            const percentage = Math.max(
-              2,
-              Math.min(100, Math.round((item.durationMs / maxDurationMs) * 100))
-            );
-            const isFailure =
-              item.isError || (item.exitCode !== undefined && item.exitCode !== 0);
+            const isExpanded = expandedIds.has(item.id);
 
             return (
-              <div
+              <BottleneckCard
                 key={item.id}
-                data-testid="bottleneck-row"
-                className="bg-white border border-hairline rounded-xl p-3 shadow-2xs hover:border-slate-300 transition-colors space-y-2"
-              >
-                {/* Header: Rank, Title, Stage, Duration */}
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2 truncate">
-                    <span
-                      data-testid="bottleneck-rank"
-                      className="font-mono font-bold text-muted text-[11px] shrink-0"
-                    >
-                      #{rank}
-                    </span>
-                    {item.type === "thinking" ? (
-                      <BrainCircuit className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                    ) : (
-                      <Terminal className="w-3.5 h-3.5 text-muted shrink-0" />
-                    )}
-                    <span
-                      data-testid="bottleneck-title"
-                      className="font-mono font-semibold text-ink truncate text-xs"
-                      title={item.title}
-                    >
-                      {item.title}
-                    </span>
-                    {item.stage && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-soft-stone text-muted shrink-0">
-                        {item.stage}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center space-x-2 shrink-0">
-                    {item.exitCode !== undefined && (
-                      <span
-                        className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                          isFailure
-                            ? "bg-coral/10 text-coral border border-coral/30"
-                            : "bg-pale-green text-deep-green border border-deep-green/30"
-                        }`}
-                      >
-                        {isFailure ? (
-                          <ShieldAlert className="w-2.5 h-2.5 text-coral" />
-                        ) : (
-                          <CheckCircle2 className="w-2.5 h-2.5 text-deep-green" />
-                        )}
-                        <span>exit {item.exitCode}</span>
-                      </span>
-                    )}
-                    <span
-                      data-testid="bottleneck-duration"
-                      className="font-mono text-xs font-semibold text-primary"
-                    >
-                      {formatDurationDisplay(item.durationMs)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Relative Duration Bar */}
-                <div className="w-full bg-soft-stone/70 h-2 rounded-full overflow-hidden border border-hairline/60">
-                  <div
-                    data-testid="bottleneck-duration-bar"
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      item.type === "thinking"
-                        ? "bg-purple-500"
-                        : isFailure
-                        ? "bg-coral"
-                        : "bg-primary"
-                    }`}
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-              </div>
+                item={item}
+                rank={rank}
+                maxDurationMs={maxDurationMs}
+                isExpanded={isExpanded}
+                onToggleExpand={() => handleToggleExpand(item.id)}
+              />
             );
           })}
         </div>
