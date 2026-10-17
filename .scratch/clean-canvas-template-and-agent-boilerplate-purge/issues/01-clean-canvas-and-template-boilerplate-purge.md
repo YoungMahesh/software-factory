@@ -20,15 +20,16 @@ Eliminate default template boilerplate residue and enforce the Clean Canvas Inva
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Triage:** ready-for-agent
 
-- [ ] Strip "Application Workspace" and guidance copy from `src/routes/index.tsx` on `software-factory-09-test/tanstack-start-template`, leaving a clean `<main className="page-wrap px-4 py-8 min-h-screen"></main>`.
-- [ ] Update `src/components/Header.tsx` on `software-factory-09-test/tanstack-start-template` to use "App" as the neutral header brand baseline.
-- [ ] Add Clean Canvas Invariant requirements to `sandbox/factory/harness/prompts/planner_system.md`.
-- [ ] Add Clean Canvas replacement instructions to `sandbox/factory/harness/prompts/coder_system.md`.
-- [ ] Add blocker-level template boilerplate rejection rules to `sandbox/factory/harness/prompts/reviewer_system.md`.
-- [ ] Update `synthesize_ticket_content` in `factory/ui/github/_issues.py` to include template replacement and header branding criteria.
-- [ ] Add `Clean Canvas Invariant` to `CONTEXT.md`.
-- [ ] Create `docs/adr/0062-clean-canvas-invariant-and-template-boilerplate-purge.md`.
-- [ ] Update unit tests in `tests/test_ui/test_synthesis.py` and verify all tests pass.
+- [x] Strip "Application Workspace" and guidance copy from `src/routes/index.tsx` on `software-factory-09-test/tanstack-start-template`, leaving a clean `<main className="page-wrap px-4 py-8 min-h-screen"></main>`.
+- [x] Update `src/components/Header.tsx` on `software-factory-09-test/tanstack-start-template` to use "App" as the neutral header brand baseline.
+- [x] Add Clean Canvas Invariant requirements to `sandbox/factory/harness/prompts/planner_system.md`.
+- [x] Add Clean Canvas replacement instructions to `sandbox/factory/harness/prompts/coder_system.md`.
+- [x] Add blocker-level template boilerplate rejection rules to `sandbox/factory/harness/prompts/reviewer_system.md`.
+- [x] Update `synthesize_ticket_content` in `factory/ui/github/_issues.py` to include template replacement and header branding criteria.
+- [x] Add `Clean Canvas Invariant` to `CONTEXT.md`.
+- [x] Create `docs/adr/0062-clean-canvas-invariant-and-template-boilerplate-purge.md`.
+- [x] Update unit tests in `tests/test_ui/test_synthesis.py` and verify all tests pass.
+

@@ -1,6 +1,6 @@
 # Spec: Clean Canvas Invariant and Template Boilerplate Purge
 
-Status: ready-for-agent
+Status: resolved
 Triage: ready-for-agent
 
 ## Problem Statement

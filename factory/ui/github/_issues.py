@@ -323,6 +323,11 @@ def synthesize_ticket_content(
         f"Implement core UI layout and component hierarchy for {first_sentence.lower()} using TanStack Start and Tailwind CSS.",
         "Implement interactive client-side state management, user actions, and error handling.",
     ]
+    if seq_num == 1:
+        criteria.extend([
+            "Replace default starter template placeholder markup in src/routes/index.tsx with the new application UI.",
+            "Update the header brand in src/components/Header.tsx to display the application title.",
+        ])
     p_lower = clean.lower()
     for keywords, text in [
         (("dark", "theme"), "Add dark mode / light mode theme toggle with persistent preference."),
