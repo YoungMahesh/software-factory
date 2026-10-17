@@ -356,4 +356,12 @@ _Avoid_: Command classifier, category heuristics, bottleneck badges, command tag
 The architectural guarantee across the Canonical Template Repository, Assembly Line Agent prompts, ticket synthesis, and quality gates requiring generated web applications to start with an empty, unencumbered route container and neutral branding baseline, ensuring autonomous agents cleanly overwrite placeholder markup rather than appending components beneath template boilerplate cards.
 _Avoid_: Blank screen, bare canvas, empty starter, template leftover
 
+**Exa Web Search Tool**:
+A read-only search tool (`web_search`) powered by the Exa AI Search API (`https://api.exa.ai/search`) using `EXA_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to retrieve modern documentation, ecosystem guides, release notes, and error diagnosis with clean text extracts.
+_Avoid_: Web scraper, google search tool, bing tool, generic search
+
+**Context7 Documentation Tool**:
+A read-only documentation lookup tool (`docs_search`) powered by the Context7 API (`https://context7.com/api/v3/search`) using `CONTEXT7_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to query official library documentation, component APIs, CLI commands, and syntax-highlighted code snippets.
+_Avoid_: Doc scraper, library crawler, context tool, c7 tool
+
 
