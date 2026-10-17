@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Core Command Failure Telemetry API and Activity Drawer Tab, 02: Stage Filtering and Historical Past-Run Job Selector
 
-**Status:** in-review
+**Status:** closed
 
 - [x] Add a coral pill badge to the Activity Drawer trigger button in `AppNavigation` displaying the count of failed commands for the active job
 - [x] Ensure the navigation badge is completely hidden when zero commands failed or no job is active
