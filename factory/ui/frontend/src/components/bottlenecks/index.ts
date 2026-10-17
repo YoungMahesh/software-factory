@@ -1,6 +1,10 @@
 export { BottleneckCard } from "./BottleneckCard";
 export { RepoBottlenecksTable } from "./RepoBottlenecksTable";
 export { classifyBottleneck } from "./classification";
+export {
+  formatBottlenecksMarkdown,
+  formatRepoBottlenecksMarkdown,
+} from "./exportSummary";
 export type {
   InfrastructureCategory,
   BottleneckItem,
@@ -8,3 +12,4 @@ export type {
   CategoryFilter,
   BottlenecksViewerProps,
 } from "./types";
+

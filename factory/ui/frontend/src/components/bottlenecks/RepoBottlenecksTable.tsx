@@ -1,8 +1,10 @@
-import React from "react";
-import { Loader2, AlertCircle, RefreshCw, Terminal, BrainCircuit } from "lucide-react";
+import React, { useState } from "react";
+import { Loader2, AlertCircle, RefreshCw, Terminal, BrainCircuit, Copy, Check } from "lucide-react";
 import { RepoBottleneck } from "../../types";
+import { copyToClipboard } from "../../utils";
 import { getCategoryBadgeStyle } from "./classification";
 import { InfrastructureCategory } from "./types";
+import { formatRepoBottlenecksMarkdown } from "./exportSummary";
 
 export interface RepoBottlenecksTableProps {
   repo?: string;
@@ -26,6 +28,17 @@ export const RepoBottlenecksTable: React.FC<RepoBottlenecksTableProps> = ({
   error = null,
   onRetry,
 }) => {
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleCopySummary = async () => {
+    const md = formatRepoBottlenecksMarkdown(repo, bottlenecks);
+    const ok = await copyToClipboard(md);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   if (isLoading) {
     return (
       <div
@@ -89,9 +102,31 @@ export const RepoBottlenecksTable: React.FC<RepoBottlenecksTableProps> = ({
         <span className="font-sans font-semibold text-ink">
           Repository Recurring Bottlenecks ({bottlenecks.length})
         </span>
-        <span className="text-[10px] font-mono text-muted">
-          Sorted by cumulative execution time
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="text-[10px] font-mono text-muted hidden sm:inline">
+            Sorted by cumulative execution time
+          </span>
+          <button
+            id="btn-copy-bottlenecks-summary"
+            data-testid="btn-copy-bottlenecks-summary"
+            type="button"
+            onClick={handleCopySummary}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-pill text-xs font-mono font-medium text-slate-600 hover:text-ink bg-white border border-hairline hover:bg-soft-stone transition-colors cursor-pointer shadow-2xs"
+            title="Copy repository summary to clipboard"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-muted" />
+                <span>Copy Summary</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <div
