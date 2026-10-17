@@ -95,6 +95,7 @@ describe("RepoBottlenecksTable", () => {
     expect(screen.getByText(/total duration/i)).toBeInTheDocument();
     expect(screen.getByText(/invocations/i)).toBeInTheDocument();
     expect(screen.getByText(/avg duration/i)).toBeInTheDocument();
+    expect(screen.getByText(/max duration/i)).toBeInTheDocument();
 
     // Row 1
     expect(screen.getByText("#1")).toBeInTheDocument();
@@ -103,6 +104,7 @@ describe("RepoBottlenecksTable", () => {
     expect(screen.getByText("12.50s")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("2.50s")).toBeInTheDocument();
+    expect(screen.getByText("3.20s")).toBeInTheDocument();
 
     // Row 2
     expect(screen.getByText("#2")).toBeInTheDocument();
@@ -111,6 +113,7 @@ describe("RepoBottlenecksTable", () => {
     expect(screen.getByText("6.00s")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("2.00s")).toBeInTheDocument();
+    expect(screen.getByText("2.40s")).toBeInTheDocument();
 
     // Row 3
     expect(screen.getByText("#3")).toBeInTheDocument();
@@ -119,6 +122,7 @@ describe("RepoBottlenecksTable", () => {
     expect(screen.getByText("3.50s")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("350ms")).toBeInTheDocument();
+    expect(screen.getByText("500ms")).toBeInTheDocument();
   });
 });
 

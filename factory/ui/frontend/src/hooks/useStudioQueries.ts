@@ -10,7 +10,6 @@ export const studioQueryKeys = {
   issues: (repo: string) => ["studio", "issues", repo] as const,
   messages: (repo: string) => ["studio", "messages", repo] as const,
   pullRequests: (repo: string) => ["studio", "pullRequests", repo] as const,
-  bottlenecks: (repo: string) => ["studio", "bottlenecks", repo] as const,
   jobs: ["jobs"] as const,
 };
 
@@ -268,14 +267,6 @@ export function useRollbackTurnMutation() {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.pullRequests(vars.repo) });
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.preview(vars.repo) });
     },
-  });
-}
-
-export function useRepoBottlenecksQuery(repo?: string) {
-  return useQuery({
-    queryKey: studioQueryKeys.bottlenecks(repo || ""),
-    queryFn: () => api.fetchRepoBottlenecks(repo || ""),
-    enabled: Boolean(repo && repo.trim()),
   });
 }
 

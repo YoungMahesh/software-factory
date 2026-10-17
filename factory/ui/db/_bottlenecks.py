@@ -61,6 +61,18 @@ def classify_operation(command: str, stage: str = "", is_thinking: bool = False)
     return "Command"
 
 
+def _extract_event_payload(row: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Extracts the parsed outer event dictionary and inner data dictionary from a database row."""
+    data_obj: dict[str, Any] = {}
+    if row["data_json"]:
+        try:
+            data_obj = json.loads(row["data_json"])
+        except Exception:
+            data_obj = {}
+    inner_data = data_obj.get("data") if isinstance(data_obj.get("data"), dict) else data_obj
+    return data_obj, inner_data
+
+
 class BottlenecksStorageMixin:
     """Provides repository-wide telemetry aggregation queries and bottleneck metrics."""
 
@@ -112,15 +124,8 @@ class BottlenecksStorageMixin:
             thinking_blocks: list[dict[str, Any]] = []
             for r in job_rows:
                 if r["event_type"] == "thinking":
-                    stage = r["stage"]
-                    data_obj = {}
-                    if r["data_json"]:
-                        try:
-                            data_obj = json.loads(r["data_json"])
-                        except Exception:
-                            data_obj = {}
-                    inner_data = data_obj.get("data") if isinstance(data_obj.get("data"), dict) else data_obj
-                    stage = stage or data_obj.get("stage") or inner_data.get("stage")
+                    data_obj, inner_data = _extract_event_payload(r)
+                    stage = r["stage"] or data_obj.get("stage") or inner_data.get("stage")
 
                     last = thinking_blocks[-1] if thinking_blocks else None
                     if last and last.get("stage") == stage and not last.get("done"):
@@ -150,13 +155,7 @@ class BottlenecksStorageMixin:
             # 2. Extract tool_result operations
             for r in job_rows:
                 if r["event_type"] == "tool_result":
-                    data_obj = {}
-                    if r["data_json"]:
-                        try:
-                            data_obj = json.loads(r["data_json"])
-                        except Exception:
-                            data_obj = {}
-                    inner_data = data_obj.get("data") if isinstance(data_obj.get("data"), dict) else data_obj
+                    data_obj, inner_data = _extract_event_payload(r)
 
                     tool_name = (inner_data.get("toolName") or data_obj.get("toolName") or "").lower()
                     stage = r["stage"] or inner_data.get("stage") or data_obj.get("stage") or ""
@@ -198,10 +197,11 @@ class BottlenecksStorageMixin:
             avg_dur = round(total_dur / count, 1) if count > 0 else 0.0
             max_dur = max(durations) if durations else 0
 
-            # Determine dominant stage
+            # Determine dominant stage and category mode
             stages = [o["stage"] for o in ops if o.get("stage")]
             dominant_stage = max(set(stages), key=stages.count) if stages else "CODER"
-            category = ops[0]["category"]
+            is_thinking = any(o.get("category") == "LLM Thinking" for o in ops)
+            category = classify_operation(cmd, stage=dominant_stage, is_thinking=is_thinking)
 
             aggregated.append({
                 "command": cmd,

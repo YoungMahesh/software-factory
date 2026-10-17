@@ -106,6 +106,7 @@ export const RepoBottlenecksTable: React.FC<RepoBottlenecksTableProps> = ({
               <th className="py-2.5 px-3 text-right">Total Duration</th>
               <th className="py-2.5 px-3 text-center">Invocations</th>
               <th className="py-2.5 px-3 text-right">Avg Duration</th>
+              <th className="py-2.5 px-3 text-right">Max Duration</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline/60">
@@ -167,6 +168,11 @@ export const RepoBottlenecksTable: React.FC<RepoBottlenecksTableProps> = ({
                   {/* Avg Duration */}
                   <td className="py-2.5 px-3 text-right font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
                     {formatDuration(item.avg_duration_ms)}
+                  </td>
+
+                  {/* Max Duration */}
+                  <td className="py-2.5 px-3 text-right font-mono text-[11px] text-muted whitespace-nowrap">
+                    {formatDuration(item.max_duration_ms ?? item.max_time ?? 0)}
                   </td>
                 </tr>
               );
