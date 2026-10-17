@@ -352,4 +352,8 @@ _Avoid_: Slow command log, performance tab, latency viewer, bottleneck tracker
 Pattern-matching categorization rules that classify agent command executions and telemetry events into discrete infrastructure domains (`Package Install`, `Test Suite`, `Build / Compile`, `Git / VCS`, `LLM Thinking`) based on executable binaries, CLI arguments, and pipeline stages to isolate systemic pipeline latency.
 _Avoid_: Command classifier, category heuristics, bottleneck badges, command tagging
 
+**Clean Canvas Invariant**:
+The architectural guarantee across the Canonical Template Repository, Assembly Line Agent prompts, ticket synthesis, and quality gates requiring generated web applications to start with an empty, unencumbered route container and neutral branding baseline, ensuring autonomous agents cleanly overwrite placeholder markup rather than appending components beneath template boilerplate cards.
+_Avoid_: Blank screen, bare canvas, empty starter, template leftover
+
 

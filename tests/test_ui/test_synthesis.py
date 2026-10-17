@@ -64,6 +64,8 @@ class TestTicketAndMilestoneSynthesis(unittest.TestCase):
         self.assertIn("**Status:** ready-for-agent", body)
         self.assertIn("- [ ]", body)
         self.assertIn("calculator", body.lower())
+        self.assertIn("Replace default starter template placeholder markup in src/routes/index.tsx with the new application UI.", body)
+        self.assertIn("Update the header brand in src/components/Header.tsx to display the application title.", body)
 
     def test_synthesize_ticket_content_sequential_ticket(self):
         prompt = "Add CSV export for calculation history with a download button."
@@ -74,6 +76,8 @@ class TestTicketAndMilestoneSynthesis(unittest.TestCase):
         self.assertIn("**Blocked by:** #1", body)
         self.assertIn("**Status:** ready-for-agent", body)
         self.assertIn("- [ ]", body)
+        self.assertNotIn("starter template placeholder markup", body)
+        self.assertNotIn("Update the header brand in src/components/Header.tsx", body)
 
     def test_create_repo_milestone_success(self):
         mock_resp = MagicMock()
@@ -242,3 +246,32 @@ class TestTicketAndMilestoneSynthesis(unittest.TestCase):
         args2, kwargs2 = mock_create_issue.call_args
         self.assertTrue(kwargs2["title"].startswith("02: "))
         self.assertIn("**Blocked by:** #1", kwargs2["body"])
+
+
+class TestCleanCanvasPromptInvariants(unittest.TestCase):
+    def setUp(self):
+        self.prompts_dir = Path(__file__).resolve().parent.parent.parent / "sandbox" / "factory" / "harness" / "prompts"
+
+    def test_planner_system_prompt_clean_canvas_invariant(self):
+        planner_path = self.prompts_dir / "planner_system.md"
+        self.assertTrue(planner_path.exists())
+        content = planner_path.read_text(encoding="utf-8")
+        self.assertIn("Clean Canvas Invariant", content)
+        self.assertIn("src/routes/index.tsx", content)
+        self.assertIn("src/components/Header.tsx", content)
+
+    def test_coder_system_prompt_clean_canvas_instructions(self):
+        coder_path = self.prompts_dir / "coder_system.md"
+        self.assertTrue(coder_path.exists())
+        content = coder_path.read_text(encoding="utf-8")
+        self.assertIn("src/routes/index.tsx", content)
+        self.assertIn("src/components/Header.tsx", content)
+
+    def test_reviewer_system_prompt_template_boilerplate_rejection(self):
+        reviewer_path = self.prompts_dir / "reviewer_system.md"
+        self.assertTrue(reviewer_path.exists())
+        content = reviewer_path.read_text(encoding="utf-8")
+        self.assertIn("Application Workspace", content)
+        self.assertIn("Ready for development", content)
+        self.assertIn("blocker", content.lower())
+

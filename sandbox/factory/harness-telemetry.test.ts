@@ -363,9 +363,15 @@ test("runReviewerAgent: enforces rejection if standardsCompliance failed even if
 test("loadPromptTemplate: loads markdown prompt file for planner, coder, and reviewer", () => {
   assert.ok(PLANNER_SYSTEM_PROMPT.includes("Planner Agent in the Software Factory assembly line"));
   assert.ok(PLANNER_SYSTEM_PROMPT.includes('"ticketId": "<ticket-id>"'));
+  assert.ok(PLANNER_SYSTEM_PROMPT.includes("Clean Canvas Invariant"));
+  assert.ok(PLANNER_SYSTEM_PROMPT.includes("src/routes/index.tsx"));
   assert.ok(CODER_SYSTEM_PROMPT.includes("Coder Agent in the Software Factory assembly line"));
+  assert.ok(CODER_SYSTEM_PROMPT.includes("src/routes/index.tsx"));
+  assert.ok(CODER_SYSTEM_PROMPT.includes("src/components/Header.tsx"));
   assert.ok(REVIEWER_SYSTEM_PROMPT.includes("Reviewer Agent in the Software Factory assembly line"));
   assert.ok(REVIEWER_SYSTEM_PROMPT.includes('"verdict": "approved" | "rejected"'));
+  assert.ok(REVIEWER_SYSTEM_PROMPT.includes("Application Workspace"));
+  assert.ok(REVIEWER_SYSTEM_PROMPT.includes("Ready for development"));
 });
 
 test("loadPromptTemplate: caches loaded prompt templates and supports reload", () => {
