@@ -182,6 +182,8 @@ def run_sandbox_launch(
     }
     if args.from_snapshot:
         env["RESUME_SNAPSHOT"] = "1"
+    if clean_secret is None:
+        env["NO_REPO"] = "1"
     if target_repo:
         env["GH_REPO"] = target_repo
     if not cloudflare_active:

@@ -153,87 +153,114 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
     echo "📂 Workspace resolved to $TARGET_DIR"
     cd "$TARGET_DIR"
 else
-    if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
-        exit 1
-    fi
-
-    if [ -f "/root/secrets/org/token" ]; then
-        if [ -z "${GH_REPO:-}" ]; then
-            echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
-            exit 1
+    if [ "${NO_REPO:-0}" = "1" ]; then
+        echo "🏝️  No repository secret provided: skipping repository fetch."
+        TARGET_DIR="/root/${APP_NAME:-sandbox}"
+        mkdir -p "$TARGET_DIR"
+        cd "$TARGET_DIR"
+        if [ ! -d "$TARGET_DIR/.git" ]; then
+            echo "🌱 Initializing empty Git repository with branch main in $TARGET_DIR..."
+            git init -b main "$TARGET_DIR"
+            cat << 'EOF' > "$TARGET_DIR/.gitignore"
+.env
+.env.*
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+EOF
+            git -C "$TARGET_DIR" add .gitignore
+            GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Mahesh}" \
+            GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-maheshghamand@gmail.com}" \
+            GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Mahesh}" \
+            GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-maheshghamand@gmail.com}" \
+            git -C "$TARGET_DIR" commit -m "initial commit"
         fi
-        echo "🔐 Decrypting organization token from /root/secrets/org/token..."
-        GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n')
-        if [ -z "$GH_TOKEN" ]; then
-            echo "ERROR: Failed to decrypt organization token using AGE_PRIVATE_KEY." >&2
-            rm -rf /root/secrets/org
-            exit 1
-        fi
-        rm -f /root/secrets/org/token
-        echo "🧹 Purged encrypted organization token from disk."
-        export ORG_TOKEN="1"
-        export TRACKER="${TRACKER:-github}"
-    elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
-        FETCH_SECRET_FILE=""
-        if [ -f "/root/secrets/repo/fetch.env" ]; then
-            FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
-        else
-            FETCH_SECRET_FILE="/root/secrets/fetch.env"
-        fi
-
-        echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
-        DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
-        if [ -z "$DECRYPTED_FETCH" ]; then
-            echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-            rm -rf /root/secrets/repo
-            exit 1
-        fi
-
-        while IFS= read -r line || [ -n "$line" ]; do
-            [[ "$line" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "${line// }" ]] && continue
-            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-                var_name="${BASH_REMATCH[1]}"
-                var_val="${BASH_REMATCH[2]}"
-                if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
-                    var_val="${BASH_REMATCH[1]}"
-                fi
-                export "$var_name"="$var_val"
-            fi
-        done <<< "$DECRYPTED_FETCH"
-
-        rm -f "$FETCH_SECRET_FILE"
-        echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
+        echo "📂 Workspace resolved to $TARGET_DIR"
     else
-        echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
-        exit 1
-    fi
+        if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
+            echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
+            exit 1
+        fi
 
-    if [ -z "${GH_REPO:-}" ]; then
-        echo "ERROR: GH_REPO is not set." >&2
-        exit 1
-    fi
+        if [ -f "/root/secrets/org/token" ]; then
+            if [ -z "${GH_REPO:-}" ]; then
+                echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
+                exit 1
+            fi
+            echo "🔐 Decrypting organization token from /root/secrets/org/token..."
+            GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n')
+            if [ -z "$GH_TOKEN" ]; then
+                echo "ERROR: Failed to decrypt organization token using AGE_PRIVATE_KEY." >&2
+                rm -rf /root/secrets/org
+                exit 1
+            fi
+            rm -f /root/secrets/org/token
+            echo "🧹 Purged encrypted organization token from disk."
+            export ORG_TOKEN="1"
+            export TRACKER="${TRACKER:-github}"
+        elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
+            FETCH_SECRET_FILE=""
+            if [ -f "/root/secrets/repo/fetch.env" ]; then
+                FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
+            else
+                FETCH_SECRET_FILE="/root/secrets/fetch.env"
+            fi
 
-    if [ -z "${GH_TOKEN:-}" ]; then
-        echo "ERROR: GH_TOKEN is not set." >&2
-        exit 1
-    fi
+            echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
+            DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
+            if [ -z "$DECRYPTED_FETCH" ]; then
+                echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+                rm -rf /root/secrets/repo
+                exit 1
+            fi
 
-    REPO_NAME=$(basename "$GH_REPO")
-    TARGET_DIR="/root/$REPO_NAME"
+            while IFS= read -r line || [ -n "$line" ]; do
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                    var_name="${BASH_REMATCH[1]}"
+                    var_val="${BASH_REMATCH[2]}"
+                    if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
+                        var_val="${BASH_REMATCH[1]}"
+                    fi
+                    export "$var_name"="$var_val"
+                fi
+            done <<< "$DECRYPTED_FETCH"
 
-    if [ ! -d "$TARGET_DIR" ]; then
-        echo "🏝️  Cloning $GH_REPO (branch: $BRANCH)..."
-        GIT_ASKPASS=echo git clone --quiet --branch "$BRANCH" --single-branch \
-            "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
-    fi
+            rm -f "$FETCH_SECRET_FILE"
+            echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
+        else
+            echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
+            exit 1
+        fi
 
-    cd "$TARGET_DIR"
+        if [ -z "${GH_REPO:-}" ]; then
+            echo "ERROR: GH_REPO is not set." >&2
+            exit 1
+        fi
 
-    if ! git symbolic-ref -q HEAD >/dev/null; then
-        echo "ERROR: '$BRANCH' resolved to a tag or detached commit. Only Git branches are supported." >&2
-        exit 1
+        if [ -z "${GH_TOKEN:-}" ]; then
+            echo "ERROR: GH_TOKEN is not set." >&2
+            exit 1
+        fi
+
+        REPO_NAME=$(basename "$GH_REPO")
+        TARGET_DIR="/root/$REPO_NAME"
+
+        if [ ! -d "$TARGET_DIR" ]; then
+            echo "🏝️  Cloning $GH_REPO (branch: $BRANCH)..."
+            GIT_ASKPASS=echo git clone --quiet --branch "$BRANCH" --single-branch \
+                "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
+        fi
+
+        cd "$TARGET_DIR"
+
+        if ! git symbolic-ref -q HEAD >/dev/null; then
+            echo "ERROR: '$BRANCH' resolved to a tag or detached commit. Only Git branches are supported." >&2
+            exit 1
+        fi
     fi
 fi
 

@@ -21,14 +21,73 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertIn("--sops", res.stdout)
         self.assertIn("Retain SOPS age private key", res.stdout)
 
-    def test_missing_secret_fails(self):
+    def test_missing_secret_without_name_fails(self):
         res = subprocess.run(
             ["python3", str(self.sandbox_main), "--sops"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("the following arguments are required: -s/--secret", res.stderr)
+        self.assertIn("--name is required when launching without --secret", res.stderr)
+
+    def test_launch_without_secret_with_branch_fails(self):
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--name", "my-app", "-b", "dev"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--github-branch cannot be used without -s/--secret", res.stderr)
+
+    def test_launch_without_secret_with_testing_fails(self):
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--name", "my-app", "--testing"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--testing cannot be used without -s/--secret", res.stderr)
+
+    def test_parser_parses_standalone_launch_with_name(self):
+        from sandbox.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "standalone-app"])
+        self.assertEqual(args.name, "standalone-app")
+        self.assertIsNone(args.secret)
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_run_sandbox_launch_standalone_sets_no_repo_env(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-standalone-1"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "standalone-app"])
+
+        run_sandbox_launch(args)
+
+        mock_app_lookup.assert_called_once_with("standalone-app", create_if_missing=True)
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["image"], mock_image)
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], "standalone-app")
+        self.assertEqual(call_kwargs["env"]["NO_REPO"], "1")
+        self.assertNotIn("GH_REPO", call_kwargs["env"])
+
 
     def test_help_contains_github_branch_flag(self):
         res = subprocess.run(
@@ -57,6 +116,47 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertNotIn('REF="${1:-main}"', content)
         self.assertIn("git symbolic-ref -q HEAD", content)
         self.assertIn("Only Git branches are supported", content)
+
+    def test_startup_script_standalone_no_repo_initializes_git_workspace(self):
+        import tempfile
+
+        startup_sh = self.repo_root / "shared" / "startup.sh"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_root = Path(tmpdir) / "root"
+            fake_root.mkdir()
+
+            test_script = f"""
+            export HOME="{fake_root}"
+            export NO_REPO="1"
+            export APP_NAME="my-standalone-app"
+            export ENABLE_CLOUDFLARE="0"
+            sed -e 's|/root|{fake_root}|g' -e 's|/usr/sbin/sshd|true|g' -e 's|exec sleep infinity|exit 0|g' "{startup_sh}" > "{tmpdir}/run_startup.sh"
+            bash "{tmpdir}/run_startup.sh"
+            """
+            res = subprocess.run(["bash", "-c", test_script], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"startup.sh failed: {res.stderr}\nstdout: {res.stdout}")
+            self.assertIn("No repository secret provided: skipping repository fetch.", res.stdout)
+            self.assertIn("Initializing empty Git repository with branch main", res.stdout)
+            target_dir = fake_root / "my-standalone-app"
+            self.assertTrue(target_dir.is_dir())
+            self.assertTrue((target_dir / ".git").is_dir())
+            self.assertTrue((target_dir / ".gitignore").is_file())
+            gitignore_content = (target_dir / ".gitignore").read_text()
+            self.assertIn(".env", gitignore_content)
+            self.assertIn("node_modules/", gitignore_content)
+            self.assertIn("dist/", gitignore_content)
+            self.assertIn(".venv/", gitignore_content)
+            self.assertIn("__pycache__/", gitignore_content)
+
+            git_log = subprocess.run(
+                ["git", "-C", str(target_dir), "log", "-1", "--pretty=%B"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn("initial commit", git_log.stdout)
+
 
     def test_parser_parses_github_branch_flag(self):
         from sandbox.main import create_parser

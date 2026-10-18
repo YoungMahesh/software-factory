@@ -134,7 +134,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--name",
         default=None,
         metavar="APP_NAME",
-        help="Explicit Modal application name (mandatory when launching with --from-snapshot without --secret).",
+        help="Explicit Modal application name (mandatory when launching without --secret).",
     )
 
     parser.add_argument(
@@ -148,7 +148,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--secret",
         dest="secret",
         default=None,
-        help="Repository secret name under secrets/<secret-name>/fetch.env",
+        help="Repository secret name under secrets/<secret-name>/fetch.env (optional; when omitted, launches a Standalone Sandbox without repository fetch).",
     )
 
     parser.add_argument(
@@ -270,8 +270,12 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--snapshot-ttl can only be used with --snapshot.")
         if args.from_snapshot and not args.secret and not args.name:
             parser.error("--name is required when launching from a snapshot without --secret.")
-        if not args.from_snapshot and not args.secret:
-            parser.error("the following arguments are required: -s/--secret")
+        if not args.secret and not args.name:
+            parser.error("--name is required when launching without --secret.")
+        if not args.secret and args.github_branch != "main":
+            parser.error("--github-branch cannot be used without -s/--secret.")
+        if not args.secret and args.testing:
+            parser.error("--testing cannot be used without -s/--secret.")
 
 
 def capture_snapshot(

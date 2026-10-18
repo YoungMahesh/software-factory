@@ -12,6 +12,11 @@ _Avoid_: Container sandbox, VM instance, Docker runner
 A lightweight container sandbox on Modal running directly on the container runtime without virtualized hardware abstraction or Docker daemon capabilities.
 _Avoid_: Basic sandbox, container VM
 
+**Standalone Sandbox**:
+A Modal sandbox execution environment provisioned without a Repository Fetch Secret (`--secret`), initialized with an empty Git repository and default `.gitignore` under `/root/<name>`, and configured to run without cloning a remote target repository.
+_Avoid_: Empty sandbox, blank runner, scratch container
+
+
 **Filesystem Snapshot**:
 A point-in-time, copy-on-write capture of a Modal sandbox's root filesystem stored as a reusable `modal.Image` with an associated Time-To-Live (TTL), used to persist workspace state or accelerate subsequent sandbox cold starts without repeating repository cloning and dependency installation.
 _Avoid_: Memory snapshot, container backup, sandbox image, VM snapshot
