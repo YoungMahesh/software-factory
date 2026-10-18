@@ -119,6 +119,11 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertIn("git symbolic-ref -q HEAD", content)
         self.assertIn("Only Git branches are supported", content)
 
+    def test_startup_script_shallow_clone_depth_limit(self):
+        startup_sh = self.repo_root / "shared" / "startup.sh"
+        content = startup_sh.read_text()
+        self.assertIn("git clone --quiet --depth 50 --branch", content)
+
     def test_startup_script_standalone_no_repo_initializes_git_workspace(self):
         import tempfile
 

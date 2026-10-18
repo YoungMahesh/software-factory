@@ -20,6 +20,10 @@ _Avoid_: Empty sandbox, blank runner, scratch container
 A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository secret or `--name`) while individual sandbox execution environments are uniquely named inside that App.
 _Avoid_: Static runner, single-app runner, constant container
 
+**Shallow Repository Clone**:
+A Git checkout optimization in development sandboxes that truncates commit history on the target branch to a fixed maximum depth of 50 commits, accelerating container boot latency and saving network transfer while maintaining sufficient recent history for active development.
+_Avoid_: Partial clone, shallow branch, depth clone, truncated repo
+
 
 **Filesystem Snapshot**:
 A point-in-time, copy-on-write capture of a Modal sandbox's root filesystem stored as a reusable `modal.Image` with an associated Time-To-Live (TTL), used to persist workspace state or accelerate subsequent sandbox cold starts without repeating repository cloning and dependency installation.

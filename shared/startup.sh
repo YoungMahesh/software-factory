@@ -251,7 +251,7 @@ EOF
 
         if [ ! -d "$TARGET_DIR" ]; then
             echo "🏝️  Cloning $GH_REPO (branch: $BRANCH)..."
-            GIT_ASKPASS=echo git clone --quiet --branch "$BRANCH" --single-branch \
+            GIT_ASKPASS=echo git clone --quiet --depth 50 --branch "$BRANCH" --single-branch \
                 "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
         fi
 
