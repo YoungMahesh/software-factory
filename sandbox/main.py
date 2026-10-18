@@ -137,13 +137,15 @@ def run_sandbox_launch(
 
     pubkey_content = load_ssh_pub_key()
 
+    random_id = uuid.uuid4().hex[:8]
     if args.name:
         app_name = args.name
+        sandbox_name = f"{app_name}-{random_id}"
     else:
         bare_repo = clean_secret.split("/")[-1] if clean_secret else "sandbox"
-        random_id = uuid.uuid4().hex[:8]
         app_prefix = "test-" if is_testing else ""
-        app_name = f"{app_prefix}{bare_repo}-{random_id}"
+        app_name = f"{app_prefix}{bare_repo}"
+        sandbox_name = f"{app_name}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
 
@@ -178,7 +180,9 @@ def run_sandbox_launch(
         "SSH_AUTHORIZED_KEY": pubkey_content,
         "PORT": str(DEFAULT_WEB_PORT),
         "HOSTNAME": "0.0.0.0",
-        "APP_NAME": app_name,
+        "APP_NAME": sandbox_name,
+        "MODAL_APP_NAME": app_name,
+        "SANDBOX_NAME": sandbox_name,
     }
     if args.from_snapshot:
         env["RESUME_SNAPSHOT"] = "1"
@@ -256,7 +260,7 @@ def run_sandbox_launch(
     from_suffix = f" from snapshot {args.from_snapshot}" if args.from_snapshot else ""
     print(
         f"🏝️  Launching Modal {runtime_desc}{from_suffix} with SSH"
-        f"{features_suffix} (App: {app_name})..."
+        f"{features_suffix} (App: {app_name}, Sandbox: {sandbox_name})..."
     )
 
     sandbox_kwargs: dict = {
@@ -264,6 +268,7 @@ def run_sandbox_launch(
         "idle_timeout": IDLE_TIMEOUT_SECS,
         "image": image,
         "app": app,
+        "name": sandbox_name,
         "volumes": volumes,
         "unencrypted_ports": [22],
         "encrypted_ports": encrypted_ports,
@@ -276,14 +281,21 @@ def run_sandbox_launch(
     else:
         sandbox_kwargs["memory"] = (128, 16384)
 
-    with modal.enable_output():
-        sandbox = modal.Sandbox.create(
-            "bash",
-            REMOTE_STARTUP_SCRIPT,
-            args.github_branch,
-            secrets=sandbox_secrets,
-            **sandbox_kwargs,
+    try:
+        with modal.enable_output():
+            sandbox = modal.Sandbox.create(
+                "bash",
+                REMOTE_STARTUP_SCRIPT,
+                args.github_branch,
+                secrets=sandbox_secrets,
+                **sandbox_kwargs,
+            )
+    except modal.exception.AlreadyExistsError as exc:
+        print(
+            f"❌ Sandbox '{sandbox_name}' already exists and is running in App '{app_name}': {exc}",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
     # Retrieve forwarded tunnels
     ssh_info = None
@@ -344,6 +356,7 @@ def run_sandbox_launch(
     print_access_info(
         sandbox,
         app_name,
+        sandbox_name=sandbox_name,
         ssh_info=ssh_info,
         opencode_url=opencode_url,
         opencode_port=args.opencode_port if args.opencode else None,

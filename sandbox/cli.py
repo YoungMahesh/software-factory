@@ -30,6 +30,7 @@ def generate_ascii_qr(data: str) -> str | None:
 def print_access_info(
     sandbox: modal.Sandbox,
     app_name: str,
+    sandbox_name: str | None = None,
     ssh_info: tuple[str, int] | None = None,
     opencode_url: str | None = None,
     opencode_port: int | None = None,
@@ -48,6 +49,8 @@ def print_access_info(
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:      {app_name}")
+    if sandbox_name:
+        print(f"  • Sandbox:  {sandbox_name}")
     print(f"  • Shell:    modal shell {sandbox.object_id}")
     if cloudflare_enabled:
         print(f"  • Cloudflare: https://{DEFAULT_WEB_PORT}.mahesh0.dev (port {DEFAULT_WEB_PORT})")
@@ -70,8 +73,9 @@ def print_access_info(
     elif t3_url:
         print(f"  • T3 Code:  {t3_url} (port {t3_port})")
         print(f"  • Web UI:   {t3_url}")
+    instance_name = sandbox_name or app_name
     if agy_enabled:
-        print(f"  • Remote Control: https://antigravity.google.com (Instance: {app_name})")
+        print(f"  • Remote Control: https://antigravity.google.com (Instance: {instance_name})")
     if ssh_info:
         ssh_host, ssh_port = ssh_info
         ssh_cmd = (
@@ -79,7 +83,7 @@ def print_access_info(
         )
         print(f"  • SSH:      {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
-        print(f"Host {app_name}")
+        print(f"Host {instance_name}")
         print(f"  HostName {ssh_host}")
         print(f"  Port {ssh_port}")
         print("  User root")
@@ -134,7 +138,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--name",
         default=None,
         metavar="APP_NAME",
-        help="Explicit Modal application name (mandatory when launching without --secret).",
+        help="Explicit Modal application name for standalone sandboxes (mandatory when launching without --secret; cannot be used with --secret).",
     )
 
     parser.add_argument(
@@ -268,6 +272,10 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--terminate can only be used with --snapshot.")
         if getattr(args, "_snapshot_ttl_specified", False):
             parser.error("--snapshot-ttl can only be used with --snapshot.")
+        if args.secret and args.name:
+            parser.error(
+                "--name cannot be used with -s/--secret: --name is strictly for standalone launches without --secret."
+            )
         if args.from_snapshot and not args.secret and not args.name:
             parser.error("--name is required when launching from a snapshot without --secret.")
         if not args.secret and not args.name:

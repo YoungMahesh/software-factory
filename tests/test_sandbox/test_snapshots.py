@@ -253,7 +253,9 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertEqual(call_kwargs["image"], mock_image)
         self.assertEqual(call_kwargs["env"]["RESUME_SNAPSHOT"], "1")
-        self.assertEqual(call_kwargs["env"]["APP_NAME"], "my-restored-app")
+        self.assertTrue(call_kwargs["name"].startswith("my-restored-app-"))
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-restored-app")
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
@@ -295,9 +297,13 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         mock_build_image.assert_not_called()
         mock_image_from_id.assert_called_once_with("im-snap-456")
         mock_image.add_local_dir.assert_called_once()
+        mock_app_lookup.assert_called_once_with("my-secret", create_if_missing=True)
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertEqual(call_kwargs["image"], mock_staged_image)
         self.assertEqual(call_kwargs["env"]["RESUME_SNAPSHOT"], "1")
+        self.assertTrue(call_kwargs["name"].startswith("my-secret-"))
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-secret")
 
 
 class TestStartupScriptResume(unittest.TestCase):

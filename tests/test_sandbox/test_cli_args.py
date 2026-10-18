@@ -84,7 +84,9 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_app_lookup.assert_called_once_with("standalone-app", create_if_missing=True)
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertEqual(call_kwargs["image"], mock_image)
-        self.assertEqual(call_kwargs["env"]["APP_NAME"], "standalone-app")
+        self.assertTrue(call_kwargs["name"].startswith("standalone-app-"))
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "standalone-app")
         self.assertEqual(call_kwargs["env"]["NO_REPO"], "1")
         self.assertNotIn("GH_REPO", call_kwargs["env"])
 
@@ -196,3 +198,115 @@ class TestSandboxCliArgs(unittest.TestCase):
             subprocess.run(["git", "clone", "--branch", "v1.0.0", "--single-branch", str(repo_dir), str(tag_clone)], check=True, capture_output=True)
             res_tag = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=tag_clone, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.assertNotEqual(res_tag.returncode, 0)
+
+    def test_name_and_secret_mutually_exclusive(self):
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "-s", "dummy", "--name", "my-app"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--name cannot be used with -s/--secret", res.stderr)
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_repo_launch_uses_constant_app_name_and_unique_named_sandbox(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+        import tempfile
+
+        mock_image = MagicMock()
+        mock_staged_image = MagicMock()
+        mock_image.add_local_dir.return_value = mock_staged_image
+        mock_build_image.return_value = mock_image
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-repo-123"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_dir = Path(tmpdir) / "secrets" / "my-project"
+            secrets_dir.mkdir(parents=True)
+            (secrets_dir / "fetch.env").write_text("GH_REPO=owner/my-project")
+
+            parser = create_parser()
+            args = parser.parse_args(["-s", "my-project"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        mock_app_lookup.assert_called_once_with("my-project", create_if_missing=True)
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertTrue(call_kwargs["name"].startswith("my-project-"))
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-project")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_testing_launch_uses_test_prefixed_constant_app(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+        import tempfile
+
+        mock_image = MagicMock()
+        mock_staged_image = MagicMock()
+        mock_image.add_local_dir.return_value = mock_staged_image
+        mock_build_image.return_value = mock_image
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-test-123"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            org_secrets_dir = Path(tmpdir) / "secrets_org" / "software-factory-09-test"
+            org_secrets_dir.mkdir(parents=True)
+            (org_secrets_dir / "token").write_text("GITHUB_TOKEN=dummy")
+
+            parser = create_parser()
+            args = parser.parse_args(["-s", "software-factory-09-test/test1", "--testing"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        mock_app_lookup.assert_called_once_with("test-test1", create_if_missing=True)
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertTrue(call_kwargs["name"].startswith("test-test1-"))
+        self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "test-test1")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_already_exists_error_exits_with_code_1(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        import modal.exception
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox_create.side_effect = modal.exception.AlreadyExistsError("sandbox exists")
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "standalone-app"])
+
+        with self.assertRaises(SystemExit) as cm:
+            run_sandbox_launch(args)
+        self.assertEqual(cm.exception.code, 1)

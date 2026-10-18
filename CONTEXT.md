@@ -13,8 +13,12 @@ A lightweight container sandbox on Modal running directly on the container runti
 _Avoid_: Basic sandbox, container VM
 
 **Standalone Sandbox**:
-A Modal sandbox execution environment provisioned without a Repository Fetch Secret (`--secret`), initialized with an empty Git repository and default `.gitignore` under `/root/<name>`, and configured to run without cloning a remote target repository.
+A Modal sandbox execution environment provisioned without a Repository Fetch Secret (`--secret`), launched under a constant Modal App named via `--name` with an empty Git repository and default `.gitignore` initialized under `/root/<sandbox-name>`, and configured to run without cloning a remote target repository.
 _Avoid_: Empty sandbox, blank runner, scratch container
+
+**Named Sandbox Runner**:
+A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository secret or `--name`) while individual sandbox execution environments are uniquely named inside that App.
+_Avoid_: Static runner, single-app runner, constant container
 
 
 **Filesystem Snapshot**:

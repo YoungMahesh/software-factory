@@ -123,9 +123,10 @@ class TestT3CodeIntegration(unittest.TestCase):
             (secrets_dir / "fetch.env").write_text("DUMMY=1")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "my-secret", "--t3", "--name", "test-t3-app"])
+            args = parser.parse_args(["-s", "my-secret", "--t3"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
+        mock_app_lookup.assert_called_once_with("my-secret", create_if_missing=True)
         mock_build_image.assert_called_once_with(
             opencode=False,
             agy=False,
@@ -226,7 +227,7 @@ class TestT3CodeIntegration(unittest.TestCase):
             (secrets_dir / "fetch.env").write_text("DUMMY=1")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "my-secret", "--t3", "--name", "test-t3-pair"])
+            args = parser.parse_args(["-s", "my-secret", "--t3"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
         mock_sandbox.exec.assert_called_with("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
