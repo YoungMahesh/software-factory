@@ -124,6 +124,12 @@ class TestSandboxCliArgs(unittest.TestCase):
         content = startup_sh.read_text()
         self.assertIn("git clone --quiet --depth 50 --branch", content)
 
+    def test_startup_script_does_not_mutate_bashrc_working_directory(self):
+        startup_sh = self.repo_root / "shared" / "startup.sh"
+        content = startup_sh.read_text()
+        self.assertNotIn("cd $TARGET_DIR", content)
+        self.assertNotIn('~/.bashrc" || echo "cd', content)
+
     def test_startup_script_standalone_no_repo_initializes_git_workspace(self):
         import tempfile
 
