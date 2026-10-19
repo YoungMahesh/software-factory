@@ -104,6 +104,11 @@ def run_sandbox_launch(
             parser.error("--memory can only be used with --vm.")
         if args.memory < 1:
             parser.error("--memory must be a positive integer number of GB.")
+        print(
+            "⚠️  Warning: --memory is deprecated. VM Sandboxes now use standard burstable RAM (128, 16384) MiB. "
+            f"Using value to configure swapfile ({args.memory * 2} GB).",
+            file=sys.stderr,
+        )
 
     if args.opencode and args.opencode_port == DEFAULT_WEB_PORT:
         parser.error(
@@ -195,9 +200,11 @@ def run_sandbox_launch(
 
     memory_gb: int | None = None
     if args.vm:
-        memory_gb = args.memory if args.memory is not None else 1
-        memory_mib = memory_gb * 1024
-        swap_gb = memory_gb * 2
+        if args.memory is not None:
+            memory_gb = args.memory
+            swap_gb = memory_gb * 2
+        else:
+            swap_gb = 2
         env["SWAP_GB"] = str(swap_gb)
         env["ENABLE_DOCKER"] = "1"
 
@@ -275,11 +282,8 @@ def run_sandbox_launch(
         "cpu": (0.125, 4.0),
         "env": env,
     }
-    if args.vm:
-        sandbox_kwargs["memory"] = memory_mib
-        sandbox_kwargs["experimental_options"] = {"vm_runtime": True}
-    else:
-        sandbox_kwargs["memory"] = (128, 16384)
+    sandbox_kwargs["runtime"] = "vm" if args.vm else "gvisor"
+    sandbox_kwargs["memory"] = (128, 16384)
 
     try:
         with modal.enable_output():
@@ -371,6 +375,7 @@ def run_sandbox_launch(
         agy_enabled=args.agy,
         cloudflare_enabled=not args.no_cloudflare,
         sops_enabled=args.sops,
+        is_vm=args.vm,
     )
 
 

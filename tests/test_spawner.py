@@ -132,6 +132,7 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertEqual(kwargs["idle_timeout"], FACTORY_IDLE_TIMEOUT_SECS)
         self.assertEqual(kwargs["memory"], FACTORY_STANDARD_MEMORY)
         self.assertEqual(kwargs["cpu"], FACTORY_CPU)
+        self.assertEqual(kwargs["runtime"], "gvisor")
         self.assertNotIn("experimental_options", kwargs)
 
         # Check share0 secret
@@ -176,9 +177,10 @@ class TestFactorySpawner(unittest.TestCase):
         self.assertNotIn("--issue", args)
         self.assertNotIn("--model", args)
 
-        # VM configuration: memory in MiB (2 * 1024), vm_runtime True
-        self.assertEqual(kwargs["memory"], 2048)
-        self.assertEqual(kwargs["experimental_options"], {"vm_runtime": True})
+        # VM configuration: runtime="vm", burstable RAM, no experimental_options
+        self.assertEqual(kwargs["runtime"], "vm")
+        self.assertEqual(kwargs["memory"], FACTORY_STANDARD_MEMORY)
+        self.assertNotIn("experimental_options", kwargs)
 
         env = kwargs["env"]
         self.assertEqual(env["ENABLE_DOCKER"], "1")

@@ -315,3 +315,101 @@ class TestSandboxCliArgs(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             run_sandbox_launch(args)
         self.assertEqual(cm.exception.code, 1)
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_vm_launch_uses_stable_runtime_and_burstable_memory(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-vm-1"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "vm-sandbox-app", "--vm"])
+        run_sandbox_launch(args)
+
+        mock_sandbox_create.assert_called_once()
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["runtime"], "vm")
+        self.assertEqual(call_kwargs["memory"], (128, 16384))
+        self.assertNotIn("experimental_options", call_kwargs)
+        self.assertEqual(call_kwargs["env"]["ENABLE_DOCKER"], "1")
+        self.assertEqual(call_kwargs["env"]["SWAP_GB"], "2")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_vm_launch_with_memory_soft_deprecation(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        import io
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-vm-2"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "vm-sandbox-app", "--vm", "--memory", "3"])
+
+        stderr_buf = io.StringIO()
+        with patch("sys.stderr", stderr_buf):
+            run_sandbox_launch(args)
+
+        self.assertIn("Warning: --memory is deprecated", stderr_buf.getvalue())
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["runtime"], "vm")
+        self.assertEqual(call_kwargs["memory"], (128, 16384))
+        self.assertEqual(call_kwargs["env"]["SWAP_GB"], "6")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_standard_launch_uses_gvisor_runtime(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-std-1"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        parser = create_parser()
+        args = parser.parse_args(["--name", "standard-app"])
+        run_sandbox_launch(args)
+
+        mock_sandbox_create.assert_called_once()
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["runtime"], "gvisor")
+        self.assertEqual(call_kwargs["memory"], (128, 16384))
+        self.assertNotIn("experimental_options", call_kwargs)
+        self.assertNotIn("ENABLE_DOCKER", call_kwargs["env"])
+

@@ -45,6 +45,7 @@ def print_access_info(
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
     sops_enabled: bool = False,
+    is_vm: bool = False,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
@@ -55,7 +56,9 @@ def print_access_info(
     if cloudflare_enabled:
         print(f"  • Cloudflare: https://{DEFAULT_WEB_PORT}.mahesh0.dev (port {DEFAULT_WEB_PORT})")
     if memory_gb:
-        print(f"  • Memory:   {memory_gb} GB RAM + {memory_gb * 2} GB swap")
+        print(f"  • Memory:   Burstable (128 MiB - 16 GiB) + {memory_gb * 2} GB swap")
+    elif is_vm:
+        print("  • Memory:   Burstable (128 MiB - 16 GiB) + 2 GB swap")
     if metro_url:
         print(f"  • Metro:    {metro_url} (port {metro_port})")
     if sops_enabled:
@@ -222,7 +225,7 @@ def create_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="GB",
-        help="RAM to allocate in GB (1 -> 1 GB, 2 -> 2 GB, ...). Swap is 2x RAM. Only valid with --vm (default with --vm: 1).",
+        help="(Deprecated) Formerly set static VM RAM; VM sandboxes now use burstable RAM (128, 16384) MiB. If provided with --vm, sizes swapfile to 2 * N GB.",
     )
     parser.add_argument(
         "--no-cloudflare",

@@ -101,13 +101,12 @@ def main() -> None:
         "env": env,
     }
 
+    sandbox_kwargs["runtime"] = "vm" if args.vm else "gvisor"
+    sandbox_kwargs["memory"] = (128, 4096)
+
     if args.vm:
         env["SWAP_GB"] = "2"
         env["ENABLE_DOCKER"] = "1"
-        sandbox_kwargs["memory"] = 1024
-        sandbox_kwargs["experimental_options"] = {"vm_runtime": True}
-    else:
-        sandbox_kwargs["memory"] = (128, 4096)
 
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
 

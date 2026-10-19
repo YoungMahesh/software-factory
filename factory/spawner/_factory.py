@@ -90,17 +90,16 @@ def create_factory_sandbox(config: FactorySpawnConfig) -> modal.Sandbox:
         "env": env,
     }
 
+    sandbox_kwargs["runtime"] = "vm" if config.vm else "gvisor"
+    sandbox_kwargs["memory"] = FACTORY_STANDARD_MEMORY
+
     if config.vm:
         memory_gb = (
             config.memory_gb
             if config.memory_gb is not None
             else FACTORY_VM_DEFAULT_MEMORY_GB
         )
-        sandbox_kwargs["memory"] = memory_gb * 1024
-        sandbox_kwargs["experimental_options"] = {"vm_runtime": True}
         env["SWAP_GB"] = str(memory_gb * 2)
-    else:
-        sandbox_kwargs["memory"] = FACTORY_STANDARD_MEMORY
 
     # Build entrypoint invocation
     entrypoint_args: list[str] = [

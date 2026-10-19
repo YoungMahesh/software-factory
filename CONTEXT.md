@@ -5,7 +5,7 @@ Isolated cloud development and execution environments running on Modal with agen
 ## Language
 
 **VM Sandbox**:
-A Modal sandbox execution environment configured with full virtual machine virtualization, custom kernel privileges, Docker daemon support, and swapfile allocation.
+A Modal sandbox execution environment configured with full virtual machine virtualization (`runtime="vm"`), custom kernel privileges, Docker daemon support, burstable RAM `(128, 16384)` MiB identical to Standard Sandboxes, and swapfile allocation.
 _Avoid_: Container sandbox, VM instance, Docker runner
 
 **Standard Sandbox**:
