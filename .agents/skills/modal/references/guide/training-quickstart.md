@@ -1,12 +1,14 @@
-# Training quickstart
+# LLM training quickstart
 
 Modal provides many ways to get started with training.
 
 The easiest way is to use [Modal Dojo](https://dojo.modal.dev), an open-source library that gives you the building blocks,
-tuned defaults, and observability you need for easy, production-grade LLM training.
+tuned defaults, and observability you need for easy, production-grade SFT and RL.
 
 For a Tinker-compatible API, you can deploy a [Spindle](/docs/guide/spindle)
-server. And when you need maximum control over your stack, you can bring your existing training code and infrastructure to a
+server.
+
+And when you need maximum control over your stack, you can bring your existing training code and infrastructure to a
 [Clustered Function](/docs/guide/multi-node-training).
 
 Here, we walk through how to start training with Modal Dojo. See [here](/docs/examples/paint_flowers) for a more fully-fledged example.

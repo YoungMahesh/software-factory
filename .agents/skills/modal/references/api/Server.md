@@ -28,6 +28,41 @@ object_id(self)
 ```
 Modal's internal ID for this Server instance.
 
+## metrics
+
+
+```python
+metrics: ServerMetricsManager
+```
+
+Access metric samples with `export()` and series definitions with `schema()`.
+
+
+### metrics.schema
+
+```python
+schema(self, groups=None)
+```
+Return metric definitions keyed by group name without fetching samples.
+
+Omit `groups` to list all groups. Each group contains its exact individual
+series definitions.
+
+### metrics.export
+
+```python
+export(self, *, since=None, until=None, bucket_size=None, groups=None)
+```
+Fetch metric samples for a Server.
+
+Defaults to all groups over the last hour. `since` defaults to one hour
+before `until`; naive datetimes use local time. The maximum range is 31
+days, with at most 500 points per series. Omit `bucket_size` for automatic
+sizing. Bounds round down to UTC bucket boundaries; the partial bucket
+at `until` is excluded. Missing observations have value None.
+
+Use `schema()` to discover groups and series without fetching samples.
+
 ## logs
 
 
@@ -190,6 +225,13 @@ session = server.sessions.start()
 
 server.sessions.terminate(session.token)
 ```
+
+## autoscaler
+
+```python
+autoscaler(self)
+```
+View and update Autoscaler settings on a Server.
 
 ## info
 

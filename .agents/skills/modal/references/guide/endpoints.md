@@ -55,8 +55,20 @@ through the OpenAI-compatible Chat Completions and Responses APIs or the
 Anthropic-compatible Messages API. Embedding models can be called through the
 OpenAI-compatible Embeddings API.
 
-The dashboard shows the Endpoint URL and model name. This example uses the Chat
-Completions API and a [proxy token](#proxy-tokens):
+### Model names
+
+Set `model` to the value shown in the dashboard's request examples.
+You can also retrieve it through the OpenAI-compatible Models API:
+
+```bash
+curl "<your-endpoint-url>/v1/models" \
+  -H "Authorization: Bearer $MODAL_PROXY_TOKEN_ID.$MODAL_PROXY_TOKEN_SECRET"
+```
+
+### Send a request
+
+This example uses the Chat Completions API and a
+[proxy token](#proxy-tokens):
 
 ```bash
 curl "<your-endpoint-url>/v1/chat/completions" \

@@ -4,7 +4,7 @@
 parameter(*, default=_no_default, init=True)
 ```
 Used to specify options for modal.cls parameters, similar to dataclass.field for dataclasses
-```
+```python
 class A:
     a: str = modal.parameter()
 

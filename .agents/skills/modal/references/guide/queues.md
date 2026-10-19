@@ -53,8 +53,8 @@ Queues are split into separate FIFO partitions via a string key. By default, one
 partition (corresponding to an empty key) is used.
 
 A single `Queue` can contain up to 100,000 partitions, each with up to 5,000
-items. Each item can be up to 1 MiB. These limits also apply to the default
-partition.
+items. Each item can be up to 1 MiB, and each partition can be up to 64 MiB in
+total size. These limits also apply to the default partition.
 
 Each partition has an independent TTL, by default 24 hours.
 Lower TTLs can be specified by the `partition_ttl` argument in the `put` or

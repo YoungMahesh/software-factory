@@ -37,6 +37,7 @@ The Modal Datadog Integration will forward the following metrics to Datadog:
 * `modal.gpu.power.usage`
 * `modal.gpu.power.utilization`
 * `modal.gpu.temperature`
+* `modal.gpu.count`
 * `modal.container.running`
 * `modal.input_events.elapsed_time_us`
 * `modal.input_events.input_queue_time_us`
@@ -47,7 +48,10 @@ The Modal Datadog Integration will forward the following metrics to Datadog:
 * `modal.function.running_inputs`
 
 All metrics are tagged with `container_id`, `environment_name`, `app_name`, `app_id`,
-`function_name`, `function_id`, `workspace_name`, and `workspace_id`.
+`function_name`, `function_id`, `workspace_name`, and `workspace_id`. Metrics from
+GPU containers are additionally tagged with `gpu_billing_type`, the GPU type the
+container is billed as (e.g. `H100`), which may differ from the physical GPU model
+when a workload is scheduled onto a newer GPU.
 
 Deprecated metrics:
 

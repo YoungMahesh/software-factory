@@ -37,7 +37,7 @@ Before pinning the region of your containers, we recommend assessing which workl
 
 In this section, we'll outline where logs and other data may be stored for different Modal products. For relevant retention policies, please refer to the data retention table in our [security and privacy documentation](/docs/guide/security#data-retention).
 
-Dedicated Endpoints, Shared Endpoints, and Servers do not [store request and response payloads](/docs/guide/security#modal-inference-endpoints).
+Dedicated Endpoints, Shared Endpoints, and Servers do not [store request and response payloads](/docs/guide/security#zero-data-retention).
 
 | Product                           | Data type                                                                 | Where                                                       | Recommended controls for strict residency requirements                                                                                                                                                                                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

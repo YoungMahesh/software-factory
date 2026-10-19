@@ -8,10 +8,15 @@ There are currently several [known limitations](#limitations).
 
 ## Introduction
 
-Sandbox Sidecars let you run additional containers alongside your main
-Sandbox container, on the same host. A sandbox and its sidecars are connected
-via an internal bridge network, allowing low latency communication between
-containers over TCP/UDP, making them ideal for:
+Sandbox Sidecars are isolated containers that run alongside your main Sandbox
+container on the same host. They provide a low-latency trust boundary, letting you
+split code with different levels of trust across containers. For example, you can
+keep credentials, proxies, or monitoring in a Sidecar that the main container
+cannot directly access.
+
+Because a Sandbox and its Sidecars run on the same host, communication between
+them stays local instead of crossing a remote service boundary. This makes
+Sidecars ideal for:
 
 * Separating an agent harness from its execution environment, by running the
   agent in one container and its tool calls in another. See the [agent example](/docs/examples/sidecar_agent)
@@ -21,12 +26,17 @@ containers over TCP/UDP, making them ideal for:
   or other secrets before passing on network calls to external services. The
   [credential proxy example](/docs/examples/sidecar_secrets_injection) uses
   a Modal [Secret](/docs/guide/secrets) that is injected only in the sidecar.
+* Monitoring and filtering outbound traffic, by [routing the Sandbox's HTTPS
+  traffic through a proxy Sidecar](#routing-https-traffic-through-a-sidecar)
+  with your own rules. The [traffic routing example](/docs/examples/sidecar_traffic_routing)
+  shows a mitmproxy-based request filter.
 * Splitting out complex multi-service applications over separate containers,
   such as databases, caches or worker processes, similar to Docker Compose. The
   [Redis example](/docs/examples/sidecar_redis) shows the pattern.
 
 We're still discovering all the ways that Sandbox Sidecars can be used - if you
-come up with another use case, please let us know!
+come up with another use case, please let us know! For more background on why
+we built Sidecars, see the [Sidecars launch blog post](https://modal.com/blog/introducing-sandbox-sidecars-trust-boundary).
 
 Sidecars are managed through the sidecars interface on a Sandbox
 (`_experimental_sidecars` in Python, `experimentalSidecars` in JS/Go),
@@ -35,9 +45,21 @@ which provides methods to create, list, get, and terminate Sidecar containers.
 Each Sidecar container:
 
 * Runs its own image independently from the main Sandbox container.
-* Runs in a separate, sandboxed process isolated from the main Sandbox container and other Sidecar containers.
-* Can communicate over an internal bridge network with the main Sandbox container and other Sidecar containers.
+* Is isolated from the main Sandbox container and other Sidecar containers with
+  the same isolation boundary as separate Sandboxes: gVisor or a VM, depending on
+  the Sandbox's [runtime](/docs/guide/sandboxes#runtimes).
+* Can communicate over an internal bridge network with the main Sandbox container
+  and other Sidecar containers. In our benchmarks, communication between a Sandbox
+  and its Sidecars is at least 3x faster than between separate Sandboxes in the
+  same region.
+* Is created through the Modal SDK, not from inside the Sandbox, so code running
+  in the main Sandbox container can't create or modify it.
 * Can be created, terminated, and replaced dynamically during the Sandbox's lifetime.
+  Terminating the Sandbox stops all of its Sidecars.
+* Has its own [outbound network policy](#outbound-access-control), independent of the main Sandbox container.
+* Shares the CPU and memory of the Sandbox, which makes Sidecars more cost-efficient
+  than running the same processes across multiple Sandboxes. See
+  [Resource configuration](#resource-configuration).
 * Supports executing commands just like the main Sandbox container.
 
 ## Usage
@@ -162,8 +184,6 @@ func main() {
 
 {/snippet} </CodeTabs>
 
-Sidecars use the same [runtime](/docs/guide/sandboxes#runtimes) as the main Sandbox.
-
 ### Listing and retrieving sidecars
 
 You can list all running Sidecar containers or retrieve a specific one by name:
@@ -207,96 +227,6 @@ _ = sidecar
 ```
 
 {/snippet} </CodeTabs>
-
-### Routing HTTPS traffic through a Sidecar
-
-Sidecars can be used to inspect the outgoing HTTPS traffic from the main Sandbox
-container in a different context, for example to perform more advanced request
-filtering, inspecting requests for logging, or injecting secrets that the main
-Sandbox container should not have access to.
-
-Normally, applications need to support explicit proxy configuration, such as
-respecting the `HTTPS_PROXY` environment variable, to route traffic through a Sidecar.
-To include HTTPS traffic (TCP on port 443) from **proxy-unaware** applications, you can
-set the experimental `proxy_traffic_via_sidecar` option that routes **all** outbound
-HTTPS traffic from the main Sandbox container through a Sidecar.
-
-<CodeTabs>
-{#snippet python()}
-
-```python notest
-sb = modal.Sandbox.create(
-    "sleep",
-    "600",
-    app=app,
-    image=image,
-    experimental_options={"proxy_traffic_via_sidecar": "my-proxy-sidecar"},
-)
-
-# Until this Sidecar is running, HTTPS from the main container is refused.
-sb._experimental_sidecars.create("python", "/proxy.py", name="my-proxy-sidecar", image=proxy_image)
-```
-
-{/snippet}
-
-{#snippet javascript()}
-
-```javascript notest
-const sb = await modal.sandboxes.create(app, image, {
-  command: ["sleep", "600"],
-  experimentalOptions: { proxy_traffic_via_sidecar: "my-proxy-sidecar" },
-});
-
-// Until this Sidecar is running, HTTPS from the main container is refused.
-await sb.experimentalSidecars.create("my-proxy-sidecar", proxyImage, {
-  command: ["python", "/proxy.py"],
-});
-```
-
-{/snippet}
-
-{#snippet go()}
-
-```go notest
-sb, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
-	Command:             []string{"sleep", "600"},
-	ExperimentalOptions: map[string]any{"proxy_traffic_via_sidecar": "my-proxy-sidecar"},
-})
-// Until this Sidecar is running, HTTPS from the main container is refused.
-sb.ExperimentalSidecars.Create(ctx, "my-proxy-sidecar", proxyImage, &modal.SidecarCreateParams{
-	Command: []string{"python", "/proxy.py"},
-})
-```
-
-{/snippet} </CodeTabs>
-
-The Sidecar receives a raw TLS stream and must read the destination hostname
-from the `ClientHello`'s SNI. The original destination IP is not forwarded, so
-mechanisms such as `SO_ORIGINAL_DST` do not work. To read or rewrite HTTP
-requests, terminate TLS in the proxy using a certificate authority that the
-Sandbox trusts. See the [Sidecar traffic routing
-example](/docs/examples/sidecar_traffic_routing) for a complete mitmproxy-based
-request filter.
-
-Only TCP traffic to port 443 is relayed. The Sandbox's own egress controls are
-set aside for it: an `outbound_cidr_allowlist` on the Sandbox still governs every
-other port, but relayed traffic passes regardless of what it lists. Non-relayed
-traffic is still subject to the egress controls of the Sandbox.
-
-Relayed traffic is instead governed by the egress controls of the Sidecar it is
-relayed into. A Sidecar's outbound network policy is independent of the main
-container's and defaults to open, so unless you pass `outbound_cidr_allowlist`
-or `outbound_domain_allowlist` to the Sidecar itself, relayed traffic reaches
-any destination the Sidecar chooses to connect to.
-
-The option cannot be combined with setting `block_network`,
-`outbound_domain_allowlist` or `proxy` on the Sandbox.
-
-### Modal Proxy
-
-You can specify that traffic from a Sidecar should exit through a
-[Proxy](/docs/guide/proxy-ips) by passing a `proxy` at Sidecar creation, just as
-for a Sandbox.
 
 ### OIDC tokens
 
@@ -509,6 +439,232 @@ the identity token is issued for the Sidecar container, so its `container_id`
 claim differs from the main container's. An IAM trust policy that matches on
 the full subject must allow the Sidecar's container ID as well.
 
+## Networking
+
+### Communication between containers
+
+The main Sandbox container is reachable by the hostname `main`, and each
+Sidecar is reachable by the `name` it was created with. These hostnames are
+listed in `/etc/hosts`.
+
+Traffic between containers in the same Sandbox is not subject to any
+container's outbound allowlists, whether CIDR or domain. For example, a main
+container with an `outbound_domain_allowlist` can connect to a Sidecar by name,
+and a Sidecar with an empty `outbound_cidr_allowlist` can still reach `main`.
+This applies only to containers in the same Sandbox; other private IP addresses
+remain blocked.
+
+### Outbound access control
+
+Each Sidecar has its own outbound network policy, independent of the main
+container's and open by default. A Sidecar does not inherit the Sandbox's
+`outbound_cidr_allowlist` or `outbound_domain_allowlist`, and restricting one
+Sidecar does not affect the main container or other Sidecars.
+
+Set a Sidecar's outbound allowlists when you create it. These options behave
+like the Sandbox options of the same name:
+
+* `outbound_cidr_allowlist` only allows traffic to the listed IP ranges, using
+  any protocol.
+* `outbound_domain_allowlist` only allows TLS traffic on port 443 to the listed
+  domains, matched on
+  [SNI](/docs/guide/sandbox-networking#how-domain-filtering-works). Wildcard
+  prefixes such as `*.example.com` are supported.
+* When both allowlists are set, traffic that matches either one is allowed.
+
+<CodeTabs>
+{#snippet python()}
+
+```python notest
+sidecar = sb._experimental_sidecars.create(
+    "sleep",
+    "600",
+    name="restricted",
+    image=image,
+    outbound_cidr_allowlist=["52.0.0.0/8"],
+    outbound_domain_allowlist=["api.openai.com", "*.github.com"],
+)
+```
+
+{/snippet}
+
+{#snippet javascript()}
+
+```javascript notest
+const sidecar = await sb.experimentalSidecars.create("restricted", image, {
+  command: ["sleep", "600"],
+  outboundCidrAllowlist: ["52.0.0.0/8"],
+  outboundDomainAllowlist: ["api.openai.com", "*.github.com"],
+});
+```
+
+{/snippet}
+
+{#snippet go()}
+
+```go notest
+sidecar, _ := sb.ExperimentalSidecars.Create(ctx, "restricted", image, &modal.SidecarCreateParams{
+	Command:                 []string{"sleep", "600"},
+	OutboundCIDRAllowlist:   &modal.Allowlist{Entries: []string{"52.0.0.0/8"}},
+	OutboundDomainAllowlist: &modal.Allowlist{Entries: []string{"api.openai.com", "*.github.com"}},
+})
+_ = sidecar
+```
+
+{/snippet} </CodeTabs>
+
+Sidecars do not support `block_network`, because a fully network-blocked Sidecar
+couldn't reach the main container. To block all external egress while keeping
+connectivity to other containers in the Sandbox, pass an empty CIDR allowlist:
+
+* Python: `outbound_cidr_allowlist=[]`
+* JavaScript: `outboundCidrAllowlist: []`
+* Go: `OutboundCIDRAllowlist: &modal.Allowlist{}`
+
+<Callout variant="warning">
+
+DNS lookups through Modal's resolver still work when a Sidecar has an allowlist,
+including an empty CIDR allowlist. Public resolvers such as `8.8.8.8` are blocked
+unless you include them in the allowlist.
+
+</Callout>
+
+A Sidecar's outbound network policy is fixed when the Sidecar is created.
+Updating the Sandbox's network policy at runtime
+(`_experimental_set_outbound_network_policy` in Python, `updateNetworkPolicy` in
+JavaScript, `UpdateNetworkPolicy` in Go) only changes the main container's
+policy and never affects Sidecars. To change a Sidecar's policy, terminate it
+and create a replacement.
+
+| Option                                                  | Sandbox (main container) | Sidecar                                               |
+| ------------------------------------------------------- | ------------------------ | ----------------------------------------------------- |
+| `block_network`                                         | Supported                | Not supported. Use an empty `outbound_cidr_allowlist` |
+| `outbound_cidr_allowlist`                               | Supported                | Supported, set per Sidecar                            |
+| `outbound_domain_allowlist` *(Beta)*                    | Supported                | Supported, set per Sidecar                            |
+| Modal Proxy (`proxy`)                                   | Supported                | Supported, set per Sidecar (not on GPU Sandboxes)     |
+| [Outbound Policy](/docs/guide/sandbox-secret-injection) | Supported                | Not supported                                         |
+| Updating the policy at runtime                          | Supported (experimental) | Not supported; create a replacement Sidecar           |
+
+### Modal Proxy
+
+You can specify that traffic from a Sidecar should exit through a
+[Proxy](/docs/guide/proxy-ips) by passing a `proxy` at Sidecar creation, just as
+for a Sandbox. A Sidecar's Proxy is configured independently of the main
+container's, so its static outbound IP can differ from the main container's.
+Using a Proxy with a Sidecar is not supported for GPU
+Sandboxes; the client raises an error.
+
+### Routing HTTPS traffic through a Sidecar
+
+Sidecars can be used to inspect the outgoing HTTPS traffic from the main Sandbox
+container in a different context, for example to perform more advanced request
+filtering, inspecting requests for logging, or injecting secrets that the main
+Sandbox container should not have access to.
+
+Normally, applications need to support explicit proxy configuration, such as
+respecting the `HTTPS_PROXY` environment variable, to route traffic through a Sidecar.
+To include HTTPS traffic (TCP on port 443) from **proxy-unaware** applications, you can
+set the experimental `proxy_traffic_via_sidecar` option that routes **all** outbound
+HTTPS traffic from the main Sandbox container through a Sidecar.
+
+<CodeTabs>
+{#snippet python()}
+
+```python notest
+sb = modal.Sandbox.create(
+    "sleep",
+    "600",
+    app=app,
+    image=image,
+    experimental_options={"proxy_traffic_via_sidecar": "my-proxy-sidecar"},
+)
+
+# Until this Sidecar is running, HTTPS from the main container is refused.
+sb._experimental_sidecars.create("python", "/proxy.py", name="my-proxy-sidecar", image=proxy_image)
+```
+
+{/snippet}
+
+{#snippet javascript()}
+
+```javascript notest
+const sb = await modal.sandboxes.create(app, image, {
+  command: ["sleep", "600"],
+  experimentalOptions: { proxy_traffic_via_sidecar: "my-proxy-sidecar" },
+});
+
+// Until this Sidecar is running, HTTPS from the main container is refused.
+await sb.experimentalSidecars.create("my-proxy-sidecar", proxyImage, {
+  command: ["python", "/proxy.py"],
+});
+```
+
+{/snippet}
+
+{#snippet go()}
+
+```go notest
+sb, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+	Command:             []string{"sleep", "600"},
+	ExperimentalOptions: map[string]any{"proxy_traffic_via_sidecar": "my-proxy-sidecar"},
+})
+// Until this Sidecar is running, HTTPS from the main container is refused.
+sb.ExperimentalSidecars.Create(ctx, "my-proxy-sidecar", proxyImage, &modal.SidecarCreateParams{
+	Command: []string{"python", "/proxy.py"},
+})
+```
+
+{/snippet} </CodeTabs>
+
+The Sidecar receives a raw TLS stream and must read the destination hostname
+from the `ClientHello`'s SNI. The original destination IP is not forwarded, so
+mechanisms such as `SO_ORIGINAL_DST` do not work. To read or rewrite HTTP
+requests, terminate TLS in the proxy using a certificate authority that the
+Sandbox trusts. See the [Sidecar traffic routing
+example](/docs/examples/sidecar_traffic_routing) for a complete mitmproxy-based
+request filter.
+
+Only TCP traffic to port 443 from the main container is relayed. Egress from the
+proxy Sidecar itself, and from any other Sidecars, is not relayed and follows
+each container's own [outbound access controls](#outbound-access-control).
+
+The relay fails closed. Until a Sidecar with the configured name is running,
+and after it exits, HTTPS connections from the main container are refused
+instead of going out directly. A new Sidecar created with the same name takes
+over the relay.
+
+#### Interaction with egress controls
+
+* An `outbound_cidr_allowlist` on the Sandbox governs every port other than
+  443, but relayed traffic on port 443 passes regardless of what the allowlist
+  contains.
+* Relayed traffic is governed by the proxy Sidecar's own egress controls, which
+  default to open. Unless you pass `outbound_cidr_allowlist` or
+  `outbound_domain_allowlist` to the proxy Sidecar, relayed traffic can reach any
+  destination the proxy Sidecar connects to.
+
+`proxy_traffic_via_sidecar` cannot be combined with `block_network`,
+`outbound_domain_allowlist`, a Modal Proxy (`proxy`), or an
+[Outbound Policy](/docs/guide/sandbox-secret-injection) on the Sandbox. A
+Sandbox `outbound_cidr_allowlist` is allowed.
+
+For `proxy_traffic_via_sidecar`, the Sidecar name can't be empty or `main`, must
+be at most 64 characters long, and may contain only letters, digits, dashes,
+and underscores.
+
+### Connect Tokens
+
+<Callout variant="info">
+
+Sidecars can connect directly to every port on the main container, including
+the port that [Connect Tokens](/docs/guide/sandbox-networking#connecting-to-sandboxes-with-http-and-websockets)
+route requests to. Requests a Sidecar sends to that port do not need a token,
+and can set any `X-Verified-User-Data` header. If your server in the main
+container trusts that header, avoid using Connect Tokens and Sidecars together
+in the same Sandbox.
+
+</Callout>
+
 ## Resource configuration
 
 The main Sandbox container and the Sidecar containers share the resource allocation (CPU and memory) of the Sandbox,
@@ -527,10 +683,12 @@ regardless of the resource reservation.
 On the gVisor runtime, bursting is still possible; see the [guide to Sandbox resources and
 pricing](/docs/guide/sandbox-resources) for more details.
 
-On the VM runtime, Sidecars cannot be combined with memory bursting. Instead, you need to
-reserve memory for any Sidecars when you launch the Sandbox. That reserve is incompatible with VM memory bursting,
-so the Sandbox must set an equal memory request and limit. With every Sidecar launch, you either specify how much of
-the reserve to use for that Sidecar, or leave the option empty to use the entire remaining reserve:
+On the VM runtime, you need to reserve memory for any Sidecars when you launch the Sandbox.
+The reserve is carved out of the main VM's memory: it boots with `memory - reserve` and, if the
+Sandbox uses [memory bursting](/docs/guide/sandbox-resources), never grows past `limit - reserve`,
+leaving the reserve for Sidecars. The request must leave the main VM at least 1024 MiB. With every
+Sidecar launch, you either specify how much of the reserve to use for that Sidecar, or leave the
+option empty to use the entire remaining reserve:
 
 <CodeTabs>
 {#snippet python()}
@@ -543,7 +701,7 @@ sb = modal.Sandbox.create(
     image=image,
     timeout=300,
     runtime="vm",
-    memory=(8192, 8192),
+    memory=8192,
     experimental_options={"vm_sidecar_memory_reserve_mib": 1024},
 )
 
@@ -574,7 +732,6 @@ const sb = await modal.sandboxes.create(app, image, {
   timeoutMs: 300 * 1000,
   runtime: "vm",
   memoryMiB: 8192,
-  memoryLimitMiB: 8192,
   experimentalOptions: { vm_sidecar_memory_reserve_mib: "1024" },
 });
 
@@ -600,7 +757,6 @@ sb, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
 	Timeout:             5 * time.Minute,
 	Runtime:             modal.SandboxRuntimeVM,
 	MemoryMiB:           8192,
-	MemoryLimitMiB:      8192,
 	ExperimentalOptions: map[string]any{"vm_sidecar_memory_reserve_mib": "1024"},
 })
 
@@ -633,8 +789,12 @@ for sidecars:
   building is not supported for sidecars. See also
   [Separating Image builds from Sandbox creation](/docs/guide/sandboxes#separating-image-builds-from-sandbox-creation).
 * **No stdin/stdout**: A Sidecar's entrypoint does not expose stdin, stdout, or stderr streams.
-* **No VM memory bursting**: Sidecars on the VM runtime cannot be combined with VM memory bursting. Set an equal memory request and limit, e.g. `memory=(8192, 8192)`.
 * **Limitations on GPU Sandboxes**: You can attach Sidecars to Sandboxes with GPUs, but the Sidecar is CPU-only and cannot attach [Cloud Bucket Mounts](/docs/guide/cloud-bucket-mounts).
 * **No memory snapshot support**: A Sidecar's [filesystem](/docs/guide/sandbox-snapshots#filesystem-snapshots) and [individual directories](/docs/guide/sandbox-snapshots#directory-snapshots) can be independently snapshotted, but Sidecar memory state can not be captured with a
   [memory snapshot](/docs/guide/sandbox-snapshots#memory-snapshots).
+* **Sidecars bypass Connect Tokens**: a Sidecar can reach the main container's Connect Token port directly and set any
+  `X-Verified-User-Data` header. See [Connect Tokens](#connect-tokens).
+* **No `block_network` for Sidecars**: Sidecars can't be fully network-blocked,
+  and their outbound network policy can't be changed after creation. See
+  [Outbound access control](#outbound-access-control).
 * **Changes to /etc/hosts are not preserved**: `/etc/hosts` is rewritten on sidecar create/terminate and user changes are not preserved.

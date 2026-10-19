@@ -293,13 +293,6 @@ settings: WorkspaceSettingsManager
 Namespace for Workspace settings APIs.
 
 
-### settings.valid_settings
-
-```python
-valid_settings(cls)
-```
-
-
 ### settings.list
 
 ```python
@@ -332,4 +325,134 @@ The following settings can be updated:
 
 ```python notest
 modal.Workspace.from_context().settings.set("default-environment", "dev")
+```
+
+## service_users
+
+
+```python
+service_users: WorkspaceServiceUserManager
+```
+
+Namespace for managing Service Users in a Workspace.
+
+See [the guide](https://modal.com/docs/guide/service-users) for more information about Service
+Users.
+
+
+### service_users.create
+
+```python
+create(self, name, *, expires_in)
+```
+Create a new Service User in the current workspace.
+
+To call this function, you are required to have Manager permissions in the Workspace.
+
+**Parameters**
+
+<Parameter name="name" type="str" description="The name of the new Service User. Must consistent only of alphanumeric, &#x27;-&#x27;, or &#x27;_&#x27; characters." />
+<Parameter name="expires_in" type="int | None" description="An expiration time, in seconds, after which the token will stop working. If `None`, the token will never expire." />
+
+**Returns**
+
+A `TokenData` dataclass containing the credentials for the Service User. Note that this
+is the only time you will be able to view these credentials.
+
+**Usage**
+
+```python notest
+ws = modal.Workspace.from_context()
+
+# Creates a Service User named "test-service-user", whose credentials expire after one year.
+service_user_token_data = ws.service_users.create(
+    "test-service-user",
+    expires_in=datetime.timedelta(days=365).total_seconds(),
+)
+```
+
+### service_users.set_role
+
+```python
+set_role(self, service_user_name, environment_name, *, role)
+```
+Set the role of a specified Service User within an Environment.
+
+To call this function, you are required to have Manager permissions in the Workspace.
+
+**Parameters**
+
+<Parameter name="service_user_name" type="str" description="The name of the Service User." />
+<Parameter name="environment_name" type="str" description="The name of the Environment to which the Service User&#x27;s new role will apply." />
+<Parameter name="role" type="str" description="The access level to grant this Service User." />
+
+**Usage**
+
+```python notest
+ws = modal.Workspace.from_context()
+# Grants Service User "test-service-user" the Viewer role in Environment "production"
+ws.service_users.set_role("test-service-user", "production", role="viewer")
+
+# Revokes access to "production" from Service User "test-service-user"
+ws.service_users.set_role("test-service-user", "production", role="no-access")
+```
+
+### service_users.info
+
+```python
+info(self, name)
+```
+Get information about a specific Service User.
+
+**Parameters**
+
+<Parameter name="name" type="str" description="The name of the Service User to introspect." />
+
+**Returns**
+
+A `ServiceUserInfo` dataclass containing information about the Service User.
+
+**Usage**
+
+```python notest
+ws = modal.Workspace.from_context()
+service_user = ws.service_users.info("test-service-user")
+```
+
+### service_users.list
+
+```python
+list(self)
+```
+List all Service Users in the current workspace.
+
+**Returns**
+
+A list of `ServiceUserInfo` dataclasses.
+
+**Usage**
+
+```python notest
+ws = modal.Workspace.from_context()
+for service_user in ws.service_users.list():
+    print(service_user.name)
+```
+
+### service_users.delete
+
+```python
+delete(self, name, *, allow_missing=False)
+```
+Permanently delete a Service User.
+
+**Parameters**
+
+<Parameter name="name" type="str" description="The name of the Service User to delete." />
+<Parameter name="allow_missing" type="bool" defaultValue="False" description="If `True`, do not throw an exception if the Service User does not exist." />
+
+**Usage**
+
+```python notest
+ws = modal.Workspace.from_context()
+ws.service_users.delete("test-service-user")
 ```

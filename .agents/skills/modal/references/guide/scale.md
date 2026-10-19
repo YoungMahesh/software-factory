@@ -45,13 +45,13 @@ shutting down if the App is substantially overprovisioned.
 
 ## Dynamic autoscaler updates
 
-It's also possible to update the autoscaler settings dynamically (i.e., without redeploying
-the App) using the [`Function.update_autoscaler()`](/docs/sdk/py/latest/Function#update_autoscaler)
-method:
+It's also possible to view and update the autoscaler settings dynamically (i.e.,
+without redeploying the App) using the
+[`Function.autoscaler.update()`](/docs/sdk/py/latest/Function#autoscalerupdate) method.
 
 ```python notest
 f = modal.Function.from_name("my-app", "f")
-f.update_autoscaler(max_containers=100)
+f.autoscaler.update(max_containers=100)
 ```
 
 The autoscaler settings will revert to the configuration in the function
@@ -59,8 +59,15 @@ decorator the next time you deploy the App. Or they can be overridden by
 further dynamic updates:
 
 ```python notest
-f.update_autoscaler(min_containers=2, max_containers=10)
-f.update_autoscaler(min_containers=4)  # max_containers=10 will still be in effect
+f.autoscaler.update(min_containers=2, max_containers=10)
+f.autoscaler.update(min_containers=4)  # max_containers=10 will still be in effect
+```
+
+To view the current autoscaler settings for a function, you can use the
+[`Function.autoscaler.settings()`](/docs/sdk/py/latest/Function#autoscalersettings) method:
+
+```python notest
+current_settings = f.autoscaler.settings()
 ```
 
 A common pattern is to run this method in a [scheduled function](/docs/guide/cron)
@@ -73,25 +80,31 @@ def inference_server():
 
 @app.function(schedule=modal.Cron("0 6 * * *", timezone="America/New_York"))
 def increase_warm_pool():
-    inference_server.update_autoscaler(min_containers=4)
+    inference_server.autoscaler.update(min_containers=4)
 
 @app.function(schedule=modal.Cron("0 22 * * *", timezone="America/New_York"))
 def decrease_warm_pool():
-    inference_server.update_autoscaler(min_containers=0)
+    inference_server.autoscaler.update(min_containers=0)
 ```
 
-When you have a [`modal.Cls`](/docs/sdk/py/latest/Cls), `update_autoscaler`
-is a method on an *instance* and will control the autoscaling behavior of
-containers serving the Function with that specific set of parameters:
+When you have a [`modal.Cls`](/docs/sdk/py/latest/Cls), autoscaler updates
+are operations on *instances* of the Cls, as opposed to the `Cls` itself, as
+instances with different parameter values use separate container pools which
+autoscale independently of each other.
+
+The `.autoscaler` namespace is available on any method handle of any instance
+of your `Cls`. The specific method is irrelevant - all autoscaling operations
+act on the same underlying instance. For example:
 
 ```python notest
 MyClass = modal.Cls.from_name("my-app", "MyClass")
 obj = MyClass(model_version="3.5")
-obj.update_autoscaler(buffer_containers=2)  # type: ignore
+# In this example, `MyCls` has a method called `my_method`
+obj.my_method.autoscaler.update(buffer_containers=2) # type: ignore
 ```
 
 Note that it's necessary to disable type checking on this line, because the
-object will appear as an instance of the class that you defined rather than the
+method will appear as a method of the class that you defined rather than the
 Modal wrapper type.
 
 ## Parallel execution of inputs

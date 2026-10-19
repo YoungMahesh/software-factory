@@ -4,8 +4,6 @@
 SCIM support is available on the <a href="/pricing">Enterprise plan</a>. Contact <a href="mailto:sales@modal.com">sales@modal.com</a> for more information.
 </Callout>
 
-<Callout variant="beta" />
-
 [SCIM (System for Cross-domain Identity Management)](https://datatracker.ietf.org/doc/html/rfc7643)
 is a protocol that identity providers (IdPs) use to automate user management in
 connected apps.

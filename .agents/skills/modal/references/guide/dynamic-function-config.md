@@ -60,7 +60,7 @@ Functions that have been looked up and dynamically configured in separate proces
 
 If your base Function configuration has `min_containers` set, it will be ignored by the Function variants to avoid creating zombie warm pools. For the same reason, it's not possible to set `min_containers` in `modal.Function.with_options()`.
 
-It is possible to dynamically configure other aspects of autoscaling behavior using `modal.Function.with_options()`. For example, if you don't expect to re-use the variant, you could reduce the `scaledown_window` so that the container shuts down faster. However, if your goal is to use different autoscaling policies over time, it may be simpler to modify the base Function's behavior using [`modal.Function.update_autoscaler`](/docs/sdk/py/latest/Function#update_autoscaler) instead.
+It is possible to dynamically configure other aspects of autoscaling behavior using `modal.Function.with_options()`. For example, if you don't expect to re-use the variant, you could reduce the `scaledown_window` so that the container shuts down faster. However, if your goal is to use different autoscaling policies over time, it may be simpler to modify the base Function's behavior using [`modal.Function.autoscaler.update`](/docs/sdk/py/latest/Function#autoscalerupdate) instead.
 
 ## Dynamic Cls configuration
 

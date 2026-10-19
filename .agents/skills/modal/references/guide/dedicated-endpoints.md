@@ -10,7 +10,7 @@ regions, or dedicated capacity.
 Create an Endpoint from the CLI:
 
 ```bash
-modal endpoint create --model Qwen/Qwen3.5-4B
+modal endpoint create --name support-chat --model Qwen/Qwen3.5-4B
 ```
 
 Modal resolves the model, selects a compatible serving recipe, and starts
@@ -18,7 +18,9 @@ provisioning. The command prints the Endpoint ID and a dashboard link where you
 can watch it come online. Dedicated Endpoints can also be created from the
 [**Endpoints**](https://modal.com/endpoints) tab in the dashboard.
 
-If you omit `--name`, Modal derives a name from the model.
+When you create an Endpoint, Modal uses its name as the
+[model name](/docs/guide/endpoints#model-names) that clients send as `model` in
+requests.
 
 ## View the generated source
 

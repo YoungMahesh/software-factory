@@ -395,6 +395,54 @@ for a function log entry, this will contain the function call ID, the input ID, 
 <Parameter name="object_id" type="str" description="" />
 <Parameter name="context_ids" type="list[str]" description="" />
 
+## MetricDefinition
+
+
+The name, unit, and meaning of an individual exportable series.
+
+**Attributes**
+
+<Parameter name="name" type="str" description="" />
+<Parameter name="unit" type="str" description="" />
+<Parameter name="description" type="str" description="" />
+
+## MetricSeries
+
+
+An individual metric series with points ordered by time.
+
+**Attributes**
+
+<Parameter name="name" type="str" description="" />
+<Parameter name="unit" type="str" description="" />
+<Parameter name="aggregation" type="str" description="" />
+<Parameter name="points" type="list[TimeSeriesPoint]" description="" />
+<Parameter name="description" type="str" defaultValue="&#x27;&#x27;" description="" />
+
+## MetricsSchema
+
+
+A metrics group and its individual series definitions.
+
+**Attributes**
+
+<Parameter name="name" type="str" description="" />
+<Parameter name="definitions" type="list[MetricDefinition]" description="" />
+
+## ObjectMetrics
+
+
+Exported metrics over the effective, UTC-aligned [since, until) range.
+
+**Attributes**
+
+<Parameter name="object_id" type="str" description="" />
+<Parameter name="since" type="datetime" description="" />
+<Parameter name="until" type="datetime" description="" />
+<Parameter name="bucket_size" type="timedelta" description="" />
+<Parameter name="point_count" type="int" description="" />
+<Parameter name="series" type="dict[str, MetricSeries]" description="" />
+
 ## ProxyTokenInfo
 
 
@@ -556,6 +604,22 @@ Inference-engine statistics for a Server.
 
 </Parameter>
 
+## ServiceUserInfo
+
+
+A lightweight dataclass containing metadata about a Modal Service User.
+
+**Attributes**
+
+<Parameter name="service_user_id" type="str" description="" />
+<Parameter name="name" type="str" description="" />
+<Parameter name="token_id" type="str" description="" />
+<Parameter name="created_by" type="str" description="" />
+<Parameter name="created_at" type="datetime" description="" />
+<Parameter name="last_used_at" type="datetime | None" description="" />
+<Parameter name="expires_at" type="datetime | None" description="" />
+<Parameter name="environment_roles" type="dict[str, str]" description="" />
+
 ## StatsPercentile
 
 
@@ -573,6 +637,16 @@ A percentile measurement for a metric or strat.
 
 <Parameter name="unit" type="str" description="" />
 <Parameter name="percentiles" type="list[StatsPercentile]" description="" />
+
+## TimeSeriesPoint
+
+
+A metric sample at a UTC bucket start. A missing observation has value None.
+
+**Attributes**
+
+<Parameter name="time" type="datetime" description="" />
+<Parameter name="value" type="float | None" description="" />
 
 ## TokenData
 

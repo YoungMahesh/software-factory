@@ -472,7 +472,7 @@ See the [guide](https://modal.com/docs/guide/servers) for more information.
 <Parameter name="memory" type="int | tuple[int, int] | None" defaultValue="None" description="Specify, in MiB, a memory request which is the minimum memory required. Or, pass (request, limit) to additionally specify a hard limit in MiB." />
 <Parameter name="ephemeral_disk" type="int | None" defaultValue="None" description="Specify, in MiB, the ephemeral disk size for the server." />
 <Parameter name="target_concurrency" type="float | None" defaultValue="None" description="Target number of concurrent requests per container; 0 disables autoscaling. May be fractional, e.g. 1.5 to target three concurrent requests per two containers." />
-<Parameter name="max_concurrency" type="int | None" defaultValue="None" description="Maximum number of concurrent requests per container. Requests above this limit receive a 503 response. If set to 0 or unset, request concurrency is unlimited." />
+<Parameter name="max_concurrency" type="int | None" defaultValue="None" description="Maximum number of concurrent requests per container. Requests above this limit receive a 429 response. If set to 0 or unset, request concurrency is unlimited." />
 <Parameter name="min_containers" type="int | None" defaultValue="None" description="Minimum number of containers to keep running regardless of demand." />
 <Parameter name="max_containers" type="int | None" defaultValue="None" description="Limit on the number of containers that can be concurrently running." />
 <Parameter name="buffer_containers" type="int | None" defaultValue="None" description="Extra containers to scale up beyond current demand." />

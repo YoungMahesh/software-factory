@@ -35,7 +35,7 @@ behavior in linear algebra and inference libraries (e.g.,
 ## Memory
 
 If you have code that needs more guaranteed memory, you can request it using the
-`memory` argument. This expects an integer number of megabytes:
+`memory` argument. This expects an integer number of mebibytes (MiB):
 
 ```python
 import modal

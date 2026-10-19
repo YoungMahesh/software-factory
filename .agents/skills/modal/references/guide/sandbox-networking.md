@@ -16,6 +16,13 @@ Modal provides three levels of outbound network restriction:
 
 `outbound_cidr_allowlist` and `outbound_domain_allowlist` can be combined additively - traffic that meets either criteria will be let through.
 
+Sidecars have their own outbound network policy; see [Sandbox Sidecars →
+Outbound access control](/docs/guide/sandbox-sidecars#outbound-access-control).
+
+<Callout variant="warning">
+Currently, DNS traffic is allowed without restriction except when all outbound traffic is blocked.
+</Callout>
+
 For advanced HTTPS inspection, the experimental `proxy_traffic_via_sidecar`
 option routes outbound TCP traffic on port 443 from the main container through
 a Sidecar. Relaying replaces the Sandbox's own controls on that traffic rather
@@ -316,7 +323,7 @@ policy no longer permits are terminated.
 ## Inbound access control
 
 Use `inbound_cidr_allowlist` to restrict which IP addresses can connect
-**inbound** to the Sandbox through tunnels and Sandbox Connect Tokens:
+**inbound** to the Sandbox through encrypted tunnels and Sandbox Connect Tokens:
 
 <CodeTabs>
   {#snippet python()}
@@ -355,6 +362,10 @@ sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
 ```
 
 {/snippet} </CodeTabs>
+
+`inbound_cidr_allowlist` is not enforced on unencrypted tunnels
+(`unencrypted_ports`), which accept connections from any IP address. Use
+`encrypted_ports` or `h2_ports` for ports that need to be restricted.
 
 ## Connecting to Sandboxes with HTTP and WebSockets
 

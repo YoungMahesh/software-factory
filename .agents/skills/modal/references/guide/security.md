@@ -1,74 +1,54 @@
 # Security and privacy at Modal
 
-The document outlines Modal's security and privacy commitments.
+This page outlines Modal's security and privacy commitments.
 
-## Application security (AppSec)
+Our [Trust Center](https://trust.modal.com/) provides [compliance](#compliance-standards) documentation, including our SOC 2 Type II report, our list of subprocessors, and details of our security controls.
 
-AppSec is the practice of building software that is secure by design, secured
-during development, secured with testing and review, and deployed securely.
+## Information security program
 
-* We build our software using memory-safe programming languages, including Rust
-  (for our worker runtime and storage infrastructure) and Python (for our API
-  servers and Modal client).
-* Software dependencies are audited by Github's Dependabot.
-* We make decisions that minimize our attack surface. Most interactions with
-  Modal are well-described in a gRPC API, and occur through
-  [`modal`](https://pypi.org/project/modal), our open-source command-line tool
-  and Python client library.
-* We have automated synthetic monitoring test applications that continuously
-  check for network and application isolation within our runtime.
-* We use HTTPS for secure connections. Modal forces HTTPS for all services using
-  TLS (SSL), including our public website and the Dashboard to ensure secure
-  connections. Modal's [client library](https://pypi.org/project/modal) connects
-  to Modal's servers over TLS and verify TLS certificates on each connection.
-* All user data is encrypted in transit and at rest.
-* All public Modal APIs use
-  [TLS 1.3](https://datatracker.ietf.org/doc/html/rfc8446), the latest and
-  safest version of the TLS protocol.
-* Internal code reviews are performed using a modern, PR-based development
-  workflow (Github), and engage external penetration testing firms to assess our
-  software security.
+Our information security (InfoSec) program covers three practice areas: application security, corporate security, and network and infrastructure security.
 
-## Corporate security (CorpSec)
+<Collapsible title="Application security (AppSec)">
 
-CorpSec is the practice of making sure Modal employees have secure access to
-Modal company infrastructure, and also that exposed channels to Modal are
-secured. CorpSec controls are the primary concern of standards such as SOC2.
+AppSec covers how we build, test, review, and deploy the Modal platform.
 
-* Access to our services and applications is gated on a SSO Identity Provider
-  (IdP).
-* We mandate phishing-resistant multi-factor authentication (MFA) in all
-  enrolled IdP accounts.
+* We build our software using memory-safe programming languages, including Rust (for our worker runtime and storage infrastructure) and Python (for our API servers and Modal client).
+* Software dependencies are automatically audited for known vulnerabilities.
+* We make decisions that minimize our attack surface. Most interactions with Modal are well-described in a gRPC API, and occur through [`modal`](https://pypi.org/project/modal), our open-source command-line tool and Python client library.
+* We have automated synthetic monitoring test applications that continuously check for network and application isolation within our runtime.
+* We force HTTPS (TLS) for all services, including our public website and the Dashboard. Our [client library](https://pypi.org/project/modal) connects to Modal's servers over TLS and verifies TLS certificates on each connection.
+* Your data is encrypted in transit and at rest.
+* All public Modal APIs use [TLS 1.3](https://datatracker.ietf.org/doc/html/rfc8446).
+* Internal code reviews are performed using a PR-based development workflow, and we engage external penetration testing firms to assess our software security.
+
+</Collapsible>
+
+<Collapsible title="Corporate security (CorpSec)">
+
+CorpSec covers how our employees access internal systems.
+
+* Access to internal systems requires single sign-on (SSO) through our identity provider.
+* Phishing-resistant multi-factor authentication (MFA) is required for all employee accounts.
 * We regularly audit access to internal systems.
-* Employee laptops are protected by full disk encryption using FileVault2, and
-  managed by Secureframe MDM.
+* Employee laptops are enrolled in mobile device management (MDM) with full disk encryption enforced.
 
-## Network and infrastructure security (InfraSec)
+</Collapsible>
 
-InfraSec is the practice of ensuring a hardened, minimal attack surface for
-components we deploy on our network.
+<Collapsible title="Network and infrastructure security (InfraSec)">
 
-* Modal uses logging and metrics observability providers, including Datadog and
-  Sentry.io.
-* Compute jobs at Modal are containerized and virtualized using
-  [gVisor](https://github.com/google/gvisor), the sandboxing technology
-  developed at Google and used in their *Google Cloud Run* and *Google
-  Kubernetes Engine* cloud services. Sandboxes may also run on Modal's
-  secure [VM runtime](/docs/guide/sandboxes#runtimes).
-* We conduct annual business continuity and security incident exercises.
+InfraSec covers how we secure the infrastructure that runs your workloads.
 
-## Vulnerability remediation
+* We continuously monitor platform logs and metrics through third-party observability providers.
+* Each container runs in its own sandbox, isolated from the host, using primitives like [gVisor](https://github.com/google/gvisor) or microVMs.
+* We run business continuity and security incident exercises every year.
 
-Security vulnerabilities directly affecting Modal's systems and services will be
-patched or otherwise remediated within a timeframe appropriate for the severity
-of the vulnerability, subject to the public availability of a patch or other
-remediation mechanisms.
+</Collapsible>
 
-If there is a CVSS severity rating accompanying a vulnerability disclosure, we
-rely on that as a starting point, but may upgrade or downgrade the severity
-using our best judgement.
+### Vulnerability remediation
 
-### Severity timeframes
+We remediate vulnerabilities in Modal's systems within the timeframes below, measured from when a fix becomes available. Severity is based on the CVSS rating of the vulnerability and our assessment of its impact on Modal.
+
+#### Severity timeframes
 
 * **Critical:** 24 hours
 * **High:** 1 week
@@ -76,65 +56,17 @@ using our best judgement.
 * **Low:** 3 months
 * **Informational:** 3 months or longer
 
-## Shared responsibility model
+### Bug bounty program
 
-Modal prioritizes the integrity, security, and availability of customer data. Under our shared responsibility model, customers also have certain responsibilities regarding data backup, recovery, and availability.
-
-1. **Data backup**: Customers are responsible for maintaining backups of their data. Performing daily backups is recommended. Customers must routinely verify the integrity of their backups.
-2. **Data recovery**: Customers should maintain a comprehensive data recovery plan that includes detailed procedures for data restoration in the event of data loss, corruption, or system failure. Customers must routinely test their recovery process.
-3. **Availability**: While Modal is committed to high service availability, customers must implement contingency measures to maintain business continuity during service interruptions. Customers are also responsible for the reliability of their own IT infrastructure.
-4. **Security measures**: Customers must implement appropriate security measures, such as encryption and access controls, to protect their data throughout the backup, storage, and recovery processes. These processes must comply with all relevant laws and regulations.
-
-## SOC 2
-
-We have successfully completed a [System and Organization Controls (SOC) 2 Type 2
-audit](/blog/soc2type2). Go to our [Security Portal](https://trust.modal.com) to request access to the report.
-
-## HIPAA
-
-HIPAA, which stands for the Health Insurance Portability and Accountability Act, establishes a set of standards that protect health information, including individuals’ medical records and other individually identifiable health information. HIPAA guidelines apply to both covered entities and business associates—of which Modal is the latter if you are processing PHI on Modal.
-
-Modal's services can be used in a HIPAA compliant manner. It is important to note that unlike other security standards, there is no officially recognized certification process for HIPAA compliance. Instead, we demonstrate our compliance with regulations such as HIPAA via the practices outlined in this doc, our technical and operational security measures, and through official audits for standards compliance such as SOC 2 certification.
-
-To use Modal services for HIPAA-compliant workloads, a Business Associate Agreement (BAA) should be established with us prior to submission of any PHI. This is available on our Enterprise plan. Contact us at security@modal.com to get started. At the moment, [Volumes v1](https://modal.com/docs/guide/volumes), [Images](https://modal.com/docs/guide/images) (excluding [Filesystem and Directory Snapshots](/docs/guide/sandbox-snapshots)), [Memory Snapshots](https://modal.com/docs/guide/memory-snapshots), and user code are out of scope of the commitments within our BAA, so PHI should not be used in those areas of the product.
-
-[Volumes v2](https://modal.com/docs/guide/volumes#volumes-v2) are HIPAA compliant.
-
-## PCI
-
-*Payment Card Industry Data Security Standard* (PCI) is a standard that defines
-the security and privacy requirements for payment card processing.
-
-Modal uses [Stripe](https://stripe.com) to securely process transactions and
-trusts their commitment to best-in-class security. We do not store personal
-credit card information for any of our customers. Stripe is certified as "PCI
-Service Provider Level 1", which is the highest level of certification in the
-payments industry.
-
-## Bug bounty program
-
-Keeping user data secure is a top priority at Modal. We welcome contributions
-from the security community to identify vulnerabilities in our product and
-disclose them to us in a responsible manner. We currently run a private bug
-bounty program through HackerOne. If you have found a vulnerability and
-wish to participate, please send an email to security@modal.com with your
-HackerOne username or email and we will invite you to the program.
+We welcome responsible disclosure from the security community and run a private bug bounty program through HackerOne. To participate, email <security@modal.com> with your HackerOne username and we will send an invite. When performing security research, you must use a Modal Workspace whose name ends in `-H1-<username>`, where `<username>` is your HackerOne username.
 
 ## Data privacy
 
-Modal will never access or use:
-
-* your source code.
-* the inputs (function arguments) or outputs (function return values) to your Modal Functions.
-* any data you store in Modal, such as in Images or Volumes.
-
-App logs and metadata are stored on Modal. Modal will not access this data
-unless permission is granted by the user to help with troubleshooting.
+This section covers how long each type of data is kept, which products retain no data at all, and where your data is stored.
 
 ### Data retention
 
-Different Modal products have different retention policies for the data they
-handle. The table below summarizes how long each type of data is retained.
+Retention varies by product; the table below shows how long each type of data is retained. All stored data is encrypted at rest.
 
 | Data                                  | Product                                                                                                              | Retention                                                                                               |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -150,19 +82,72 @@ handle. The table below summarizes how long each type of data is retained.
 | Partitions                            | [Queues](/docs/guide/queues)                                                                                         | Configurable per-partition TTL (default 24 hours)                                                       |
 | App, Function, and container metadata | All products                                                                                                         | Stored for the lifetime of your account                                                                 |
 
-#### Function inputs and outputs
+<Callout variant="info">
 
-Function inputs and outputs are stored encrypted at rest. Small payloads
-(≤ 2 MiB) are stored inline in our metadata store; larger payloads are stored
-in object storage. Both are deleted within a maximum TTL of 7 days.
+While we store app logs and metadata as part of operating the platform, we access them only with your permission, to help troubleshoot an issue.
 
-#### Modal Inference endpoints
+</Callout>
 
-Modal Inference endpoints are zero data retention: request and response payloads
-are never written to disk and pass through Modal's infrastructure only as
-in-flight network traffic. Inference endpoints terminate TLS at Modal's edge
-proxy and forward requests directly to your containers over an internal tunnel.
+### Zero data retention
 
-## Questions?
+[Dedicated](/docs/guide/dedicated-endpoints) and [Shared](/docs/guide/shared-endpoints) inference endpoints have zero data retention. Request and response payloads are never written to disk and pass through Modal only as in-flight network traffic.
 
-[Email us!](mailto:security@modal.com)
+### Data residency
+
+See our [data residency guide](/docs/guide/data-residency) for where each type of data is stored and the controls available for residency requirements.
+
+## Shared responsibility model
+
+Modal prioritizes the integrity, security, and availability of customer data. Under our shared responsibility model, you also have responsibilities in the areas below.
+
+| Area                            | Modal                                                                                                                                                                                             | Customer                                                                                                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access and secrets              | Provides access controls, including SSO, SCIM, API tokens, and RBAC, and [Secrets](/docs/guide/secrets) management for storing credentials.                                                       | Manage the identities in your Workspace, assign roles, and rotate and remove API tokens. Own the contents and rotation of your Secrets.                                                                                               |
+| Encryption and network security | Encrypts data in transit with TLS 1.3 and at rest.                                                                                                                                                | Decide which endpoints you expose and how they are authenticated. Apply any additional encryption your data requires, such as encrypting sensitive fields before they reach Modal.                                                    |
+| Vulnerabilities                 | Patches the platform and runtimes within our [severity timeframes](#severity-timeframes) and audits our dependencies for known vulnerabilities.                                                   | Patch your Images, dependencies, and code.                                                                                                                                                                                            |
+| Untrusted code                  | Provides isolation primitives for running untrusted code through [Restricted Functions and Sandboxes](/docs/guide/restricted-access#sandboxes-offer-an-alternative-interface-for-untrusted-code). | Run untrusted code, such as LLM-generated or end-user-submitted code, using those primitives and with guardrails such as egress restrictions, resource limits, and timeouts. Keep Secrets and credentials out of untrusted workloads. |
+| Data lifecycle                  | Ensures the durability of managed storage and applies our [retention](#data-retention) and deletion policies.                                                                                     | Maintain backups of the data you store in Modal and routinely verify their integrity.                                                                                                                                                 |
+| Operations                      | Operates the platform for high availability, monitors it, and responds to platform incidents.                                                                                                     | Monitor your applications and design for failover.                                                                                                                                                                                    |
+| Compliance                      | Makes our audit reports and control documentation available on our [Trust Center](https://trust.modal.com).                                                                                       | Determine which laws and regulations apply to your organization and your data, and configure and use Modal to meet them.                                                                                                              |
+
+### Security features
+
+We provide security features across our products to help you secure your workloads, such as single sign-on, Role-Based Access Control (RBAC), Sandbox network access controls, audit logs, and customer-supplied encryption keys.
+
+| Product       | Features                                                                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workspace     | [Block unauthenticated endpoints](/docs/guide/webhook-proxy-auth#blocking-unauthenticated-urls), [Role-Based Access Control (RBAC)](/docs/guide/rbac), [Proxies (static egress IPs)](/docs/guide/proxy-ips)              |
+| Functions     | [Restricted Functions](/docs/guide/restricted-access)                                                                                                                                                                    |
+| Sandboxes     | [Outbound access control](/docs/guide/sandbox-networking#outbound-access-control), [Inbound access control](/docs/guide/sandbox-networking#inbound-access-control)                                                       |
+| Identity      | [Okta SSO](/docs/guide/okta-sso), [Microsoft Entra SSO](/docs/guide/entra-sso), [Custom SAML SSO](/docs/guide/saml-sso), [SCIM integration](/docs/guide/scim?idp=okta), [OIDC integration](/docs/guide/oidc-integration) |
+| Observability | [Audit logs](/docs/guide/audit-logs), [Datadog integration](/docs/guide/datadog-integration), [OpenTelemetry integration](/docs/guide/otel-integration)                                                                  |
+| Encryption    | [Customer-supplied encryption keys](/docs/guide/customer-supplied-encryption-keys)                                                                                                                                       |
+
+## Compliance standards
+
+### System and Organization Controls (SOC) 2 Type II
+
+For our latest SOC 2 Type II audit report, please visit our [Trust Center](https://trust.modal.com) to request access.
+
+### General Data Protection Regulation (GDPR)
+
+A Data Processing Addendum (DPA) is available on our [Trust Center](https://trust.modal.com).
+
+### Health Insurance Portability and Accountability Act (HIPAA)
+
+<Callout variant="gated-feature">
+Contact <a href="mailto:sales@modal.com">sales@modal.com</a> to get started with HIPAA on the <a href="/pricing">Enterprise plan</a>.
+</Callout>
+
+The following products are out of scope and should not be used for protected health information (PHI):
+
+| Out of scope for PHI                             | Notes                                                                         |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| [Volumes v1](/docs/guide/volumes)                | Use [Volumes v2](/docs/guide/volumes#volumes-v2) instead                      |
+| [Images](/docs/guide/images)                     | Excluding [Filesystem and Directory Snapshots](/docs/guide/sandbox-snapshots) |
+| [Memory Snapshots](/docs/guide/memory-snapshots) | —                                                                             |
+| User code                                        | —                                                                             |
+
+## Contact
+
+<security@modal.com>

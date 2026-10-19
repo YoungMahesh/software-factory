@@ -11,7 +11,7 @@ description: >
   to run untrusted processes in a sandbox, since Modal serves these use cases
   well.
 metadata:
-  version: "1.6.1"
+  version: "1.6.2"
 ---
 
 # Overview

@@ -12,7 +12,7 @@ Modal Clusters provide:
 
 When you call a Clustered [Function](https://modal.com/docs/guide/functions) or [Server](https://modal.com/docs/guide/servers), Modal starts multiple containers simultaneously, then runs your code in each container. Therefore, your code should establish communication between containers and coordinate with each other to deliver the final result.
 
-The guide will walk you through how to fully take advantage of Modal Clusters.
+The guide will walk you through how to fully take advantage of Modal Clusters. To learn how to use common training frameworks with Clusters, see the [multi-node training guide](https://modal.com/docs/guide/multi-node-training).
 
 ## Using the `@clustered` decorator
 

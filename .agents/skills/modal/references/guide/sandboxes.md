@@ -143,6 +143,65 @@ of a Modal container. You may pass in a regular `App` object or look one up by n
 [`App.lookup`](/docs/sdk/py/latest/App#lookup). The `create_if_missing` flag on `App.lookup`
 will create an `App` with the given name if it doesn't exist.
 
+## Configuration
+
+Sandboxes support nearly all configuration options found in regular `modal.Function`s.
+Refer to [`Sandbox.create`](/docs/sdk/py/latest/Sandbox#create) for further documentation
+on Sandbox configs.
+
+For example, Images and Volumes can be used just as with functions:
+
+<CodeTabs>
+  {#snippet python()}
+
+```python fixture:sb_app
+sb = modal.Sandbox.create(
+    image=modal.Image.debian_slim().pip_install("pandas"),
+    volumes={"/data": modal.Volume.from_name("data-volume", create_if_missing=True)},
+    app=sb_app,
+)
+```
+
+{/snippet}
+
+{#snippet python\_async()}
+
+```python fixture:sb_app
+sb = await modal.Sandbox.create.aio(
+    image=modal.Image.debian_slim().pip_install("pandas"),
+    volumes={"/data": modal.Volume.from_name("data-volume", create_if_missing=True)},
+    app=sb_app,
+)
+```
+
+{/snippet}
+
+{#snippet javascript()}
+
+```javascript notest
+const image = modal.images.fromRegistry("python:3.13-slim");
+const volume = modal.volumes.fromName("my-volume");
+const sb = await modal.sandboxes.create(app, image, {
+  volumes: { "/data": volume },
+  workdir: "/repo",
+});
+```
+
+{/snippet}
+
+{#snippet go()}
+
+```go notest
+image := mc.Images.FromRegistry("python:3.13-slim", nil)
+volume := mc.Volumes.FromName("my-volume", nil)
+sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+  Volumes: map[string]*modal.Volume{"/data": volume},
+  Workdir: "/repo",
+})
+```
+
+{/snippet} </CodeTabs>
+
 ## Lifecycle
 
 ### Events
@@ -617,65 +676,6 @@ fmt.Println(returnCode) // 42
 // Terminate sends a SIGKILL, code 137
 returnCodeSb, _ := sb.Terminate(ctx, &modal.SandboxTerminateParams{Wait: true})
 fmt.Println(returnCodeSb) // 137
-```
-
-{/snippet} </CodeTabs>
-
-## Configuration
-
-Sandboxes support nearly all configuration options found in regular `modal.Function`s.
-Refer to [`Sandbox.create`](/docs/sdk/py/latest/Sandbox#create) for further documentation
-on Sandbox configs.
-
-For example, Images and Volumes can be used just as with functions:
-
-<CodeTabs>
-  {#snippet python()}
-
-```python fixture:sb_app
-sb = modal.Sandbox.create(
-    image=modal.Image.debian_slim().pip_install("pandas"),
-    volumes={"/data": modal.Volume.from_name("data-volume", create_if_missing=True)},
-    app=sb_app,
-)
-```
-
-{/snippet}
-
-{#snippet python\_async()}
-
-```python fixture:sb_app
-sb = await modal.Sandbox.create.aio(
-    image=modal.Image.debian_slim().pip_install("pandas"),
-    volumes={"/data": modal.Volume.from_name("data-volume", create_if_missing=True)},
-    app=sb_app,
-)
-```
-
-{/snippet}
-
-{#snippet javascript()}
-
-```javascript notest
-const image = modal.images.fromRegistry("python:3.13-slim");
-const volume = modal.volumes.fromName("my-volume");
-const sb = await modal.sandboxes.create(app, image, {
-  volumes: { "/data": volume },
-  workdir: "/repo",
-});
-```
-
-{/snippet}
-
-{#snippet go()}
-
-```go notest
-image := mc.Images.FromRegistry("python:3.13-slim", nil)
-volume := mc.Volumes.FromName("my-volume", nil)
-sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
-  Volumes: map[string]*modal.Volume{"/data": volume},
-  Workdir: "/repo",
-})
 ```
 
 {/snippet} </CodeTabs>

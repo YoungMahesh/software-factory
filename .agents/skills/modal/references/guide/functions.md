@@ -208,11 +208,11 @@ def f():
     ...
 ```
 
-While most Function configuration requires a redeployment to change, the autoscaler parameters can be dynamically updated using [`f.update_autoscaler()`](/docs/sdk/py/latest/Function#update_autoscaler):
+While most Function configuration requires a redeployment to change, the autoscaler parameters can be dynamically updated using [`f.autoscaler.update()`](/docs/sdk/py/latest/Function#autoscalerupdate):
 
 ```python notest
 f = modal.Function.from_name("prod-app", "f")
-f.update_autoscaler(max_containers=50)  # Override the Function's decorator configuration
+f.autoscaler.update(max_containers=50)  # Override the Function's decorator configuration
 ```
 
 Note that any dynamic updates will be reset by a subsequent deployment.

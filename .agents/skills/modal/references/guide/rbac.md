@@ -35,7 +35,9 @@ Every Environment has three Environment Roles that determine access to it:
 
 Workspace Members default to **Contributor** in regular Environments. In a **Restricted** Environment, Members other than Workspace Owners and Managers use the Environment's default member Role, which can be **Contributor**, **Viewer**, or **No Access**. Workspace Owners and Managers always have **Contributor** access.
 
-You can assign a **Contributor**, **Viewer**, or **No Access** Role directly to a Workspace Member in a Restricted Environment. A directly assigned Role takes precedence over the default. Service users do not use the member default: they default to **No Access** in every Environment and must be assigned a Role for each Environment they need.
+You can assign a **Contributor**, **Viewer**, or **No Access** Role to a Workspace Member in a Restricted Environment directly or through a [user group](/docs/guide/user-groups). Direct and group Roles take precedence over the default. If a Member has multiple direct or group Roles, the most permissive Role applies: **Contributor**, then **Viewer**, then **No Access**.
+
+Service users do not use the member default: they default to **No Access** in every Environment and must be assigned a Role for each Environment they need.
 
 ## Setting up Restricted Environments
 
@@ -43,7 +45,7 @@ Create and manage Restricted Environments from [Environment settings](/settings/
 
 You can also create a Restricted Environment with [`modal environment create --restricted NAME`](/docs/cli/latest/environment#modal-environment-create).
 
-Changing the default updates access only for Members who use it. Roles assigned directly to Members and service-user Roles are unchanged.
+Changing the default updates access only for Members who use it. Roles assigned directly to Members, group Roles, and service-user Roles are unchanged.
 
 ### Default access by actor
 

@@ -117,7 +117,8 @@ promptly closed once those operations complete.
 ## from_name
 
 ```python
-from_name(app_name, name, *, environment_name=None, client=None)
+from_name(app_name, name, *, environment_name=None, include_terminated=False,
+    client=None)
 ```
 Get a running Sandbox by name from a deployed App.
 
@@ -128,15 +129,17 @@ A Sandbox's name is the `name` argument passed to `Sandbox.create`.
 <Parameter name="app_name" type="str" description="Name of the deployed app to look up the sandbox under." />
 <Parameter name="name" type="str" description="Sandbox name to resolve." />
 <Parameter name="environment_name" type="str | None" defaultValue="None" description="Optional environment name for the lookup; defaults to the configured environment." />
+<Parameter name="include_terminated" type="bool" defaultValue="False" description="If set to `True` and no Sandbox with the name is currently running, the most recent terminated Sandbox will be returned instead." />
 <Parameter name="client" type="_Client | None" defaultValue="None" description="Modal client to use for the RPC; defaults to `Client.from_env()` when omitted." />
 
 **Returns**
 
-A `Sandbox` handle for the running sandbox.
+A `Sandbox` handle for the running Sandbox, or the most recent terminated one when
+`include_terminated=True`.
 
 **Raises**
 
-- `NotFoundError`: If no running sandbox exists with the given name.
+- `NotFoundError`: If no matching sandbox exists with the given name.
 
 ## from_id
 

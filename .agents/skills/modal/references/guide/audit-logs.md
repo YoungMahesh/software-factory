@@ -10,7 +10,7 @@ from where. They are designed for compliance reviews, incident
 investigation, and answering questions like *"did anyone delete this Secret
 last Thursday?"* without asking Modal support.
 
-Audit logs are viewable within the <a href="/settings/audit-logs" target="_blank" rel="noopener" class="text-c-green-100 hover:underline">settings page</a>.
+Audit logs are viewable within the <a href="/settings/audit-logs" target="_blank" rel="noopener" class="text-accent hover:underline">settings page</a>.
 
 <center>
 <video controls autoplay muted playsinline>

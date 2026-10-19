@@ -8,8 +8,6 @@ Workspace Manager Role. Visit <a href="/settings/plans">Workspace settings</a>
 to upgrade.
 </Callout>
 
-<Callout variant="beta" />
-
 User groups let you manage access for multiple Workspace Members at once. Add
 members to a group, then assign the group an Environment Role in each
 [Restricted Environment](/docs/guide/rbac#setting-up-restricted-environments)
@@ -32,21 +30,23 @@ its Environment access.
 
 To create and populate a custom group:
 
-1. Open the **Groups** tab on the [Workspace Management settings
-   page](/settings/workspace-management/groups).
+1. Open the **Groups** tab in [Members
+   settings](/settings/workspace-management/groups).
 2. Click **Create Group**.
 3. Enter a group name and select the Workspace Members to add.
-4. Click **Create**.
+4. Optionally, under **Environment access**, search for Restricted Environments
+   to add and choose an Environment Role for each one.
+5. Click **Create**.
 
-A group can be created without any members or Environment access. Assigning an
-Environment Role later applies that Role to every current and future member of
-the group.
+A group can be created without any members or Environment access. An assigned
+Environment Role applies to every current and future member of the group.
 
 ## Update a custom group
 
-On the **Groups** settings page, expand a custom group and click **Edit Group**
-to rename it or change its membership. You can also remove a member directly
-from the group's member list.
+On the **Groups** tab, click **Edit Group** for a custom group to rename it,
+change its membership, or manage its Environment Roles. Click **Save changes**
+to apply your edits. You can also remove a member directly from the group's
+member list by clicking **Remove**.
 
 Changes to group membership update the members' access to every Environment
 assigned to that group.
@@ -54,12 +54,13 @@ assigned to that group.
 ## Manage groups with SCIM
 
 When [SCIM](/docs/guide/scim) group provisioning is enabled, groups pushed by
-your identity provider (IdP) appear automatically on the **Groups** settings
-page with a **SCIM** label.
+your identity provider (IdP) appear automatically on the **Groups** tab with a
+**SCIM** label.
 
 Manage the name and membership of a SCIM group in the IdP. These fields cannot
 be edited in Modal, so the IdP remains their source of truth. You can still
-assign, change, and remove the group's Environment Roles in Modal.
+assign, change, and remove the group's Environment Roles in Modal by clicking
+**Edit Access** on the **Groups** tab.
 
 Removing a user from a group in the IdP removes the access they received from
 that group after the change syncs to Modal. Deactivating or removing the user
@@ -83,22 +84,40 @@ User groups work with [Role-Based Access Control
 (RBAC)](/docs/guide/rbac) at the Environment level. Groups do not receive a
 Workspace Role and do not change who can manage Workspace settings or billing.
 
-To assign a group to an Environment:
+Environment Roles for groups can only be assigned in Restricted Environments.
+You can manage them from either the **Groups** tab in Members settings or
+Environment settings.
 
-1. Open [Environment settings](/settings/workspace-management/environments).
-2. Click **Manage** for a Restricted Environment, then open **Access
-   Restrictions**.
-3. Select the **Groups** tab and click **Add Group**.
-4. Select a custom or SCIM group and choose an Environment Role:
+### From the Groups tab
+
+1. Open the **Groups** tab in [Members
+   settings](/settings/workspace-management/groups).
+2. Click **Edit Group** for a custom group or **Edit Access** for a SCIM group.
+3. Under **Environment access**, search for a Restricted Environment to add.
+4. Choose an Environment Role for each Environment:
    * **Contributor** — can view and modify resources in the Environment.
    * **Viewer** — can view resources but cannot modify them.
-   * **No Access** — cannot discover or access the Environment.
+   * **No access** — cannot discover or access the Environment.
+5. Click **Save changes**.
+
+To change a group's existing Role, select a different Role in its
+**Environment access** list. To remove a group assignment, click the remove
+(×) button next to the Environment. Click **Save changes** to apply either
+change. Removing an assignment removes the Role granted by that group; members
+may still have access through other RBAC settings.
+
+### From Environment settings
+
+1. Open [Environment settings](/settings/workspace-management/environments).
+2. Click **Manage** for a Restricted Environment, then open the **Access
+   Restrictions** tab.
+3. Select the **Groups** tab and click **Add Group**.
+4. Select a custom or SCIM group and choose an Environment Role.
 5. Click **Confirm**.
 
-Group Roles can only be assigned in Restricted Environments. From the same
-**Groups** tab, you can change a group's Role or remove the group from the
-Environment. The **Groups** settings page also lists every Environment and Role
-assigned to each group.
+From the same **Groups** tab, you can change a group's Role or remove the group
+from the Environment. The **Groups** tab in Members settings lists every
+Environment and Role assigned to each group.
 
 ## How group Roles combine with other RBAC settings
 

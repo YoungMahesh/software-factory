@@ -23,10 +23,11 @@
   - [Endpoints](./endpoints.md)
   - [Shared Endpoints](./shared-endpoints.md)
   - [Dedicated Endpoints](./dedicated-endpoints.md)
+  - [Endpoint candidates](./endpoint-candidates.md)
   - [Endpoint integrations](./endpoint-integrations.md)
 - Training
   - [Quickstart](./training-quickstart.md)
-  - [Tinker-compatible API](./spindle.md)
+  - [Tinker-compatible API (Beta)](./spindle.md)
   - [Multi-node training](./multi-node-training.md)
 - Images
   - [Defining Images](./images.md)
@@ -94,13 +95,13 @@
   - [Okta SSO](./okta-sso.md)
   - [Microsoft Entra SSO](./entra-sso.md)
   - [Custom SAML SSO](./saml-sso.md)
-  - [SCIM Integration (Beta)](./scim.md)
+  - [SCIM Integration](./scim.md)
   - [Slack notifications (Beta)](./slack-notifications.md)
 - Workspace & account settings
   - [Workspaces](./workspaces.md)
   - [Environments](./environments.md)
   - [Service users](./service-users.md)
-  - [User groups (Beta)](./user-groups.md)
+  - [User groups](./user-groups.md)
   - [Role-Based Access Control (RBAC)](./rbac.md)
   - [Billing](./billing.md)
   - [Network egress billing](./network-egress-billing.md)

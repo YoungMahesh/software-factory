@@ -64,9 +64,6 @@ The Sandbox and ContainerProcess `stdout` and `stderr` handles are [`StreamReade
 objects. These objects support reading from the stream in both synchronous and asynchronous manners.
 These handles also respect the timeout given to `Sandbox.exec`.
 
-To read from a stream after the underlying process has finished, you can use the `read`
-method, which blocks until the process finishes and returns the entire output stream.
-
 ```python notest
 sb = modal.Sandbox.create(app=my_app)
 p = sb.exec("echo", "hello")
@@ -147,3 +144,9 @@ p.wait()
 
 sb.terminate()
 ```
+
+An exec's stdout and stderr are streamed to your client only when you read from the
+stream objects. You can read from a stream after the underlying process has finished
+by calling `read`, which returns the entire output stream. If the process is still
+running, `read` blocks until it finishes. After an exec completes, you can read its
+output for up to 10 minutes. Modal then discards the output, so later reads will fail.

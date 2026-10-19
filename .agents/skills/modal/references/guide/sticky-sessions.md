@@ -26,7 +26,7 @@ Note: `@modal.sessioned()` can only be applied to a [Server](/docs/guide/servers
 
 Sessions have a lifecycle during which they can serve one or more requests belonging to it.
 
-Calling `Server.sessions.start()` creates a session and assigns it to a container, spinning one up if necessary, and returns a `session_id` and a session token. Any HTTP request (including WebSocket handshake) that carries the token as a `Modal-Authorization: Bearer <token>` header is routed deterministically to that container.
+Calling `Server.sessions.start()` creates a session and assigns it to a container, spinning one up if necessary, and returns a `session_id` and a session token. Any HTTP request (including WebSocket handshake) that carries the token as a `Modal-Authorization: Bearer <token>` header is routed deterministically to that container. Every request forwarded to the container carries the `x-modal-server-session-id` header containing the `session_id` (`sd-...`) for the request's session. This can be used to associate requests received by the Server with their sessions.
 
 A session will end once it reaches its configured idle timeout naturally. It can also be
 ended explicitly through a terminate request. A terminated session waits for any in-flight
@@ -98,4 +98,8 @@ The other Server autoscaling controls e.g. scaleup/scaledown window, buffer cont
 
 ## Queuing
 
-Unlike a request to a non-sessioned Server which is rejected immediately if it can't be routed to a container, session creation queues for capacity for up to 60 seconds. Queuing only applies to session starts.
+Unlike a request to a non-sessioned Server which is rejected immediately if it can't be routed to a container, session creation queues for capacity for up to 5 minutes. Queuing only applies to session starts.
+
+## Example
+
+See the [sessioned WebSocket chat room example](/docs/examples/sessioned_chatroom) for a basic use case of Sticky Sessions.

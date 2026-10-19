@@ -103,7 +103,7 @@ The valid options for `routing_region=` are:
 
 `routing_region=` can only be set during the initial deployment of a Function and cannot be changed in a subsequent redeployment. To change the routing region, a new Function should be created. Functions specifying a routing region outside of `us-east` can only be invoked with `.remote()` or `.map()` or via HTTP for [Web Functions](/docs/guide/webhooks).
 
-[Inputs and outputs larger than 2 MiB](/docs/guide/security#function-inputs-and-outputs) are still uploaded to object storage in `us-east`.
+[Inputs and outputs larger than 2 MiB](/docs/guide/security#data-retention) are still uploaded to object storage in `us-east`.
 
 ## Optimizing latency
 

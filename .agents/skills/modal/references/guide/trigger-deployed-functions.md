@@ -323,7 +323,7 @@ around autoscaling:
   consumes a limited resource (e.g., a connection to a database).
 * Version-pinned Functions will ignore the `min_containers` configuration in the
   Function decorator, and they will not maintain a warm pool by default. If this
-  is desired, the `Function.update_autoscaler()` method can be used to
+  is desired, the `Function.autoscaler.update()` method can be used to
   dynamically configure a warm pool. It is the user's responsibility to scale the
   warm pool down after it is no longer needed.
 

@@ -24,6 +24,51 @@ access object metadata, such as its ID.
 
 *Added in v0.72.39*: This method replaces the deprecated `.resolve()` method.
 
+## metrics
+
+
+```python
+metrics: FunctionMetricsManager
+```
+
+Access metric samples with `export()` and series definitions with `schema()`.
+
+
+### metrics.schema
+
+```python
+schema(self, groups=None)
+```
+Return metric definitions keyed by group name without fetching samples.
+
+Omit `groups` to list all groups. Each group contains its exact individual
+series definitions.
+
+### metrics.export
+
+```python
+export(self, *, since=None, until=None, bucket_size=None, groups=None,
+    all_variants=False)
+```
+Fetch metric samples for a Function.
+
+Defaults to all groups over the last hour. `since` defaults to one hour
+before `until`; naive datetimes use local time. The maximum range is 31
+days, with at most 500 points per series. If `bucket_size` is omitted,
+Modal selects a supported width targeting approximately 100 buckets.
+Bounds round down to UTC bucket boundaries, so data before `since` may
+be included and the partial bucket at `until` is excluded.
+
+Set `all_variants=True` to include the root Function and its variants.
+Missing observations have value None. Use `schema()` to discover
+group names and series definitions without fetching samples.
+
+```python notest
+metrics = function.metrics.export(bucket_size=timedelta(minutes=5), groups=["calls"])
+for point in metrics["successful_calls_count"].points:
+    print(point.time, point.value)
+```
+
 ## logs
 
 
@@ -418,6 +463,75 @@ The default time range is the most recent hour. The maximum time range is 7 days
 **Returns**
 
 A `FunctionStats` object
+
+## autoscaler
+
+
+```python
+autoscaler: FunctionAutoscalerManager
+```
+
+Namespace for Function autoscaler APIs.
+
+
+### autoscaler.settings
+
+```python
+settings(self)
+```
+View the current Autoscaler settings for this Function.
+
+**Returns**
+
+A `FunctionAutoscalerSettings` dataclass.
+
+**Usage**
+
+```python notest
+fn = modal.Function.from_name("my-app", "my_function")
+settings = fn.autoscaler.settings()
+```
+
+### autoscaler.update
+
+```python
+update(self, *, min_containers=UNSET_PARAMETER, max_containers=UNSET_PARAMETER,
+    buffer_containers=UNSET_PARAMETER, scaledown_window=UNSET_PARAMETER)
+```
+Override the current Autoscaler settings for this Function.
+
+All parameters to this function are optional; not passing an argument for a given parameter
+will not update its value.
+
+Note that re-deploying the App containing this Function will wipe any overrides and revert
+its Autoscaler settings back to those defined on the Function at creation time.
+
+**Parameters**
+
+<Parameter name="min_containers" type="int | None" defaultValue="UNSET_PARAMETER" description="Minimum number of containers to keep running. Must be a nonnegative integer, or `None`. Passing `None` is equivalent to setting the minimum to 0." />
+<Parameter name="max_containers" type="int | None" defaultValue="UNSET_PARAMETER" description="Maximum concurrent containers. Must be a positive integer, or `None`. Passing `None` is equivalent to disabling the upper bound on container concurrency at the Function level (note that Environment and Workspace level container upper limits still apply.)" />
+<Parameter name="buffer_containers" type="int | None" defaultValue="UNSET_PARAMETER" description="Extra containers to keep warm beyond current demand. Must be a nonnegative integer, or `None`. Passing `None` is equivalent to setting the buffer to 0." />
+<Parameter name="scaledown_window" type="int" defaultValue="UNSET_PARAMETER" description="Maximum duration (in seconds) idle containers wait before scaling down. Must be a positive integer between 2 and 3600, inclusive." />
+
+**Returns**
+
+A `FunctionAutoscalerSettings` dataclass.
+
+**Usage**
+
+Update `my_function` so that 2 containers are always active.
+
+```python notest
+fn = modal.Function.from_name("my-app", "my_function")
+fn.autoscaler.update(min_containers=2)
+```
+
+Update `my_function` so that there is no Function-level limit on `max_containers`:
+
+```python notest
+fn = modal.Function.from_name("my-app", "my_function")
+fn.autoscaler.update(max_containers=None)
+```
 
 ## map
 
