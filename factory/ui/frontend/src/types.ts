@@ -324,9 +324,15 @@ export interface FailedCommand {
   timestamp?: number;
 }
 
-export type DrawerTab = "timeline" | "logs" | "bottlenecks" | "failed-commands" | "history";
-export type DrawerTabParam = DrawerTab | "failed_commands";
+export type DrawerTab = "timeline" | "logs" | "bottlenecks" | "failed-commands" | "history" | "terminal";
+export type DrawerTabParam = DrawerTab | "failed_commands" | "interactive_terminal";
 export type ActivityDrawerTab = DrawerTab;
+
+export function normalizeDrawerTab(tab?: DrawerTabParam): DrawerTab {
+  if (tab === "failed_commands") return "failed-commands";
+  if (tab === "interactive_terminal") return "terminal";
+  return tab || "timeline";
+}
 
 export interface RepoBottleneck {
   command: string;

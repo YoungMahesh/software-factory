@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle, Timer } from "lucide-react";
-import { AgentEvent, JobStage, Job, DrawerTab, DrawerTabParam } from "../types";
+import { X, Copy, Check, Terminal, History, Activity, Eye, XCircle, AlertTriangle, Timer, SquareTerminal } from "lucide-react";
+import { AgentEvent, JobStage, Job, DrawerTab, DrawerTabParam, normalizeDrawerTab } from "../types";
 import { copyToClipboard, formatRelativeTime } from "../utils";
 import { extractFailedCommands } from "../utils/failedCommands";
 import { ThinkingAccordion } from "./ThinkingAccordion";
@@ -9,6 +9,7 @@ import { ToolChip } from "./ToolChip";
 import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
 import { FailedCommandsTab } from "./activity-drawer/FailedCommandsTab";
+import { InteractiveTerminalTab } from "./activity-drawer/InteractiveTerminalTab";
 import { Badge } from "./ui/Badge";
 import { BottlenecksViewer } from "./BottlenecksViewer";
 
@@ -39,8 +40,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   onCancelJob,
   initialTab = "timeline",
 }) => {
-  const normalizedInitialTab = initialTab === "failed_commands" ? "failed-commands" : (initialTab || "timeline");
-  const [activeTab, setActiveTab] = useState<DrawerTab>(normalizedInitialTab);
+  const [activeTab, setActiveTab] = useState<DrawerTab>(normalizeDrawerTab(initialTab));
   const [copied, setCopied] = useState<boolean>(false);
 
   const failedCommands = React.useMemo(() => {
@@ -52,9 +52,16 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
     return jobs.filter((j) => !j.repo || j.repo === selectedRepo);
   }, [jobs, selectedRepo]);
 
+  const isPipelineRunning = React.useMemo(() => {
+    return (
+      Boolean(stage && stage !== "SUCCESS" && stage !== "FAILED" && stage !== "CANCELLED") ||
+      jobs.some((j) => (!selectedRepo || !j.repo || j.repo === selectedRepo) && j.status === "RUNNING")
+    );
+  }, [stage, jobs, selectedRepo]);
+
   useEffect(() => {
     if (isOpen && initialTab) {
-      setActiveTab(initialTab === "failed_commands" ? "failed-commands" : initialTab);
+      setActiveTab(normalizeDrawerTab(initialTab));
     }
   }, [isOpen, initialTab]);
 
@@ -149,6 +156,20 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             >
               <Terminal className="w-3.5 h-3.5" />
               <span>Terminal Logs</span>
+            </button>
+            <button
+              id="btn-drawer-tab-terminal"
+              data-testid="btn-drawer-tab-terminal"
+              type="button"
+              onClick={() => setActiveTab("terminal")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === "terminal"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-white"
+              }`}
+            >
+              <SquareTerminal className="w-3.5 h-3.5" />
+              <span>Interactive Terminal</span>
             </button>
             <button
               id="btn-drawer-tab-bottlenecks"
@@ -398,17 +419,7 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                           <td className="py-2.5 px-3 text-ink">{j.repo}</td>
                           <td className="py-2.5 px-3 text-muted">{j.feature || "—"}</td>
                           <td className="py-2.5 px-3">
-                            <Badge
-                              variant={
-                                j.status === "SUCCESS"
-                                  ? "success"
-                                  : j.status === "FAILED"
-                                  ? "danger"
-                                  : j.status === "RUNNING"
-                                  ? "console"
-                                  : "neutral"
-                              }
-                            >
+                            <Badge variant={j.status === "SUCCESS" ? "success" : j.status === "FAILED" ? "danger" : j.status === "RUNNING" ? "console" : "neutral"}>
                               {j.status}
                             </Badge>
                           </td>
@@ -450,6 +461,11 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
                 </table>
               </div>
             </div>
+          ) : activeTab === "terminal" ? (
+            <InteractiveTerminalTab
+              repo={selectedRepo}
+              isPipelineRunning={isPipelineRunning}
+            />
           ) : (
             <FailedCommandsTab
               failedCommands={failedCommands}

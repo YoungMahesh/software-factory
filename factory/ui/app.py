@@ -67,6 +67,7 @@ from factory.ui.routes.rollback import (
     RollbackTurnRequest,
     router as rollback_router,
 )
+from factory.ui.routes.terminal import router as terminal_router
 from factory.ui.tracker import update_local_markdown_issue_for_rollback
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
@@ -174,5 +175,6 @@ def create_app(
     app.include_router(rollback_router)
     app.include_router(files_router)
     app.include_router(diffs_router)
+    app.include_router(terminal_router)
 
     return app

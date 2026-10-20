@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Job, ChatMessage, PreviewState, DrawerTab, DrawerTabParam } from "./types";
+import { Job, ChatMessage, PreviewState, DrawerTab, DrawerTabParam, normalizeDrawerTab } from "./types";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { StudioView } from "./views/StudioView";
 import { ActivityDrawer } from "./components/ActivityDrawer";
@@ -269,7 +269,7 @@ export const AppContent: React.FC = () => {
     onCancelJob: handleCancelJob,
     onOpenDrawer: (_targetToolCallId?: string, tab?: DrawerTabParam) => {
       if (tab) {
-        setDrawerTab(tab === "failed_commands" ? "failed-commands" : tab);
+        setDrawerTab(normalizeDrawerTab(tab));
       }
       setIsDrawerOpen(true);
     },
