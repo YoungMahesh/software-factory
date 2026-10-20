@@ -413,6 +413,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
         />
 
         <StudioPreviewPane
+          repo={selectedRepo}
           previewState={previewState}
           branches={branches}
           onSelectBranch={handleSelectBranch}

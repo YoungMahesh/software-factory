@@ -347,4 +347,33 @@ export interface RepoBottlenecksResponse {
   bottlenecks: RepoBottleneck[];
 }
 
+export type CanvasViewMode = "preview" | "files" | "diff";
+
+export interface RepoTreeItem {
+  path: string;
+  type: "blob" | "tree";
+  size?: number;
+}
+
+export interface RepoTreeResponse {
+  repo: string;
+  branch: string;
+  tree: RepoTreeItem[];
+  source: "sandbox" | "github";
+}
+
+export interface RepoFileResponse {
+  repo: string;
+  branch: string;
+  path: string;
+  size: number;
+  is_binary: boolean;
+  is_truncated: boolean;
+  content: string | null;
+  language?: string;
+  message?: string | null;
+  source: "sandbox" | "github";
+}
+
+
 

@@ -17,6 +17,8 @@ import {
   RollbackTurnParams,
   RollbackTurnResponse,
   FailedCommand,
+  RepoTreeResponse,
+  RepoFileResponse,
 } from "./types";
 import type { RepoBottlenecksResponse } from "./types";
 
@@ -33,6 +35,8 @@ export type {
   RollbackTarget,
   RepoBottleneck,
   RepoBottlenecksResponse,
+  RepoTreeResponse,
+  RepoFileResponse,
 } from "./types";
 
 export interface StudioPromptResponse {
@@ -448,5 +452,36 @@ export async function fetchRepoBottlenecks(
   }
   return res.json();
 }
+
+export async function fetchRepoTree(
+  repo: string,
+  branch?: string
+): Promise<RepoTreeResponse> {
+  const params = new URLSearchParams();
+  if (branch) params.set("branch", branch);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/tree${qs}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch file tree: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchRepoFile(
+  repo: string,
+  path: string,
+  branch?: string
+): Promise<RepoFileResponse> {
+  const params = new URLSearchParams({ path });
+  if (branch) params.set("branch", branch);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/files?${params.toString()}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch file content: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 
 

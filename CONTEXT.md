@@ -377,4 +377,14 @@ _Avoid_: Web scraper, google search tool, bing tool, generic search
 A read-only documentation lookup tool (`docs_search`) powered by the Context7 API (`https://context7.com/api/v3/search`) using `CONTEXT7_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to query official library documentation, component APIs, CLI commands, and syntax-highlighted code snippets.
 _Avoid_: Doc scraper, library crawler, context tool, c7 tool
 
+**In-Studio Code Viewer**:
+A file tree and source code inspection interface in Factory Studio that renders project files via a hybrid retrieval pipeline querying the Unified Studio Sandbox or GitHub Git API.
+_Avoid_: File browser, repo explorer, in-studio code editor, web IDE file tree
 
+**Pre-Merge Diff Viewer**:
+A side-by-side or unified Git comparison interface in Factory Studio displaying working-tree uncommitted changes or feature branch diffs prior to triggering the In-Studio Merge Control.
+_Avoid_: Diff tab, branch comparator, merge diff viewer
+
+**In-Sandbox Interactive Terminal**:
+A full-duplex interactive terminal emulator tab powered by xterm.js in Factory Studio's Activity Drawer, connected over WebSockets to a pseudo-terminal (`pty=True`) in the Unified Studio Sandbox.
+_Avoid_: Web shell, container console, remote terminal, cloud ssh web
