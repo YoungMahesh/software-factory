@@ -5,13 +5,13 @@ An interactive Git comparison surface in the right canvas under the "Git Diff" v
 
 **Blocked by:** 01 (In-Studio File Explorer & Code Viewer with Canvas View Switcher)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Selecting "Git Diff" in the canvas header renders the Pre-Merge Diff Viewer.
-- [ ] A scope selector allows toggling between "Working Tree Changes" (container uncommitted modifications) and "Branch Changes" (feature branch compared to main trunk).
-- [ ] A summary header displays total additions, total deletions, and count of modified files for the active scope.
-- [ ] Modified files are listed as expandable accordion cards displaying file paths, addition badges, and deletion badges.
-- [ ] A layout toggle allows switching between Unified hunk view and Split two-column side-by-side view.
-- [ ] Split side-by-side view aligns unchanged, added, and deleted lines across columns with synchronized scrolling.
-- [ ] Clean empty states render when no uncommitted changes or branch diffs exist.
-- [ ] Diff endpoints and frontend components are covered by automated tests and adhere to the Universal File Line Budget (<= 500 lines).
+- [x] Selecting "Git Diff" in the canvas header renders the Pre-Merge Diff Viewer.
+- [x] A scope selector allows toggling between "Working Tree Changes" (container uncommitted modifications) and "Branch Changes" (feature branch compared to main trunk).
+- [x] A summary header displays total additions, total deletions, and count of modified files for the active scope.
+- [x] Modified files are listed as expandable accordion cards displaying file paths, addition badges, and deletion badges.
+- [x] A layout toggle allows switching between Unified hunk view and Split two-column side-by-side view.
+- [x] Split side-by-side view aligns unchanged, added, and deleted lines across columns with synchronized scrolling.
+- [x] Clean empty states render when no uncommitted changes or branch diffs exist.
+- [x] Diff endpoints and frontend components are covered by automated tests and adhere to the Universal File Line Budget (<= 500 lines).

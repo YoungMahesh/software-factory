@@ -1,43 +1,12 @@
-import {
-  Repo,
-  Milestone,
-  Issue,
-  Job,
-  LaunchJobParams,
-  PreviewState,
-  GrillTurnResult,
-  DraftADR,
-  DbChatMessage,
-  StudioDispatchParams,
-  StudioDispatchResponse,
-  PullRequest,
-  MergePullRequestParams,
-  MergePullRequestResponse,
-  MarkPullRequestReadyResponse,
-  RollbackTurnParams,
-  RollbackTurnResponse,
-  FailedCommand,
-  RepoTreeResponse,
-  RepoFileResponse,
+import type {
+  Repo, Milestone, Issue, Job, LaunchJobParams, PreviewState, GrillTurnResult,
+  DraftADR, DbChatMessage, StudioDispatchParams, StudioDispatchResponse,
+  PullRequest, MergePullRequestParams, MergePullRequestResponse,
+  MarkPullRequestReadyResponse, RollbackTurnParams, RollbackTurnResponse,
+  FailedCommand, RepoTreeResponse, RepoFileResponse, RepoBottlenecksResponse,
+  DiffScope, RepoDiffResponse,
 } from "./types";
-import type { RepoBottlenecksResponse } from "./types";
-
-export type {
-  StudioDispatchParams,
-  StudioDispatchResponse,
-  PullRequest,
-  MergePullRequestParams,
-  MergePullRequestResponse,
-  MarkPullRequestReadyResponse,
-  TurnRollbackData,
-  RollbackTurnParams,
-  RollbackTurnResponse,
-  RollbackTarget,
-  RepoBottleneck,
-  RepoBottlenecksResponse,
-  RepoTreeResponse,
-  RepoFileResponse,
-} from "./types";
+export * from "./types";
 
 export interface StudioPromptResponse {
   accepted: boolean;
@@ -482,6 +451,24 @@ export async function fetchRepoFile(
   }
   return res.json();
 }
+
+export async function fetchRepoDiff(
+  repo: string,
+  scope: DiffScope = "working_tree",
+  branch?: string,
+  base?: string
+): Promise<RepoDiffResponse> {
+  const params = new URLSearchParams({ scope });
+  if (branch) params.set("branch", branch);
+  if (base) params.set("base", base);
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/diff?${params.toString()}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch diff: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 
 
 

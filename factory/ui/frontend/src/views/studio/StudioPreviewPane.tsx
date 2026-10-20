@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Play, FolderTree, GitCompare } from "lucide-react";
 import { LivePreview } from "../../components/LivePreview";
 import { InStudioCodeViewer } from "../../components/code-viewer";
+import { PreMergeDiffViewer } from "../../components/diff-viewer";
 import { CanvasViewMode, PreviewState, RollbackTarget } from "../../types";
 
 export interface StudioPreviewPaneProps {
@@ -175,18 +176,7 @@ export const StudioPreviewPane: React.FC<StudioPreviewPaneProps> = ({
         ) : currentViewMode === "files" ? (
           <InStudioCodeViewer repo={repo || ""} branch={activeBranch} />
         ) : (
-          <div
-            data-testid="pre-merge-diff-placeholder"
-            className="flex-1 bg-white rounded-[22px] border border-hairline p-8 flex flex-col items-center justify-center text-center shadow-sm"
-          >
-            <div className="w-12 h-12 rounded-full bg-soft-stone flex items-center justify-center text-slate-500 mb-3">
-              <GitCompare className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-semibold text-ink mb-1">Pre-Merge Diff Viewer</h3>
-            <p className="text-xs text-slate-500 max-w-sm">
-              Review working-tree and branch changes across the repository before merging.
-            </p>
-          </div>
+          <PreMergeDiffViewer repo={repo || ""} branch={activeBranch} />
         )}
       </div>
     </div>

@@ -25,6 +25,16 @@ vi.mock("../../api", async () => {
       content: "console.log('hi');",
       source: "github",
     }),
+    fetchRepoDiff: vi.fn().mockResolvedValue({
+      repo: "my-app",
+      branch: "main",
+      base: "main",
+      scope: "working_tree",
+      source: "sandbox",
+      summary: { total_files: 0, additions: 0, deletions: 0 },
+      files: [],
+      clean: true,
+    }),
   };
 });
 
@@ -80,7 +90,7 @@ describe("StudioPreviewPane", () => {
     await user.click(screen.getByTestId("canvas-view-mode-diff"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("pre-merge-diff-placeholder")).toBeInTheDocument();
+      expect(screen.getByTestId("pre-merge-diff-viewer")).toBeInTheDocument();
       expect(screen.getByTestId("canvas-view-mode-diff")).toHaveClass("bg-primary");
     });
 

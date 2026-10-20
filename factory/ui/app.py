@@ -48,6 +48,7 @@ from factory.ui.routes.chat import (
     StudioPromptRequest,
     router as chat_router,
 )
+from factory.ui.routes.diffs import router as diffs_router
 from factory.ui.routes.files import router as files_router
 from factory.ui.routes.jobs import LaunchJobRequest, router as jobs_router
 from factory.ui.routes.preview import (
@@ -172,5 +173,6 @@ def create_app(
     app.include_router(pulls_router)
     app.include_router(rollback_router)
     app.include_router(files_router)
+    app.include_router(diffs_router)
 
     return app

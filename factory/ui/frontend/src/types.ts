@@ -376,5 +376,36 @@ export interface RepoFileResponse {
   source: "sandbox" | "github";
 }
 
+export type DiffScope = "working_tree" | "branch";
+export type DiffLayout = "unified" | "split";
+
+export interface FileDiffItem {
+  path: string;
+  old_path?: string | null;
+  status: "modified" | "added" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+  patch: string;
+}
+
+export interface DiffSummary {
+  total_files: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface RepoDiffResponse {
+  repo: string;
+  branch: string;
+  base?: string;
+  scope: DiffScope;
+  source: "sandbox" | "github";
+  summary: DiffSummary;
+  files: FileDiffItem[];
+  clean: boolean;
+  message?: string | null;
+}
+
+
 
 
