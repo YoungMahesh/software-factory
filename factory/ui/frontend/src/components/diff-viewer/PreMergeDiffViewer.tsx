@@ -8,10 +8,12 @@ import {
   AlignJustify,
   FolderGit2,
   AlertCircle,
+  ServerOff,
 } from "lucide-react";
 import { DiffScope, DiffLayout } from "../../types";
 import { fetchRepoDiff } from "../../api";
 import { DiffFileCard } from "./DiffFileCard";
+import { DiffStatsBadges } from "./DiffStatsBadges";
 
 interface PreMergeDiffViewerProps {
   repo?: string;
@@ -44,6 +46,7 @@ export const PreMergeDiffViewer: React.FC<PreMergeDiffViewerProps> = ({
   const files = diffData?.files || [];
   const summary = diffData?.summary || { total_files: 0, additions: 0, deletions: 0 };
   const isClean = diffData?.clean || files.length === 0;
+  const offlineMessage = diffData?.message;
 
   const toggleFile = (path: string) => {
     setExpandedFiles((prev) => ({
@@ -162,20 +165,12 @@ export const PreMergeDiffViewer: React.FC<PreMergeDiffViewerProps> = ({
             {summary.total_files} modified file{summary.total_files === 1 ? "" : "s"}
           </span>
 
-          <div className="flex items-center space-x-1.5 font-mono">
-            <span
-              data-testid="diff-summary-additions"
-              className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium text-[11px] border border-emerald-200/60"
-            >
-              +{summary.additions}
-            </span>
-            <span
-              data-testid="diff-summary-deletions"
-              className="inline-flex items-center text-coral bg-coral/10 px-2 py-0.5 rounded-full font-medium text-[11px] border border-coral/20"
-            >
-              -{summary.deletions}
-            </span>
-          </div>
+          <DiffStatsBadges
+            additions={summary.additions}
+            deletions={summary.deletions}
+            additionsTestId="diff-summary-additions"
+            deletionsTestId="diff-summary-deletions"
+          />
 
           <span className="text-slate-400 text-[11px] hidden sm:inline">
             {scope === "working_tree"
@@ -213,7 +208,7 @@ export const PreMergeDiffViewer: React.FC<PreMergeDiffViewerProps> = ({
             <p className="text-xs">Computing Git diff comparison...</p>
           </div>
         ) : isError ? (
-          <div className="p-6 bg-red-50/50 rounded-2xl border border-red-200 text-center">
+          <div className="p-6 bg-coral/5 rounded-2xl border border-coral/20 text-center">
             <AlertCircle className="w-8 h-8 text-coral mx-auto mb-2" />
             <h4 className="text-xs font-semibold text-coral mb-1">Failed to Load Diff</h4>
             <p className="text-xs text-slate-600 mb-3">
@@ -232,17 +227,19 @@ export const PreMergeDiffViewer: React.FC<PreMergeDiffViewerProps> = ({
             data-testid="diff-empty-state"
             className="flex flex-col items-center justify-center text-center p-12 bg-white rounded-2xl border border-hairline shadow-2xs my-4"
           >
-            <div className="w-12 h-12 rounded-full bg-pale-green/10 text-pale-green flex items-center justify-center mb-3">
-              <CheckCircle2 className="w-6 h-6" />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${
+              offlineMessage ? "bg-amber-100/60 text-amber-600" : "bg-deep-green/10 text-deep-green"
+            }`}>
+              {offlineMessage ? <ServerOff className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
             </div>
             <h3 className="text-sm font-semibold text-ink mb-1">
               {scope === "working_tree"
-                ? "No Working Tree Changes"
+                ? (offlineMessage ? "Sandbox Stopped" : "No Working Tree Changes")
                 : "No Branch Changes"}
             </h3>
             <p className="text-xs text-slate-500 max-w-sm">
               {scope === "working_tree"
-                ? "Container filesystem is clean. All modifications have been committed to the branch."
+                ? (offlineMessage || "Container filesystem is clean. All modifications have been committed to the branch.")
                 : `Feature branch is up to date with the default trunk (${base}). No differences detected.`}
             </p>
           </div>

@@ -69,9 +69,9 @@ def _parse_unified_git_diff(raw_diff: str) -> list[dict[str, Any]]:
                 in_patch = True
             if in_patch:
                 patch_lines.append(line)
-                if line.startswith("+") and not line.startswith("+++"):
+                if line.startswith("+") and not line.startswith("+++ "):
                     additions += 1
-                elif line.startswith("-") and not line.startswith("---"):
+                elif line.startswith("-") and not line.startswith("--- "):
                     deletions += 1
 
         files.append(
@@ -107,6 +107,35 @@ def _build_untracked_file_diff(path: str, content: str) -> dict[str, Any]:
     }
 
 
+def _build_diff_response(
+    bare_repo: str,
+    target_branch: str,
+    base: str,
+    scope: str,
+    source: str,
+    file_diffs: list[dict[str, Any]],
+    message: str | None = None,
+) -> dict[str, Any]:
+    """Constructs standardized diff response dictionary with addition/deletion summary."""
+    total_adds = sum(f["additions"] for f in file_diffs)
+    total_dels = sum(f["deletions"] for f in file_diffs)
+    return {
+        "repo": bare_repo,
+        "branch": target_branch,
+        "base": base,
+        "scope": scope,
+        "source": source,
+        "summary": {
+            "total_files": len(file_diffs),
+            "additions": total_adds,
+            "deletions": total_dels,
+        },
+        "files": file_diffs,
+        "clean": len(file_diffs) == 0,
+        "message": message,
+    }
+
+
 @router.get("/api/repos/{repo}/diff")
 async def get_repo_diff(
     repo: str,
@@ -127,17 +156,15 @@ async def get_repo_diff(
     # 1. Working Tree Scope (Container uncommitted edits vs HEAD)
     if norm_scope == "working_tree":
         if active_sandbox is None:
-            return {
-                "repo": bare_repo,
-                "branch": target_branch,
-                "base": base,
-                "scope": "working_tree",
-                "source": "sandbox",
-                "summary": {"total_files": 0, "additions": 0, "deletions": 0},
-                "files": [],
-                "clean": True,
-                "message": "Unified Studio Sandbox is not running.",
-            }
+            return _build_diff_response(
+                bare_repo=bare_repo,
+                target_branch=target_branch,
+                base=base,
+                scope="working_tree",
+                source="sandbox",
+                file_diffs=[],
+                message="Unified Studio Sandbox is not running.",
+            )
 
         diff_py = (
             "import os, sys, json, subprocess\n"
@@ -186,35 +213,28 @@ async def get_repo_diff(
                 file_diffs.append(_build_untracked_file_diff(u_path, u.get("content", "")))
                 seen_paths.add(u_path)
 
-        total_adds = sum(f["additions"] for f in file_diffs)
-        total_dels = sum(f["deletions"] for f in file_diffs)
-
-        return {
-            "repo": bare_repo,
-            "branch": target_branch,
-            "base": base,
-            "scope": "working_tree",
-            "source": "sandbox",
-            "summary": {
-                "total_files": len(file_diffs),
-                "additions": total_adds,
-                "deletions": total_dels,
-            },
-            "files": file_diffs,
-            "clean": len(file_diffs) == 0,
-        }
+        return _build_diff_response(
+            bare_repo=bare_repo,
+            target_branch=target_branch,
+            base=base,
+            scope="working_tree",
+            source="sandbox",
+            file_diffs=file_diffs,
+        )
 
     # 2. Branch Scope (Feature branch vs main trunk)
-    # Check if sandbox can execute git diff origin/{base}...HEAD
+    # Check if sandbox can execute git diff origin/{base}...{branch}
     if active_sandbox is not None:
         branch_diff_py = (
             "import os, sys, json, subprocess\n"
             "bare_repo = sys.argv[1]\n"
             "base_br = sys.argv[2]\n"
+            "target_br = sys.argv[3]\n"
             "root = os.path.join('/root', bare_repo)\n"
             "result = {'diff': '', 'success': False}\n"
             "if os.path.isdir(root):\n"
-            "    for target in [f'origin/{base_br}...HEAD', f'{base_br}...HEAD']:\n"
+            "    targets = [f'origin/{base_br}...origin/{target_br}', f'origin/{base_br}...{target_br}', f'origin/{base_br}...HEAD', f'{base_br}...HEAD']\n"
+            "    for target in targets:\n"
             "        try:\n"
             "            p = subprocess.run(['git', 'diff', '-U3', target], cwd=root, capture_output=True, text=True, timeout=10)\n"
             "            if p.returncode == 0:\n"
@@ -225,7 +245,7 @@ async def get_repo_diff(
             "            pass\n"
             "print(json.dumps(result))\n"
         )
-        proc = active_sandbox.exec("python3", "-c", branch_diff_py, bare_repo, base)
+        proc = active_sandbox.exec("python3", "-c", branch_diff_py, bare_repo, base, target_branch)
         raw_output = _read_process_output(proc).strip()
         data = {}
         try:
@@ -235,22 +255,14 @@ async def get_repo_diff(
 
         if data.get("success", False):
             file_diffs = _parse_unified_git_diff(data.get("diff", ""))
-            total_adds = sum(f["additions"] for f in file_diffs)
-            total_dels = sum(f["deletions"] for f in file_diffs)
-            return {
-                "repo": bare_repo,
-                "branch": target_branch,
-                "base": base,
-                "scope": "branch",
-                "source": "sandbox",
-                "summary": {
-                    "total_files": len(file_diffs),
-                    "additions": total_adds,
-                    "deletions": total_dels,
-                },
-                "files": file_diffs,
-                "clean": len(file_diffs) == 0,
-            }
+            return _build_diff_response(
+                bare_repo=bare_repo,
+                target_branch=target_branch,
+                base=base,
+                scope="branch",
+                source="sandbox",
+                file_diffs=file_diffs,
+            )
 
     # Fallback to GitHub Comparison API
     headers = _get_github_headers()
@@ -281,33 +293,22 @@ async def get_repo_diff(
                         }
                     )
 
-                total_adds = sum(f["additions"] for f in filtered_files)
-                total_dels = sum(f["deletions"] for f in filtered_files)
-
-                return {
-                    "repo": bare_repo,
-                    "branch": target_branch,
-                    "base": base,
-                    "scope": "branch",
-                    "source": "github",
-                    "summary": {
-                        "total_files": len(filtered_files),
-                        "additions": total_adds,
-                        "deletions": total_dels,
-                    },
-                    "files": filtered_files,
-                    "clean": len(filtered_files) == 0,
-                }
+                return _build_diff_response(
+                    bare_repo=bare_repo,
+                    target_branch=target_branch,
+                    base=base,
+                    scope="branch",
+                    source="github",
+                    file_diffs=filtered_files,
+                )
     except Exception:
         pass
 
-    return {
-        "repo": bare_repo,
-        "branch": target_branch,
-        "base": base,
-        "scope": "branch",
-        "source": "github",
-        "summary": {"total_files": 0, "additions": 0, "deletions": 0},
-        "files": [],
-        "clean": True,
-    }
+    return _build_diff_response(
+        bare_repo=bare_repo,
+        target_branch=target_branch,
+        base=base,
+        scope="branch",
+        source="github",
+        file_diffs=[],
+    )

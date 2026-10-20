@@ -7,12 +7,51 @@ interface DiffSplitViewProps {
 interface SplitRow {
   type: "hunk" | "content";
   hunkHeader?: string;
-  leftLineNumber?: number | string;
+  leftLineNumber?: number;
   leftText?: string;
   leftType?: "context" | "deletion" | "empty";
-  rightLineNumber?: number | string;
+  rightLineNumber?: number;
   rightText?: string;
   rightType?: "context" | "addition" | "empty";
+}
+
+const KEYWORDS = new Set([
+  "const", "let", "var", "function", "return", "if", "else", "for", "while",
+  "import", "export", "from", "default", "class", "interface", "type", "async",
+  "await", "try", "catch", "throw", "new", "this", "typeof", "instanceof", "def",
+  "None", "True", "False", "null", "undefined", "true", "false"
+]);
+
+export function renderTokenizedLine(text: string): React.ReactNode {
+  if (!text) return "\u00A0";
+
+  // Simple comment detection
+  if (text.trim().startsWith("//") || text.trim().startsWith("#")) {
+    return <span className="text-slate-500 italic">{text}</span>;
+  }
+
+  // Tokenize by word boundaries, strings, and whitespace
+  const tokens = text.split(/([a-zA-Z_$][a-zA-Z0-9_$]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\s+|[^\s\w])/g);
+
+  return (
+    <>
+      {tokens.map((token, i) => {
+        if (!token) return null;
+        if (KEYWORDS.has(token)) {
+          return <span key={i} className="text-amber-300 font-semibold">{token}</span>;
+        }
+        if ((token.startsWith('"') && token.endsWith('"')) ||
+            (token.startsWith("'") && token.endsWith("'")) ||
+            (token.startsWith("`") && token.endsWith("`"))) {
+          return <span key={i} className="text-emerald-300">{token}</span>;
+        }
+        if (/^\d+$/.test(token)) {
+          return <span key={i} className="text-sky-300">{token}</span>;
+        }
+        return <span key={i}>{token}</span>;
+      })}
+    </>
+  );
 }
 
 export function parseSplitDiff(patch: string): SplitRow[] {
@@ -20,8 +59,8 @@ export function parseSplitDiff(patch: string): SplitRow[] {
   const lines = patch.split(/\r?\n/);
   const rows: SplitRow[] = [];
 
-  let oldLine = 0;
-  let newLine = 0;
+  let oldLine = 1;
+  let newLine = 1;
 
   let pendingDels: { lineNum: number; text: string }[] = [];
   let pendingAdds: { lineNum: number; text: string }[] = [];
@@ -33,11 +72,11 @@ export function parseSplitDiff(patch: string): SplitRow[] {
       const add = pendingAdds[i];
       rows.push({
         type: "content",
-        leftLineNumber: del ? del.lineNum : "",
-        leftText: del ? del.text : "",
+        leftLineNumber: del?.lineNum,
+        leftText: del?.text,
         leftType: del ? "deletion" : "empty",
-        rightLineNumber: add ? add.lineNum : "",
-        rightText: add ? add.text : "",
+        rightLineNumber: add?.lineNum,
+        rightText: add?.text,
         rightType: add ? "addition" : "empty",
       });
     }
@@ -61,17 +100,24 @@ export function parseSplitDiff(patch: string): SplitRow[] {
       continue;
     }
 
-    if (line.startsWith("-") && !line.startsWith("---")) {
+    // Skip git diff header metadata
+    if (
+      line.startsWith("--- ") ||
+      line.startsWith("+++ ") ||
+      line.startsWith("diff ") ||
+      line.startsWith("index ")
+    ) {
+      continue;
+    }
+
+    if (line.startsWith("-")) {
       pendingDels.push({ lineNum: oldLine++, text: line.slice(1) });
-    } else if (line.startsWith("+") && !line.startsWith("+++")) {
+    } else if (line.startsWith("+")) {
       pendingAdds.push({ lineNum: newLine++, text: line.slice(1) });
     } else {
-      // Context line or header line
+      // Context line
       flushPending();
       const content = line.startsWith(" ") ? line.slice(1) : line;
-      if (line.startsWith("---") || line.startsWith("+++")) {
-        continue;
-      }
       rows.push({
         type: "content",
         leftLineNumber: oldLine++,
@@ -110,7 +156,7 @@ export const DiffSplitView: React.FC<DiffSplitViewProps> = ({ patch }) => {
                 <tr key={idx} className="bg-white/5 border-y border-white/10">
                   <td
                     colSpan={4}
-                    className="px-3 py-1 text-cyan-300 font-mono text-[10px] tracking-wide"
+                    className="px-3 py-1 text-slate-300 font-mono text-[10px] tracking-wide"
                   >
                     {row.hunkHeader}
                   </td>
@@ -131,7 +177,7 @@ export const DiffSplitView: React.FC<DiffSplitViewProps> = ({ patch }) => {
                       : "text-slate-600 bg-white/[0.01]"
                   }`}
                 >
-                  {row.leftLineNumber || ""}
+                  {row.leftLineNumber !== undefined ? row.leftLineNumber : ""}
                 </td>
 
                 {/* Left Code Text (Original/Base) */}
@@ -144,7 +190,7 @@ export const DiffSplitView: React.FC<DiffSplitViewProps> = ({ patch }) => {
                       : "text-slate-300"
                   }`}
                 >
-                  {row.leftText || (row.leftType === "empty" ? "" : "\u00A0")}
+                  {row.leftType === "empty" ? "" : renderTokenizedLine(row.leftText || "")}
                 </td>
 
                 {/* Right Line Number */}
@@ -155,7 +201,7 @@ export const DiffSplitView: React.FC<DiffSplitViewProps> = ({ patch }) => {
                       : "text-slate-600 bg-white/[0.01]"
                   }`}
                 >
-                  {row.rightLineNumber || ""}
+                  {row.rightLineNumber !== undefined ? row.rightLineNumber : ""}
                 </td>
 
                 {/* Right Code Text (Head/Modified) */}
@@ -168,7 +214,7 @@ export const DiffSplitView: React.FC<DiffSplitViewProps> = ({ patch }) => {
                       : "text-slate-300"
                   }`}
                 >
-                  {row.rightText || (row.rightType === "empty" ? "" : "\u00A0")}
+                  {row.rightType === "empty" ? "" : renderTokenizedLine(row.rightText || "")}
                 </td>
               </tr>
             );

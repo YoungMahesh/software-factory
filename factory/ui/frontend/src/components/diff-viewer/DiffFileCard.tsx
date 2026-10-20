@@ -1,7 +1,8 @@
 import React from "react";
 import { ChevronDown, ChevronRight, FileCode } from "lucide-react";
 import { FileDiffItem, DiffLayout } from "../../types";
-import { DiffSplitView } from "./DiffSplitView";
+import { DiffSplitView, renderTokenizedLine } from "./DiffSplitView";
+import { DiffStatsBadges } from "./DiffStatsBadges";
 
 interface DiffFileCardProps {
   file: FileDiffItem;
@@ -16,11 +17,11 @@ export const DiffFileCard: React.FC<DiffFileCardProps> = ({
   isExpanded,
   onToggle,
 }) => {
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: FileDiffItem["status"]) => {
     switch (status) {
       case "added":
         return (
-          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-pale-green/10 text-pale-green border border-pale-green/20">
+          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-pale-green/20 text-deep-green border border-deep-green/20">
             added
           </span>
         );
@@ -32,13 +33,13 @@ export const DiffFileCard: React.FC<DiffFileCardProps> = ({
         );
       case "renamed":
         return (
-          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-amber-400/10 text-amber-400 border border-amber-400/20">
+          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-amber-400/10 text-amber-500 border border-amber-400/20">
             renamed
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-white/10 text-slate-300 border border-white/15">
+          <span className="px-2 py-0.5 rounded-pill text-[10px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200">
             modified
           </span>
         );
@@ -54,20 +55,47 @@ export const DiffFileCard: React.FC<DiffFileCardProps> = ({
         className="p-3 font-mono text-[11px] leading-relaxed max-h-[480px] overflow-y-auto bg-primary border-t border-white/10 select-text"
       >
         {rawLines.map((line, idx) => {
-          let lineClass = "text-slate-300 px-2.5 py-0.5 whitespace-pre-wrap break-all";
-          if (line.startsWith("+++") || line.startsWith("---")) {
-            lineClass = "text-slate-500 font-bold px-2.5 py-0.5";
-          } else if (line.startsWith("@@")) {
-            lineClass = "text-cyan-300 bg-white/5 px-2.5 py-0.5 my-1 rounded border-y border-white/5";
-          } else if (line.startsWith("+")) {
-            lineClass = "diff-addition text-pale-green bg-pale-green/10 px-2.5 py-0.5 border-l-2 border-pale-green";
-          } else if (line.startsWith("-")) {
-            lineClass = "diff-deletion text-coral bg-coral/10 px-2.5 py-0.5 border-l-2 border-coral";
+          if (
+            line.startsWith("--- ") ||
+            line.startsWith("+++ ") ||
+            line.startsWith("diff ") ||
+            line.startsWith("index ")
+          ) {
+            return (
+              <div key={idx} className="text-slate-500 font-bold px-2.5 py-0.5 whitespace-pre-wrap break-all">
+                {line}
+              </div>
+            );
           }
 
+          if (line.startsWith("@@")) {
+            return (
+              <div key={idx} className="text-slate-300 bg-white/5 px-2.5 py-0.5 my-1 rounded border-y border-white/5 whitespace-pre-wrap break-all">
+                {line}
+              </div>
+            );
+          }
+
+          if (line.startsWith("+")) {
+            return (
+              <div key={idx} className="diff-addition text-pale-green bg-pale-green/10 px-2.5 py-0.5 border-l-2 border-pale-green whitespace-pre-wrap break-all">
+                +{renderTokenizedLine(line.slice(1))}
+              </div>
+            );
+          }
+
+          if (line.startsWith("-")) {
+            return (
+              <div key={idx} className="diff-deletion text-coral bg-coral/10 px-2.5 py-0.5 border-l-2 border-coral whitespace-pre-wrap break-all">
+                -{renderTokenizedLine(line.slice(1))}
+              </div>
+            );
+          }
+
+          const content = line.startsWith(" ") ? line.slice(1) : line;
           return (
-            <div key={idx} className={lineClass}>
-              {line || "\u00A0"}
+            <div key={idx} className="text-slate-300 px-2.5 py-0.5 whitespace-pre-wrap break-all">
+              {renderTokenizedLine(content)}
             </div>
           );
         })}
@@ -103,20 +131,12 @@ export const DiffFileCard: React.FC<DiffFileCardProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
-          <div className="flex items-center space-x-1.5 font-mono text-xs">
-            <span
-              data-testid={`file-additions-${file.path}`}
-              className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium text-[11px] border border-emerald-200/60"
-            >
-              +{file.additions}
-            </span>
-            <span
-              data-testid={`file-deletions-${file.path}`}
-              className="inline-flex items-center text-coral bg-coral/10 px-2 py-0.5 rounded-full font-medium text-[11px] border border-coral/20"
-            >
-              -{file.deletions}
-            </span>
-          </div>
+          <DiffStatsBadges
+            additions={file.additions}
+            deletions={file.deletions}
+            additionsTestId={`file-additions-${file.path}`}
+            deletionsTestId={`file-deletions-${file.path}`}
+          />
         </div>
       </button>
 

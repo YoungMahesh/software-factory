@@ -138,18 +138,18 @@ describe("PreMergeDiffViewer", () => {
     });
 
     // Content is visible initially (expanded by default)
-    expect(screen.getByText(/const \[total, setTotal\]/)).toBeInTheDocument();
+    expect(screen.getByText(/setTotal/)).toBeInTheDocument();
 
     // Click to collapse
     const cardToggle = screen.getByTestId("diff-card-toggle-src/components/Checkout.tsx");
     await user.click(cardToggle);
 
     // Patch should not be visible when collapsed
-    expect(screen.queryByText(/const \[total, setTotal\]/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/setTotal/)).not.toBeInTheDocument();
 
     // Click to expand again
     await user.click(cardToggle);
-    expect(screen.getByText(/const \[total, setTotal\]/)).toBeInTheDocument();
+    expect(screen.getByText(/setTotal/)).toBeInTheDocument();
   });
 
   it("allows switching layout between Unified hunk view and Split side-by-side view", async () => {
