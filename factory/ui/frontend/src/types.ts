@@ -372,6 +372,7 @@ export interface RepoFileResponse {
   content: string | null;
   language?: string;
   message?: string | null;
+  download_url?: string;
   source: "sandbox" | "github";
 }
 

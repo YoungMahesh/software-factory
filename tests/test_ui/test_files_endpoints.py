@@ -277,6 +277,33 @@ class TestFilesEndpoints(unittest.TestCase):
         )
         self.assertEqual(res2.status_code, 403)
 
+    def test_get_raw_file_download(self):
+        """Verifies raw download endpoint returns attachment header and file bytes."""
+        mock_sandbox = MagicMock()
+        mock_proc = MagicMock()
+        import base64
+        test_bytes = b"RAW_BINARY_CONTENT_12345"
+        mock_proc.stdout = [base64.b64encode(test_bytes)]
+        mock_proc.stderr = []
+        mock_proc.wait.return_value = 0
+        mock_sandbox.exec.return_value = mock_proc
+
+        preview = PreviewState(
+            repo="test1",
+            branch="main",
+            status=PreviewStatus.SERVING,
+        )
+        preview.sandbox = mock_sandbox
+        self.preview_reg._previews["test1"] = preview
+
+        res = self.client.get(
+            "/api/repos/test1/raw?path=assets/binary.bin",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.content, test_bytes)
+        self.assertIn('attachment; filename="binary.bin"', res.headers.get("content-disposition", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

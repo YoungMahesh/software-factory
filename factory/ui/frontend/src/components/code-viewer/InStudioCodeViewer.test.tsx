@@ -120,7 +120,7 @@ describe("InStudioCodeViewer", () => {
 
     await waitFor(() => {
       expect(api.fetchRepoFile).toHaveBeenCalledWith("cool-app", "src/App.tsx", "main");
-      expect(screen.getByText(/Hello World/)).toBeInTheDocument();
+      expect(screen.getByText("Hello")).toBeInTheDocument();
     });
 
     // Line numbers should be rendered
@@ -174,7 +174,7 @@ describe("InStudioCodeViewer", () => {
     const writeSpy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
 
     await waitFor(() => {
-      expect(screen.getByText(/Hello World/)).toBeInTheDocument();
+      expect(screen.getByText("Hello")).toBeInTheDocument();
     });
 
     const copyBtn = screen.getByTestId("copy-code-button");

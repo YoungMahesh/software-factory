@@ -195,14 +195,14 @@ export const FileTreePane: React.FC<FileTreePaneProps> = ({
       {/* Pane Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-hairline bg-white/40">
         <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider font-mono">
-          Explorer
+          Files &amp; Code
         </span>
         {onToggleCollapse && (
           <button
             type="button"
             onClick={onToggleCollapse}
             className="p-1 rounded-md text-slate-400 hover:text-ink hover:bg-white transition-colors cursor-pointer"
-            title="Collapse file tree"
+            title="Collapse Files &amp; Code panel"
           >
             <PanelLeftClose className="w-3.5 h-3.5" />
           </button>

@@ -4,13 +4,12 @@ import base64
 import json
 import os
 from pathlib import Path
-import shlex
 import sys
 from typing import Any
 import httpx
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from factory.ui.github import DEFAULT_TEST_ORG, get_test_org_token, strip_repo_owner
 from factory.ui.registry import (
@@ -70,8 +69,45 @@ EXTENSION_TO_LANGUAGE = {
 }
 
 
-def _get_preview_reg(request: Request) -> PreviewRegistry:
-    return getattr(request.app.state, "preview_reg", preview_registry)
+def _get_preview_reg(request: Request | None) -> PreviewRegistry:
+    if request is not None and hasattr(request, "app"):
+        return getattr(request.app.state, "preview_reg", preview_registry)
+    return preview_registry
+
+
+def _get_active_sandbox(request: Request | None, clean_repo: str, bare_repo: str) -> tuple[Any, str | None]:
+    preview_reg = _get_preview_reg(request)
+    for r in (bare_repo, clean_repo):
+        sandbox, url = preview_reg.get_active_sandbox(r)
+        if sandbox is not None:
+            return sandbox, url
+    return None, None
+
+
+def _resolve_target_branch(
+    preview_reg: PreviewRegistry,
+    clean_repo: str,
+    bare_repo: str,
+    branch: str | None,
+) -> str:
+    if branch and branch.strip():
+        return branch.strip()
+    preview = preview_reg.get_preview(bare_repo) or preview_reg.get_preview(clean_repo)
+    if preview and preview.branch:
+        return preview.branch
+    return resolve_active_preview_branch(bare_repo)
+
+
+def _get_github_headers() -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "SoftwareFactory-TestingConsole/1.0",
+    }
+    token = get_test_org_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 def is_ignored_path(path: str) -> bool:
@@ -137,45 +173,34 @@ async def get_repo_tree(
     clean_repo = repo.strip()
     bare_repo = strip_repo_owner(clean_repo)
     preview_reg = _get_preview_reg(request)
-
-    target_branch = branch.strip() if branch and branch.strip() else None
-    if not target_branch:
-        preview = preview_reg.get_preview(bare_repo) or preview_reg.get_preview(clean_repo)
-        if preview and preview.branch:
-            target_branch = preview.branch
-        else:
-            target_branch = resolve_active_preview_branch(bare_repo)
-
-    active_sandbox, _ = preview_reg.get_active_sandbox(bare_repo)
-    if active_sandbox is None:
-        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
+    target_branch = _resolve_target_branch(preview_reg, clean_repo, bare_repo, branch)
+    active_sandbox, _ = _get_active_sandbox(request, clean_repo, bare_repo)
 
     # 1. Live Unified Studio Sandbox active
     if active_sandbox is not None:
-        tree_script = (
-            f"python3 -c "
-            f"\"import os, json; "
-            f"root = '/root/{bare_repo}'; "
-            f"ignored = {list(IGNORED_DIRECTORIES)}; "
-            f"results = []; "
-            f"exists = os.path.isdir(root); "
-            f"if exists: "
-            f"    for dirpath, dirnames, filenames in os.walk(root): "
-            f"        dirnames[:] = [d for d in dirnames if d not in ignored and not any(p in ignored for p in d.split('/'))]; "
-            f"        rel_dir = os.path.relpath(dirpath, root); "
-            f"        if rel_dir != '.': "
-            f"            results.append({{'path': rel_dir.replace('\\\\', '/'), 'type': 'tree', 'size': 0}}); "
-            f"        for f in filenames: "
-            f"            if f in ignored: continue; "
-            f"            rel_path = os.path.normpath(os.path.join(rel_dir, f)).replace('\\\\', '/') if rel_dir != '.' else f; "
-            f"            full_path = os.path.join(dirpath, f); "
-            f"            try: sz = os.path.getsize(full_path); "
-            f"            except Exception: sz = 0; "
-            f"            results.append({{'path': rel_path, 'type': 'blob', 'size': sz}}); "
-            f"results.sort(key=lambda x: x['path']); "
-            f"print(json.dumps(results))\""
+        tree_py = (
+            "import os, sys, json\n"
+            "bare_repo = sys.argv[1]\n"
+            "root = os.path.join('/root', bare_repo)\n"
+            f"ignored = set({list(IGNORED_DIRECTORIES)})\n"
+            "results = []\n"
+            "if os.path.isdir(root):\n"
+            "    for dirpath, dirnames, filenames in os.walk(root):\n"
+            "        dirnames[:] = [d for d in dirnames if d not in ignored and not any(p in ignored for p in d.split('/'))]\n"
+            "        rel_dir = os.path.relpath(dirpath, root)\n"
+            "        if rel_dir != '.':\n"
+            "            results.append({'path': rel_dir.replace('\\\\', '/'), 'type': 'tree', 'size': 0})\n"
+            "        for f in filenames:\n"
+            "            if f in ignored: continue\n"
+            "            rel_path = os.path.normpath(os.path.join(rel_dir, f)).replace('\\\\', '/') if rel_dir != '.' else f\n"
+            "            full_path = os.path.join(dirpath, f)\n"
+            "            try: sz = os.path.getsize(full_path)\n"
+            "            except Exception: sz = 0\n"
+            "            results.append({'path': rel_path, 'type': 'blob', 'size': sz})\n"
+            "results.sort(key=lambda x: x['path'])\n"
+            "print(json.dumps(results))\n"
         )
-        proc = active_sandbox.exec("bash", "-c", tree_script)
+        proc = active_sandbox.exec("python3", "-c", tree_py, bare_repo)
         raw_output = _read_process_output(proc).strip()
         try:
             tree_data = json.loads(raw_output) if raw_output else []
@@ -190,15 +215,7 @@ async def get_repo_tree(
         }
 
     # 2. Remote GitHub Git Database API fallback
-    auth_token = get_test_org_token()
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "SoftwareFactory-TestingConsole/1.0",
-    }
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
-
+    headers = _get_github_headers()
     tree_url = f"https://api.github.com/repos/{DEFAULT_TEST_ORG}/{bare_repo}/git/trees/{target_branch}?recursive=1"
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -246,45 +263,38 @@ async def get_repo_file(
     validate_relative_path(clean_path)
 
     preview_reg = _get_preview_reg(request)
-    target_branch = branch.strip() if branch and branch.strip() else None
-    if not target_branch:
-        preview = preview_reg.get_preview(bare_repo) or preview_reg.get_preview(clean_repo)
-        if preview and preview.branch:
-            target_branch = preview.branch
-        else:
-            target_branch = resolve_active_preview_branch(bare_repo)
-
-    active_sandbox, _ = preview_reg.get_active_sandbox(bare_repo)
-    if active_sandbox is None:
-        active_sandbox, _ = preview_reg.get_active_sandbox(clean_repo)
-
+    target_branch = _resolve_target_branch(preview_reg, clean_repo, bare_repo, branch)
+    active_sandbox, _ = _get_active_sandbox(request, clean_repo, bare_repo)
     lang = detect_language(clean_path)
+    download_url = f"/api/repos/{bare_repo}/raw?path={clean_path}&branch={target_branch}"
 
     # 1. Live Sandbox Inspection
     if active_sandbox is not None:
-        file_script = (
-            f"python3 -c "
-            f"\"import os, json; "
-            f"target = os.path.join('/root/{bare_repo}', {shlex.quote(clean_path)}); "
-            f"if not os.path.isfile(target): "
-            f"    print(json.dumps({{'exists': False}})); "
-            f"else: "
-            f"    sz = os.path.getsize(target); "
-            f"    if sz > {MAX_FILE_SIZE_BYTES}: "
-            f"        print(json.dumps({{'exists': True, 'size': sz, 'is_binary': False, 'is_truncated': True, 'content': None}})); "
-            f"    else: "
-            f"        is_bin = False; "
-            f"        with open(target, 'rb') as f: "
-            f"            chunk = f.read(8192); "
-            f"            if b'\\x00' in chunk: is_bin = True; "
-            f"        if is_bin: "
-            f"            print(json.dumps({{'exists': True, 'size': sz, 'is_binary': True, 'is_truncated': False, 'content': None}})); "
-            f"        else: "
-            f"            with open(target, 'r', encoding='utf-8', errors='replace') as f: "
-            f"                cnt = f.read(); "
-            f"            print(json.dumps({{'exists': True, 'size': sz, 'is_binary': False, 'is_truncated': False, 'content': cnt}}))\""
+        file_py = (
+            "import os, sys, json\n"
+            "bare_repo = sys.argv[1]\n"
+            "clean_path = sys.argv[2]\n"
+            f"max_bytes = {MAX_FILE_SIZE_BYTES}\n"
+            "target = os.path.join('/root', bare_repo, clean_path)\n"
+            "if not os.path.isfile(target):\n"
+            "    print(json.dumps({'exists': False}))\n"
+            "else:\n"
+            "    sz = os.path.getsize(target)\n"
+            "    if sz > max_bytes:\n"
+            "        print(json.dumps({'exists': True, 'size': sz, 'is_binary': False, 'is_truncated': True, 'content': None}))\n"
+            "    else:\n"
+            "        is_bin = False\n"
+            "        with open(target, 'rb') as f:\n"
+            "            chunk = f.read(8192)\n"
+            "            if b'\\x00' in chunk: is_bin = True\n"
+            "        if is_bin:\n"
+            "            print(json.dumps({'exists': True, 'size': sz, 'is_binary': True, 'is_truncated': False, 'content': None}))\n"
+            "        else:\n"
+            "            with open(target, 'r', encoding='utf-8', errors='replace') as f:\n"
+            "                cnt = f.read()\n"
+            "            print(json.dumps({'exists': True, 'size': sz, 'is_binary': False, 'is_truncated': False, 'content': cnt}))\n"
         )
-        proc = active_sandbox.exec("bash", "-c", file_script)
+        proc = active_sandbox.exec("python3", "-c", file_py, bare_repo, clean_path)
         raw_output = _read_process_output(proc).strip()
         data: dict[str, Any] = {}
         try:
@@ -316,19 +326,12 @@ async def get_repo_file(
             "content": content,
             "language": lang,
             "message": message,
+            "download_url": download_url,
             "source": "sandbox",
         }
 
-    # 2. GitHub Contents API fallback
-    auth_token = get_test_org_token()
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "SoftwareFactory-TestingConsole/1.0",
-    }
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
-
+    # 2. GitHub Contents / Blobs API fallback
+    headers = _get_github_headers()
     content_url = f"https://api.github.com/repos/{DEFAULT_TEST_ORG}/{bare_repo}/contents/{clean_path}?ref={target_branch}"
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -349,6 +352,7 @@ async def get_repo_file(
                         "content": None,
                         "language": lang,
                         "message": f"File exceeds 500KB inspection ceiling ({sz / 1024:.1f} KB).",
+                        "download_url": download_url,
                         "source": "github",
                     }
 
@@ -366,6 +370,7 @@ async def get_repo_file(
                         "content": None,
                         "language": lang,
                         "message": "Binary file cannot be displayed.",
+                        "download_url": download_url,
                         "source": "github",
                     }
 
@@ -380,11 +385,73 @@ async def get_repo_file(
                     "content": text_content,
                     "language": lang,
                     "message": None,
+                    "download_url": download_url,
                     "source": "github",
                 }
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to fetch file from GitHub: {str(exc)}")
+
+    raise HTTPException(status_code=404, detail=f"File not found: {clean_path}")
+
+
+@router.get("/api/repos/{repo}/raw")
+async def get_repo_raw_file(
+    repo: str,
+    path: str = Query(..., description="Relative file path to download"),
+    request: Request = None,
+    branch: str | None = Query(None, description="Target branch"),
+):
+    """Raw file download endpoint for binary assets or large files exceeding preview limits."""
+    clean_repo = repo.strip()
+    bare_repo = strip_repo_owner(clean_repo)
+    clean_path = path.strip()
+    validate_relative_path(clean_path)
+
+    preview_reg = _get_preview_reg(request)
+    target_branch = _resolve_target_branch(preview_reg, clean_repo, bare_repo, branch)
+    active_sandbox, _ = _get_active_sandbox(request, clean_repo, bare_repo)
+    filename = Path(clean_path).name
+
+    # 1. Live Sandbox Raw Retrieval
+    if active_sandbox is not None:
+        read_py = (
+            "import os, sys, base64\n"
+            "target = os.path.join('/root', sys.argv[1], sys.argv[2])\n"
+            "if os.path.isfile(target):\n"
+            "    with open(target, 'rb') as f:\n"
+            "        sys.stdout.buffer.write(base64.b64encode(f.read()))\n"
+        )
+        proc = active_sandbox.exec("python3", "-c", read_py, bare_repo, clean_path)
+        raw_b64 = _read_process_output(proc).strip().encode("utf-8")
+        if not raw_b64:
+            raise HTTPException(status_code=404, detail=f"File not found in sandbox: {clean_path}")
+        file_bytes = base64.b64decode(raw_b64)
+        return Response(
+            content=file_bytes,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # 2. GitHub Raw Retrieval
+    headers = _get_github_headers()
+    content_url = f"https://api.github.com/repos/{DEFAULT_TEST_ORG}/{bare_repo}/contents/{clean_path}?ref={target_branch}"
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.get(content_url, headers=headers)
+            if resp.status_code == 200:
+                payload = resp.json()
+                b64_content = payload.get("content", "")
+                file_bytes = base64.b64decode(b64_content) if b64_content else b""
+                return Response(
+                    content=file_bytes,
+                    media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch raw file: {str(exc)}")
 
     raise HTTPException(status_code=404, detail=f"File not found: {clean_path}")
