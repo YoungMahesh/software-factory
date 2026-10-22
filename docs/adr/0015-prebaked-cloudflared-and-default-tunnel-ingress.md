@@ -21,4 +21,5 @@ Previously, sandboxes relied solely on ephemeral Modal tunnels (`sandbox.tunnels
 ## Amendments
 
 - **Non-Intrusive Socket Monitoring**: The port watcher daemon in `shared/startup.sh` was amended from raw TCP socket writing (`echo > /dev/tcp/127.0.0.1/$PORT`) to inspecting `/proc/net/tcp` for listening sockets (`0A`). This eliminates spurious `Invalid HTTP request received` warnings in HTTP servers like Uvicorn caused by raw newline probes while preserving dynamic tunnel startup and shutdown.
+- **Zombie Process Rejection in Init Script**: In container environments where PID 1 does not reap re-parented child processes, terminated cloudflared daemons linger as defunct zombies. Because `ps <pid>` succeeds on zombie processes in `/proc`, `/etc/init.d/cloudflared` falsely treated dead processes as active, failing to delete `/var/run/cloudflared.pid` and preventing `cloudflared-port-watcher` from starting the daemon when target ports activate. `shared/startup.sh` was amended to patch `/etc/init.d/cloudflared` to verify that the PID is alive and not in a zombie state (`State: Z` in `/proc/$PID/status`), and to cleanly unlink stale PID files.
 

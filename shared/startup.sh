@@ -45,8 +45,16 @@ if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
         fi
     fi
 
+    # Patch /etc/init.d/cloudflared to reject zombie processes so stop/status/start
+    # correctly handle defunct child processes in container environments where PID 1
+    # does not reap re-parented child zombies.
+    if [ -f /etc/init.d/cloudflared ]; then
+        sed -i 's|\[ -f "$pid_file" \] && ps $(get_pid) > /dev/null 2>&1|[ -f "$pid_file" ] \&\& [ -d "/proc/$(get_pid)" ] \&\& ! grep -q "^State:[[:space:]]*Z" "/proc/$(get_pid)/status" 2>/dev/null|' /etc/init.d/cloudflared
+    fi
+
     # Initially stop the service until the target web port actually opens
     /etc/init.d/cloudflared stop >/dev/null 2>&1 || true
+    rm -f /var/run/cloudflared.pid
 
     # Port watcher daemon: starts cloudflared only when the port is listening,
     # and immediately stops it when the app stops, preventing traffic hijacking.
