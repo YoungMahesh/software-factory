@@ -287,6 +287,36 @@ class TestSandboxImageStaging(unittest.TestCase):
             ],
         )
 
+    def test_build_sandbox_image_layers_react_native(self):
+        from shared.image import build_sandbox_image
+
+        with patch("shared.image.base_image") as mock_base:
+            mock_apt_img = MagicMock()
+            mock_env_img = MagicMock()
+            mock_run_img = MagicMock()
+
+            mock_base.apt_install.return_value = mock_apt_img
+            mock_apt_img.env.return_value = mock_env_img
+            mock_env_img.run_commands.return_value = mock_run_img
+
+            build_sandbox_image(react_native=True)
+
+            mock_base.apt_install.assert_called_once_with(
+                "openjdk-17-jdk-headless", "watchman"
+            )
+            run_cmd_args = mock_env_img.run_commands.call_args[0]
+            self.assertIn("npm install --global @expo/ngrok@^4.1.0", run_cmd_args)
+
+    def test_startup_script_react_native_inotify_and_checks(self):
+        from shared.image import LOCAL_STARTUP_SCRIPT
+
+        content = LOCAL_STARTUP_SCRIPT.read_text()
+        self.assertIn("sysctl -w fs.inotify.max_user_watches=524288", content)
+        self.assertIn("/etc/sysctl.d/99-react-native.conf", content)
+        self.assertIn("watchman --version", content)
+        self.assertIn("npm list -g @expo/ngrok", content)
+
 
 if __name__ == "__main__":
     unittest.main()
+

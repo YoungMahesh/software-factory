@@ -339,6 +339,13 @@ if [ "${ENABLE_T3:-}" = "1" ]; then
 fi
 
 if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
+    # Increase inotify file watch limit for React Native / Expo bundler
+    if ! sysctl -w fs.inotify.max_user_watches=524288 2>/dev/null; then
+        echo "⚠️  Warning: Unable to set fs.inotify.max_user_watches=524288. If using React Native / Metro, consider launching with --vm."
+    fi
+    mkdir -p /etc/sysctl.d 2>/dev/null || true
+    echo "fs.inotify.max_user_watches=524288" > /etc/sysctl.d/99-react-native.conf 2>/dev/null || true
+
     grep -qxF 'export ANDROID_HOME="/opt/android-sdk"' ~/.bashrc 2>/dev/null || echo 'export ANDROID_HOME="/opt/android-sdk"' >> ~/.bashrc
     grep -qxF 'export ANDROID_SDK_ROOT="/opt/android-sdk"' ~/.bashrc 2>/dev/null || echo 'export ANDROID_SDK_ROOT="/opt/android-sdk"' >> ~/.bashrc
     grep -qxF 'export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"' ~/.bashrc 2>/dev/null || echo 'export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"' >> ~/.bashrc
@@ -369,6 +376,9 @@ if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
 #!/usr/bin/env bash
 echo "=== Java ===" && java -version
 echo "=== Android Tools ===" && adb --version && sdkmanager --version
+echo "=== Watchman ===" && (watchman --version 2>/dev/null || echo "Watchman not found")
+echo "=== Inotify Watch Limit ===" && sysctl fs.inotify.max_user_watches
+echo "=== Expo Ngrok ===" && (npm list -g @expo/ngrok --depth=0 2>/dev/null || echo "Not installed")
 echo "=== Environment Variables ===" && echo "JAVA_HOME: $JAVA_HOME" && echo "ANDROID_HOME: $ANDROID_HOME"
 echo "=== Installed SDK Packages ===" && sdkmanager --list_installed
 EOF

@@ -210,7 +210,7 @@ def build_sandbox_image(
 
     if react_native:
         image = (
-            image.apt_install("openjdk-17-jdk-headless")
+            image.apt_install("openjdk-17-jdk-headless", "watchman")
             .env(
                 {
                     "ANDROID_HOME": "/opt/android-sdk",
@@ -219,6 +219,7 @@ def build_sandbox_image(
                 }
             )
             .run_commands(
+                "npm install --global @expo/ngrok@^4.1.0",
                 "mkdir -p /opt/android-sdk/cmdline-tools",
                 "wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip",
                 "unzip -q /tmp/cmdline-tools.zip -d /opt/android-sdk/cmdline-tools",

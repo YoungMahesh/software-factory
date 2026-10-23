@@ -47,7 +47,7 @@ A background reverse tunnel connection between the sandbox's Antigravity CLI and
 _Avoid_: Antigravity web, agy proxy, remote tunnel
 
 **React Native Tooling**:
-A pre-baked Android development toolchain within the sandbox image including OpenJDK 17, Android SDK platforms, build-tools, NDK, and CMake.
+A pre-baked Android and React Native development toolchain within the sandbox image including OpenJDK 17, Android SDK platforms, build-tools, NDK, CMake, Watchman for file indexing, a tuned inotify file watch limit (524,288), and `@expo/ngrok` for tunnel connectivity.
 _Avoid_: Android environment, mobile dependencies, Android emulator
 
 **Metro Tunnel**:

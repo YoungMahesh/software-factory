@@ -1,0 +1,17 @@
+# React Native File Watcher and Expo Tunnel Tooling
+
+When running React Native and Expo development servers (`npx expo start` or `npx react-native start`) on Linux sandboxes, Metro bundlers crash with `Error: ENOSPC: System limit for number of file watchers reached` due to default container inotify watch exhaustion across large project trees and dependency graphs. Additionally, Expo's remote tunnel feature (`npx expo start --tunnel`) strictly requires the `@expo/ngrok@^4.1.0` binary package, and Metro file crawling incurs high CPU utilization and latency in the absence of the native `watchman` service. We decided to pre-bake `watchman` and `@expo/ngrok@^4.1.0` into the React Native Modal image layer, tune the Linux inotify user watch limit to 524,288 at boot time in `shared/startup.sh`, and provide comprehensive diagnostics in `check-react-native`.
+
+## Considered Options
+
+- **Install packages and tune inotify dynamically inside `startup.sh` on every boot**: Run `apt-get install watchman` and `npm install -g @expo/ngrok` at container initialization. Rejected because downloading binaries and compiling dependencies on every sandbox launch introduces substantial cold-start network latency (15-30+ seconds).
+- **Add `watchman` and `@expo/ngrok` globally across all sandboxes in `base_image`**: Bake them into the Shared Base Image for every standard and VM sandbox regardless of tech stack. Rejected because watchman and expo ngrok are specialized mobile development dependencies unnecessary for headless web or backend sandboxes; placing them in the opt-in `react_native` layer maintains lean base image sizes.
+- **Enforce or auto-promote `--vm` whenever `--react-native` is supplied**: Require VM sandbox virtualization to guarantee `sysctl` kernel tuning access. Rejected because developers may intentionally run lightweight standard sandboxes for fast evaluations, and standard sandboxes can still benefit from pre-baked Watchman and ngrok packages.
+- **Pre-bake tooling in the `react_native` image layer and tune inotify in `startup.sh` with graceful fallback**: Install `watchman` and `@expo/ngrok@^4.1.0` during Modal image build (`build_sandbox_image(react_native=True)`), apply `sysctl -w fs.inotify.max_user_watches=524288` at boot time with graceful fallback (`|| true` and diagnostic warning if in gVisor), write `/etc/sysctl.d/99-react-native.conf`, and verify all tools in `/usr/local/bin/check-react-native`. Accepted because it eliminates cold-start overhead, satisfies Meta/Expo standards, and provides resilient runtime execution across both standard and VM sandboxes.
+
+## Consequences
+
+- The `shared/image.py` `build_sandbox_image(react_native=True)` image builder includes `watchman` in its `apt_install` call and installs `@expo/ngrok@^4.1.0` globally via npm during image caching.
+- `shared/startup.sh` raises `fs.inotify.max_user_watches` to 524,288 when `ENABLE_REACT_NATIVE=1`, writing `/etc/sysctl.d/99-react-native.conf` and degrading gracefully with an advisory if running in unprivileged container environments.
+- `/usr/local/bin/check-react-native` outputs Watchman version, inotify max watch limit, and `@expo/ngrok` status alongside existing Java and Android SDK health checks.
+- The canonical domain definition for **React Native Tooling** in `CONTEXT.md` is updated to reflect Watchman, tuned inotify file watch capacity, and `@expo/ngrok` tunnel support.
