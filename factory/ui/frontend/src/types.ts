@@ -159,15 +159,6 @@ export interface StudioDispatchResponse {
   stage: string;
 }
 
-export interface LaunchJobParams {
-  repo: string;
-  feature?: string;
-  issue?: string;
-  model: string;
-  vm: boolean;
-  dev: boolean;
-}
-
 export interface Job {
   id: string;
   repo: string;

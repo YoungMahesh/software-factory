@@ -8,51 +8,14 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 from factory.ui.registry import JobRegistry, job_registry
 
 router = APIRouter()
 
 
-class LaunchJobRequest(BaseModel):
-    repo: str = Field(..., description="Target repository name in Test Organization (e.g. 'test3')")
-    feature: str | None = Field(None, description="Feature / milestone slug (e.g. 'slug-generator')")
-    issue: str | None = Field(None, description="Optional ticket ID (e.g. '01' or '42')")
-    model: str = Field("deepseek-v4.1-flash", description="Model identifier")
-    vm: bool = Field(False, description="Launch in VM Sandbox with Docker support")
-    dev: bool = Field(False, description="Launch in dev preview mode with port 3000 keep-alive")
-
-
 def _get_registry(request: Request) -> JobRegistry:
     return getattr(request.app.state, "registry", job_registry)
-
-
-@router.post("/api/jobs")
-async def launch_job(req: LaunchJobRequest, request: Request):
-    if not req.repo or not req.repo.strip():
-        raise HTTPException(status_code=400, detail="Repository name is required.")
-
-    feature = (req.feature or "").strip()
-    issue = (req.issue or "").strip() or None
-
-    if not feature:
-        if issue:
-            feature = f"issue-{issue}"
-        else:
-            raise HTTPException(status_code=400, detail="Feature / milestone slug or issue ID is required.")
-
-    registry = _get_registry(request)
-    job = registry.create_job(
-        repo=req.repo,
-        feature=feature,
-        issue=issue,
-        model=req.model,
-        vm=req.vm,
-        dev=req.dev,
-    )
-    registry.start_job(job.id)
-    return job.to_dict()
 
 
 @router.get("/api/jobs")

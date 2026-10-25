@@ -3,7 +3,7 @@ import { Play, FolderTree, GitCompare } from "lucide-react";
 import { LivePreview } from "../../components/LivePreview";
 import { InStudioCodeViewer } from "../../components/code-viewer";
 import { PreMergeDiffViewer } from "../../components/diff-viewer";
-import { CanvasViewMode, PreviewState, RollbackTarget } from "../../types";
+import { CanvasViewMode, PreviewState } from "../../types";
 
 export interface StudioPreviewPaneProps {
   repo?: string;
@@ -24,10 +24,6 @@ export interface StudioPreviewPaneProps {
   isSyncing: boolean;
   onSync: () => void;
   isExecutingTurn: boolean;
-  latestRollbackInfo: { target: RollbackTarget | null; isMerged: boolean };
-  onOpenRollback: (turnInfo?: RollbackTarget) => void;
-  isRollingBack: boolean;
-  isLatestTurnMerged: boolean;
 }
 
 export const StudioPreviewPane: React.FC<StudioPreviewPaneProps> = ({
@@ -49,10 +45,6 @@ export const StudioPreviewPane: React.FC<StudioPreviewPaneProps> = ({
   isSyncing,
   onSync,
   isExecutingTurn,
-  latestRollbackInfo,
-  onOpenRollback,
-  isRollingBack,
-  isLatestTurnMerged,
 }) => {
   const [internalViewMode, setInternalViewMode] = useState<CanvasViewMode>("preview");
   const currentViewMode = propViewMode !== undefined ? propViewMode : internalViewMode;
@@ -162,16 +154,6 @@ export const StudioPreviewPane: React.FC<StudioPreviewPaneProps> = ({
             isLaunching={isLaunchingPreview}
             isSyncing={isSyncing}
             onSync={onSync}
-            onRollbackLastTurn={
-              latestRollbackInfo.target ? () => onOpenRollback() : undefined
-            }
-            isRollingBack={isRollingBack}
-            isRollbackDisabled={isLatestTurnMerged}
-            rollbackDisabledReason={
-              isLatestTurnMerged
-                ? "Cannot roll back turn for a merged pull request"
-                : undefined
-            }
           />
         ) : currentViewMode === "files" ? (
           <InStudioCodeViewer repo={repo || ""} branch={activeBranch} />

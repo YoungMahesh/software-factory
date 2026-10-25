@@ -8,7 +8,6 @@ vi.mock("./api", () => ({
   createRepo: vi.fn(),
   fetchMilestones: vi.fn(),
   fetchIssues: vi.fn(),
-  launchJob: vi.fn(),
   sendStudioPrompt: vi.fn(),
   approvePlan: vi.fn(),
   listJobs: vi.fn(),
@@ -202,30 +201,6 @@ describe("App Root - URL Routing & State Hydration", () => {
       expect(repoSelect).toHaveValue("counter-2");
     });
     expect(window.location.search).toBe("?repo=counter-2");
-    expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
-  });
-
-  it("redirects direct navigation to /console seamlessly to / while preserving search parameters", async () => {
-    window.history.replaceState(null, "", "/console?repo=counter-2");
-    vi.mocked(api.fetchRepos).mockResolvedValue({
-      org: "software-factory-09-test",
-      repos: [
-        { name: "calculator-app", is_tanstack_compatible: true },
-        { name: "counter-2", is_tanstack_compatible: true },
-      ],
-    });
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/");
-      expect(window.location.search).toBe("?repo=counter-2");
-    });
-
-    const repoSelect = await screen.findByRole("combobox");
-    await waitFor(() => {
-      expect(repoSelect).toHaveValue("counter-2");
-    });
     expect(localStorage.getItem(STORAGE_KEY_SELECTED_REPO)).toBe("counter-2");
   });
 

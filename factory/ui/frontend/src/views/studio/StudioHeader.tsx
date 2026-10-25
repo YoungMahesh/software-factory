@@ -5,7 +5,6 @@ import {
   Lock,
   GitPullRequest,
   Play,
-  Square,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PullRequest, PreviewState } from "../../types";
@@ -204,21 +203,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             >
               Preview App
             </Button>
-
-            {(isServing || isProvisioning) && onStopPreview && (
-              <Button
-                id="btn-studio-preview-stop"
-                data-testid="studio-stop-preview-btn"
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={onStopPreview}
-                icon={<Square className="w-3 h-3 fill-current" />}
-                title="Stop preview sandbox"
-              >
-                Stop
-              </Button>
-            )}
           </div>
         )}
       </div>

@@ -37,7 +37,6 @@ from factory.ui.github import (
     PullRequestMergeError,
     fetch_repo_branches,
     reopen_repo_issue_for_rollback,
-    update_local_markdown_issue_for_rollback,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.registry import (
@@ -376,29 +375,3 @@ class TestStudioTurnRollback(unittest.TestCase):
             json={"branch": "factory/feat-stopped"},
         )
         self.assertEqual(resp.status_code, 404)
-
-    def test_update_local_markdown_issue_for_rollback(self):
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmproot = Path(tmpdir)
-            issue_dir = tmproot / ".scratch" / "feat-x" / "issues"
-            issue_dir.mkdir(parents=True, exist_ok=True)
-            ticket_file = issue_dir / "01-test-feature.md"
-            ticket_file.write_text(
-                "# 01: Test Feature\n\n**Status:** resolved\n**Commit:** abc1234\n\n- Task 1\n",
-                encoding="utf-8",
-            )
-
-            updated = update_local_markdown_issue_for_rollback(
-                repo_name="test-repo",
-                feature="feat-x",
-                issue_number=1,
-                repo_root=tmproot,
-            )
-            self.assertTrue(updated)
-
-            content = ticket_file.read_text(encoding="utf-8")
-            self.assertIn("**Status:** ready-for-agent", content)
-            self.assertNotIn("Commit:", content)
-            self.assertNotIn("abc1234", content)

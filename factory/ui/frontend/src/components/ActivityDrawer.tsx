@@ -10,6 +10,7 @@ import { DiffViewer } from "./DiffViewer";
 import { AttemptDividerCard, ReviewerRejectionCard } from "./SelfCorrectionCards";
 import { FailedCommandsTab } from "./activity-drawer/FailedCommandsTab";
 import { InteractiveTerminalTab } from "./activity-drawer/InteractiveTerminalTab";
+import { TerminalLogViewer } from "./TerminalLogViewer";
 import { Badge } from "./ui/Badge";
 import { BottlenecksViewer } from "./BottlenecksViewer";
 
@@ -369,17 +370,8 @@ export const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
               })())}
             </div>
           ) : activeTab === "logs" ? (
-            <div
-              id="studio-drawer-logs"
-              className="font-mono text-xs text-slate-300 bg-primary border border-white/10 rounded-xl p-4 whitespace-pre-wrap leading-relaxed select-text shadow-sm"
-            >
-              {logs.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  No terminal logs available.
-                </div>
-              ) : (
-                logs.join("")
-              )}
+            <div id="studio-drawer-logs" className="h-full min-h-[450px]">
+              <TerminalLogViewer logs={logs} />
             </div>
           ) : activeTab === "history" ? (
             <div id="studio-drawer-history" className="space-y-4">

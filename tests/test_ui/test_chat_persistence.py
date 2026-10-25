@@ -37,7 +37,6 @@ from factory.ui.github import (
     PullRequestMergeError,
     fetch_repo_branches,
     reopen_repo_issue_for_rollback,
-    update_local_markdown_issue_for_rollback,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.registry import (

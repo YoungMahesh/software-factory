@@ -8,7 +8,6 @@ vi.mock("./api", () => ({
   createRepo: vi.fn(),
   fetchMilestones: vi.fn(),
   fetchIssues: vi.fn(),
-  launchJob: vi.fn(),
   sendStudioPrompt: vi.fn(),
   approvePlan: vi.fn(),
   listJobs: vi.fn(),

@@ -50,7 +50,7 @@ from factory.ui.routes.chat import (
 )
 from factory.ui.routes.diffs import router as diffs_router
 from factory.ui.routes.files import router as files_router
-from factory.ui.routes.jobs import LaunchJobRequest, router as jobs_router
+from factory.ui.routes.jobs import router as jobs_router
 from factory.ui.routes.preview import (
     LaunchPreviewRequest,
     PreviewBranchRequest,
@@ -68,7 +68,6 @@ from factory.ui.routes.rollback import (
     router as rollback_router,
 )
 from factory.ui.routes.terminal import router as terminal_router
-from factory.ui.tracker import update_local_markdown_issue_for_rollback
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 

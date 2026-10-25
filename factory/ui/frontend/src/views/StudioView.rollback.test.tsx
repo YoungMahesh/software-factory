@@ -115,7 +115,7 @@ const renderStudio = (overrides: Partial<StudioContextValue> = {}) =>
         ],
       });
 
-      const undoBtn = screen.getByTestId("preview-rollback-btn");
+      const undoBtn = screen.getByTestId("composer-rollback-btn");
       await user.click(undoBtn);
 
       const modal = screen.getByTestId("turn-rollback-dialog");
@@ -166,7 +166,7 @@ const renderStudio = (overrides: Partial<StudioContextValue> = {}) =>
         ],
       });
 
-      const undoBtn = screen.getByTestId("preview-rollback-btn");
+      const undoBtn = screen.getByTestId("composer-rollback-btn");
       await user.click(undoBtn);
 
       const confirmBtn = screen.getByTestId("confirm-rollback-btn");

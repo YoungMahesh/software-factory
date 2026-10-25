@@ -24,14 +24,6 @@ import { extractFailedCommands } from "./utils/failedCommands";
 
 export const STORAGE_KEY_SELECTED_REPO = "factory_studio_selected_repo";
 
-export const redirectConsolePath = (): void => {
-  if (typeof window !== "undefined" && (window.location.pathname === "/console" || window.location.pathname.startsWith("/console/"))) {
-    const currentUrl = new URL(window.location.href);
-    currentUrl.pathname = "/";
-    window.history.replaceState(null, "", currentUrl.pathname + currentUrl.search);
-  }
-};
-
 export const getInitialRepo = (): string => {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
@@ -52,8 +44,6 @@ export const getInitialRepo = (): string => {
 };
 
 export const AppContent: React.FC = () => {
-  redirectConsolePath();
-
   const [selectedRepo, setSelectedRepo] = useState<string>(getInitialRepo);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -176,20 +166,18 @@ export const AppContent: React.FC = () => {
     clearLogs,
   });
 
-  // Revalidate issues and branches query on job completion
+  // Revalidate issues query on job completion
   useEffect(() => {
     if (activeJob?.status === "SUCCESS" && selectedRepo) {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
-      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
     }
   }, [activeJob?.status, selectedRepo, queryClient]);
 
-  // Reset chat cleared state and revalidate issues and branches query when selected repo changes
+  // Reset chat cleared state and revalidate issues query when selected repo changes
   useEffect(() => {
     setIsChatCleared(false);
     if (selectedRepo) {
       queryClient.invalidateQueries({ queryKey: studioQueryKeys.issues(selectedRepo) });
-      queryClient.invalidateQueries({ queryKey: studioQueryKeys.branches(selectedRepo) });
     }
   }, [selectedRepo, queryClient]);
 
@@ -227,14 +215,8 @@ export const AppContent: React.FC = () => {
     }
   }, [previewQuery.data]);
 
-  // Redirect /console paths to / while preserving search parameters
-  useEffect(() => {
-    redirectConsolePath();
-  }, []);
-
   useEffect(() => {
     const onPopState = () => {
-      redirectConsolePath();
       const params = new URLSearchParams(window.location.search);
       const repoFromUrl = params.get("repo");
       if (repoFromUrl && repoFromUrl.trim()) {

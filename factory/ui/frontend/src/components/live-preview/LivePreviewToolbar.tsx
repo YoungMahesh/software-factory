@@ -11,7 +11,6 @@ import {
   Terminal,
   RefreshCw,
   Lock,
-  RotateCcw,
 } from "lucide-react";
 import { ViewportMode, PreviewStatus } from "../../types";
 import { LivePreviewBranchSelector } from "./LivePreviewBranchSelector";
@@ -34,10 +33,6 @@ export interface LivePreviewToolbarProps {
   onRefresh?: () => void;
   isSyncing?: boolean;
   onSync?: () => void;
-  onRollbackLastTurn?: () => void;
-  isRollingBack?: boolean;
-  isRollbackDisabled?: boolean;
-  rollbackDisabledReason?: string;
   isLogsDrawerOpen: boolean;
   onToggleLogsDrawer: () => void;
   logsCount: number;
@@ -61,10 +56,6 @@ export const LivePreviewToolbar: React.FC<LivePreviewToolbarProps> = ({
   onReload,
   isSyncing = false,
   onSync,
-  onRollbackLastTurn,
-  isRollingBack = false,
-  isRollbackDisabled = false,
-  rollbackDisabledReason,
   isLogsDrawerOpen,
   onToggleLogsDrawer,
   logsCount,
@@ -221,38 +212,6 @@ export const LivePreviewToolbar: React.FC<LivePreviewToolbarProps> = ({
           </button>
         )}
 
-        {/* Undo Last Turn Action Button */}
-        {onRollbackLastTurn && (
-          <button
-            data-testid="preview-rollback-btn"
-            id="btn-preview-rollback"
-            type="button"
-            onClick={onRollbackLastTurn}
-            disabled={isLocked || isRollingBack || isSyncing || isSwitching || isRollbackDisabled}
-            className={`p-1.5 rounded-pill border text-xs transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-              isLocked || isSyncing || isSwitching || isRollbackDisabled
-                ? "bg-cohere-black/40 border-white/10 text-muted cursor-not-allowed"
-                : isRollingBack
-                ? "bg-white/10 border-white/30 text-white cursor-wait"
-                : "bg-transparent border-white/20 text-slate-300 hover:text-white hover:bg-white/10"
-            } disabled:opacity-50`}
-            title={
-              isLocked
-                ? "Cannot roll back turn while job is active"
-                : rollbackDisabledReason ||
-                  (isRollingBack ? "Rolling back last turn..." : "Roll Back Last Turn")
-            }
-            aria-label="Roll Back Last Turn"
-          >
-            {isRollingBack ? (
-              <Loader2 className="w-3 h-3 animate-spin text-white" data-testid="rollback-loading-spinner" />
-            ) : isLocked || isRollbackDisabled ? (
-              <Lock className="w-3 h-3 text-muted" data-testid="rollback-lock-icon" />
-            ) : (
-              <RotateCcw className="w-3 h-3 text-coral" data-testid="rollback-icon" />
-            )}
-          </button>
-        )}
       </div>
 
       {/* URL Address Bar */}

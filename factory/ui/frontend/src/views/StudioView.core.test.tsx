@@ -103,11 +103,13 @@ describe("StudioView - Core", () => {
       onStopPreview: handleStop,
     });
 
-    const stopBtn = screen.getByTestId("studio-stop-preview-btn");
-    expect(stopBtn).toBeInTheDocument();
-    expect(stopBtn).toHaveTextContent(/Stop/i);
+    expect(screen.queryByTestId("studio-stop-preview-btn")).not.toBeInTheDocument();
 
-    await user.click(stopBtn);
+    const previewAppBtn = screen.getByTestId("preview-app-btn");
+    expect(previewAppBtn).toBeInTheDocument();
+    expect(previewAppBtn).toHaveAttribute("title", "Preview active (click to stop)");
+
+    await user.click(previewAppBtn);
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
 

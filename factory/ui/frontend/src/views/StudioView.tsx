@@ -6,8 +6,6 @@ import {
   useStudioIssuesQuery,
   useStudioPullRequestQuery,
   useMergePullRequestMutation,
-  useRepoBranchesQuery,
-  useUpdatePreviewBranchMutation,
   useRollbackTurnMutation,
   studioQueryKeys,
 } from "../hooks/useStudioQueries";
@@ -54,9 +52,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
     onCloseIssueDrawer,
     isIssueDrawerOpen: propIssueDrawerOpen,
     onMergeSuccess,
-    branches: propBranches,
-    onSelectBranch: propOnSelectBranch,
-    isSwitchingBranch: propIsSwitchingBranch,
+    branches = [],
+    onSelectBranch,
+    isSwitchingBranch = false,
   } = useStudio();
 
   const queryClient = useQueryClient();
@@ -129,20 +127,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
   const prIsClosed = prStatus === "closed";
 
   const isIssueDrawerOpen =
-    propIssueDrawerOpen !== undefined ? (propIssueDrawerOpen || isLocalIssueDrawerOpen) : isLocalIssueDrawerOpen;
+    propIssueDrawerOpen !== undefined ? propIssueDrawerOpen : isLocalIssueDrawerOpen;
 
   const issuesQuery = useStudioIssuesQuery(selectedRepo);
-  const branchesQuery = useRepoBranchesQuery(selectedRepo);
-  const updateBranchMutation = useUpdatePreviewBranchMutation();
-
-  const branches =
-    propBranches !== undefined
-      ? propBranches
-      : (branchesQuery.data?.branches || []);
-  const isSwitchingBranch =
-    propIsSwitchingBranch !== undefined
-      ? propIsSwitchingBranch
-      : updateBranchMutation.isPending;
 
   // Invalidate branches query cache on repository switch
   useEffect(() => {
@@ -232,24 +219,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
 
   const handleSelectBranch = async (targetBranch: string) => {
     setBranchSwitchError(null);
-    if (propOnSelectBranch) {
+    if (onSelectBranch) {
       try {
-        await propOnSelectBranch(targetBranch);
+        await onSelectBranch(targetBranch);
         setBranchRefreshKey((prev) => prev + 1);
       } catch (err: any) {
         setBranchSwitchError(err?.message || "Failed to switch preview branch");
         throw err;
       }
-      return;
-    }
-    if (!selectedRepo) return;
-    try {
-      await updateBranchMutation.mutateAsync({ repo: selectedRepo, branch: targetBranch });
-      setBranchRefreshKey((prev) => prev + 1);
-    } catch (err: any) {
-      setBranchSwitchError(err?.message || "Failed to switch preview branch");
-      console.error("Failed to switch preview branch:", err);
-      throw err;
     }
   };
 
@@ -429,10 +406,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ className = "" }) => {
           isSyncing={isSyncing}
           onSync={handleSync}
           isExecutingTurn={isExecutingTurn}
-          latestRollbackInfo={latestRollbackInfo}
-          onOpenRollback={handleOpenRollback}
-          isRollingBack={isRollingBack}
-          isLatestTurnMerged={isLatestTurnMerged}
         />
       </div>
 

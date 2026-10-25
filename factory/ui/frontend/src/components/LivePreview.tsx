@@ -34,10 +34,6 @@ export interface LivePreviewProps {
   isLaunching?: boolean;
   isSyncing?: boolean;
   onSync?: () => void;
-  onRollbackLastTurn?: () => void;
-  isRollingBack?: boolean;
-  isRollbackDisabled?: boolean;
-  rollbackDisabledReason?: string;
 }
 
 export const LivePreview: React.FC<LivePreviewProps> = ({
@@ -64,10 +60,6 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   isLaunching = false,
   isSyncing = false,
   onSync,
-  onRollbackLastTurn,
-  isRollingBack = false,
-  isRollbackDisabled = false,
-  rollbackDisabledReason,
 }) => {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -130,10 +122,6 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
         onRefresh={onRefresh}
         isSyncing={isSyncing}
         onSync={onSync}
-        onRollbackLastTurn={onRollbackLastTurn}
-        isRollingBack={isRollingBack}
-        isRollbackDisabled={isRollbackDisabled}
-        rollbackDisabledReason={rollbackDisabledReason}
         isLogsDrawerOpen={isLogsDrawerOpen}
         onToggleLogsDrawer={() => setIsLogsDrawerOpen((prev) => !prev)}
         logsCount={logs.length}

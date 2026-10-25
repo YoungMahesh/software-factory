@@ -1,5 +1,5 @@
 import type {
-  Repo, Milestone, Issue, Job, LaunchJobParams, PreviewState, GrillTurnResult,
+  Repo, Milestone, Issue, Job, PreviewState, GrillTurnResult,
   DraftADR, DbChatMessage, StudioDispatchParams, StudioDispatchResponse,
   PullRequest, MergePullRequestParams, MergePullRequestResponse,
   MarkPullRequestReadyResponse, RollbackTurnParams, RollbackTurnResponse,
@@ -93,18 +93,6 @@ export async function dispatchStudio(
   return res.json();
 }
 
-export async function launchJob(params: LaunchJobParams): Promise<Job> {
-  const res = await fetch("/api/jobs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Failed to launch job: ${res.statusText}`);
-  }
-  return res.json();
-}
 
 export interface SendStudioPromptParams {
   repo: string;

@@ -18,7 +18,6 @@ from factory.ui.registry import (
     preview_registry,
     PreviewStatus,
 )
-from factory.ui.tracker import update_local_markdown_issue_for_rollback
 
 router = APIRouter()
 
@@ -317,12 +316,6 @@ async def rollback_turn_endpoint(repo: str, request: Request, req: RollbackTurnR
             )
         except Exception as e:
             preview_reg.append_log(clean_repo, f"⚠️ [ROLLBACK] Issue tracker reopen notice: {e}\n", flush=True)
-
-    update_local_markdown_issue_for_rollback(
-        repo_name=clean_repo,
-        feature=target_branch.removeprefix("factory/") if target_branch.startswith("factory/") else None,
-        issue_number=issue_num,
-    )
 
     # 7. SQLite database persistence
     if target_msg is not None:

@@ -37,7 +37,6 @@ from factory.ui.github import (
     PullRequestMergeError,
     fetch_repo_branches,
     reopen_repo_issue_for_rollback,
-    update_local_markdown_issue_for_rollback,
 )
 from factory.ui.db import StudioDatabase
 from factory.ui.registry import (
@@ -239,66 +238,9 @@ class TestFastApiApp(unittest.TestCase):
         resp_404 = self.client.get("/api/repos/test3/issues/999")
         self.assertEqual(resp_404.status_code, 404)
 
-    def test_launch_job_validation(self):
-        # Missing both feature and issue
-        resp1 = self.client.post("/api/jobs", json={"repo": "test3", "feature": "", "issue": ""})
-        self.assertEqual(resp1.status_code, 400)
-
-        # Missing repo
-        resp2 = self.client.post("/api/jobs", json={"repo": "", "feature": "feat"})
-        self.assertEqual(resp2.status_code, 400)
-
-    @patch.object(JobRegistry, "start_job")
-    def test_launch_job_adhoc_issue_without_feature(self, mock_start_job):
-        payload = {
-            "repo": "test3",
-            "issue": "42",
-            "model": "deepseek-v4.1-flash",
-            "vm": False,
-        }
-        resp = self.client.post("/api/jobs", json=payload)
-        self.assertEqual(resp.status_code, 200)
-        job_data = resp.json()
-        self.assertEqual(job_data["repo"], "test3")
-        self.assertEqual(job_data["issue"], "42")
-        self.assertEqual(job_data["feature"], "issue-42")
-        mock_start_job.assert_called_once_with(job_data["id"])
-
-    @patch.object(JobRegistry, "start_job")
-    def test_launch_job_success(self, mock_start_job):
-        payload = {
-            "repo": "test3",
-            "feature": "slug-generator",
-            "issue": "01",
-            "model": "deepseek-v4.1-flash",
-            "vm": False,
-        }
-        resp = self.client.post("/api/jobs", json=payload)
-        self.assertEqual(resp.status_code, 200)
-        job_data = resp.json()
-        self.assertEqual(job_data["repo"], "test3")
-        self.assertEqual(job_data["feature"], "slug-generator")
-        self.assertEqual(job_data["status"], "QUEUED")
-        self.assertFalse(job_data["dev"])
-        mock_start_job.assert_called_once_with(job_data["id"])
-
-    @patch.object(JobRegistry, "start_job")
-    def test_launch_job_with_dev_preview(self, mock_start_job):
-        payload = {
-            "repo": "test3",
-            "feature": "slug-generator",
-            "issue": "01",
-            "model": "deepseek-v4.1-flash",
-            "vm": False,
-            "dev": True,
-        }
-        resp = self.client.post("/api/jobs", json=payload)
-        self.assertEqual(resp.status_code, 200)
-        job_data = resp.json()
-        self.assertEqual(job_data["repo"], "test3")
-        self.assertTrue(job_data["dev"])
-        self.assertEqual(job_data["preview_url"], "https://3000.mahesh0.dev")
-        mock_start_job.assert_called_once_with(job_data["id"])
+    def test_retired_post_api_jobs_returns_405(self):
+        resp = self.client.post("/api/jobs", json={"repo": "test3", "feature": "test"})
+        self.assertIn(resp.status_code, (404, 405))
 
     def test_cancel_job_endpoint(self):
         job = self.registry.create_job(repo="test3", feature="slug-gen")

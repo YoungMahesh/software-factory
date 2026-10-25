@@ -52,9 +52,6 @@ from factory.ui.github._prs import (
 from factory.ui.github._rollback import (
     reopen_repo_issue_for_rollback,
 )
-from factory.ui.tracker import (
-    update_local_markdown_issue_for_rollback,
-)
 
 __all__ = [
     "CANONICAL_TEMPLATE_ORG",
@@ -93,6 +90,5 @@ __all__ = [
     "strip_repo_owner",
     "synthesize_and_create_issue",
     "synthesize_ticket_content",
-    "update_local_markdown_issue_for_rollback",
     "validate_github_repo_name",
 ]
