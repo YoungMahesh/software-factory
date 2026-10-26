@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../api";
-import { Repo, PreviewState } from "../types";
+import { Repo, PreviewState, VisualQaTelemetry } from "../types";
 
 export const studioQueryKeys = {
   repos: ["studio", "repos"] as const,
@@ -12,6 +12,7 @@ export const studioQueryKeys = {
   pullRequests: (repo: string) => ["studio", "pullRequests", repo] as const,
   jobs: ["jobs"] as const,
   failedCommands: (jobId: string) => ["jobs", jobId, "failed-commands"] as const,
+  visualQa: (repo: string, branch?: string) => ["studio", "visualQa", repo, branch || ""] as const,
 };
 
 export function createStoppedPreviewState(prev: PreviewState): PreviewState {
@@ -276,6 +277,19 @@ export function useJobFailedCommandsQuery(jobId?: string | null) {
     queryKey: studioQueryKeys.failedCommands(jobId || ""),
     queryFn: () => api.fetchFailedCommands(jobId || ""),
     enabled: Boolean(jobId),
+  });
+}
+
+export function useVisualQaQuery(
+  repo: string,
+  branch?: string,
+  initialData?: VisualQaTelemetry
+) {
+  return useQuery({
+    queryKey: studioQueryKeys.visualQa(repo, branch),
+    queryFn: () => api.fetchVisualQa(repo, branch),
+    enabled: Boolean(repo),
+    initialData,
   });
 }
 

@@ -9,6 +9,7 @@ from factory.ui.routes.pulls import router as pulls_router
 from factory.ui.routes.repos import router as repos_router
 from factory.ui.routes.rollback import router as rollback_router
 from factory.ui.routes.terminal import router as terminal_router
+from factory.ui.routes.visual_qa import router as visual_qa_router
 
 __all__ = [
     "chat_router",
@@ -20,5 +21,6 @@ __all__ = [
     "repos_router",
     "rollback_router",
     "terminal_router",
+    "visual_qa_router",
 ]
 

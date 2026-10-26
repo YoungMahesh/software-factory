@@ -4,7 +4,7 @@ import type {
   PullRequest, MergePullRequestParams, MergePullRequestResponse,
   MarkPullRequestReadyResponse, RollbackTurnParams, RollbackTurnResponse,
   FailedCommand, RepoTreeResponse, RepoFileResponse, RepoBottlenecksResponse,
-  DiffScope, RepoDiffResponse,
+  DiffScope, RepoDiffResponse, VisualQaTelemetry,
 } from "./types";
 export * from "./types";
 
@@ -457,6 +457,17 @@ export async function fetchRepoDiff(
   return res.json();
 }
 
-
-
-
+export async function fetchVisualQa(
+  repo: string,
+  branch?: string
+): Promise<VisualQaTelemetry> {
+  const params = new URLSearchParams();
+  if (branch) params.set("branch", branch);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/visual-qa${qs}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch visual QA telemetry: ${res.statusText}`);
+  }
+  return res.json();
+}
