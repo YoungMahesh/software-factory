@@ -399,6 +399,34 @@ export async function runVisualQA(options?: VisualQaOptions): Promise<VisualQaRe
     summary,
   };
 
+  try {
+    const outputDir = path.join(artifactsDir, "visual-qa");
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      path.join(outputDir, "metadata.json"),
+      JSON.stringify(
+        {
+          passed,
+          status: passed ? "passed" : "failed",
+          cleanCanvas,
+          cleanCanvasDetails,
+          errors: browserErrors,
+          screenshots,
+          url,
+          durationMs,
+          summary,
+          captured_at: Date.now() / 1000,
+        },
+        null,
+        2
+      )
+    );
+  } catch {
+    // Ignore metadata write errors
+  }
+
   if (emitTelemetry) {
     emitTelemetryEvent(
       {

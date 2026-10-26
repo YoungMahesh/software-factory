@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  GitPullRequest,
   ExternalLink,
   CheckCircle2,
   GitMerge,
@@ -11,8 +10,18 @@ import {
 } from "lucide-react";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
-import { DeliveryGateData, PullRequest } from "../types";
-import { useStudioPullRequestQuery, useMergePullRequestMutation, useMarkPullRequestReadyMutation } from "../hooks/useStudioQueries";
+import { VisualQABadge } from "./VisualQABadge";
+import { VisualQAThumbnail } from "./VisualQAThumbnail";
+import { VisualQAModal } from "./VisualQAModal";
+import { DeliveryGateHeader } from "./DeliveryGateHeader";
+import { DeliveryGateConfirmation } from "./DeliveryGateConfirmation";
+import { DeliveryGateData, PullRequest, VisualQaTelemetry } from "../types";
+import {
+  useStudioPullRequestQuery,
+  useMergePullRequestMutation,
+  useMarkPullRequestReadyMutation,
+  useVisualQaQuery,
+} from "../hooks/useStudioQueries";
 import { getPullRequestStatus, getPullRequestBadgeConfig } from "../utils";
 
 export interface DeliveryGateCardProps {
@@ -37,6 +46,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   className = "",
 }) => {
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
+  const [isVqaModalOpen, setIsVqaModalOpen] = useState<boolean>(false);
+  const [selectedViewport, setSelectedViewport] = useState<"desktop" | "mobile">("desktop");
   const [mergeError, setMergeError] = useState<string | null>(null);
   const [markReadyError, setMarkReadyError] = useState<string | null>(null);
 
@@ -44,7 +55,6 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   const mergeMutation = useMergePullRequestMutation();
   const markReadyMutation = useMarkPullRequestReadyMutation();
 
-  // Find live PR from query cache if available for reactive updates
   const pullNumber =
     data.pull_number ||
     data.pull_request?.number ||
@@ -55,8 +65,11 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
   );
 
   const pr: PullRequest | undefined = livePR || data.pull_request;
+  const branchName = pr?.head_branch || data.branch;
 
-  // Determine current status
+  const visualQaQuery = useVisualQaQuery(repo, branchName, data.visual_qa);
+  const visualQa: VisualQaTelemetry | undefined = visualQaQuery.data ?? data.visual_qa;
+
   const status = getPullRequestStatus(pr, data);
   const isMerged = status === "merged";
   const hasConflict = status === "conflict";
@@ -75,7 +88,14 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       : data.test_verdict.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : "Deterministic Tests Passing";
 
-  // Resolved issues list
+  const hasVisualQaFailure = Boolean(
+    visualQa &&
+      (visualQa.passed === false ||
+        visualQa.status === "failed" ||
+        (visualQa.errors && visualQa.errors.length > 0) ||
+        visualQa.cleanCanvas === false)
+  );
+
   const resolvedIssues: string[] = (() => {
     if (data.resolved_issues && data.resolved_issues.length > 0) {
       return data.resolved_issues.map((i) => String(i));
@@ -144,6 +164,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
     isDraft ||
     activeJobRunning ||
     hasConflict ||
+    hasVisualQaFailure ||
     isMerged ||
     isClosed ||
     isReverted ||
@@ -159,49 +180,12 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
       } p-4 space-y-3.5 shadow-sm text-xs ${className}`}
     >
       {/* Header: Title & Badges */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <GitPullRequest className="w-4 h-4 text-coral shrink-0" />
-            <span className="font-semibold text-white text-sm">
-              {pr?.title || (pullNumber ? `Feature Pull Request #${pullNumber}` : "Feature Pull Request")}
-            </span>
-            {pullNumber ? (
-              <span className="text-slate-400 font-mono text-xs">#{pullNumber}</span>
-            ) : null}
-          </div>
-          {pr?.head_branch && (
-            <div className="text-[11px] font-mono text-slate-400 pl-6">
-              {pr.head_branch} <span className="text-slate-500">➔</span> main
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center space-x-2 shrink-0">
-          {isReverted && (
-            <Badge
-              data-testid="turn-reverted-badge"
-              variant="neutral"
-              className="bg-white/10 text-slate-400 border-white/10"
-            >
-              Reverted
-            </Badge>
-          )}
-          {getStatusBadge()}
-          {pr?.html_url && (
-            <a
-              data-testid="delivery-gate-gh-link"
-              href={pr.html_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-slate-400 hover:text-white transition-colors p-1"
-              title="View Pull Request on GitHub"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
-        </div>
-      </div>
+      <DeliveryGateHeader
+        pr={pr}
+        pullNumber={pullNumber}
+        isReverted={isReverted}
+        statusBadge={getStatusBadge()}
+      />
 
       {/* Resolved Work Items Checklist */}
       {resolvedIssues.length > 0 && (
@@ -223,22 +207,61 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
         </div>
       )}
 
-      {/* Verifier Test Verdict */}
-      <div
-        data-testid="delivery-gate-verifier-verdict"
-        className="flex items-center space-x-2 p-2 rounded-lg bg-cohere-black/70 border border-white/10 text-[11px] text-slate-300"
-      >
-        {isTestPassed ? (
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-        ) : (
-          <AlertTriangle className="w-4 h-4 text-coral shrink-0" />
-        )}
-        <span className="font-medium text-slate-200">{testVerdictTitle}</span>
-        <span className="text-slate-500">•</span>
-        <span className="text-slate-400">
-          {isTestPassed ? "Quality gate verified" : "Quality gate failed"}
-        </span>
+      {/* Verifier Test Verdict & Visual QA Badge */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-lg bg-cohere-black/70 border border-white/10 text-[11px] text-slate-300">
+        <div
+          data-testid="delivery-gate-verifier-verdict"
+          className="flex items-center space-x-2"
+        >
+          {isTestPassed ? (
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-coral shrink-0" />
+          )}
+          <span className="font-medium text-slate-200">{testVerdictTitle}</span>
+          <span className="text-slate-500">•</span>
+          <span className="text-slate-400">
+            {isTestPassed ? "Quality gate verified" : "Quality gate failed"}
+          </span>
+        </div>
+
+        <VisualQABadge
+          telemetry={visualQa}
+          isLoading={visualQaQuery.isLoading && !visualQa}
+        />
       </div>
+
+      {/* Screenshot Thumbnail with Desktop & Mobile Indicators */}
+      <VisualQAThumbnail
+        telemetry={visualQa}
+        onInspect={(vp) => {
+          setSelectedViewport(vp || "desktop");
+          setIsVqaModalOpen(true);
+        }}
+      />
+
+      {/* Visual QA Warning Telemetry Details if failed */}
+      {hasVisualQaFailure && (
+        <div
+          data-testid="visual-qa-error-telemetry"
+          className="p-3 rounded-lg bg-coral/10 border border-coral/30 space-y-1.5 text-xs text-coral"
+        >
+          <div className="flex items-center space-x-2 font-semibold text-coral">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Visual Verification Failed — Merge Blocked</span>
+          </div>
+          <div className="text-[11px] text-coral/90">
+            Fatal browser console errors or Clean Canvas violations detected during headless verification.
+          </div>
+          {visualQa?.errors && visualQa.errors.length > 0 && (
+            <ul className="list-disc pl-5 font-mono text-[11px] text-coral/90 space-y-0.5 max-h-32 overflow-y-auto">
+              {visualQa.errors.map((err, idx) => (
+                <li key={idx}>{err}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Conflict Warning */}
       {hasConflict && (
@@ -267,7 +290,7 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
         </div>
       )}
 
-      {/* Error Banner */}
+      {/* Error Banners */}
       {mergeError && (
         <div className="p-2.5 rounded-lg bg-coral/10 border border-coral/30 text-coral text-xs">
           {mergeError}
@@ -311,40 +334,12 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
             )}
           </div>
         ) : isConfirming ? (
-          <div className="p-3 rounded-lg bg-cohere-black/90 border border-white/10 space-y-2.5">
-            <div className="text-slate-200 font-medium text-xs">
-              Squash merge Feature Pull Request #{pullNumber} into main?
-            </div>
-            <div className="text-[11px] text-slate-400">
-              This will create a squash commit on <span className="font-mono text-slate-300">main</span>, delete the remote feature branch, and update the Live Preview.
-            </div>
-            <div className="flex items-center space-x-2 pt-1">
-              <Button
-                data-testid="btn-delivery-gate-confirm-merge"
-                type="button"
-                variant="inverted"
-                size="sm"
-                onClick={handleConfirmMerge}
-                isLoading={mergeMutation.isPending}
-                disabled={mergeMutation.isPending}
-                icon={<GitMerge className="w-3.5 h-3.5" />}
-                className="font-medium"
-              >
-                Confirm Squash Merge
-              </Button>
-              <Button
-                data-testid="btn-delivery-gate-cancel-merge"
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsConfirming(false)}
-                disabled={mergeMutation.isPending}
-                className="text-slate-300"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+          <DeliveryGateConfirmation
+            pullNumber={pullNumber}
+            isLoading={mergeMutation.isPending}
+            onConfirm={handleConfirmMerge}
+            onCancel={() => setIsConfirming(false)}
+          />
         ) : (
           <div className="flex items-center justify-between">
             <div className="text-[11px] text-slate-400">
@@ -358,6 +353,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                 <span>PR is currently in Draft</span>
               ) : hasConflict ? (
                 <span className="text-coral">Blocked by merge conflicts</span>
+              ) : hasVisualQaFailure ? (
+                <span className="text-coral">Blocked by Visual QA failures</span>
               ) : isClosed ? (
                 <span className="text-slate-400">PR is closed</span>
               ) : (
@@ -429,6 +426,8 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
                     ? "Cannot merge while PR is in Draft"
                     : hasConflict
                     ? "Cannot merge due to conflicts"
+                    : hasVisualQaFailure
+                    ? "Cannot merge: Visual QA verification failed"
                     : isClosed
                     ? "Cannot merge a closed pull request"
                     : isReverted
@@ -443,6 +442,15 @@ export const DeliveryGateCard: React.FC<DeliveryGateCardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Expandable High-Resolution Visual QA Modal */}
+      <VisualQAModal
+        isOpen={isVqaModalOpen}
+        onClose={() => setIsVqaModalOpen(false)}
+        repo={repo}
+        telemetry={visualQa}
+        initialViewport={selectedViewport}
+      />
     </div>
   );
 };

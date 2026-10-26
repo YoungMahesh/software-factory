@@ -10,6 +10,7 @@ launch.sh
 llm-response.md
 
 node_modules/
+node_modules
 .pytest_cache/
 *.db
 factory/ui/data/

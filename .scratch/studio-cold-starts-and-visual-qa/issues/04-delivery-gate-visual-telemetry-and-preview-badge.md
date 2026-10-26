@@ -5,11 +5,11 @@ Visual verification surfacing and screenshot inspection in Factory Studio, enabl
 
 **Blocked by:** 03: In-Sandbox Headless Visual QA and Console Crash Detection
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] REST API endpoint serves the latest captured visual QA screenshot and metadata for a repository and branch.
-- [ ] Delivery Gate Card displays a Visual QA status badge alongside deterministic test pass/fail results.
-- [ ] Delivery Gate Card renders a screenshot thumbnail with an indicator showing desktop and mobile capture status.
-- [ ] Clicking the thumbnail opens an expandable high-resolution preview modal displaying the captured UI screenshot before merging.
-- [ ] If visual verification failed with console errors, the card renders warning telemetry details and disables merge controls until resolved.
-- [ ] Automated backend tests verify the screenshot endpoint and frontend component tests verify card badge rendering, empty states, and modal expansion.
+- [x] REST API endpoint serves the latest captured visual QA screenshot and metadata for a repository and branch.
+- [x] Delivery Gate Card displays a Visual QA status badge alongside deterministic test pass/fail results.
+- [x] Delivery Gate Card renders a screenshot thumbnail with an indicator showing desktop and mobile capture status.
+- [x] Clicking the thumbnail opens an expandable high-resolution preview modal displaying the captured UI screenshot before merging.
+- [x] If visual verification failed with console errors, the card renders warning telemetry details and disables merge controls until resolved.
+- [x] Automated backend tests verify the screenshot endpoint and frontend component tests verify card badge rendering, empty states, and modal expansion.

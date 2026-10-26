@@ -108,6 +108,17 @@ export interface MergePullRequestResponse {
   preview_synced?: boolean;
 }
 
+export interface VisualQaTelemetry {
+  passed: boolean;
+  status: "passed" | "failed" | "pending" | string;
+  errors: string[];
+  desktop_url?: string | null;
+  mobile_url?: string | null;
+  captured_at?: number | null;
+  summary?: string;
+  cleanCanvas?: boolean;
+}
+
 export interface DeliveryGateData {
   phase?: "init" | "finalized" | string;
   pull_number?: number;
@@ -129,6 +140,7 @@ export interface DeliveryGateData {
   reverted?: boolean;
   reverted_at?: number;
   revert_commit?: string;
+  visual_qa?: VisualQaTelemetry;
 }
 
 export interface MarkPullRequestReadyResponse {
