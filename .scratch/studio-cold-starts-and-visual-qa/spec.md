@@ -1,7 +1,7 @@
 # Spec: Instant Cold Starts and Visual Multimodal QA for Factory Studio
 
-Status: ready-for-agent
-Triage: ready-for-agent
+Status: resolved
+Triage: resolved
 
 ## Problem Statement
 
