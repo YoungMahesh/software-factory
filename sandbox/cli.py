@@ -242,6 +242,11 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also install Herdr agent multiplexer (https://herdr.dev) into /usr/local/bin in the sandbox.",
     )
+    parser.add_argument(
+        "--pi",
+        action="store_true",
+        help="Also install Pi coding agent CLI (https://pi.dev) and configure OpenCode Go with DeepSeek V4.1 Flash in the sandbox.",
+    )
     return parser
 
 
@@ -274,6 +279,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.agy
             or args.t3
             or args.herdr
+            or args.pi
         ):
             parser.error("--snapshot cannot be used with launch configuration arguments.")
     else:

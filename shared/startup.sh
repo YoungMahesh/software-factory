@@ -501,10 +501,10 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ]; then
     if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
         if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-            echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, or --sops), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
+            echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, --pi, or --sops), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
             exit 1
         fi
 
@@ -521,6 +521,9 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
         fi
         if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
             setup_args+=("--opencode")
+        fi
+        if [ "${ENABLE_PI:-}" = "1" ]; then
+            setup_args+=("--pi")
         fi
 
         setup_status=0
@@ -641,6 +644,17 @@ if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
     fi
     echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
     nohup opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" > /tmp/opencode.log 2>&1 &
+fi
+
+if [ "${ENABLE_PI:-}" = "1" ]; then
+    if [ -f /root/.config/opencode/opencode.env ]; then
+        set -a
+        source /root/.config/opencode/opencode.env
+        set +a
+    fi
+    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
+        export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
+    fi
 fi
 
 if [ "${ENABLE_T3:-}" = "1" ]; then

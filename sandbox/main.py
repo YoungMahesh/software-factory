@@ -172,6 +172,7 @@ def run_sandbox_launch(
             react_native=args.react_native,
             t3=args.t3,
             herdr=args.herdr,
+            pi=args.pi,
         )
 
     if secrets_dir:
@@ -239,6 +240,9 @@ def run_sandbox_launch(
     if args.herdr:
         env["ENABLE_HERDR"] = "1"
 
+    if args.pi:
+        env["ENABLE_PI"] = "1"
+
     if browser_active:
         env["ENABLE_BROWSER"] = "1"
 
@@ -266,6 +270,8 @@ def run_sandbox_launch(
         features.append("SOPS")
     if args.herdr:
         features.append("Herdr")
+    if args.pi:
+        features.append("Pi")
     if browser_active:
         features.append("Browser")
 

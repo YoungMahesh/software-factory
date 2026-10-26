@@ -42,6 +42,10 @@ _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 An agent-aware terminal multiplexer and background session runtime (https://herdr.dev) pre-baked into `/usr/local/bin` via `--herdr`, enabling persistent agent workflows, process status tracking across panes, and remote attachment over SSH.
 _Avoid_: Terminal multiplexer, tmux clone, herdr daemon, herdr runner
 
+**Pi Coding Agent CLI**:
+A minimal, extensible terminal coding agent interface (https://pi.dev) installed into the sandbox user environment via `--pi` and configured with OpenCode Go and DeepSeek V4.1 Flash.
+_Avoid_: Pi agent, pi terminal, pi runner
+
 **Antigravity CLI**:
 Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
 _Avoid_: Gemini CLI, antigravity-ide
@@ -116,7 +120,7 @@ The authenticated session credential for the Antigravity CLI, encrypted with SOP
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
-Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`, `shared/antigravity-onboarding.json`) and mounted into sandboxes at runtime.
+Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`, `shared/antigravity-onboarding.json`, `shared/pi-settings.json`, `shared/pi-models.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
 **Sandbox Shell Aliases**:

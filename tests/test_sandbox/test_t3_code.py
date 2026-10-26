@@ -135,6 +135,7 @@ class TestT3CodeIntegration(unittest.TestCase):
             react_native=False,
             t3=True,
             herdr=False,
+            pi=False,
         )
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertIn(3775, call_kwargs["encrypted_ports"])

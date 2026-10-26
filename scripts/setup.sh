@@ -4,6 +4,7 @@ set -euo pipefail
 DECRYPT_MODAL=false
 DECRYPT_AGY=false
 DECRYPT_OPENCODE=false
+DECRYPT_PI=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -19,13 +20,17 @@ while [ "$#" -gt 0 ]; do
             DECRYPT_OPENCODE=true
             shift
             ;;
+        --pi)
+            DECRYPT_PI=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--modal] [--agy] [--opencode]"
+            echo "Usage: $0 [--modal] [--agy] [--opencode] [--pi]"
             exit 0
             ;;
         *)
             echo "ERROR: Unknown option: $1" >&2
-            echo "Usage: $0 [--modal] [--agy] [--opencode]" >&2
+            echo "Usage: $0 [--modal] [--agy] [--opencode] [--pi]" >&2
             exit 1
             ;;
     esac
@@ -45,7 +50,7 @@ if [ "$DECRYPT_AGY" = true ]; then
     chmod 600 ~/.gemini/antigravity-cli/antigravity-oauth-token
 fi
 
-if [ "$DECRYPT_OPENCODE" = true ]; then
+if [ "$DECRYPT_OPENCODE" = true ] || [ "$DECRYPT_PI" = true ]; then
     mkdir -p ~/.config/opencode
     sops decrypt "$SECRETS_DIR/opencode.env" > ~/.config/opencode/opencode.env
     chmod 600 ~/.config/opencode/opencode.env
@@ -58,4 +63,8 @@ if [ "$DECRYPT_OPENCODE" = true ]; then
         fi
         grep -qxF "export $line" ~/.bashrc 2>/dev/null || echo "export $line" >> ~/.bashrc
     done < ~/.config/opencode/opencode.env
+fi
+
+if [ "$DECRYPT_PI" = true ]; then
+    mkdir -p ~/.pi/agent
 fi

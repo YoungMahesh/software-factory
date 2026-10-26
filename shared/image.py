@@ -24,6 +24,10 @@ LOCAL_SETUP_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "setup
 REMOTE_SETUP_SCRIPT = "/root/scripts/setup.sh"
 LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
 REMOTE_OPENCODE_SECRET = "/root/secrets/opencode.env"
+LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
+REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
+LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
+REMOTE_PI_MODELS = "/root/.pi/agent/models.json"
 LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
@@ -170,6 +174,7 @@ def build_sandbox_image(
     react_native: bool = False,
     t3: bool = False,
     herdr: bool = False,
+    pi: bool = False,
 ) -> modal.Image:
     """Constructs the layered Modal image according to requested features."""
     image = base_image
@@ -259,6 +264,19 @@ def build_sandbox_image(
     if herdr:
         image = image.run_commands(
             "curl -fsSL https://herdr.dev/install.sh | env HERDR_INSTALL_DIR=/usr/local/bin sh"
+        )
+
+    if pi:
+        image = image.run_commands(
+            "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+        )
+        image = add_local_files_if_present(
+            image,
+            [
+                (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
+                (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
+                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+            ],
         )
 
     if path_prefixes:
