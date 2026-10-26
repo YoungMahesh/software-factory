@@ -1,0 +1,16 @@
+# 01: Automatic Filesystem Snapshot Capture on Serving State
+
+**What to build:**
+Automated root filesystem snapshot capture for Unified Studio Sandboxes once an application container successfully reaches the active serving state. Extends the database persistence layer to record snapshot metadata linked to each target repository, executes non-destructive container snapshotting in the background without interrupting active developer previews, registers the snapshot with a 30-day retention Time-To-Live, and logs the captured image identifier for future cold-start acceleration.
+
+**Blocked by:** None (can start immediately)
+
+**Status:** ready-for-agent
+
+- [ ] Database schema and persistence helpers store and retrieve snapshot image identifiers, commit SHAs, and capture timestamps for repositories.
+- [ ] Preview registry monitors active sandbox lifecycles and detects when a sandbox transitions into the active serving status.
+- [ ] Background snapshot worker asynchronously executes filesystem synchronization (`sync`) and invokes non-destructive snapshot capture with a 30-day retention period.
+- [ ] Active container remains running and serving traffic without termination or preview downtime during and after snapshot capture.
+- [ ] Captured snapshot image identifier and associated repository commit SHA are persisted in the database.
+- [ ] Snapshot capture errors do not crash the running preview or disrupt client connections.
+- [ ] Automated tests verify database persistence, lifecycle state triggers, and background snapshot worker dispatch.
