@@ -5,7 +5,7 @@ Instant cold-start sandbox provisioning that resumes existing Unified Studio San
 
 **Blocked by:** 01: Automatic Filesystem Snapshot Capture on Serving State
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Sandbox spawner queries the database for existing snapshot image identifiers for the target repository before falling back to full image building.
 - [ ] When a valid snapshot is found, the spawner instantiates the container directly from the snapshot image ID and passes the snapshot resumption signal.
