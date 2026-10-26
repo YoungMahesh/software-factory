@@ -15,6 +15,7 @@ export type TelemetryEventType =
   | "attempt_start"
   | "reviewer_rejection"
   | "delivery_gate"
+  | "visual_qa"
   | (string & {});
 
 export type TelemetryStage =
