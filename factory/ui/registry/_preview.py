@@ -27,6 +27,10 @@ from factory.ui.registry._models import (
     PreviewState,
     PreviewStatus,
 )
+from factory.ui.registry._snapshot import (
+    spawn_preview_sandbox_with_fallback,
+    trigger_background_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +85,13 @@ class PreviewRegistry:
             for p_dict in self.db.get_all_previews():
                 repo = p_dict["repo"]
                 if repo not in self._previews:
+                    status = PreviewStatus.IDLE
+                    stage = PreviewStage.IDLE
                     try:
                         status = PreviewStatus(p_dict.get("status", "IDLE"))
-                    except ValueError:
-                        status = PreviewStatus.IDLE
-                    try:
                         stage = PreviewStage(p_dict.get("stage", "IDLE"))
                     except ValueError:
-                        stage = PreviewStage.IDLE
+                        pass
                     self._previews[repo] = PreviewState(
                         repo=repo,
                         branch=p_dict.get("branch", "main"),
@@ -197,10 +200,7 @@ class PreviewRegistry:
         return None, None
 
     async def wait_for_serving(
-        self,
-        repo: str,
-        timeout: float = 60.0,
-        poll_interval: float = 0.05,
+        self, repo: str, timeout: float = 60.0, poll_interval: float = 0.05
     ) -> tuple[modal.Sandbox | None, str | None]:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -214,10 +214,7 @@ class PreviewRegistry:
         return self.get_active_sandbox(repo)
 
     def wait_for_serving_sync(
-        self,
-        repo: str,
-        timeout: float = 60.0,
-        poll_interval: float = 0.05,
+        self, repo: str, timeout: float = 60.0, poll_interval: float = 0.05
     ) -> tuple[modal.Sandbox | None, str | None]:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -393,7 +390,6 @@ class PreviewRegistry:
 
     def _trigger_background_snapshot(self, preview: PreviewState) -> threading.Thread | None:
         try:
-            from ._snapshot import trigger_background_snapshot
             return trigger_background_snapshot(preview, db=self.db)
         except Exception as e:
             logger.warning("Failed to trigger background snapshot for %s: %s", preview.repo, e)
@@ -433,7 +429,14 @@ class PreviewRegistry:
             self._broadcast(preview, {"event": "status", "status": PreviewStatus.PROVISIONING.value})
             self._broadcast(preview, {"event": "stage", "stage": PreviewStage.PROVISIONING.value})
 
-            sandbox, preview_url = create_preview_fn(PreviewSpawnConfig(repo=repo, branch=preview.branch, testing=True))
+            sandbox, preview_url = spawn_preview_sandbox_with_fallback(
+                create_preview_fn=create_preview_fn,
+                repo=repo,
+                branch=preview.branch,
+                db=self.db,
+                preview=preview,
+                on_log=lambda m: self.append_log(repo, m, flush=True),
+            )
 
             with self._lock:
                 if preview._stopped:

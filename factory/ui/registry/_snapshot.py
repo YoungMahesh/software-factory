@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any
 
+from factory.spawner import PreviewSpawnConfig
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SNAPSHOT_TTL_SECONDS: int = 30 * 86400  # 30 days
@@ -157,3 +159,55 @@ def trigger_background_snapshot(
     preview._snapshot_thread = thread
     thread.start()
     return thread
+
+
+def resolve_snapshot_image_id(db: Any, repo: str, preview: Any = None) -> str | None:
+    """Checks DB and preview state for an existing snapshot image ID."""
+    clean_repo = repo.strip()
+    if db is not None:
+        try:
+            meta = db.get_snapshot_metadata(clean_repo)
+            if meta and meta.get("snapshot_image_id"):
+                return meta["snapshot_image_id"]
+        except Exception as e:
+            logger.warning("Failed to query snapshot metadata for %s: %s", clean_repo, e)
+    if preview is not None:
+        return getattr(preview, "snapshot_image_id", None)
+    return None
+
+
+def spawn_preview_sandbox_with_fallback(
+    create_preview_fn: Any,
+    repo: str,
+    branch: str,
+    db: Any = None,
+    preview: Any = None,
+    on_log: Any = None,
+) -> tuple[Any, str]:
+    """Attempts fast-path snapshot sandbox instantiation with graceful fallback to base image build."""
+    clean_repo = repo.strip()
+    snapshot_id = resolve_snapshot_image_id(db, clean_repo, preview)
+
+    if snapshot_id:
+        try:
+            if on_log:
+                on_log(f"⚡ [PREVIEW] Fast-path cold start: attempting snapshot resumption from {snapshot_id}...\n")
+            logger.info("Attempting fast-path preview launch from snapshot %s for %s", snapshot_id, clean_repo)
+            config = PreviewSpawnConfig(
+                repo=clean_repo,
+                branch=branch,
+                testing=True,
+                from_snapshot=snapshot_id,
+                snapshot_resume=True,
+            )
+            return create_preview_fn(config)
+        except Exception as snap_err:
+            msg = f"⚠️ [PREVIEW] Snapshot resumption failed ({snap_err}); falling back to base image build...\n"
+            if on_log:
+                on_log(msg)
+            logger.warning("Snapshot resumption failed for %s (image %s): %s; falling back to clean build", clean_repo, snapshot_id, snap_err)
+
+    if on_log:
+        on_log(f"🔨 [PREVIEW] Building base image and provisioning dedicated preview sandbox for {clean_repo} ({branch})...\n")
+    config = PreviewSpawnConfig(repo=clean_repo, branch=branch, testing=True)
+    return create_preview_fn(config)
