@@ -17,6 +17,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: ^1.1.0
         version: 1.1.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(ws@8.22.0)
+      playwright-core:
+        specifier: ^1.64.1
+        version: 1.64.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.4
@@ -709,6 +712,11 @@ packages:
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
+
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
@@ -1514,6 +1522,8 @@ snapshots:
   partial-json@0.1.7: {}
 
   path-key@3.1.1: {}
+
+  playwright-core@1.64.1: {}
 
   proper-lockfile@4.1.2:
     dependencies:
