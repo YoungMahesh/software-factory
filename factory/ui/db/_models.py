@@ -25,6 +25,7 @@ def _row_to_job_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def _row_to_preview_dict(row: sqlite3.Row) -> dict[str, Any]:
+    keys = row.keys() if hasattr(row, "keys") else ()
     return {
         "repo": row["repo"],
         "branch": row["branch"],
@@ -32,4 +33,7 @@ def _row_to_preview_dict(row: sqlite3.Row) -> dict[str, Any]:
         "status": row["status"],
         "stage": row["stage"],
         "updated_at": row["updated_at"],
+        "snapshot_image_id": row["snapshot_image_id"] if "snapshot_image_id" in keys else None,
+        "snapshot_commit_sha": row["snapshot_commit_sha"] if "snapshot_commit_sha" in keys else None,
+        "snapshot_captured_at": row["snapshot_captured_at"] if "snapshot_captured_at" in keys else None,
     }

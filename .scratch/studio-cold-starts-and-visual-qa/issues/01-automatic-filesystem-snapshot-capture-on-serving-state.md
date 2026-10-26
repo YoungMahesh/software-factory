@@ -5,12 +5,12 @@ Automated root filesystem snapshot capture for Unified Studio Sandboxes once an 
 
 **Blocked by:** None (can start immediately)
 
-**Status:** claimed
+**Status:** completed
 
-- [ ] Database schema and persistence helpers store and retrieve snapshot image identifiers, commit SHAs, and capture timestamps for repositories.
-- [ ] Preview registry monitors active sandbox lifecycles and detects when a sandbox transitions into the active serving status.
-- [ ] Background snapshot worker asynchronously executes filesystem synchronization (`sync`) and invokes non-destructive snapshot capture with a 30-day retention period.
-- [ ] Active container remains running and serving traffic without termination or preview downtime during and after snapshot capture.
-- [ ] Captured snapshot image identifier and associated repository commit SHA are persisted in the database.
-- [ ] Snapshot capture errors do not crash the running preview or disrupt client connections.
-- [ ] Automated tests verify database persistence, lifecycle state triggers, and background snapshot worker dispatch.
+- [x] Database schema and persistence helpers store and retrieve snapshot image identifiers, commit SHAs, and capture timestamps for repositories.
+- [x] Preview registry monitors active sandbox lifecycles and detects when a sandbox transitions into the active serving status.
+- [x] Background snapshot worker asynchronously executes filesystem synchronization (`sync`) and invokes non-destructive snapshot capture with a 30-day retention period.
+- [x] Active container remains running and serving traffic without termination or preview downtime during and after snapshot capture.
+- [x] Captured snapshot image identifier and associated repository commit SHA are persisted in the database.
+- [x] Snapshot capture errors do not crash the running preview or disrupt client connections.
+- [x] Automated tests verify database persistence, lifecycle state triggers, and background snapshot worker dispatch.

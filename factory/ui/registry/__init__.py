@@ -29,9 +29,15 @@ from factory.ui.registry._preview import (
     preview_registry,
     resolve_active_preview_branch,
 )
+from factory.ui.registry._snapshot import (
+    DEFAULT_SNAPSHOT_TTL_SECONDS,
+    capture_snapshot_for_preview,
+    trigger_background_snapshot,
+)
 
 __all__ = [
     "DEFAULT_PREVIEW_URL",
+    "DEFAULT_SNAPSHOT_TTL_SECONDS",
     "FactoryJob",
     "JobRegistry",
     "JobStage",
@@ -44,10 +50,12 @@ __all__ = [
     "PreviewState",
     "PreviewStatus",
     "STAGE_PATTERNS",
+    "capture_snapshot_for_preview",
     "create_preview_sandbox",
     "fetch_repo_issues",
     "fetch_repo_milestones",
     "job_registry",
     "preview_registry",
     "resolve_active_preview_branch",
+    "trigger_background_snapshot",
 ]

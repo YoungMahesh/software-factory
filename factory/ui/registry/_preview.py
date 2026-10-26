@@ -95,6 +95,9 @@ class PreviewRegistry:
                         preview_url=p_dict.get("preview_url"),
                         status=status,
                         stage=stage,
+                        snapshot_image_id=p_dict.get("snapshot_image_id"),
+                        snapshot_commit_sha=p_dict.get("snapshot_commit_sha"),
+                        snapshot_captured_at=p_dict.get("snapshot_captured_at"),
                         created_at=p_dict.get("updated_at", time.time()),
                     )
 
@@ -385,7 +388,16 @@ class PreviewRegistry:
             if stage == PreviewStage.SERVING:
                 preview.status = PreviewStatus.SERVING
                 self._broadcast(preview, {"event": "status", "status": PreviewStatus.SERVING.value, "preview_url": preview.preview_url})
+                self._trigger_background_snapshot(preview)
             self._persist_preview(preview)
+
+    def _trigger_background_snapshot(self, preview: PreviewState) -> threading.Thread | None:
+        try:
+            from ._snapshot import trigger_background_snapshot
+            return trigger_background_snapshot(preview, db=self.db)
+        except Exception as e:
+            logger.warning("Failed to trigger background snapshot for %s: %s", preview.repo, e)
+            return None
 
     def append_log(self, repo: str, line: str, flush: bool = False) -> None:
         with self._lock:
