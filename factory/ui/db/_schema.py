@@ -95,7 +95,10 @@ SCHEMA_STATEMENTS = [
         preview_url TEXT,
         status TEXT NOT NULL,
         stage TEXT NOT NULL,
-        updated_at REAL NOT NULL
+        updated_at REAL NOT NULL,
+        snapshot_image_id TEXT,
+        snapshot_commit_sha TEXT,
+        snapshot_captured_at REAL
     );
     """,
     """
@@ -109,3 +112,21 @@ def init_db_schema(cursor: sqlite3.Cursor) -> None:
     """Executes all schema creation statements on the given database cursor."""
     for stmt in SCHEMA_STATEMENTS:
         cursor.execute(stmt)
+    _ensure_preview_snapshot_columns(cursor)
+
+
+def _ensure_preview_snapshot_columns(cursor: sqlite3.Cursor) -> None:
+    """Adds snapshot metadata columns to previews table if not present (migration)."""
+    try:
+        cursor.execute("PRAGMA table_info(previews);")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        columns = [
+            ("snapshot_image_id", "TEXT"),
+            ("snapshot_commit_sha", "TEXT"),
+            ("snapshot_captured_at", "REAL"),
+        ]
+        for col_name, col_type in columns:
+            if col_name not in existing_cols:
+                cursor.execute(f"ALTER TABLE previews ADD COLUMN {col_name} {col_type};")
+    except Exception:
+        pass
