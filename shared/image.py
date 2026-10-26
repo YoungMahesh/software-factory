@@ -169,6 +169,7 @@ def build_sandbox_image(
     modal_tooling: bool = False,
     react_native: bool = False,
     t3: bool = False,
+    herdr: bool = False,
 ) -> modal.Image:
     """Constructs the layered Modal image according to requested features."""
     image = base_image
@@ -253,6 +254,11 @@ def build_sandbox_image(
             "mkdir -p /opt/t3",
             f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
             "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+        )
+
+    if herdr:
+        image = image.run_commands(
+            "curl -fsSL https://herdr.dev/install.sh | env HERDR_INSTALL_DIR=/usr/local/bin sh"
         )
 
     if path_prefixes:

@@ -38,6 +38,10 @@ _Avoid_: OpenCode IDE, code server
 A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents (Antigravity, OpenCode) across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
 _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 
+**Herdr Multiplexer**:
+An agent-aware terminal multiplexer and background session runtime (https://herdr.dev) pre-baked into `/usr/local/bin` via `--herdr`, enabling persistent agent workflows, process status tracking across panes, and remote attachment over SSH.
+_Avoid_: Terminal multiplexer, tmux clone, herdr daemon, herdr runner
+
 **Antigravity CLI**:
 Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
 _Avoid_: Gemini CLI, antigravity-ide

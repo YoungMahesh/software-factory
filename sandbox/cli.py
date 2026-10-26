@@ -237,6 +237,11 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Retain SOPS age private key and credentials in ~/.config/sops for interactive debugging.",
     )
+    parser.add_argument(
+        "--herdr",
+        action="store_true",
+        help="Also install Herdr agent multiplexer (https://herdr.dev) into /usr/local/bin in the sandbox.",
+    )
     return parser
 
 
@@ -268,6 +273,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.browser
             or args.agy
             or args.t3
+            or args.herdr
         ):
             parser.error("--snapshot cannot be used with launch configuration arguments.")
     else:

@@ -337,6 +337,9 @@ fi
 if [ "${ENABLE_T3:-}" = "1" ]; then
     grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
 fi
+if [ "${ENABLE_HERDR:-}" = "1" ]; then
+    grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+fi
 
 if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
     # Increase inotify file watch limit for React Native / Expo bundler

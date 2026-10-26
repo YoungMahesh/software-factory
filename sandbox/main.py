@@ -171,6 +171,7 @@ def run_sandbox_launch(
             modal_tooling=args.modal,
             react_native=args.react_native,
             t3=args.t3,
+            herdr=args.herdr,
         )
 
     if secrets_dir:
@@ -235,6 +236,9 @@ def run_sandbox_launch(
     if args.sops:
         env["ENABLE_SOPS"] = "1"
 
+    if args.herdr:
+        env["ENABLE_HERDR"] = "1"
+
     if browser_active:
         env["ENABLE_BROWSER"] = "1"
 
@@ -260,6 +264,8 @@ def run_sandbox_launch(
         features.append("Modal")
     if args.sops:
         features.append("SOPS")
+    if args.herdr:
+        features.append("Herdr")
     if browser_active:
         features.append("Browser")
 
