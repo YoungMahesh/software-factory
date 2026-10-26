@@ -79,34 +79,19 @@ def _find_screenshot_file(
         if candidate_file.is_file():
             return candidate_file
 
-    clean_repo = strip_repo_owner(repo)
-    with getattr(registry, "_lock", None) or dummy_lock:
-        jobs = getattr(registry, "_jobs", {})
-        for job in reversed(list(jobs.values())):
-            if strip_repo_owner(getattr(job, "repo", "")) == clean_repo:
-                for event in reversed(getattr(job, "events", [])):
-                    if isinstance(event, dict) and event.get("type") == "visual_qa":
-                        data = event.get("data", {})
-                        screenshots = data.get("screenshots") or {}
-                        vp_key = "desktop" if "desk" in norm_viewport else "mobile"
-                        shot_path_str = screenshots.get(vp_key)
-                        if shot_path_str:
-                            shot_path = Path(shot_path_str)
-                            if shot_path.is_file():
-                                return shot_path
+    if hasattr(registry, "get_latest_visual_qa_event"):
+        event = registry.get_latest_visual_qa_event(repo, branch=branch)
+        if event:
+            data = event.get("data", {})
+            screenshots = data.get("screenshots") or {}
+            vp_key = "desktop" if "desk" in norm_viewport else "mobile"
+            shot_path_str = screenshots.get(vp_key)
+            if shot_path_str:
+                shot_path = Path(shot_path_str)
+                if shot_path.is_file():
+                    return shot_path
 
     return None
-
-
-class _DummyLock:
-    def __enter__(self):
-        pass
-
-    def __exit__(self, *args):
-        pass
-
-
-dummy_lock = _DummyLock()
 
 
 @router.get("/api/studio/repos/{repo}/visual-qa", response_model=VisualQaTelemetryResponse)
@@ -174,33 +159,29 @@ async def get_visual_qa_telemetry(
             )
 
     # 2. Check JobRegistry events for recorded telemetry
-    clean_repo = strip_repo_owner(repo)
-    with getattr(registry, "_lock", None) or dummy_lock:
-        jobs = getattr(registry, "_jobs", {})
-        for job in reversed(list(jobs.values())):
-            if strip_repo_owner(getattr(job, "repo", "")) == clean_repo:
-                for event in reversed(getattr(job, "events", [])):
-                    if isinstance(event, dict) and event.get("type") == "visual_qa":
-                        data = event.get("data", {})
-                        passed = bool(data.get("passed", False))
-                        status = "passed" if passed else "failed"
-                        raw_errors = data.get("errors", [])
-                        errors = [e.get("message", str(e)) if isinstance(e, dict) else str(e) for e in raw_errors]
-                        captured_at = event.get("timestamp") or getattr(job, "ended_at", None) or getattr(job, "created_at", None)
+    if hasattr(registry, "get_latest_visual_qa_event"):
+        event = registry.get_latest_visual_qa_event(repo, branch=branch)
+        if event:
+            data = event.get("data", {})
+            passed = bool(data.get("passed", False))
+            status = "passed" if passed else "failed"
+            raw_errors = data.get("errors", [])
+            errors = [e.get("message", str(e)) if isinstance(e, dict) else str(e) for e in raw_errors]
+            captured_at = event.get("timestamp")
 
-                        shots = data.get("screenshots") or {}
-                        has_desktop = bool(shots.get("desktop"))
-                        has_mobile = bool(shots.get("mobile"))
-                        desktop_url, mobile_url = _make_urls(has_desktop, has_mobile)
+            shots = data.get("screenshots") or {}
+            has_desktop = bool(shots.get("desktop"))
+            has_mobile = bool(shots.get("mobile"))
+            desktop_url, mobile_url = _make_urls(has_desktop, has_mobile)
 
-                        return VisualQaTelemetryResponse(
-                            passed=passed,
-                            status=status,
-                            errors=errors,
-                            desktop_url=desktop_url,
-                            mobile_url=mobile_url,
-                            captured_at=float(captured_at) if captured_at is not None else None,
-                        )
+            return VisualQaTelemetryResponse(
+                passed=passed,
+                status=status,
+                errors=errors,
+                desktop_url=desktop_url,
+                mobile_url=mobile_url,
+                captured_at=float(captured_at) if captured_at is not None else None,
+            )
 
     # 3. Default pending state
     return VisualQaTelemetryResponse(

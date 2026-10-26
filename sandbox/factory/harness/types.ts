@@ -88,4 +88,5 @@ export interface ReviewerOptions extends StageAgentCommonOptions {
   diff?: string;
   contextContent?: string;
   adrsContent?: string;
+  visualSummary?: string;
 }

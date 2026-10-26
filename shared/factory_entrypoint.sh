@@ -390,7 +390,7 @@ if [ "${SNAPSHOT_RESUME:-0}" = "1" ]; then
             echo "⚠️ Failed to fetch or checkout ${BRANCH_NAME} during fast-path resumption; falling back to clean init..." >&2
         fi
     else
-        echo "⚠️ Target directory ${TARGET_DIR} is not a valid git repository; falling back to clean init..." >&2
+        echo "⚠️ Target Project Workspace ${TARGET_DIR} is not a valid git repository; falling back to clean init..." >&2
     fi
 fi
 

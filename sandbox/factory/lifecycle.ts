@@ -312,6 +312,30 @@ export async function runTicketLifecycle(
       }
     }
 
+    // Format Visual QA evidence into context and visual summary for Reviewer Agent
+    let reviewerContext = contextContent;
+    let visualSummary: string | undefined = undefined;
+    if (lastVisualQa && lastVisualQa.passed) {
+      const vSummaryParts: string[] = [
+        "### Visual QA Verification Evidence",
+        "- Status: PASSED (Clean Canvas Invariant verified, 0 runtime errors)",
+        `- Target URL: ${lastVisualQa.url}`,
+      ];
+      if (lastVisualQa.screenshots?.desktop) {
+        vSummaryParts.push(`- Desktop Screenshot: ${lastVisualQa.screenshots.desktop}`);
+      }
+      if (lastVisualQa.screenshots?.mobile) {
+        vSummaryParts.push(`- Mobile Screenshot: ${lastVisualQa.screenshots.mobile}`);
+      }
+      if (lastVisualQa.summary) {
+        vSummaryParts.push(`- Summary: ${lastVisualQa.summary}`);
+      }
+      visualSummary = vSummaryParts.join("\n");
+      reviewerContext = reviewerContext
+        ? `${reviewerContext}\n\n${visualSummary}`
+        : visualSummary;
+    }
+
     let verdict: ReviewVerdict;
     try {
       const reviewResult = await reviewerRunner({
@@ -319,7 +343,8 @@ export async function runTicketLifecycle(
         ticket,
         plan,
         diff: gitDiff,
-        contextContent,
+        contextContent: reviewerContext,
+        visualSummary,
         adrsContent,
         provider: options.provider,
         model: options.model,

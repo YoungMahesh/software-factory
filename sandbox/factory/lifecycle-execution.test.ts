@@ -304,6 +304,7 @@ test("runTicketLifecycle: self-corrects when visual QA fails on attempt 0 and pa
     let coderAttempts = 0;
     const receivedDiagnostics: (string | undefined)[] = [];
     let vqaAttempts = 0;
+    let reviewerOptionsReceived: any = null;
 
     const result = await runTicketLifecycle({
       workspaceDir: repoDir,
@@ -357,7 +358,10 @@ test("runTicketLifecycle: self-corrects when visual QA fails on attempt 0 and pa
           summary: "Visual QA passed: Clean Canvas verified.",
         };
       },
-      reviewerRunner: async () => ({ verdict: mockPassingReview, messages: [] }),
+      reviewerRunner: async (opts: any) => {
+        reviewerOptionsReceived = opts;
+        return { verdict: mockPassingReview, messages: [] };
+      },
     });
 
     assert.equal(result.status, "resolved");
@@ -366,6 +370,13 @@ test("runTicketLifecycle: self-corrects when visual QA fails on attempt 0 and pa
     assert.equal(vqaAttempts, 2);
     assert.ok(result.visualQa);
     assert.equal(result.visualQa.passed, true);
+
+    // Reviewer receives Visual QA evidence and screenshot paths
+    assert.ok(reviewerOptionsReceived);
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("Visual QA Verification Evidence"));
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("/tmp/desk.png"));
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("/tmp/mob.png"));
+    assert.ok(reviewerOptionsReceived.visualSummary?.includes("/tmp/desk.png"));
 
     // Coder on attempt 1 must have received Visual QA failure diagnostics
     assert.equal(receivedDiagnostics[0], undefined);

@@ -262,6 +262,9 @@ export async function runReviewerAgent(options: ReviewerOptions): Promise<{
   if (options.adrsContent) {
     promptParts.push("# Architectural Decision Records (docs/adr/)", options.adrsContent);
   }
+  if (options.visualSummary) {
+    promptParts.push("# Visual QA Evidence", options.visualSummary);
+  }
 
   if (options.diff) {
     promptParts.push("# Git Diff", options.diff);

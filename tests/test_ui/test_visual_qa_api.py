@@ -164,6 +164,74 @@ class TestVisualQaApi(unittest.TestCase):
         self.assertEqual(data["status"], "passed")
         self.assertEqual(data["captured_at"], 1729900333.0)
 
+    def test_visual_qa_telemetry_branch_filtering_from_job_events(self):
+        """Filters job events by target branch when branch parameter is provided."""
+        job_feat_a = FactoryJob(
+            id="job-vqa-feat-a",
+            repo="my-app",
+            feature="feat-a",
+            issue="1",
+            model="default",
+            vm=False,
+            status=JobStatus.SUCCESS,
+        )
+        job_feat_a.events.append({
+            "type": "visual_qa",
+            "stage": "VERIFIER",
+            "data": {
+                "passed": True,
+                "cleanCanvas": True,
+                "errors": [],
+                "screenshots": {"desktop": "/tmp/nonexistent-a.png"},
+                "summary": "Visual QA passed on feat-a",
+            },
+            "timestamp": 1729900100.0,
+        })
+
+        job_feat_b = FactoryJob(
+            id="job-vqa-feat-b",
+            repo="my-app",
+            feature="feat-b",
+            issue="2",
+            model="default",
+            vm=False,
+            status=JobStatus.SUCCESS,
+        )
+        job_feat_b.events.append({
+            "type": "visual_qa",
+            "stage": "VERIFIER",
+            "data": {
+                "passed": False,
+                "cleanCanvas": False,
+                "errors": ["Clean Canvas failed on feat-b"],
+                "screenshots": {},
+                "summary": "Visual QA failed on feat-b",
+            },
+            "timestamp": 1729900200.0,
+        })
+
+        self.registry._jobs[job_feat_a.id] = job_feat_a
+        self.registry._jobs[job_feat_b.id] = job_feat_b
+
+        # Query feat-a: returns job_feat_a event
+        resp_a = self.client.get("/api/studio/repos/my-app/visual-qa?branch=factory/feat-a")
+        self.assertEqual(resp_a.status_code, 200)
+        data_a = resp_a.json()
+        self.assertTrue(data_a["passed"])
+        self.assertEqual(data_a["captured_at"], 1729900100.0)
+
+        # Query feat-b: returns job_feat_b event
+        resp_b = self.client.get("/api/studio/repos/my-app/visual-qa?branch=feat-b")
+        self.assertEqual(resp_b.status_code, 200)
+        data_b = resp_b.json()
+        self.assertFalse(data_b["passed"])
+        self.assertEqual(data_b["captured_at"], 1729900200.0)
+
+        # Query nonexistent branch: returns pending
+        resp_c = self.client.get("/api/studio/repos/my-app/visual-qa?branch=feat-nonexistent")
+        self.assertEqual(resp_c.status_code, 200)
+        self.assertEqual(resp_c.json()["status"], "pending")
+
     def test_screenshot_endpoint_serves_png(self):
         """Serves PNG image with image/png media type."""
         vqa_dir = Path(self.temp_dir) / "visual-qa"
