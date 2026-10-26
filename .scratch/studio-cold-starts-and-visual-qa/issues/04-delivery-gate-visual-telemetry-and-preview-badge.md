@@ -5,7 +5,7 @@ Visual verification surfacing and screenshot inspection in Factory Studio, enabl
 
 **Blocked by:** 03: In-Sandbox Headless Visual QA and Console Crash Detection
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] REST API endpoint serves the latest captured visual QA screenshot and metadata for a repository and branch.
 - [ ] Delivery Gate Card displays a Visual QA status badge alongside deterministic test pass/fail results.
