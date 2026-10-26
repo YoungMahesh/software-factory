@@ -68,6 +68,7 @@ from factory.ui.routes.rollback import (
     router as rollback_router,
 )
 from factory.ui.routes.terminal import router as terminal_router
+from factory.ui.routes.visual_qa import router as visual_qa_router
 
 STATIC_DIST_DIR = Path(__file__).resolve().parent / "static" / "dist"
 
@@ -175,5 +176,6 @@ def create_app(
     app.include_router(files_router)
     app.include_router(diffs_router)
     app.include_router(terminal_router)
+    app.include_router(visual_qa_router)
 
     return app

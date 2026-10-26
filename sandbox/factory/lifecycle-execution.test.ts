@@ -294,3 +294,96 @@ test("runTicketLifecycle: marks ready-for-human and commits diagnostics when max
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+test("runTicketLifecycle: self-corrects when visual QA fails on attempt 0 and passes on retry 1", async () => {
+  const { repoDir, ticket } = setupMockWorkspace("visual-qa-self-correct");
+
+  try {
+    ensureFeatureBranch({ workspaceDir: repoDir, featureSlug: "visual-qa-self-correct" });
+
+    let coderAttempts = 0;
+    const receivedDiagnostics: (string | undefined)[] = [];
+    let vqaAttempts = 0;
+    let reviewerOptionsReceived: any = null;
+
+    const result = await runTicketLifecycle({
+      workspaceDir: repoDir,
+      featureSlug: "visual-qa-self-correct",
+      ticket,
+      push: false,
+      plannerRunner: async () => ({ plan: mockPlan, messages: [] }),
+      coderRunner: async (opts) => {
+        coderAttempts++;
+        receivedDiagnostics.push(opts.diagnostics);
+        fs.writeFileSync(path.join(repoDir, "app.js"), `v${coderAttempts}`, "utf-8");
+        return { summary: "Implemented fix", messages: [] };
+      },
+      verifierRunner: async () => ({
+        passed: true,
+        totalCommands: 1,
+        passedCommands: 1,
+        failedCommands: 0,
+        results: [],
+        summary: "### Verification Summary: PASSED",
+        durationMs: 10,
+      }),
+      visualQaRunner: async () => {
+        vqaAttempts++;
+        if (vqaAttempts === 1) {
+          return {
+            passed: false,
+            url: "http://127.0.0.1:3000",
+            durationMs: 50,
+            cleanCanvas: false,
+            cleanCanvasDetails: { selector: "#root", width: 0, height: 0, hasRenderedMarkup: false },
+            errors: [
+              {
+                type: "pageerror",
+                message: "ReferenceError: activeSection is not defined",
+                stack: "ReferenceError: activeSection is not defined\n    at App (http://127.0.0.1:3000/src/App.tsx:15:3)",
+                timestamp: Date.now(),
+              },
+            ],
+            summary: "Clean Canvas Invariant failed and 1 fatal browser error detected.",
+          };
+        }
+        return {
+          passed: true,
+          url: "http://127.0.0.1:3000",
+          durationMs: 40,
+          cleanCanvas: true,
+          cleanCanvasDetails: { selector: "#root", width: 1280, height: 800, hasRenderedMarkup: true },
+          errors: [],
+          screenshots: { desktop: "/tmp/desk.png", mobile: "/tmp/mob.png" },
+          summary: "Visual QA passed: Clean Canvas verified.",
+        };
+      },
+      reviewerRunner: async (opts: any) => {
+        reviewerOptionsReceived = opts;
+        return { verdict: mockPassingReview, messages: [] };
+      },
+    });
+
+    assert.equal(result.status, "resolved");
+    assert.equal(result.retriesUsed, 1);
+    assert.equal(coderAttempts, 2);
+    assert.equal(vqaAttempts, 2);
+    assert.ok(result.visualQa);
+    assert.equal(result.visualQa.passed, true);
+
+    // Reviewer receives Visual QA evidence and screenshot paths
+    assert.ok(reviewerOptionsReceived);
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("Visual QA Verification Evidence"));
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("/tmp/desk.png"));
+    assert.ok(reviewerOptionsReceived.contextContent?.includes("/tmp/mob.png"));
+    assert.ok(reviewerOptionsReceived.visualSummary?.includes("/tmp/desk.png"));
+
+    // Coder on attempt 1 must have received Visual QA failure diagnostics
+    assert.equal(receivedDiagnostics[0], undefined);
+    assert.ok(receivedDiagnostics[1]?.includes("Visual QA Verification: FAILED"));
+    assert.ok(receivedDiagnostics[1]?.includes("Clean Canvas Invariant Violated"));
+    assert.ok(receivedDiagnostics[1]?.includes("ReferenceError: activeSection is not defined"));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

@@ -17,6 +17,7 @@ import {
   runReviewerAgent,
 } from "./harness.ts";
 import { verifyWorkspace } from "./verifier.ts";
+import { type runVisualQA } from "./visual-qa.ts";
 import { resolveIssueTracker } from "./tracker/factory.ts";
 import type { IssueTracker, TrackerType } from "./tracker/types.ts";
 import { emitStageEvent, emitTelemetryEvent, emitDeliveryGateEvent } from "./events.ts";
@@ -37,6 +38,8 @@ export interface PipelineOptions {
   coderRunner?: typeof runCoderAgent;
   verifierRunner?: typeof verifyWorkspace;
   reviewerRunner?: typeof runReviewerAgent;
+  visualQaRunner?: typeof runVisualQA;
+  enableVisualQa?: boolean;
   studio?: boolean;
 }
 
@@ -172,6 +175,8 @@ export async function runAssemblyLinePipeline(
       coderRunner: options.coderRunner,
       verifierRunner: options.verifierRunner,
       reviewerRunner: options.reviewerRunner,
+      visualQaRunner: options.visualQaRunner,
+      enableVisualQa: options.enableVisualQa,
       studio: options.studio,
     });
 
@@ -233,6 +238,8 @@ export async function runAssemblyLinePipeline(
         coderRunner: options.coderRunner,
         verifierRunner: options.verifierRunner,
         reviewerRunner: options.reviewerRunner,
+        visualQaRunner: options.visualQaRunner,
+        enableVisualQa: options.enableVisualQa,
         studio: options.studio,
       });
 

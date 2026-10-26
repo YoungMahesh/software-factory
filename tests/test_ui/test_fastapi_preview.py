@@ -240,6 +240,12 @@ class TestFastApiPreviewEndpoints(unittest.TestCase):
         launch_data = resp_launch.json()
         self.assertEqual(launch_data["branch"], "factory/feature-preselected")
 
+        import time
+        for _ in range(50):
+            if mock_create.called:
+                break
+            time.sleep(0.02)
+
         mock_create.assert_called_once()
         spawn_cfg = mock_create.call_args[0][0]
         self.assertEqual(spawn_cfg.branch, "factory/feature-preselected")

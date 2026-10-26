@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-strip-types events-core.test.ts events-thinking-bash.test.ts events-tools-gate.test.ts preflight-local.test.ts preflight-github.test.ts verifier-core.test.ts verifier-discovery.test.ts provider.test.ts tools.test.ts parsers.test.ts harness-agents.test.ts harness-telemetry.test.ts ticket.test.ts git.test.ts lifecycle-execution.test.ts lifecycle-telemetry.test.ts pipeline-batch.test.ts pipeline-github.test.ts pipeline-dispatch.test.ts github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts",
+    "test": "node --test --experimental-strip-types events-core.test.ts events-thinking-bash.test.ts events-tools-gate.test.ts preflight-local.test.ts preflight-github.test.ts verifier-core.test.ts verifier-discovery.test.ts provider.test.ts tools.test.ts parsers.test.ts harness-agents.test.ts harness-telemetry.test.ts ticket.test.ts git.test.ts lifecycle-execution.test.ts lifecycle-telemetry.test.ts pipeline-batch.test.ts pipeline-github.test.ts pipeline-dispatch.test.ts github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts visual-qa.test.ts",
+    "test:visual": "node --test --experimental-strip-types visual-qa.test.ts",
     "test:tracker": "node --test --experimental-strip-types github.test.ts tracker/local-tracker.test.ts tracker/github-tracker.test.ts tracker/factory.test.ts",
     "test:pipeline": "node --test --experimental-strip-types ticket.test.ts git.test.ts lifecycle-execution.test.ts lifecycle-telemetry.test.ts pipeline-batch.test.ts pipeline-github.test.ts pipeline-dispatch.test.ts",
     "test:verifier": "node --test --experimental-strip-types verifier-core.test.ts verifier-discovery.test.ts",
@@ -24,6 +25,7 @@
   "dependencies": {
     "@earendil-works/pi-agent-core": "^1.1.0",
     "@earendil-works/pi-ai": "^1.1.0",
-    "@earendil-works/pi-coding-agent": "^1.1.0"
+    "@earendil-works/pi-coding-agent": "^1.1.0",
+    "playwright-core": "^1.64.1"
   }
 }

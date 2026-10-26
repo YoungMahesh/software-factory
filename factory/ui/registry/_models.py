@@ -137,6 +137,9 @@ class PreviewState:
     preview_url: str | None = None
     sandbox_id: str | None = None
     sandbox: modal.Sandbox | None = None
+    snapshot_image_id: str | None = None
+    snapshot_commit_sha: str | None = None
+    snapshot_captured_at: float | None = None
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
     ended_at: float | None = None
@@ -145,6 +148,8 @@ class PreviewState:
     listeners: list[queue.Queue] = field(default_factory=list)
     _stopped: bool = False
     _thread: threading.Thread | None = None
+    _snapshot_thread: threading.Thread | None = None
+    _snapshot_in_progress: bool = False
     _line_buffer: str = ""
 
     def add_log(self, line: str, max_lines: int = 5000) -> None:
@@ -175,6 +180,9 @@ class PreviewState:
             "branch": self.branch,
             "preview_url": self.preview_url,
             "sandbox_id": self.sandbox_id,
+            "snapshot_image_id": self.snapshot_image_id,
+            "snapshot_commit_sha": self.snapshot_commit_sha,
+            "snapshot_captured_at": self.snapshot_captured_at,
             "created_at": self.created_at,
             "started_at": self.started_at,
             "ended_at": self.ended_at,

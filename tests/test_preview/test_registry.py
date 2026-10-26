@@ -198,6 +198,8 @@ class TestPreviewRegistry(unittest.TestCase):
         # 2. Launch preview without specifying branch -> must launch on preselected branch
         launched = registry.launch_preview("test-idle-repo")
         self.assertEqual(launched.branch, "factory/my-preselected-branch")
+        if getattr(launched, "_thread", None) is not None:
+            launched._thread.join(timeout=2.0)
 
         mock_create.assert_called_once()
         spawn_cfg = mock_create.call_args[0][0]
@@ -234,6 +236,8 @@ class TestPreviewRegistry(unittest.TestCase):
         # 3. Relaunch without branch argument -> must use updated branch
         relaunch = registry.launch_preview("stopped-repo")
         self.assertEqual(relaunch.branch, "factory/feature-v2")
+        if getattr(relaunch, "_thread", None) is not None:
+            relaunch._thread.join(timeout=2.0)
 
         mock_create.assert_called_once()
         spawn_cfg = mock_create.call_args[0][0]
