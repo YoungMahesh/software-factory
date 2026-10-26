@@ -10,6 +10,12 @@ import {
   runReviewerAgent,
 } from "./harness.ts";
 import { type VerificationResult, verifyWorkspace } from "./verifier.ts";
+import {
+  type VisualQaResult,
+  runVisualQA,
+  formatVisualQaDiagnostics,
+  isDevServerAvailable,
+} from "./visual-qa.ts";
 import { type Ticket, findContextFile, loadAcceptedAdrsBundle } from "./preflight.ts";
 import { updateTicketFile } from "./ticket.ts";
 import { commitAndPushFeatureBranch, commitFailureDiagnostics } from "./git.ts";
@@ -36,6 +42,10 @@ export interface TicketLifecycleOptions {
   coderRunner?: typeof runCoderAgent;
   verifierRunner?: typeof verifyWorkspace;
   reviewerRunner?: typeof runReviewerAgent;
+  visualQaRunner?: typeof runVisualQA;
+  enableVisualQa?: boolean;
+  artifactsDir?: string;
+  devServerUrl?: string;
   studio?: boolean;
 }
 
@@ -48,6 +58,7 @@ export interface TicketLifecycleResult {
   branch: string;
   plan?: ImplementationPlan;
   verification?: VerificationResult;
+  visualQa?: VisualQaResult;
   review?: ReviewVerdict;
   error?: string;
 }
@@ -183,6 +194,7 @@ export async function runTicketLifecycle(
   }
   let lastDiagnostics: string | undefined = undefined;
   let lastVerification: VerificationResult | undefined = undefined;
+  let lastVisualQa: VisualQaResult | undefined = undefined;
   let lastReview: ReviewVerdict | undefined = undefined;
   let failureContext: FailureContext | undefined = undefined;
   let retriesUsed = 0;
@@ -246,6 +258,34 @@ export async function runTicketLifecycle(
       };
       lastDiagnostics = `Deterministic Verification Failed:\n\n${verification.summary}`;
       continue;
+    }
+
+    // Stage 3b: Headless Visual QA & Crash Detection
+    const devServerUrl = options.devServerUrl ?? "http://127.0.0.1:3000";
+    const shouldRunVisualQa =
+      options.enableVisualQa ??
+      (options.visualQaRunner !== undefined
+        ? true
+        : ((options.studio ?? (process.env.STUDIO_MODE === "1")) || (await isDevServerAvailable(devServerUrl))));
+
+    if (shouldRunVisualQa) {
+      console.log(`\n👁️ Stage 3b: Visual QA: Inspecting ${devServerUrl}...`);
+      const vqaRunner = options.visualQaRunner ?? runVisualQA;
+      const vqaResult = await vqaRunner({
+        url: devServerUrl,
+        artifactsDir: options.artifactsDir,
+        stream: options.stream,
+      });
+      lastVisualQa = vqaResult;
+
+      if (!vqaResult.passed) {
+        failureContext = {
+          reason: "visual qa failure",
+          summary: "Fixing visual / runtime errors in application UI",
+        };
+        lastDiagnostics = formatVisualQaDiagnostics(vqaResult);
+        continue;
+      }
     }
 
     // Stage 4: Reviewer Agent (only after verifier passes)
@@ -315,6 +355,7 @@ export async function runTicketLifecycle(
     const auditSummary = [
       plan?.rawContent ? `### Implementation Plan\n\n${plan.rawContent}` : "",
       lastVerification ? `### Deterministic Verification\n\n${lastVerification.summary}` : "### Deterministic Verification\n\nPASSED",
+      lastVisualQa ? `### Visual QA Verification\n\n${lastVisualQa.summary}` : "",
       lastReview
         ? `### Reviewer Verdict: ${lastReview.verdict.toUpperCase()}\n\n${lastReview.summary}`
         : "### Reviewer Verdict\n\nAPPROVED",
@@ -359,6 +400,7 @@ export async function runTicketLifecycle(
       branch,
       plan,
       verification: lastVerification,
+      visualQa: lastVisualQa,
       review: lastReview,
     };
   } else {
@@ -387,6 +429,7 @@ export async function runTicketLifecycle(
       branch,
       plan,
       verification: lastVerification,
+      visualQa: lastVisualQa,
       review: lastReview,
       error: lastDiagnostics,
     };
