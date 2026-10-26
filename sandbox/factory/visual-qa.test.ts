@@ -29,7 +29,7 @@ test("resolveChromeExecutablePath: resolves /opt/google/chrome/chrome or overrid
   );
 });
 
-test("CHROME_CONTAINER_FLAGS: includes required container sandbox flags", () => {
+test("CHROME_CONTAINER_FLAGS: includes required sandbox-free flags", () => {
   assert.ok(CHROME_CONTAINER_FLAGS.includes("--no-sandbox"));
   assert.ok(CHROME_CONTAINER_FLAGS.includes("--disable-dev-shm-usage"));
   assert.ok(CHROME_CONTAINER_FLAGS.includes("--disable-gpu"));
@@ -254,7 +254,17 @@ test("runVisualQA: traps browser uncaught exceptions and console.error", async (
                   })
                 );
               }
+              if (listeners["requestfailed"]) {
+                listeners["requestfailed"].forEach((h) =>
+                  h({
+                    url: () => "http://127.0.0.1:3000/assets/missing.js",
+                    failure: () => ({ errorText: "net::ERR_FILE_NOT_FOUND" }),
+                    method: () => "GET",
+                  })
+                );
+              }
             },
+            waitForLoadState: async () => {},
             evaluate: async () => ({
               selector: "#root",
               width: 1280,
@@ -279,11 +289,13 @@ test("runVisualQA: traps browser uncaught exceptions and console.error", async (
 
     assert.equal(result.passed, false);
     assert.equal(result.cleanCanvas, true);
-    assert.equal(result.errors.length, 2);
+    assert.equal(result.errors.length, 3);
     assert.equal(result.errors[0].type, "pageerror");
     assert.ok(result.errors[0].message.includes("Cannot read property 'map'"));
     assert.equal(result.errors[1].type, "console.error");
     assert.ok(result.errors[1].message.includes("Failed to load resource"));
+    assert.equal(result.errors[2].type, "requestfailed");
+    assert.ok(result.errors[2].message.includes("missing.js"));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -358,7 +370,7 @@ test("runVisualQA [E2E with real headless Chrome]: verifies Clean Canvas, screen
         </html>
       `);
     } else {
-      // blank screen
+      // Clean Canvas Invariant violation
       res.end(`
         <!DOCTYPE html>
         <html>

@@ -71,21 +71,13 @@ class JobRegistry:
                         stage = JobStage.IDLE
 
                     job = FactoryJob(
-                        id=j_dict["id"],
-                        repo=j_dict["repo"],
-                        feature=j_dict["feature"],
-                        issue=j_dict["issue"],
-                        model=j_dict["model"],
-                        vm=j_dict["vm"],
-                        dev=j_dict["dev"],
-                        preview_url=j_dict.get("preview_url"),
-                        status=status,
-                        stage=stage,
+                        id=j_dict["id"], repo=j_dict["repo"], feature=j_dict["feature"],
+                        issue=j_dict["issue"], model=j_dict["model"], vm=j_dict["vm"],
+                        dev=j_dict["dev"], preview_url=j_dict.get("preview_url"),
+                        status=status, stage=stage,
                         created_at=j_dict.get("created_at", time.time()),
-                        started_at=j_dict.get("started_at"),
-                        ended_at=j_dict.get("ended_at"),
-                        exit_code=j_dict.get("exit_code"),
-                        error_message=j_dict.get("error_message"),
+                        started_at=j_dict.get("started_at"), ended_at=j_dict.get("ended_at"),
+                        exit_code=j_dict.get("exit_code"), error_message=j_dict.get("error_message"),
                     )
 
                     logs = self.db.get_console_logs(job.id)
@@ -138,14 +130,9 @@ class JobRegistry:
         job_id = uuid.uuid4().hex[:10]
         preview_url = DEFAULT_PREVIEW_URL if dev else None
         job = FactoryJob(
-            id=job_id,
-            repo=repo.strip(),
-            feature=feature.strip(),
-            issue=issue.strip() if issue else None,
-            model=model.strip(),
-            vm=vm,
-            dev=dev,
-            preview_url=preview_url,
+            id=job_id, repo=repo.strip(), feature=feature.strip(),
+            issue=issue.strip() if issue else None, model=model.strip(),
+            vm=vm, dev=dev, preview_url=preview_url,
         )
         with self._lock:
             self._jobs[job_id] = job
@@ -160,6 +147,37 @@ class JobRegistry:
         with self._lock:
             jobs = sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
             return [j.to_dict() for j in jobs]
+
+    def get_latest_visual_qa_event(
+        self,
+        repo: str,
+        branch: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Finds latest visual_qa telemetry event for a repository, optionally filtered by branch."""
+        from factory.ui.github import strip_repo_owner
+
+        clean_repo = strip_repo_owner(repo)
+        tb_clean = branch.strip() if branch else None
+
+        with self._lock:
+            for job in reversed(list(self._jobs.values())):
+                if strip_repo_owner(getattr(job, "repo", "")) != clean_repo:
+                    continue
+                if tb_clean:
+                    tb_short = tb_clean[len("factory/"):] if tb_clean.startswith("factory/") else tb_clean
+                    jb = getattr(job, "branch", None) or ""
+                    jb_short = jb[len("factory/"):] if jb.startswith("factory/") else jb
+                    feat = getattr(job, "feature", "") or ""
+                    feat_short = feat[len("factory/"):] if feat.startswith("factory/") else feat
+                    if not ({tb_clean, tb_short} & {jb, jb_short, feat, feat_short, f"factory/{feat_short}"}):
+                        continue
+                for event in reversed(getattr(job, "events", [])):
+                    if isinstance(event, dict) and event.get("type") == "visual_qa":
+                        evt = dict(event)
+                        if not evt.get("timestamp"):
+                            evt["timestamp"] = getattr(job, "ended_at", None) or getattr(job, "created_at", None)
+                        return evt
+        return None
 
     def add_listener(self, job_id: str) -> queue.Queue | None:
         with self._lock:
@@ -204,16 +222,15 @@ class JobRegistry:
                     job._line_buffer = parts[-1]
                 else:
                     stripped = incoming.strip()
+                    is_evt = False
                     if stripped.startswith("__SF_EVENT__:"):
                         try:
                             json.loads(stripped[len("__SF_EVENT__:"):].strip())
-                            complete_lines = [incoming]
+                            is_evt = True
                         except Exception:
-                            job._line_buffer = incoming
-                            complete_lines = []
-                    else:
-                        job._line_buffer = incoming
-                        complete_lines = []
+                            pass
+                    complete_lines = [incoming] if is_evt else []
+                    job._line_buffer = "" if is_evt else incoming
             else:
                 complete_lines = [incoming] if incoming else []
 

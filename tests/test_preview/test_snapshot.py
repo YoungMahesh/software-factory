@@ -182,3 +182,26 @@ class TestSnapshotCapture(unittest.TestCase):
         self.assertIsNotNone(meta)
         self.assertEqual(meta["snapshot_image_id"], "im-snap-test-456")
         self.assertEqual(meta["snapshot_commit_sha"], commit_sha)
+
+    def test_configurable_snapshot_ttl(self):
+        commit_sha = "4444555566667777888899990000111122223333"
+        mock_sandbox, _, _ = self._create_mock_sandbox(commit_sha=commit_sha)
+        preview = PreviewState(
+            repo="test-ttl-snap",
+            status=PreviewStatus.SERVING,
+            stage=PreviewStage.SERVING,
+            sandbox=mock_sandbox,
+        )
+
+        # 1. Configurable via FACTORY_SNAPSHOT_TTL_DAYS
+        with patch.dict("os.environ", {"FACTORY_SNAPSHOT_TTL_DAYS": "7"}):
+            capture_snapshot_for_preview(preview, db=self.db)
+            mock_sandbox.snapshot_filesystem.assert_called_with(ttl=7 * 86400)
+
+        # 2. Configurable via FACTORY_SNAPSHOT_TTL_SECONDS
+        mock_sandbox.reset_mock()
+        with patch.dict("os.environ", {"FACTORY_SNAPSHOT_TTL_SECONDS": "3600"}):
+            preview.snapshot_commit_sha = None
+            mock_sandbox.snapshot_filesystem.return_value = MagicMock(object_id="im-ttl-2")
+            capture_snapshot_for_preview(preview, db=None)
+            mock_sandbox.snapshot_filesystem.assert_called_with(ttl=3600)

@@ -1,6 +1,7 @@
 """Background filesystem snapshot capture worker for Unified Studio Sandboxes."""
 
 import logging
+import os
 import shlex
 import threading
 import time
@@ -10,7 +11,22 @@ from factory.spawner import PreviewSpawnConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SNAPSHOT_TTL_SECONDS: int = 30 * 86400  # 30 days
+DEFAULT_SNAPSHOT_TTL_DAYS: int = 30
+DEFAULT_SNAPSHOT_TTL_SECONDS: int = DEFAULT_SNAPSHOT_TTL_DAYS * 86400
+
+
+def get_snapshot_ttl_seconds() -> int:
+    """Returns configurable snapshot TTL in seconds from environment or default 30 days."""
+    if "FACTORY_SNAPSHOT_TTL_SECONDS" in os.environ:
+        try:
+            return int(os.environ["FACTORY_SNAPSHOT_TTL_SECONDS"])
+        except ValueError:
+            pass
+    try:
+        days = int(os.environ.get("FACTORY_SNAPSHOT_TTL_DAYS", DEFAULT_SNAPSHOT_TTL_DAYS))
+        return days * 86400
+    except ValueError:
+        return DEFAULT_SNAPSHOT_TTL_SECONDS
 
 
 def _read_proc_stdout(proc: Any) -> str:
@@ -75,7 +91,7 @@ def is_snapshot_needed(db: Any, repo: str, commit_sha: str | None) -> bool:
 def capture_snapshot_for_preview(
     preview: Any,
     db: Any = None,
-    ttl_seconds: int = DEFAULT_SNAPSHOT_TTL_SECONDS,
+    ttl_seconds: int | None = None,
 ) -> str | None:
     """Synchronously executes sync and snapshot_filesystem for an active preview."""
     sandbox = getattr(preview, "sandbox", None)
@@ -85,6 +101,7 @@ def capture_snapshot_for_preview(
 
     repo = preview.repo
     logger.info("Initiating filesystem snapshot capture for preview %s...", repo)
+    effective_ttl = ttl_seconds if ttl_seconds is not None else get_snapshot_ttl_seconds()
 
     try:
         commit_sha = query_container_commit_sha(sandbox, repo)
@@ -103,8 +120,8 @@ def capture_snapshot_for_preview(
         except Exception as sync_err:
             logger.warning("Filesystem sync error on preview %s (continuing): %s", repo, sync_err)
 
-        # 2. Invoke snapshot_filesystem with 30-day retention
-        snapshot_image = sandbox.snapshot_filesystem(ttl=ttl_seconds)
+        # 2. Invoke snapshot_filesystem with retention
+        snapshot_image = sandbox.snapshot_filesystem(ttl=effective_ttl)
         image_id = getattr(snapshot_image, "object_id", None) or str(snapshot_image)
 
         captured_at = time.time()
@@ -135,7 +152,7 @@ def capture_snapshot_for_preview(
 def trigger_background_snapshot(
     preview: Any,
     db: Any = None,
-    ttl_seconds: int = DEFAULT_SNAPSHOT_TTL_SECONDS,
+    ttl_seconds: int | None = None,
 ) -> threading.Thread | None:
     """Dispatches background snapshot capture worker thread if not already running."""
     if getattr(preview, "sandbox", None) is None:
@@ -144,10 +161,12 @@ def trigger_background_snapshot(
     if getattr(preview, "_snapshot_in_progress", False):
         return None
 
+    effective_ttl = ttl_seconds if ttl_seconds is not None else get_snapshot_ttl_seconds()
+
     def worker():
         try:
             preview._snapshot_in_progress = True
-            capture_snapshot_for_preview(preview, db=db, ttl_seconds=ttl_seconds)
+            capture_snapshot_for_preview(preview, db=db, ttl_seconds=effective_ttl)
         finally:
             preview._snapshot_in_progress = False
 
@@ -208,6 +227,6 @@ def spawn_preview_sandbox_with_fallback(
             logger.warning("Snapshot resumption failed for %s (image %s): %s; falling back to clean build", clean_repo, snapshot_id, snap_err)
 
     if on_log:
-        on_log(f"🔨 [PREVIEW] Building base image and provisioning dedicated preview sandbox for {clean_repo} ({branch})...\n")
+        on_log(f"🔨 [PREVIEW] Building base image and provisioning Unified Studio Sandbox for {clean_repo} ({branch})...\n")
     config = PreviewSpawnConfig(repo=clean_repo, branch=branch, testing=True)
     return create_preview_fn(config)

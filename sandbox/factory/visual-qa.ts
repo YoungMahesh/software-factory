@@ -16,7 +16,7 @@ export const DEFAULT_VIEWPORTS = {
 };
 
 export interface VisualQaBrowserError {
-  type: "pageerror" | "console.error";
+  type: "pageerror" | "console.error" | "requestfailed";
   message: string;
   stack?: string;
   location?: string;
@@ -125,7 +125,7 @@ export function formatVisualQaDiagnostics(result: VisualQaResult): string {
   }
 
   parts.push(
-    `**Action Required**: Fix the browser exceptions or blank screen above so the application cleanly mounts and renders visible elements without runtime errors.`
+    `**Action Required**: Fix the browser exceptions or Clean Canvas Invariant violation above so the application cleanly mounts and renders visible elements without runtime errors.`
   );
 
   return parts.join("\n\n");
@@ -253,9 +253,33 @@ export async function runVisualQA(options?: VisualQaOptions): Promise<VisualQaRe
       });
     });
 
-    // Navigate to page
+    page.on("requestfailed", (req: any) => {
+      try {
+        const reqUrl = typeof req.url === "function" ? req.url() : String(req?.url || req);
+        const failure = typeof req.failure === "function" ? req.failure() : req?.failure;
+        const failureText = failure?.errorText || "Request failed";
+        const method = typeof req.method === "function" ? req.method() : "GET";
+        browserErrors.push({
+          type: "requestfailed",
+          message: `Failed resource load: ${method} ${reqUrl} (${failureText})`,
+          location: reqUrl,
+          timestamp: Date.now(),
+        });
+      } catch {
+        // Ignore failure extraction errors
+      }
+    });
+
+    // Navigate to page and wait for network settling
     await Promise.race([
-      page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs }),
+      (async () => {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+        if (typeof page.waitForLoadState === "function") {
+          await page
+            .waitForLoadState("networkidle", { timeout: Math.min(2000, timeoutMs) })
+            .catch(() => {});
+        }
+      })(),
       timeoutPromise,
     ]);
 
