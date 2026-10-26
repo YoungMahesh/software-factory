@@ -46,6 +46,8 @@ class PreviewSpawnConfig:
     app_name: str | None = None
     repo_root: Path | None = None
     install_deps: bool = True
+    from_snapshot: str | None = None
+    snapshot_resume: bool = False
 
 
 @dataclass
@@ -65,6 +67,8 @@ class FactorySpawnConfig:
     app_name: str | None = None
     repo_root: Path | None = None
     install_deps: bool = True
+    from_snapshot: str | None = None
+    snapshot_resume: bool = False
     dev: bool = False
 
 

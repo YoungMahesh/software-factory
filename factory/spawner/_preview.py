@@ -1,5 +1,6 @@
 """Dedicated Preview Sandbox spawner and tunnel resolution."""
 
+import logging
 from typing import Any
 import modal
 
@@ -21,6 +22,9 @@ from factory.spawner._config import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def create_preview_sandbox(config: PreviewSpawnConfig) -> tuple[modal.Sandbox, str]:
     """Creates and launches an ephemeral Modal Dedicated Preview Sandbox.
 
@@ -29,25 +33,28 @@ def create_preview_sandbox(config: PreviewSpawnConfig) -> tuple[modal.Sandbox, s
     Modal Application Tunnel URL on port 3000.
     """
     root = resolve_repo_root(config.repo_root)
-    secrets_dir = resolve_secrets_dir(
-        project=config.repo,
-        testing=config.testing,
-        repo_root=root,
-    )
-    factory_dir = root / "sandbox" / "factory"
-
     app_name = config.app_name or get_factory_app_name(
         project=config.repo,
         testing=config.testing,
     )
     app = modal.App.lookup(app_name, create_if_missing=True)
 
-    image = build_factory_image(
-        project_secrets_dir=secrets_dir,
-        factory_dir=factory_dir,
-        repo_root=root,
-        install_deps=config.install_deps,
-    )
+    if config.from_snapshot:
+        logger.info("Resolving preview image directly from snapshot ID: %s", config.from_snapshot)
+        image = modal.Image.from_id(config.from_snapshot)
+    else:
+        secrets_dir = resolve_secrets_dir(
+            project=config.repo,
+            testing=config.testing,
+            repo_root=root,
+        )
+        factory_dir = root / "sandbox" / "factory"
+        image = build_factory_image(
+            project_secrets_dir=secrets_dir,
+            factory_dir=factory_dir,
+            repo_root=root,
+            install_deps=config.install_deps,
+        )
 
     target_repo = resolve_target_repo(config.repo, testing=config.testing) or config.repo
 
@@ -61,6 +68,8 @@ def create_preview_sandbox(config: PreviewSpawnConfig) -> tuple[modal.Sandbox, s
         "PORT": str(PREVIEW_PORT),
         "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": PREVIEW_ALLOWED_HOSTS,
     }
+    if config.snapshot_resume or config.from_snapshot:
+        env["SNAPSHOT_RESUME"] = "1"
 
     entrypoint_args: list[str] = [
         "bash",
@@ -69,6 +78,8 @@ def create_preview_sandbox(config: PreviewSpawnConfig) -> tuple[modal.Sandbox, s
         "--branch",
         config.branch,
     ]
+    if config.snapshot_resume or config.from_snapshot:
+        entrypoint_args.append("--snapshot-resume")
 
     sandbox_kwargs: dict[str, Any] = {
         "timeout": config.timeout_secs,

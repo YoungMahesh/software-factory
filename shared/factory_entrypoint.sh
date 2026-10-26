@@ -7,6 +7,7 @@ MODEL_ID=""
 TRACKER="${TRACKER:-}"
 
 DEV_PREVIEW="${DEV_PREVIEW:-0}"
+SNAPSHOT_RESUME="${SNAPSHOT_RESUME:-0}"
 
 PREVIEW_ONLY="${PREVIEW_ONLY:-0}"
 TARGET_BRANCH="${BRANCH:-}"
@@ -43,8 +44,12 @@ while [[ $# -gt 0 ]]; do
             DEV_PREVIEW="1"
             shift
             ;;
+        --snapshot-resume)
+            SNAPSHOT_RESUME="1"
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--feature <slug>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--branch <branch>] [--dev] [--preview-only]"
+            echo "Usage: $0 [--feature <slug>] [--issue <id>] [--model <model>] [--tracker <github|local>] [--branch <branch>] [--dev] [--preview-only] [--snapshot-resume]"
             exit 0
             ;;
         *)
@@ -89,6 +94,9 @@ fi
 if [ "${DEV_PREVIEW:-0}" = "1" ]; then
     echo "  • Dev Preview: Enabled (port 3000 -> Modal Application Tunnel)"
 fi
+if [ "${SNAPSHOT_RESUME:-0}" = "1" ]; then
+    echo "  • Snapshot Resumption: Enabled (Fast-path warm cold start)"
+fi
 echo "================================================================"
 
 BASE_DIR="${SANDBOX_ROOT:-/root}"
@@ -124,15 +132,19 @@ fi
 
 # 1. SOPS Age key bootstrap
 if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-    echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is mounted." >&2
-    exit 1
+    if [ "${SNAPSHOT_RESUME:-0}" = "1" ] && [ -f "${BASE_DIR}/.factory.env" ]; then
+        echo "⚡ Resuming from snapshot; AGE_PRIVATE_KEY check bypassed (.factory.env present)."
+    else
+        echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is mounted." >&2
+        exit 1
+    fi
+else
+    mkdir -p ~/.config/sops/age
+    echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
+    chmod 600 ~/.config/sops/age/keys.txt
+    export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
+    export SOPS_AGE_KEY_FILE="${HOME:-/root}/.config/sops/age/keys.txt"
 fi
-
-mkdir -p ~/.config/sops/age
-echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
-chmod 600 ~/.config/sops/age/keys.txt
-export SOPS_AGE_KEY="$AGE_PRIVATE_KEY"
-export SOPS_AGE_KEY_FILE="${HOME:-/root}/.config/sops/age/keys.txt"
 
 # 2. Ephemerally decrypt OpenCode credentials into ~/.config/opencode/opencode.env
 OPENCODE_SECRET_FILE="${BASE_DIR}/secrets/opencode.env"
@@ -186,9 +198,17 @@ else
     fi
 
     if [ -z "$FETCH_SECRET_FILE" ]; then
-        echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
-        exit 1
-    fi
+        if [ "${SNAPSHOT_RESUME:-0}" = "1" ] && [ -f "${BASE_DIR}/.factory.env" ]; then
+            echo "🔐 Sourcing credentials from existing ${BASE_DIR}/.factory.env for snapshot resumption..."
+            set -a
+            # shellcheck disable=SC1090
+            source "${BASE_DIR}/.factory.env"
+            set +a
+        else
+            echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
+            exit 1
+        fi
+    else
 
     echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
     DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
@@ -213,6 +233,7 @@ else
 
     rm -f "$FETCH_SECRET_FILE"
     unset DECRYPTED_FETCH
+    fi
 fi
 
 if [ -z "${GH_REPO:-}" ]; then
@@ -232,6 +253,146 @@ TARGET_DIR="${BASE_DIR}/$REPO_NAME"
 git config --global advice.detachedHead false
 git config --global user.name "Software Factory"
 git config --global user.email "factory@modal.internal"
+export GIT_TERMINAL_PROMPT=0
+
+# Resolve target branch
+if [ -n "${TARGET_BRANCH:-}" ]; then
+    BRANCH_NAME="$TARGET_BRANCH"
+else
+    BRANCH_NAME="factory/${FEATURE_SLUG}"
+fi
+
+# Dev preview supervisor function
+start_dev_preview_supervisor() {
+    export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-.modal.host}"
+
+    echo ""
+    echo "================================================================"
+    echo "🌟 Launching Dev Preview Keep-Alive Daemon"
+    echo "PREVIEW_STAGE:STARTING_DEV"
+    echo "  • Working Directory: ${TARGET_DIR}"
+    echo "  • Dev Command: pnpm dev --port 3000 --host 0.0.0.0"
+    echo "  • Preview: Modal Application Tunnel (port 3000)"
+    echo "  • Allowed Hosts: ${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS}"
+    echo "================================================================"
+
+    cd "$TARGET_DIR"
+
+    DEV_PID=""
+    SUPERVISOR_STOPPED=0
+    cleanup_dev() {
+        echo ""
+        echo "🛑 Shutting down dev server supervisor daemon..."
+        SUPERVISOR_STOPPED=1
+        if [ -n "$DEV_PID" ]; then
+            kill -TERM -- -"$DEV_PID" 2>/dev/null || kill -TERM "$DEV_PID" 2>/dev/null || true
+            wait "$DEV_PID" 2>/dev/null || true
+        fi
+        exit 0
+    }
+    trap cleanup_dev SIGTERM SIGINT SIGHUP
+
+    while [ "$SUPERVISOR_STOPPED" -eq 0 ]; do
+        pnpm dev --port 3000 --host 0.0.0.0 &
+        DEV_PID=$!
+
+        echo "📡 Dev server running with PID ${DEV_PID}."
+        echo "⏳ Container entering active serving keep-alive state..."
+
+        # Maintain serving keep-alive state until process termination or cancellation
+        set +e
+        wait "$DEV_PID"
+        DEV_EXIT_CODE=$?
+        set -e
+
+        if [ "$SUPERVISOR_STOPPED" -eq 1 ]; then
+            break
+        fi
+
+        if [ "${DEV_PREVIEW_ONCE:-0}" = "1" ]; then
+            exit "$DEV_EXIT_CODE"
+        fi
+
+        echo "⚠️ Dev server process exited with code ${DEV_EXIT_CODE}. Auto-restarting in 1s..."
+        sleep 1
+    done
+    exit 0
+}
+
+# 5. Fast-path snapshot resumption (instant cold start)
+FAST_PATH_RESUMED=0
+if [ "${SNAPSHOT_RESUME:-0}" = "1" ]; then
+    echo "⚡ Snapshot fast-path resumption requested (SNAPSHOT_RESUME=1)..."
+    if [ -d "$TARGET_DIR/.git" ]; then
+        SNAPSHOT_COMMIT=$(git -C "$TARGET_DIR" rev-parse HEAD 2>/dev/null || echo "")
+        echo "   • Resuming from snapshot commit: ${SNAPSHOT_COMMIT:-unknown}"
+
+        ORIGIN_URL=$(git -C "$TARGET_DIR" remote get-url origin 2>/dev/null || echo "")
+        if [ -n "${GH_TOKEN:-}" ] && [[ ! "$ORIGIN_URL" =~ ^(/|file://) ]]; then
+            git -C "$TARGET_DIR" remote set-url origin "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" 2>/dev/null || true
+        fi
+
+        echo "🌿 Fast-fetching target branch ${BRANCH_NAME}..."
+        git -C "$TARGET_DIR" fetch origin "+refs/heads/${BRANCH_NAME}:refs/remotes/origin/${BRANCH_NAME}" --quiet 2>/dev/null || \
+        git -C "$TARGET_DIR" fetch origin --quiet 2>/dev/null || true
+
+        CHECKOUT_OK=0
+        if git -C "$TARGET_DIR" show-ref --verify --quiet "refs/remotes/origin/${BRANCH_NAME}"; then
+            git -C "$TARGET_DIR" checkout -B "${BRANCH_NAME}" "origin/${BRANCH_NAME}" --quiet && CHECKOUT_OK=1
+        elif git -C "$TARGET_DIR" show-ref --verify --quiet "refs/heads/${BRANCH_NAME}"; then
+            git -C "$TARGET_DIR" checkout "${BRANCH_NAME}" --quiet && CHECKOUT_OK=1
+        elif git -C "$TARGET_DIR" show-ref --verify --quiet "refs/remotes/origin/main"; then
+            if [ "${PREVIEW_ONLY:-0}" = "1" ]; then
+                git -C "$TARGET_DIR" checkout -B "main" "origin/main" --quiet && CHECKOUT_OK=1
+            else
+                git -C "$TARGET_DIR" checkout -B "${BRANCH_NAME}" "origin/main" --quiet && CHECKOUT_OK=1
+            fi
+        elif git -C "$TARGET_DIR" show-ref --verify --quiet "refs/heads/main"; then
+            if [ "${PREVIEW_ONLY:-0}" = "1" ]; then
+                git -C "$TARGET_DIR" checkout "main" --quiet && CHECKOUT_OK=1
+            else
+                git -C "$TARGET_DIR" checkout -B "${BRANCH_NAME}" "main" --quiet && CHECKOUT_OK=1
+            fi
+        fi
+
+        if [ "$CHECKOUT_OK" -eq 1 ]; then
+            TARGET_COMMIT=$(git -C "$TARGET_DIR" rev-parse HEAD 2>/dev/null || echo "")
+            echo "   • Checked out ref ${BRANCH_NAME} at commit: ${TARGET_COMMIT}"
+
+            # Dependency drift detection
+            DRIFT=0
+            if [ -n "$SNAPSHOT_COMMIT" ] && [ -n "$TARGET_COMMIT" ] && [ "$SNAPSHOT_COMMIT" != "$TARGET_COMMIT" ]; then
+                DIFF_MANIFESTS=$(git -C "$TARGET_DIR" diff --name-only "$SNAPSHOT_COMMIT" "$TARGET_COMMIT" -- package.json pnpm-lock.yaml package-lock.json 2>/dev/null || echo "")
+                if [ -n "$DIFF_MANIFESTS" ]; then
+                    DRIFT=1
+                    echo "PREVIEW_STAGE:INSTALLING_DEPS"
+                    echo "📦 Dependency manifest drift detected (${DIFF_MANIFESTS}). Running incremental dependency installation..."
+                    if [ -f "$TARGET_DIR/package-lock.json" ] && [ ! -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
+                        (cd "$TARGET_DIR" && npm install --prefer-offline 2>/dev/null || (cd "$TARGET_DIR" && npm install))
+                    else
+                        (cd "$TARGET_DIR" && pnpm install --prefer-offline)
+                    fi
+                fi
+            fi
+
+            if [ "$DRIFT" -eq 0 ]; then
+                echo "⚡ No dependency manifest drift detected; skipping package installation."
+            fi
+
+            FAST_PATH_RESUMED=1
+            echo "⚡ Fast-path snapshot resumption successful (<3s cold start)."
+
+            # Launch dev preview directly if in preview mode
+            if [ "${DEV_PREVIEW:-0}" = "1" ]; then
+                start_dev_preview_supervisor
+            fi
+        else
+            echo "⚠️ Failed to fetch or checkout ${BRANCH_NAME} during fast-path resumption; falling back to clean init..." >&2
+        fi
+    else
+        echo "⚠️ Target directory ${TARGET_DIR} is not a valid git repository; falling back to clean init..." >&2
+    fi
+fi
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "🏝️  Cloning $GH_REPO..."
@@ -241,12 +402,7 @@ fi
 
 cd "$TARGET_DIR"
 
-# 5. Check out target branch
-if [ -n "${TARGET_BRANCH:-}" ]; then
-    BRANCH_NAME="$TARGET_BRANCH"
-else
-    BRANCH_NAME="factory/${FEATURE_SLUG}"
-fi
+# 6. Check out target branch
 echo "🌿 Checking out branch $BRANCH_NAME..."
 if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
     if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH_NAME"; then
@@ -431,55 +587,7 @@ fi
 
 # 10. Dev preview keep-alive daemon
 if [ "${DEV_PREVIEW:-0}" = "1" ]; then
-    export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-.modal.host}"
-
-    echo ""
-    echo "================================================================"
-    echo "🌟 Launching Dev Preview Keep-Alive Daemon"
-    echo "PREVIEW_STAGE:STARTING_DEV"
-    echo "  • Working Directory: ${TARGET_DIR}"
-    echo "  • Dev Command: pnpm dev --port 3000 --host 0.0.0.0"
-    echo "  • Preview: Modal Application Tunnel (port 3000)"
-    echo "  • Allowed Hosts: ${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS}"
-    echo "================================================================"
-
-    cd "$TARGET_DIR"
-
-    DEV_PID=""
-    SUPERVISOR_STOPPED=0
-    cleanup_dev() {
-        echo ""
-        echo "🛑 Shutting down dev server supervisor daemon..."
-        SUPERVISOR_STOPPED=1
-        if [ -n "$DEV_PID" ]; then
-            kill -TERM -- -"$DEV_PID" 2>/dev/null || kill -TERM "$DEV_PID" 2>/dev/null || true
-            wait "$DEV_PID" 2>/dev/null || true
-        fi
-        exit 0
-    }
-    trap cleanup_dev SIGTERM SIGINT SIGHUP
-
-    while [ "$SUPERVISOR_STOPPED" -eq 0 ]; do
-        pnpm dev --port 3000 --host 0.0.0.0 &
-        DEV_PID=$!
-
-        echo "📡 Dev server running with PID ${DEV_PID}."
-        echo "⏳ Container entering active serving keep-alive state..."
-
-        # Maintain serving keep-alive state until process termination or cancellation
-        set +e
-        wait "$DEV_PID"
-        DEV_EXIT_CODE=$?
-        set -e
-
-        if [ "$SUPERVISOR_STOPPED" -eq 1 ]; then
-            break
-        fi
-
-        echo "⚠️ Dev server process exited with code ${DEV_EXIT_CODE}. Auto-restarting in 1s..."
-        sleep 1
-    done
-    exit 0
+    start_dev_preview_supervisor
 fi
 
 exit "$EXIT_CODE"
