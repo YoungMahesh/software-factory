@@ -5,7 +5,7 @@ Automated root filesystem snapshot capture for Unified Studio Sandboxes once an 
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Database schema and persistence helpers store and retrieve snapshot image identifiers, commit SHAs, and capture timestamps for repositories.
 - [ ] Preview registry monitors active sandbox lifecycles and detects when a sandbox transitions into the active serving status.

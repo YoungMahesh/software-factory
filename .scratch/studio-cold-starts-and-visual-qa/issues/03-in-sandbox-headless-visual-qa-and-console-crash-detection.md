@@ -5,7 +5,7 @@ An automated visual quality gate and crash detection stage running inside the sa
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] In-sandbox verification stage connects to the local development server via Playwright using pre-baked headless Google Chrome with container sandbox flags.
 - [ ] Clean Canvas Invariant verification asserts that the application root DOM container has positive bounding dimensions and non-empty rendered markup within a bounded timeout.
