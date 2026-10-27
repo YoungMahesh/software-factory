@@ -108,9 +108,72 @@ if os.path.exists(token_path):
                 }
             else:
                 settings["providerInstances"]["antigravity"]["enabled"] = True
+            if "claudeAgent" not in settings["providerInstances"]:
+                settings["providerInstances"]["claudeAgent"] = {
+                    "driver": "claudeAgent",
+                    "enabled": False
+                }
+            if "codex" not in settings["providerInstances"]:
+                settings["providerInstances"]["codex"] = {
+                    "driver": "codex",
+                    "enabled": False
+                }
             with open(t3_settings_path, "w") as fp:
                 json.dump(settings, fp, indent=2)
             os.chmod(t3_settings_path, 0o644)
+
+            t3_cache_dir = "/root/.t3/caches"
+            os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
+            t3_cache_file = os.path.join(t3_cache_dir, "antigravity.json")
+            cache_data = {
+                "displayName": "Antigravity",
+                "showInteractionModeToggle": False,
+                "enabled": True,
+                "installed": True,
+                "version": "1.3.0",
+                "status": "ready",
+                "auth": {
+                    "status": "authenticated",
+                    "type": "oauth-personal",
+                    "label": "Google account"
+                },
+                "setup": {
+                    "canAuthenticate": True,
+                    "canInstall": True
+                },
+                "checkedAt": "2026-10-27T12:00:00.000Z",
+                "models": [
+                    {
+                        "slug": "gemini-3.8-flash-high",
+                        "name": "Gemini 3.8 Flash (High)",
+                        "isCustom": False,
+                        "isDefault": True,
+                        "aliases": ["antigravity-default"],
+                        "capabilities": {"optionDescriptors": []}
+                    },
+                    {
+                        "slug": "gemini-3.8-flash-medium",
+                        "name": "Gemini 3.8 Flash (Medium)",
+                        "isCustom": False,
+                        "capabilities": {"optionDescriptors": []}
+                    },
+                    {
+                        "slug": "gemini-3.8-flash-low",
+                        "name": "Gemini 3.8 Flash (Low)",
+                        "isCustom": False,
+                        "capabilities": {"optionDescriptors": []}
+                    }
+                ],
+                "slashCommands": [],
+                "skills": [],
+                "supportsConversationRollback": False,
+                "supportsTextGeneration": True,
+                "instanceId": "antigravity",
+                "driver": "antigravity"
+            }
+            with open(t3_cache_file, "w") as fp:
+                json.dump(cache_data, fp, indent=2)
+            os.chmod(t3_cache_file, 0o644)
     except Exception as e:
         print(f"Warning: Failed to setup Antigravity ACP credentials: {e}")
 ' 2>/dev/null || true

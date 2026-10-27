@@ -108,6 +108,8 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("dummy-client-id", content)
             self.assertIn("providerInstances", content)
             self.assertIn("antigravity", content)
+            self.assertIn("/root/.t3/caches", content)
+            self.assertIn("gemini-3.8-flash-high", content)
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
