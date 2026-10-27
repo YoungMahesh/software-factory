@@ -165,11 +165,12 @@ T3_VERSION = "0.0.45"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 T3_PATCH_SCRIPT = (
     "python3 -c '"
+    'p = "/opt/t3/t3"; '
     'target = b"args: input.profile.platform === \\"linux\\" ? [\\"--uid=\\"] : []"; '
     'replacement = b"args: input.profile.platform === \\"linux\\" ? [\\"--enforce_kernel_ipv6_support=false\\",\\"--uid=\\"] : []"; '
-    'with open("/opt/t3/t3", "rb") as f: c = f.read(); '
-    'assert target in c, "target pattern not found in /opt/t3/t3"; '
-    'with open("/opt/t3/t3", "wb") as f: f.write(c.replace(target, replacement, 1))\''
+    'c = open(p, "rb").read(); '
+    'assert target in c or replacement in c, "target pattern not found in /opt/t3/t3"; '
+    'open(p, "wb").write(c.replace(target, replacement, 1)) if target in c else None\''
 )
 
 

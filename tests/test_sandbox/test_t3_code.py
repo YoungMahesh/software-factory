@@ -157,6 +157,36 @@ class TestT3CodeIntegration(unittest.TestCase):
                 T3_PATCH_SCRIPT,
             )
 
+    def test_t3_patch_script_validity_and_execution(self):
+        import ast
+        import tempfile
+        from shared.image import T3_PATCH_SCRIPT
+
+        self.assertTrue(T3_PATCH_SCRIPT.startswith("python3 -c '") and T3_PATCH_SCRIPT.endswith("'"))
+        py_code = T3_PATCH_SCRIPT[len("python3 -c '") : -1]
+
+        try:
+            ast.parse(py_code)
+        except SyntaxError as e:
+            self.fail(f"T3_PATCH_SCRIPT contains invalid Python syntax: {e}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_bin = Path(tmpdir) / "t3"
+            target = b'args: input.profile.platform === "linux" ? ["--uid="] : []'
+            test_bin.write_bytes(b"PREFIX_" + target + b"_SUFFIX")
+
+            test_cmd = T3_PATCH_SCRIPT.replace("/opt/t3/t3", str(test_bin))
+            res = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"Patch script failed: {res.stderr}")
+
+            patched_content = test_bin.read_bytes()
+            self.assertIn(b"--enforce_kernel_ipv6_support=false", patched_content)
+            self.assertNotIn(target, patched_content)
+
+            # Verify idempotency on already-patched binary
+            res_idempotent = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
+            self.assertEqual(res_idempotent.returncode, 0, f"Idempotent patch failed: {res_idempotent.stderr}")
+
     def test_startup_script_mints_pairing_token(self):
         content = self.startup_sh.read_text()
         self.assertIn("t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json", content)
