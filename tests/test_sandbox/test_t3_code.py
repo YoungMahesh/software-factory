@@ -111,6 +111,16 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
 
+    def test_startup_and_setup_scripts_contain_opencode_preauth(self):
+        startup_content = self.startup_sh.read_text()
+        setup_content = (self.repo_root / "scripts" / "setup.sh").read_text()
+
+        for content in [startup_content, setup_content]:
+            self.assertIn("OPENCODE_GO_API_KEY", content)
+            self.assertIn("providerInstances", content)
+            self.assertIn("opencode", content)
+            self.assertIn("/root/.opencode/bin/opencode", content)
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
@@ -171,13 +181,36 @@ class TestT3CodeIntegration(unittest.TestCase):
             T3_ANTIGRAVITY_MANAGED_DIR,
             T3_INSTALL_COMPLETE_JSON,
             T3_ACTIVE_JSON,
+            LOCAL_OPENCODE_CONFIG,
+            REMOTE_OPENCODE_CONFIG,
+            LOCAL_OPENCODE_SECRET,
+            REMOTE_OPENCODE_SECRET,
         )
 
-        with patch("shared.image.base_image") as mock_base:
-            mock_img = MagicMock()
-            mock_base.run_commands.return_value = mock_img
+        with patch("shared.image.base_image") as mock_base, patch(
+            "shared.image.add_local_files_if_present"
+        ) as mock_add_files:
+            mock_img1 = MagicMock()
+            mock_img2 = MagicMock()
+            mock_img3 = MagicMock()
+            mock_base.run_commands.return_value = mock_img1
+            mock_add_files.return_value = mock_img1
+            mock_img1.run_commands.return_value = mock_img2
+            mock_img2.env.return_value = mock_img3
+
             result = build_sandbox_image(t3=True)
+
             mock_base.run_commands.assert_called_once_with(
+                "curl -fsSL https://opencode.ai/v2/install | bash"
+            )
+            mock_add_files.assert_called_once_with(
+                mock_img1,
+                [
+                    (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+                ],
+            )
+            mock_img1.run_commands.assert_called_once_with(
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
@@ -192,6 +225,9 @@ class TestT3CodeIntegration(unittest.TestCase):
                 ),
                 f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
                 f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
+            )
+            mock_img2.env.assert_called_once_with(
+                {"PATH": "/root/.opencode/bin:${PATH}"}
             )
 
     def test_t3_patch_script_validity_and_execution(self):

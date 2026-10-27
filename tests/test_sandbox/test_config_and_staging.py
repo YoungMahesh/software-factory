@@ -287,6 +287,17 @@ class TestSandboxImageStaging(unittest.TestCase):
             ],
         )
 
+        # Test t3 also stages opencode config and secrets
+        mock_add_files.reset_mock()
+        build_sandbox_image(t3=True)
+        mock_add_files.assert_called_with(
+            ANY,
+            [
+                (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+            ],
+        )
+
     def test_build_sandbox_image_layers_react_native(self):
         from shared.image import build_sandbox_image
 

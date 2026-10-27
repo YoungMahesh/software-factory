@@ -212,7 +212,7 @@ def build_sandbox_image(
     image = base_image
     path_prefixes: list[str] = []
 
-    if opencode:
+    if opencode or t3:
         image = image.run_commands("curl -fsSL https://opencode.ai/v2/install | bash")
         path_prefixes.append("/root/.opencode/bin")
         image = add_local_files_if_present(

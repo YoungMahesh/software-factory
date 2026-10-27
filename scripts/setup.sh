@@ -108,6 +108,33 @@ if os.path.exists(token_path):
                 }
             else:
                 settings["providerInstances"]["antigravity"]["enabled"] = True
+
+            # Also check if OpenCode credentials are ready and configure OpenCode in T3
+            opencode_env_path = os.path.expanduser("~/.config/opencode/opencode.env")
+            has_opencode = bool(os.environ.get("OPENCODE_GO_API_KEY"))
+            if not has_opencode and os.path.exists(opencode_env_path):
+                try:
+                    with open(opencode_env_path, "r") as ef:
+                        for eline in ef:
+                            if eline.startswith("OPENCODE_GO_API_KEY="):
+                                val = eline.split("=", 1)[1].strip().strip("\"").strip(chr(39))
+                                if val:
+                                    has_opencode = True
+                                    break
+                except Exception:
+                    pass
+            if has_opencode:
+                if "opencode" not in settings["providerInstances"]:
+                    settings["providerInstances"]["opencode"] = {
+                        "driver": "opencode",
+                        "displayName": "OpenCode",
+                        "enabled": True,
+                        "binaryPath": "/root/.opencode/bin/opencode"
+                    }
+                else:
+                    settings["providerInstances"]["opencode"]["enabled"] = True
+                    settings["providerInstances"]["opencode"]["binaryPath"] = "/root/.opencode/bin/opencode"
+
             if "claudeAgent" not in settings["providerInstances"]:
                 settings["providerInstances"]["claudeAgent"] = {
                     "driver": "claudeAgent",
@@ -193,6 +220,37 @@ if [ "$DECRYPT_OPENCODE" = true ] || [ "$DECRYPT_PI" = true ]; then
         fi
         grep -qxF "export $line" ~/.bashrc 2>/dev/null || echo "export $line" >> ~/.bashrc
     done < ~/.config/opencode/opencode.env
+
+    if [ "$DECRYPT_OPENCODE" = true ] && command -v python3 >/dev/null 2>&1; then
+        python3 -c '
+import json, os
+t3_settings_path = "/root/.t3/userdata/settings.json"
+if os.path.exists(os.path.dirname(t3_settings_path)) or os.path.exists("/opt/t3"):
+    os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
+    settings = {}
+    if os.path.exists(t3_settings_path):
+        try:
+            with open(t3_settings_path, "r") as fp:
+                settings = json.load(fp)
+        except Exception:
+            settings = {}
+    if "providerInstances" not in settings:
+        settings["providerInstances"] = {}
+    if "opencode" not in settings["providerInstances"]:
+        settings["providerInstances"]["opencode"] = {
+            "driver": "opencode",
+            "displayName": "OpenCode",
+            "enabled": True,
+            "binaryPath": "/root/.opencode/bin/opencode"
+        }
+    else:
+        settings["providerInstances"]["opencode"]["enabled"] = True
+        settings["providerInstances"]["opencode"]["binaryPath"] = "/root/.opencode/bin/opencode"
+    with open(t3_settings_path, "w") as fp:
+        json.dump(settings, fp, indent=2)
+    os.chmod(t3_settings_path, 0o644)
+' 2>/dev/null || true
+    fi
 fi
 
 if [ "$DECRYPT_PI" = true ]; then
