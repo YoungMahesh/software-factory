@@ -144,7 +144,7 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertEqual(call_kwargs["env"]["FLAGS_enforce_kernel_ipv6_support"], "false")
 
     def test_build_sandbox_image_layers_t3(self):
-        from shared.image import build_sandbox_image, T3_VERSION, T3_TAR_URL, T3_PATCH_SCRIPT
+        from shared.image import build_sandbox_image, T3_VERSION, T3_TAR_URL
 
         with patch("shared.image.base_image") as mock_base:
             mock_img = MagicMock()
@@ -154,38 +154,7 @@ class TestT3CodeIntegration(unittest.TestCase):
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
-                T3_PATCH_SCRIPT,
             )
-
-    def test_t3_patch_script_validity_and_execution(self):
-        import ast
-        import tempfile
-        from shared.image import T3_PATCH_SCRIPT
-
-        self.assertTrue(T3_PATCH_SCRIPT.startswith("python3 -c '") and T3_PATCH_SCRIPT.endswith("'"))
-        py_code = T3_PATCH_SCRIPT[len("python3 -c '") : -1]
-
-        try:
-            ast.parse(py_code)
-        except SyntaxError as e:
-            self.fail(f"T3_PATCH_SCRIPT contains invalid Python syntax: {e}")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            test_bin = Path(tmpdir) / "t3"
-            target = b'args: input.profile.platform === "linux" ? ["--uid="] : []'
-            test_bin.write_bytes(b"PREFIX_" + target + b"_SUFFIX")
-
-            test_cmd = T3_PATCH_SCRIPT.replace("/opt/t3/t3", str(test_bin))
-            res = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
-            self.assertEqual(res.returncode, 0, f"Patch script failed: {res.stderr}")
-
-            patched_content = test_bin.read_bytes()
-            self.assertIn(b"--enforce_kernel_ipv6_support=false", patched_content)
-            self.assertNotIn(target, patched_content)
-
-            # Verify idempotency on already-patched binary
-            res_idempotent = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
-            self.assertEqual(res_idempotent.returncode, 0, f"Idempotent patch failed: {res_idempotent.stderr}")
 
     def test_startup_script_mints_pairing_token(self):
         content = self.startup_sh.read_text()

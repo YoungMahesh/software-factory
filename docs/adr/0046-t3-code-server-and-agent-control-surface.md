@@ -13,6 +13,10 @@ We added support for T3 Code (`pingdotgg/t3code`) as an opt-in agent control sur
 
 - `sandbox/main.py` gains `--t3`, `--t3code` (alias), and `--t3-port` (default: 3775).
 - Port 3000 is rejected for `--t3-port`, and collisions between `--t3-port`, `--opencode-port`, and `--metro-port` are strictly prevented.
-- `shared/image.py` layers the pinned T3 Code distribution into `/opt/t3`, patches the binary to pass `--enforce_kernel_ipv6_support=false` to Antigravity ACP runtime on Linux, and symlinks `/usr/local/bin/t3` when `t3` is requested.
+- `shared/image.py` layers the pinned T3 Code distribution into `/opt/t3` and symlinks `/usr/local/bin/t3` when `t3` is requested.
 - `shared/startup.sh` launches `t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR"` in the background, mints a 24-hour client pairing token (`/tmp/t3-pairing.json`), and provisions `/usr/local/bin/check-t3`.
 - `print_access_info` outputs the direct 1-click pairing URL (`/pair#token=...`) and renders a terminal unicode ASCII QR code for instant mobile app connection.
+
+## Amendments
+
+- **2026-10-27**: Upgraded pinned release from `0.0.45` to `0.1.3` (`t3-0.1.3-linux-x64.tar.gz`). Replaced binary patching with container environment propagation (`FLAGS_enforce_kernel_ipv6_support=false`) to prevent Node SEA bundle truncation.
