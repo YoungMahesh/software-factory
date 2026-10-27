@@ -1,0 +1,3 @@
+interface:
+  display_name: "Close Modal Sandboxes"
+  short_description: "Quickly identify and terminate Modal sandboxes safely"
