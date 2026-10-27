@@ -149,6 +149,16 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/secrets/antigravity-oauth-token-mgh.json")
         self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/secrets/antigravity-oauth-token-anv.json")
 
+    def test_startup_and_setup_scripts_contain_opencode_preauth(self):
+        startup_content = self.startup_sh.read_text()
+        setup_content = (self.repo_root / "scripts" / "setup.sh").read_text()
+
+        for content in [startup_content, setup_content]:
+            self.assertIn("OPENCODE_GO_API_KEY", content)
+            self.assertIn("providerInstances", content)
+            self.assertIn("opencode", content)
+            self.assertIn("/root/.opencode/bin/opencode", content)
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
@@ -199,6 +209,7 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertEqual(call_kwargs["env"]["FLAGS_enforce_kernel_ipv6_support"], "false")
 
     def test_build_sandbox_image_layers_t3(self):
+        from unittest.mock import call
         from shared.image import (
             build_sandbox_image,
             T3_VERSION,
@@ -209,13 +220,54 @@ class TestT3CodeIntegration(unittest.TestCase):
             T3_ANTIGRAVITY_MANAGED_DIR,
             T3_INSTALL_COMPLETE_JSON,
             T3_ACTIVE_JSON,
+            LOCAL_OPENCODE_CONFIG,
+            REMOTE_OPENCODE_CONFIG,
+            LOCAL_OPENCODE_SECRET,
+            REMOTE_OPENCODE_SECRET,
+            LOCAL_ANTIGRAVITY_SECRET,
+            LOCAL_ANTIGRAVITY_SECRET_MGH,
+            LOCAL_ANTIGRAVITY_SECRET_ANV,
+            REMOTE_ANTIGRAVITY_SECRET,
+            REMOTE_ANTIGRAVITY_SECRET_MGH,
+            REMOTE_ANTIGRAVITY_SECRET_ANV,
         )
 
-        with patch("shared.image.base_image") as mock_base:
-            mock_img = MagicMock()
-            mock_base.run_commands.return_value = mock_img
+        with patch("shared.image.base_image") as mock_base, patch(
+            "shared.image.add_local_files_if_present"
+        ) as mock_add_files:
+            mock_img1 = MagicMock()
+            mock_img2 = MagicMock()
+            mock_img3 = MagicMock()
+            mock_base.run_commands.return_value = mock_img1
+            mock_add_files.side_effect = lambda img, *args, **kwargs: img
+            mock_img1.run_commands.return_value = mock_img2
+            mock_img2.env.return_value = mock_img3
+
             result = build_sandbox_image(t3=True)
+
             mock_base.run_commands.assert_called_once_with(
+                "curl -fsSL https://opencode.ai/v2/install | bash"
+            )
+            mock_add_files.assert_has_calls(
+                [
+                    call(
+                        mock_img1,
+                        [
+                            (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                            (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+                        ],
+                    ),
+                    call(
+                        mock_img2,
+                        [
+                            (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
+                            (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
+                            (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                        ],
+                    ),
+                ]
+            )
+            mock_img1.run_commands.assert_called_once_with(
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
@@ -230,6 +282,9 @@ class TestT3CodeIntegration(unittest.TestCase):
                 ),
                 f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
                 f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
+            )
+            mock_img2.env.assert_called_once_with(
+                {"PATH": "/root/.opencode/bin:${PATH}"}
             )
 
     def test_t3_patch_script_validity_and_execution(self):

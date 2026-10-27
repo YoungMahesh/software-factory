@@ -158,7 +158,7 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
         done
     fi
     TARGET_DIR="${TARGET_DIR:-/root}"
-    echo "📂 Workspace resolved to $TARGET_DIR"
+    echo "📁 Workspace resolved to $TARGET_DIR"
     cd "$TARGET_DIR"
 else
     if [ "${NO_REPO:-0}" = "1" ]; then
@@ -185,7 +185,7 @@ EOF
             GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-maheshghamand@gmail.com}" \
             git -C "$TARGET_DIR" commit -m "initial commit"
         fi
-        echo "📂 Workspace resolved to $TARGET_DIR"
+        echo "📁 Workspace resolved to $TARGET_DIR"
     else
         if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
             echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
@@ -479,6 +479,7 @@ echo "=== T3 Server Log ===" && tail -n 20 /tmp/t3.log 2>/dev/null || true
 echo "=== Listening Sockets ===" && (ss -tulpn 2>/dev/null | grep 3775 || netstat -tulpn 2>/dev/null | grep 3775 || true)
 echo "=== T3 Settings ===" && cat /root/.t3/userdata/settings.json 2>/dev/null || true
 echo "=== T3 Antigravity Token ===" && ls -la /root/.t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json 2>/dev/null || true
+echo "=== T3 OpenCode Config ===" && ls -la /root/.config/opencode/opencode.json /root/.config/opencode/opencode.env 2>/dev/null || true
 EOF
     chmod +x /usr/local/bin/check-t3 2>/dev/null || true
 fi
@@ -503,38 +504,44 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
     if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
         if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-            echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, --pi, or --sops), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
-            exit 1
+            if [ "${ENABLE_T3:-}" = "1" ] && [ "${ENABLE_ANTIGRAVITY:-0}" != "1" ] && [ "${ENABLE_MODAL:-0}" != "1" ] && [ "${ENABLE_OPENCODE:-0}" != "1" ] && [ "${ENABLE_SOPS:-0}" != "1" ] && [ "${ENABLE_PI:-0}" != "1" ]; then
+                echo "⚠️  Warning: AGE_PRIVATE_KEY not set in environment. Skipping OpenCode credentials decryption for T3 Code." >&2
+            else
+                echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, --pi, --sops, or --t3), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
+                exit 1
+            fi
         fi
 
-        mkdir -p ~/.config/sops/age
-        echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
-        chmod 600 ~/.config/sops/age/keys.txt
+        if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
+            mkdir -p ~/.config/sops/age
+            echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
+            chmod 600 ~/.config/sops/age/keys.txt
 
-        setup_args=()
-        if [ "${ENABLE_MODAL:-}" = "1" ]; then
-            setup_args+=("--modal")
-        fi
-        if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-            setup_args+=("--agy")
-        fi
-        if [ "${ENABLE_T3:-}" = "1" ]; then
-            setup_args+=("--t3")
-        fi
-        if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
-            setup_args+=("--opencode")
-        fi
-        if [ "${ENABLE_PI:-}" = "1" ]; then
-            setup_args+=("--pi")
-        fi
+            setup_args=()
+            if [ "${ENABLE_MODAL:-}" = "1" ]; then
+                setup_args+=("--modal")
+            fi
+            if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+                setup_args+=("--agy")
+            fi
+            if [ "${ENABLE_T3:-}" = "1" ]; then
+                setup_args+=("--t3")
+            fi
+            if [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
+                setup_args+=("--opencode")
+            fi
+            if [ "${ENABLE_PI:-}" = "1" ]; then
+                setup_args+=("--pi")
+            fi
 
-        setup_status=0
-        if [ ${#setup_args[@]} -gt 0 ] && [ -f "/root/scripts/setup.sh" ]; then
-            echo "🔐 Decrypting tooling credentials with SOPS..."
-            bash /root/scripts/setup.sh "${setup_args[@]}" || setup_status=$?
+            setup_status=0
+            if [ ${#setup_args[@]} -gt 0 ] && [ -f "/root/scripts/setup.sh" ]; then
+                echo "🔐 Decrypting tooling credentials with SOPS..."
+                bash /root/scripts/setup.sh "${setup_args[@]}" || setup_status=$?
+            fi
         fi
     fi
 fi
@@ -690,9 +697,17 @@ except Exception:
 ' 2>/dev/null || true
     fi
 
-    # Pre-authenticate Antigravity provider in T3 Code if OAuth token is available
-    if [ -d /root/.gemini/antigravity-cli/profiles ] || [ -f /root/.gemini/antigravity-cli/antigravity-oauth-token ]; then
-        python3 -c '
+    if [ -f /root/.config/opencode/opencode.env ]; then
+        set -a
+        source /root/.config/opencode/opencode.env
+        set +a
+    fi
+    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
+        export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
+    fi
+
+    # Pre-authenticate Antigravity and OpenCode providers in T3 Code
+    python3 -c '
 import hashlib, json, os
 
 accounts = [
@@ -817,6 +832,34 @@ for instance_id, display_name, token_path, is_primary in accounts:
     except Exception as e:
         print(f"Warning: Failed to setup Antigravity ACP credentials for {instance_id}: {e}")
 
+# 2. OpenCode Provider
+opencode_env_path = "/root/.config/opencode/opencode.env"
+has_opencode_key = bool(os.environ.get("OPENCODE_GO_API_KEY"))
+if not has_opencode_key and os.path.exists(opencode_env_path):
+    try:
+        with open(opencode_env_path, "r") as ef:
+            for eline in ef:
+                if eline.startswith("OPENCODE_GO_API_KEY="):
+                    val = eline.split("=", 1)[1].strip().strip("\"").strip(chr(39))
+                    if val:
+                        has_opencode_key = True
+                        break
+    except Exception:
+        pass
+
+if has_opencode_key:
+    if "opencode" not in settings["providerInstances"]:
+        settings["providerInstances"]["opencode"] = {
+            "driver": "opencode",
+            "displayName": "OpenCode",
+            "enabled": True,
+            "binaryPath": "/root/.opencode/bin/opencode"
+        }
+    else:
+        settings["providerInstances"]["opencode"]["enabled"] = True
+        settings["providerInstances"]["opencode"]["binaryPath"] = "/root/.opencode/bin/opencode"
+    print("✨ Pre-configured OpenCode provider in T3 Code")
+
 if "claudeAgent" not in settings["providerInstances"]:
     settings["providerInstances"]["claudeAgent"] = {
         "driver": "claudeAgent",
@@ -832,7 +875,6 @@ with open(t3_settings_path, "w") as fp:
 os.chmod(t3_settings_path, 0o644)
 print("✨ Pre-authenticated Antigravity providers in T3 Code")
 ' 2>/dev/null || true
-    fi
 
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
