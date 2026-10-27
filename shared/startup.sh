@@ -659,6 +659,22 @@ fi
 
 if [ "${ENABLE_T3:-}" = "1" ]; then
     T3_PORT="${T3_PORT:-3775}"
+    if [ -f "/opt/t3/t3" ]; then
+        python3 -c '
+import base64
+p = "/opt/t3/t3"
+t = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2Qs")
+r = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs")
+try:
+    with open(p, "rb") as f:
+        c = f.read()
+    if t in c:
+        with open(p, "wb") as f:
+            f.write(c.replace(t, r, 1))
+except Exception:
+    pass
+' 2>/dev/null || true
+    fi
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true

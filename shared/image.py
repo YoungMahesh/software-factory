@@ -164,6 +164,38 @@ def browser_enabled(
 T3_VERSION = "0.1.3"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
+T3_ANTIGRAVITY_VERSION = "1.3.0"
+T3_ANTIGRAVITY_RELEASE_ID = (
+    "9fb60956af0a9d76220a4db91ca9ac88e2a2372ad68f985ab5fceace6b825b96"
+)
+T3_ANTIGRAVITY_URL = (
+    f"https://dl.google.com/agy-extensions/releases/linux/"
+    f"agy-acp-server-{T3_ANTIGRAVITY_VERSION}-linux-x86_64.zip"
+)
+T3_ANTIGRAVITY_MANAGED_DIR = "/root/.t3/tools/antigravity-acp/linux-x64"
+T3_ANTIGRAVITY_VERSION_DIR = (
+    f"{T3_ANTIGRAVITY_MANAGED_DIR}/versions/{T3_ANTIGRAVITY_RELEASE_ID}"
+)
+T3_INSTALL_COMPLETE_JSON = (
+    f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}","version":"{T3_ANTIGRAVITY_VERSION}",'
+    f'"executable":{{"name":"agy_acp_server.par","bytes":926533965}},'
+    f'"harness":{{"name":"localharness_external","bytes":130388040}}}}'
+)
+T3_ACTIVE_JSON = f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}"}}'
+
+# Length-preserving (183 -> 183 byte) in-place patch: passes --enforce_kernel_ipv6_support=false
+# to Antigravity ACP runtime on Linux without changing file size or shifting Node SEA offsets.
+T3_PATCH_SCRIPT = (
+    "python3 -c '"
+    'import base64; p = "/opt/t3/t3"; '
+    't = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2Qs"); '
+    'r = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs"); '
+    "assert len(t) == len(r); "
+    'c = open(p, "rb").read(); '
+    'assert t in c or r in c, "target pattern not found in /opt/t3/t3"; '
+    'open(p, "wb").write(c.replace(t, r, 1)) if t in c else None\''
+)
+
 
 def build_sandbox_image(
     *,
@@ -259,6 +291,17 @@ def build_sandbox_image(
             "mkdir -p /opt/t3",
             f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
             "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+            T3_PATCH_SCRIPT,
+            f"mkdir -p {T3_ANTIGRAVITY_VERSION_DIR}",
+            f"curl -fsSL {T3_ANTIGRAVITY_URL} -o /tmp/agy-acp.zip",
+            f"unzip -q /tmp/agy-acp.zip -d {T3_ANTIGRAVITY_VERSION_DIR}",
+            "rm -f /tmp/agy-acp.zip",
+            (
+                f"chmod 0755 {T3_ANTIGRAVITY_VERSION_DIR}/agy_acp_server.par "
+                f"{T3_ANTIGRAVITY_VERSION_DIR}/localharness_external"
+            ),
+            f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
+            f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
         )
 
     if herdr:

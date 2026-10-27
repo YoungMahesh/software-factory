@@ -19,4 +19,5 @@ We added support for T3 Code (`pingdotgg/t3code`) as an opt-in agent control sur
 
 ## Amendments
 
-- **2026-10-27**: Upgraded pinned release from `0.0.45` to `0.1.3` (`t3-0.1.3-linux-x64.tar.gz`). Replaced binary patching with container environment propagation (`FLAGS_enforce_kernel_ipv6_support=false`) to prevent Node SEA bundle truncation.
+- **2026-10-27**: Upgraded pinned release from `0.0.45` to `0.1.3` (`t3-0.1.3-linux-x64.tar.gz`).
+- **2026-10-27**: Pre-downloaded and staged Google's Antigravity ACP runtime `1.3.0` (`9fb60956af0a9d76220a4db91ca9ac88e2a2372ad68f985ab5fceace6b825b96`) into `/root/.t3/tools/antigravity-acp/linux-x64/` with `.install-complete.json` and `active.json` at image build time to eliminate on-demand web UI downloads. Restored the `--enforce_kernel_ipv6_support=false` launch argument patch via an exact length-preserving in-place patch (183 to 183 bytes) to satisfy gVisor networking without corrupting or truncating the Node SEA bundle.

@@ -13,8 +13,10 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.startup_sh = self.repo_root / "shared" / "startup.sh"
 
     def test_help_contains_t3_flags(self):
+        import sys
+
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--help"],
+            [sys.executable, str(self.sandbox_main), "--help"],
             capture_output=True,
             text=True,
         )
@@ -37,8 +39,10 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertEqual(args_alias.t3_port, 3776)
 
     def test_snapshot_cannot_be_used_with_t3(self):
+        import sys
+
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--t3"],
+            [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123", "--t3"],
             capture_output=True,
             text=True,
         )
@@ -144,7 +148,17 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertEqual(call_kwargs["env"]["FLAGS_enforce_kernel_ipv6_support"], "false")
 
     def test_build_sandbox_image_layers_t3(self):
-        from shared.image import build_sandbox_image, T3_VERSION, T3_TAR_URL
+        from shared.image import (
+            build_sandbox_image,
+            T3_VERSION,
+            T3_TAR_URL,
+            T3_PATCH_SCRIPT,
+            T3_ANTIGRAVITY_URL,
+            T3_ANTIGRAVITY_VERSION_DIR,
+            T3_ANTIGRAVITY_MANAGED_DIR,
+            T3_INSTALL_COMPLETE_JSON,
+            T3_ACTIVE_JSON,
+        )
 
         with patch("shared.image.base_image") as mock_base:
             mock_img = MagicMock()
@@ -154,7 +168,59 @@ class TestT3CodeIntegration(unittest.TestCase):
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+                T3_PATCH_SCRIPT,
+                f"mkdir -p {T3_ANTIGRAVITY_VERSION_DIR}",
+                f"curl -fsSL {T3_ANTIGRAVITY_URL} -o /tmp/agy-acp.zip",
+                f"unzip -q /tmp/agy-acp.zip -d {T3_ANTIGRAVITY_VERSION_DIR}",
+                "rm -f /tmp/agy-acp.zip",
+                (
+                    f"chmod 0755 {T3_ANTIGRAVITY_VERSION_DIR}/agy_acp_server.par "
+                    f"{T3_ANTIGRAVITY_VERSION_DIR}/localharness_external"
+                ),
+                f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
+                f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
             )
+
+    def test_t3_patch_script_validity_and_execution(self):
+        import ast
+        import tempfile
+        import base64
+        from shared.image import T3_PATCH_SCRIPT
+
+        self.assertTrue(T3_PATCH_SCRIPT.startswith("python3 -c '") and T3_PATCH_SCRIPT.endswith("'"))
+        py_code = T3_PATCH_SCRIPT[len("python3 -c '") : -1]
+
+        try:
+            ast.parse(py_code)
+        except SyntaxError as e:
+            self.fail(f"T3_PATCH_SCRIPT contains invalid Python syntax: {e}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_bin = Path(tmpdir) / "t3"
+            t = base64.b64decode(
+                "ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2Qs"
+            )
+            r = base64.b64decode(
+                "ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs"
+            )
+            self.assertEqual(len(t), len(r), "Patch must be length-preserving to prevent SEA corruption")
+
+            initial_content = b"PREFIX_" + t + b"_SUFFIX"
+            test_bin.write_bytes(initial_content)
+
+            test_cmd = T3_PATCH_SCRIPT.replace("/opt/t3/t3", str(test_bin))
+            res = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"Patch script failed: {res.stderr}")
+
+            patched_content = test_bin.read_bytes()
+            self.assertIn(b"--enforce_kernel_ipv6_support=false", patched_content)
+            self.assertNotIn(t, patched_content)
+            self.assertEqual(len(patched_content), len(initial_content), "Binary size must not change")
+
+            # Verify idempotency on already-patched binary
+            res_idempotent = subprocess.run(["bash", "-c", test_cmd], capture_output=True, text=True)
+            self.assertEqual(res_idempotent.returncode, 0, f"Idempotent patch failed: {res_idempotent.stderr}")
+            self.assertEqual(test_bin.read_bytes(), patched_content)
 
     def test_startup_script_mints_pairing_token(self):
         content = self.startup_sh.read_text()
