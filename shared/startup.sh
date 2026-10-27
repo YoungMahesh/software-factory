@@ -477,6 +477,8 @@ echo "=== T3 Code Binary ===" && which t3 && t3 --version
 echo "=== T3 Code Process ===" && ps aux | grep [t]3
 echo "=== T3 Server Log ===" && tail -n 20 /tmp/t3.log 2>/dev/null || true
 echo "=== Listening Sockets ===" && (ss -tulpn 2>/dev/null | grep 3775 || netstat -tulpn 2>/dev/null | grep 3775 || true)
+echo "=== T3 Settings ===" && cat /root/.t3/userdata/settings.json 2>/dev/null || true
+echo "=== T3 Antigravity Token ===" && ls -la /root/.t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json 2>/dev/null || true
 EOF
     chmod +x /usr/local/bin/check-t3 2>/dev/null || true
 fi
@@ -661,20 +663,98 @@ if [ "${ENABLE_T3:-}" = "1" ]; then
     T3_PORT="${T3_PORT:-3775}"
     if [ -f "/opt/t3/t3" ]; then
         python3 -c '
-import base64
+import base64, os
 p = "/opt/t3/t3"
-t = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2Qs")
-r = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs")
+t = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2QsCgkJZW52OiB7CgkJCS4uLmFudGlncmF2aXR5RW52aXJvbm1lbnQoaW5wdXQucHJvZmlsZSwgaW5wdXQuYmFzZUVudiA/PyBwcm9jZXNzLmVudiwgaW5wdXQuYXV0aCA/PyBBTlRJR1JBVklUWV9QRVJTT05BTF9BVVRILCBpbnB1dC5ydW50aW1lVGVtcERpcmVjdG9yeSksCgkJCUFOVElHUkFWSVRZX0hBUk5FU1NfUEFUSDogaW5wdXQuaW5zdGFsbGF0aW9uLmhhcm5lc3NQYXRoCgkJfSwKCQlleHRlbmRFbnY6IGZhbHNlCgl9Owp9")
+r = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpewpyZXR1cm57CmNvbW1hbmQ6aW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAphcmdzOiBpbnB1dC5wcm9maWxlLnBsYXRmb3JtPT09ImxpbnV4Ij9bIi0tZW5mb3JjZV9rZXJuZWxfaXB2Nl9zdXBwb3J0PWZhbHNlIiwiLS11aWQ9Il06W10sCmN3ZDppbnB1dC5jd2QsCmVudjp7Ci4uLmFudGlncmF2aXR5RW52aXJvbm1lbnQoaW5wdXQucHJvZmlsZSxpbnB1dC5iYXNlRW52Pz9wcm9jZXNzLmVudiwgaW5wdXQuYXV0aD8/QU5USUdSQVZJVFlfUEVSU09OQUxfQVVUSCwgaW5wdXQucnVudGltZVRlbXBEaXJlY3RvcnkpLApBTlRJR1JBVklUWV9IQVJORVNTX1BBVEg6aW5wdXQuaW5zdGFsbGF0aW9uLmhhcm5lc3NQYXRoCn0sCmV4dGVuZEVudjpmYWxzZQp9Owp9")
+r_old = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs")
 try:
     with open(p, "rb") as f:
         c = f.read()
     if t in c:
-        with open(p, "wb") as f:
+        with open(p + ".tmp", "wb") as f:
             f.write(c.replace(t, r, 1))
+        os.chmod(p + ".tmp", 0o755)
+        os.replace(p + ".tmp", p)
+    elif r_old in c:
+        pos = c.find(r_old)
+        with open(p + ".tmp", "wb") as f:
+            f.write(c[:pos] + r + c[pos+426:])
+        os.chmod(p + ".tmp", 0o755)
+        os.replace(p + ".tmp", p)
 except Exception:
     pass
 ' 2>/dev/null || true
     fi
+
+    # Pre-authenticate Antigravity provider in T3 Code if OAuth token is available
+    if [ -f /root/.gemini/antigravity-cli/antigravity-oauth-token ]; then
+        python3 -c '
+import hashlib, json, os
+
+token_path = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
+if os.path.exists(token_path):
+    try:
+        with open(token_path, "r") as f:
+            data = json.load(f)
+        refresh_token = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
+        if refresh_token:
+            acp_token = {
+                "client_id": "dummy-client-id.apps.googleusercontent.com",
+                "client_secret": "dummy-client-secret",
+                "refresh_token": refresh_token,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": [
+                    "https://www.googleapis.com/auth/cloud-platform",
+                    "https://www.googleapis.com/auth/userinfo.email",
+                    "https://www.googleapis.com/auth/aicode"
+                ]
+            }
+            acp_settings = {"auth": {"type": "oauth-personal"}}
+            t3_hash = hashlib.sha256(b"antigravity").hexdigest()
+            target_dirs = [
+                f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp",
+                "/root/.gemini/antigravity-acp"
+            ]
+            for d in target_dirs:
+                os.makedirs(d, mode=0o700, exist_ok=True)
+                tok_file = os.path.join(d, "acp_token.json")
+                set_file = os.path.join(d, "settings.json")
+                with open(tok_file, "w") as fp:
+                    json.dump(acp_token, fp, indent=2)
+                os.chmod(tok_file, 0o600)
+                with open(set_file, "w") as fp:
+                    json.dump(acp_settings, fp, indent=2)
+                os.chmod(set_file, 0o600)
+
+            t3_settings_path = "/root/.t3/userdata/settings.json"
+            os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
+            settings = {}
+            if os.path.exists(t3_settings_path):
+                try:
+                    with open(t3_settings_path, "r") as fp:
+                        settings = json.load(fp)
+                except Exception:
+                    settings = {}
+            if "providerInstances" not in settings:
+                settings["providerInstances"] = {}
+            if "antigravity" not in settings["providerInstances"]:
+                settings["providerInstances"]["antigravity"] = {
+                    "driver": "antigravity",
+                    "displayName": "Antigravity",
+                    "enabled": True
+                }
+            else:
+                settings["providerInstances"]["antigravity"]["enabled"] = True
+            with open(t3_settings_path, "w") as fp:
+                json.dump(settings, fp, indent=2)
+            os.chmod(t3_settings_path, 0o644)
+            print("✨ Pre-authenticated Antigravity provider in T3 Code")
+    except Exception as e:
+        print(f"Warning: Failed to setup Antigravity ACP credentials: {e}")
+' 2>/dev/null || true
+    fi
+
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true
