@@ -40,6 +40,21 @@ def resolve_instance_name(sb: modal.Sandbox) -> str | None:
     except Exception:
         pass
 
+    try:
+        proc = sb.exec("printenv")
+        out = proc.stdout.read()
+        env_dict = {}
+        for line in out.splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                env_dict[k] = v
+        if "SANDBOX_NAME" in env_dict:
+            return env_dict["SANDBOX_NAME"]
+        if "APP_NAME" in env_dict:
+            return env_dict["APP_NAME"]
+    except Exception:
+        pass
+
     return None
 
 
@@ -113,6 +128,17 @@ def main() -> int:
 
     sandboxes = get_sandboxes(app_name=args.app, all_apps=args.all_apps)
     running_sandboxes = [s for s in sandboxes if s["running"]]
+
+    targets = (args.terminate or []) + (args.keep or [])
+    if targets and not args.all_apps and args.app == "software-factory":
+        known = {s["id"] for s in running_sandboxes} | {s["name"] for s in running_sandboxes if s["name"]}
+        if not any(t in known for t in targets):
+            all_sandboxes = get_sandboxes(all_apps=True)
+            all_running = [s for s in all_sandboxes if s["running"]]
+            known_all = {s["id"] for s in all_running} | {s["name"] for s in all_running if s["name"]}
+            if any(t in known_all for t in targets):
+                sandboxes = all_sandboxes
+                running_sandboxes = all_running
 
     if args.list or (not args.terminate and not args.keep):
         if args.json:

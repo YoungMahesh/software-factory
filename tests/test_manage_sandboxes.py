@@ -54,6 +54,23 @@ class TestManageSandboxes(TestCase):
         name = resolve_instance_name(sb)
         self.assertEqual(name, "software-factory-from-config")
 
+    def test_resolve_instance_name_from_env(self):
+        sb = MagicMock()
+        sb.get_tags.return_value = {}
+
+        def mock_exec(*args, **kwargs):
+            proc = MagicMock()
+            if "printenv" in args:
+                proc.stdout.read.return_value = "FOO=BAR\nSANDBOX_NAME=t3-antigravity-test-env\n"
+            else:
+                proc.stdout.read.return_value = ""
+            return proc
+
+        sb.exec.side_effect = mock_exec
+
+        name = resolve_instance_name(sb)
+        self.assertEqual(name, "t3-antigravity-test-env")
+
     def test_terminate_sandboxes_dry_run(self):
         results = terminate_sandboxes(["sb-1", "sb-2"], dry_run=True)
         self.assertEqual(len(results), 2)
