@@ -659,6 +659,20 @@ fi
 
 if [ "${ENABLE_T3:-}" = "1" ]; then
     T3_PORT="${T3_PORT:-3775}"
+    if [ -f "/opt/t3/t3" ]; then
+        python3 -c '
+target = b"args: input.profile.platform === \"linux\" ? [\"--uid=\"] : []"
+replacement = b"args: input.profile.platform === \"linux\" ? [\"--enforce_kernel_ipv6_support=false\",\"--uid=\"] : []"
+try:
+    with open("/opt/t3/t3", "rb") as f:
+        c = f.read()
+    if target in c:
+        with open("/opt/t3/t3", "wb") as f:
+            f.write(c.replace(target, replacement, 1))
+except Exception:
+    pass
+' 2>/dev/null || true
+    fi
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true

@@ -163,6 +163,14 @@ def browser_enabled(
 
 T3_VERSION = "0.0.45"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
+T3_PATCH_SCRIPT = (
+    "python3 -c '"
+    'target = b"args: input.profile.platform === \\"linux\\" ? [\\"--uid=\\"] : []"; '
+    'replacement = b"args: input.profile.platform === \\"linux\\" ? [\\"--enforce_kernel_ipv6_support=false\\",\\"--uid=\\"] : []"; '
+    'with open("/opt/t3/t3", "rb") as f: c = f.read(); '
+    'assert target in c, "target pattern not found in /opt/t3/t3"; '
+    'with open("/opt/t3/t3", "wb") as f: f.write(c.replace(target, replacement, 1))\''
+)
 
 
 def build_sandbox_image(
@@ -259,6 +267,7 @@ def build_sandbox_image(
             "mkdir -p /opt/t3",
             f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
             "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+            T3_PATCH_SCRIPT,
         )
 
     if herdr:

@@ -141,9 +141,10 @@ class TestT3CodeIntegration(unittest.TestCase):
         self.assertIn(3775, call_kwargs["encrypted_ports"])
         self.assertEqual(call_kwargs["env"]["ENABLE_T3"], "1")
         self.assertEqual(call_kwargs["env"]["T3_PORT"], "3775")
+        self.assertEqual(call_kwargs["env"]["FLAGS_enforce_kernel_ipv6_support"], "false")
 
     def test_build_sandbox_image_layers_t3(self):
-        from shared.image import build_sandbox_image, T3_VERSION, T3_TAR_URL
+        from shared.image import build_sandbox_image, T3_VERSION, T3_TAR_URL, T3_PATCH_SCRIPT
 
         with patch("shared.image.base_image") as mock_base:
             mock_img = MagicMock()
@@ -153,6 +154,7 @@ class TestT3CodeIntegration(unittest.TestCase):
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
+                T3_PATCH_SCRIPT,
             )
 
     def test_startup_script_mints_pairing_token(self):

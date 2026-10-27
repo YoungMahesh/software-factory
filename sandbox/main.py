@@ -226,6 +226,7 @@ def run_sandbox_launch(
         encrypted_ports.append(args.t3_port)
         env["ENABLE_T3"] = "1"
         env["T3_PORT"] = str(args.t3_port)
+        env["FLAGS_enforce_kernel_ipv6_support"] = "false"
 
     if args.agy:
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
