@@ -1,5 +1,6 @@
 """Subsystem tests for Modal Sandbox runner and configuration."""
 
+import os
 from pathlib import Path
 import subprocess
 import unittest
@@ -108,8 +109,45 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("dummy-client-id", content)
             self.assertIn("providerInstances", content)
             self.assertIn("antigravity", content)
+            self.assertIn("antigravity-mgh", content)
+            self.assertIn("antigravity-anv", content)
+            self.assertIn("Antigravity (MGH)", content)
+            self.assertIn("Antigravity (ANV)", content)
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
+
+    def test_switch_agy_profile_offline_with_cached_profiles(self):
+        import tempfile
+
+        switch_script = self.repo_root / "scripts" / "switch-agy-profile.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target_dir = Path(tmpdir) / ".gemini" / "antigravity-cli"
+            profiles_dir = target_dir / "profiles"
+            profiles_dir.mkdir(parents=True)
+            (profiles_dir / "mgh").write_text('{"refresh_token": "token-mgh"}')
+            (profiles_dir / "anv").write_text('{"refresh_token": "token-anv"}')
+            (profiles_dir / "m47").write_text('{"refresh_token": "token-m47"}')
+
+            env = {"TARGET_DIR": str(target_dir), "PATH": os.environ["PATH"]}
+            res = subprocess.run(["bash", str(switch_script), "mgh"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, f"Failed: {res.stderr}")
+            self.assertIn("Switched Antigravity CLI profile to: mgh", res.stdout)
+            self.assertEqual((target_dir / "antigravity-oauth-token").read_text(), '{"refresh_token": "token-mgh"}')
+
+    def test_build_sandbox_image_stages_multiple_antigravity_accounts(self):
+        from shared.image import (
+            LOCAL_ANTIGRAVITY_SECRET,
+            LOCAL_ANTIGRAVITY_SECRET_MGH,
+            LOCAL_ANTIGRAVITY_SECRET_ANV,
+            REMOTE_ANTIGRAVITY_SECRET,
+            REMOTE_ANTIGRAVITY_SECRET_MGH,
+            REMOTE_ANTIGRAVITY_SECRET_ANV,
+        )
+
+        self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_MGH).endswith("antigravity-oauth-token-mgh.json"))
+        self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_ANV).endswith("antigravity-oauth-token-anv.json"))
+        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/secrets/antigravity-oauth-token-mgh.json")
+        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/secrets/antigravity-oauth-token-anv.json")
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")

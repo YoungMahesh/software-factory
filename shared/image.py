@@ -32,6 +32,14 @@ LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
 REMOTE_ANTIGRAVITY_SECRET = "/root/secrets/antigravity-oauth-token.json"
+LOCAL_ANTIGRAVITY_SECRET_MGH = (
+    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-mgh.json"
+)
+REMOTE_ANTIGRAVITY_SECRET_MGH = "/root/secrets/antigravity-oauth-token-mgh.json"
+LOCAL_ANTIGRAVITY_SECRET_ANV = (
+    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-anv.json"
+)
+REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/secrets/antigravity-oauth-token-anv.json"
 LOCAL_MODAL_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "modal.toml"
 REMOTE_MODAL_SECRET = "/root/secrets/modal.toml"
 LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
@@ -71,7 +79,7 @@ def add_local_files_if_present(
     return image
 
 
-BASE_IMAGE_FILES: list[tuple[Path, str]] = [
+BASE_IMAGE_FILES: list[tuple[Path, str]] = [\
     (LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT),
     (LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH),
     (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
@@ -236,6 +244,8 @@ def build_sandbox_image(
                 (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
                 (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
                 (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
+                (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
+                (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
             ],
         )
 
@@ -303,6 +313,15 @@ def build_sandbox_image(
             f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
             f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
         )
+        if not agy:
+            image = add_local_files_if_present(
+                image,
+                [
+                    (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
+                    (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
+                    (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                ],
+            )
 
     if herdr:
         image = image.run_commands(

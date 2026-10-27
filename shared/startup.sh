@@ -503,7 +503,7 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ]; then
+if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ]; then
     if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
         if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
             echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, --pi, or --sops), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
@@ -521,6 +521,9 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
         if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
             setup_args+=("--agy")
         fi
+        if [ "${ENABLE_T3:-}" = "1" ]; then
+            setup_args+=("--t3")
+        fi
         if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
             setup_args+=("--opencode")
         fi
@@ -537,7 +540,7 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
 fi
 
 # Scrub staged encrypted tooling secrets immediately after decryption
-rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token.json /root/secrets/modal.toml
+rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml
 
 if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "🔐 SOPS credentials retained in sandbox (~/.config/sops/age/keys.txt)."
@@ -688,133 +691,146 @@ except Exception:
     fi
 
     # Pre-authenticate Antigravity provider in T3 Code if OAuth token is available
-    if [ -f /root/.gemini/antigravity-cli/antigravity-oauth-token ]; then
+    if [ -d /root/.gemini/antigravity-cli/profiles ] || [ -f /root/.gemini/antigravity-cli/antigravity-oauth-token ]; then
         python3 -c '
 import hashlib, json, os
 
-token_path = "/root/.gemini/antigravity-cli/antigravity-oauth-token"
-if os.path.exists(token_path):
+accounts = [
+    ("antigravity", "Antigravity", os.path.expanduser("~/.gemini/antigravity-cli/profiles/m47"), True),
+    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
+    ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
+]
+
+t3_settings_path = "/root/.t3/userdata/settings.json"
+os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
+settings = {}
+if os.path.exists(t3_settings_path):
+    try:
+        with open(t3_settings_path, "r") as fp:
+            settings = json.load(fp)
+    except Exception:
+        settings = {}
+if "providerInstances" not in settings:
+    settings["providerInstances"] = {}
+
+t3_cache_dir = "/root/.t3/caches"
+os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
+
+for instance_id, display_name, token_path, is_primary in accounts:
+    if not os.path.exists(token_path) and is_primary:
+        token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+
+    if not os.path.exists(token_path):
+        continue
+
     try:
         with open(token_path, "r") as f:
             data = json.load(f)
         refresh_token = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
-        if refresh_token:
-            acp_token = {
-                "client_id": "dummy-client-id.apps.googleusercontent.com",
-                "client_secret": "dummy-client-secret",
-                "refresh_token": refresh_token,
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "scopes": [
-                    "https://www.googleapis.com/auth/cloud-platform",
-                    "https://www.googleapis.com/auth/userinfo.email",
-                    "https://www.googleapis.com/auth/aicode"
-                ]
-            }
-            acp_settings = {"auth": {"type": "oauth-personal"}}
-            t3_hash = hashlib.sha256(b"antigravity").hexdigest()
-            target_dirs = [
-                f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp",
-                "/root/.gemini/antigravity-acp"
+        if not refresh_token:
+            continue
+
+        acp_token = {
+            "client_id": "dummy-client-id.apps.googleusercontent.com",
+            "client_secret": "dummy-client-secret",
+            "refresh_token": refresh_token,
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": [
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/aicode"
             ]
-            for d in target_dirs:
-                os.makedirs(d, mode=0o700, exist_ok=True)
-                tok_file = os.path.join(d, "acp_token.json")
-                set_file = os.path.join(d, "settings.json")
-                with open(tok_file, "w") as fp:
-                    json.dump(acp_token, fp, indent=2)
-                os.chmod(tok_file, 0o600)
-                with open(set_file, "w") as fp:
-                    json.dump(acp_settings, fp, indent=2)
-                os.chmod(set_file, 0o600)
+        }
+        acp_settings = {"auth": {"type": "oauth-personal"}}
+        t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+        target_dirs = [f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp"]
+        if is_primary:
+            target_dirs.append(os.path.expanduser("~/.gemini/antigravity-acp"))
 
-            t3_settings_path = "/root/.t3/userdata/settings.json"
-            os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
-            settings = {}
-            if os.path.exists(t3_settings_path):
-                try:
-                    with open(t3_settings_path, "r") as fp:
-                        settings = json.load(fp)
-                except Exception:
-                    settings = {}
-            if "providerInstances" not in settings:
-                settings["providerInstances"] = {}
-            if "antigravity" not in settings["providerInstances"]:
-                settings["providerInstances"]["antigravity"] = {
-                    "driver": "antigravity",
-                    "displayName": "Antigravity",
-                    "enabled": True
-                }
-            else:
-                settings["providerInstances"]["antigravity"]["enabled"] = True
-            if "claudeAgent" not in settings["providerInstances"]:
-                settings["providerInstances"]["claudeAgent"] = {
-                    "driver": "claudeAgent",
-                    "enabled": False
-                }
-            if "codex" not in settings["providerInstances"]:
-                settings["providerInstances"]["codex"] = {
-                    "driver": "codex",
-                    "enabled": False
-                }
-            with open(t3_settings_path, "w") as fp:
-                json.dump(settings, fp, indent=2)
-            os.chmod(t3_settings_path, 0o644)
+        for d in target_dirs:
+            os.makedirs(d, mode=0o700, exist_ok=True)
+            tok_file = os.path.join(d, "acp_token.json")
+            set_file = os.path.join(d, "settings.json")
+            with open(tok_file, "w") as fp:
+                json.dump(acp_token, fp, indent=2)
+            os.chmod(tok_file, 0o600)
+            with open(set_file, "w") as fp:
+                json.dump(acp_settings, fp, indent=2)
+            os.chmod(set_file, 0o600)
 
-            t3_cache_dir = "/root/.t3/caches"
-            os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
-            t3_cache_file = os.path.join(t3_cache_dir, "antigravity.json")
-            cache_data = {
-                "displayName": "Antigravity",
-                "showInteractionModeToggle": False,
-                "enabled": True,
-                "installed": True,
-                "version": "1.3.0",
-                "status": "ready",
-                "auth": {
-                    "status": "authenticated",
-                    "type": "oauth-personal",
-                    "label": "Google account"
+        settings["providerInstances"][instance_id] = {
+            "driver": "antigravity",
+            "displayName": display_name,
+            "enabled": True
+        }
+
+        t3_cache_file = os.path.join(t3_cache_dir, f"{instance_id}.json")
+        cache_data = {
+            "displayName": display_name,
+            "showInteractionModeToggle": False,
+            "enabled": True,
+            "installed": True,
+            "version": "1.3.0",
+            "status": "ready",
+            "auth": {
+                "status": "authenticated",
+                "type": "oauth-personal",
+                "label": "Google account"
+            },
+            "setup": {
+                "canAuthenticate": True,
+                "canInstall": True
+            },
+            "checkedAt": "2026-10-27T12:00:00.000Z",
+            "models": [
+                {
+                    "slug": "gemini-3.8-flash-high",
+                    "name": "Gemini 3.8 Flash (High)",
+                    "isCustom": False,
+                    "isDefault": True,
+                    "aliases": [f"{instance_id}-default"],
+                    "capabilities": {"optionDescriptors": []}
                 },
-                "setup": {
-                    "canAuthenticate": True,
-                    "canInstall": True
+                {
+                    "slug": "gemini-3.8-flash-medium",
+                    "name": "Gemini 3.8 Flash (Medium)",
+                    "isCustom": False,
+                    "capabilities": {"optionDescriptors": []}
                 },
-                "checkedAt": "2026-10-27T12:00:00.000Z",
-                "models": [
-                    {
-                        "slug": "gemini-3.8-flash-high",
-                        "name": "Gemini 3.8 Flash (High)",
-                        "isCustom": False,
-                        "isDefault": True,
-                        "aliases": ["antigravity-default"],
-                        "capabilities": {"optionDescriptors": []}
-                    },
-                    {
-                        "slug": "gemini-3.8-flash-medium",
-                        "name": "Gemini 3.8 Flash (Medium)",
-                        "isCustom": False,
-                        "capabilities": {"optionDescriptors": []}
-                    },
-                    {
-                        "slug": "gemini-3.8-flash-low",
-                        "name": "Gemini 3.8 Flash (Low)",
-                        "isCustom": False,
-                        "capabilities": {"optionDescriptors": []}
-                    }
-                ],
-                "slashCommands": [],
-                "skills": [],
-                "supportsConversationRollback": False,
-                "supportsTextGeneration": True,
-                "instanceId": "antigravity",
-                "driver": "antigravity"
-            }
-            with open(t3_cache_file, "w") as fp:
-                json.dump(cache_data, fp, indent=2)
-            os.chmod(t3_cache_file, 0o644)
-            print("✨ Pre-authenticated Antigravity provider in T3 Code")
+                {
+                    "slug": "gemini-3.8-flash-low",
+                    "name": "Gemini 3.8 Flash (Low)",
+                    "isCustom": False,
+                    "capabilities": {"optionDescriptors": []}
+                }
+            ],
+            "slashCommands": [],
+            "skills": [],
+            "supportsConversationRollback": False,
+            "supportsTextGeneration": True,
+            "instanceId": instance_id,
+            "driver": "antigravity"
+        }
+        with open(t3_cache_file, "w") as fp:
+            json.dump(cache_data, fp, indent=2)
+        os.chmod(t3_cache_file, 0o644)
     except Exception as e:
-        print(f"Warning: Failed to setup Antigravity ACP credentials: {e}")
+        print(f"Warning: Failed to setup Antigravity ACP credentials for {instance_id}: {e}")
+
+if "claudeAgent" not in settings["providerInstances"]:
+    settings["providerInstances"]["claudeAgent"] = {
+        "driver": "claudeAgent",
+        "enabled": False
+    }
+if "codex" not in settings["providerInstances"]:
+    settings["providerInstances"]["codex"] = {
+        "driver": "codex",
+        "enabled": False
+    }
+with open(t3_settings_path, "w") as fp:
+    json.dump(settings, fp, indent=2)
+os.chmod(t3_settings_path, 0o644)
+print("✨ Pre-authenticated Antigravity providers in T3 Code")
 ' 2>/dev/null || true
     fi
 
