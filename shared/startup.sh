@@ -479,6 +479,8 @@ if [ "${ENABLE_T3:-}" = "1" ]; then
     cat << 'EOF' > /usr/local/bin/check-t3
 #!/usr/bin/env bash
 echo "=== T3 Code Binary ===" && which t3 && t3 --version
+echo "=== T3 Public URL ===" && cat /root/.t3/public_url 2>/dev/null || true
+echo "=== T3 Runtime State ===" && cat /root/.t3/userdata/server-runtime.json 2>/dev/null || true
 echo "=== T3 Code Process ===" && ps aux | grep [t]3
 echo "=== T3 Server Log ===" && tail -n 20 /tmp/t3.log 2>/dev/null || true
 echo "=== Listening Sockets ===" && (ss -tulpn 2>/dev/null | grep 3775 || netstat -tulpn 2>/dev/null | grep 3775 || true)
@@ -880,6 +882,63 @@ with open(t3_settings_path, "w") as fp:
 os.chmod(t3_settings_path, 0o644)
 print("✨ Pre-authenticated Antigravity providers in T3 Code")
 ' 2>/dev/null || true
+
+    # Install T3 CLI wrapper that ensures t3 pair uses the Modal HTTPS public URL
+    cat << 'EOF' > /usr/local/bin/t3.wrapper
+#!/usr/bin/env bash
+REAL_T3="/opt/t3/t3"
+
+if [ "${1:-}" = "pair" ]; then
+    PUBLIC_URL="${T3_PUBLIC_URL:-}"
+    if [ -z "$PUBLIC_URL" ] && [ -f "/root/.t3/public_url" ]; then
+        PUBLIC_URL=$(cat /root/.t3/public_url 2>/dev/null | tr -d '\r\n')
+    fi
+
+    if [ -n "$PUBLIC_URL" ]; then
+        python3 -c "
+import json, os, sys
+
+url = sys.argv[1]
+candidates = [
+    '/root/.t3/userdata/server-runtime.json',
+    '/root/.t3/dev/server-runtime.json',
+]
+
+for p in candidates:
+    if os.path.isfile(p):
+        try:
+            with open(p, 'r') as f:
+                d = json.load(f)
+            if d.get('devUrl') != url:
+                d['devUrl'] = url
+                tmp = p + '.tmp'
+                with open(tmp, 'w') as f:
+                    json.dump(d, f, indent=2)
+                os.replace(tmp, p)
+        except Exception:
+            pass
+" "$PUBLIC_URL" 2>/dev/null || true
+    fi
+
+    has_base_dir=0
+    for arg in "$@"; do
+        if [ "$arg" = "--base-dir" ] || [[ "$arg" == --base-dir=* ]]; then
+            has_base_dir=1
+            break
+        fi
+    done
+
+    if [ "$has_base_dir" -eq 0 ]; then
+        if [ ! -f ".t3/userdata/server-runtime.json" ] && [ -f "/root/.t3/userdata/server-runtime.json" ]; then
+            set -- "$@" --base-dir /root/.t3
+        fi
+    fi
+fi
+
+exec "$REAL_T3" "$@"
+EOF
+    chmod +x /usr/local/bin/t3.wrapper
+    mv -f /usr/local/bin/t3.wrapper /usr/local/bin/t3
 
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &

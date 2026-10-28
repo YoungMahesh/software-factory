@@ -339,6 +339,46 @@ def run_sandbox_launch(
     t3_pair_url = None
     t3_qr_code = None
     if args.t3 and t3_url:
+        clean_t3_url = t3_url.rstrip("/")
+        # Configure T3 public URL in the sandbox environment and server runtime state
+        try:
+            cfg_script = (
+                f"import json, os, time\n"
+                f"url = {json.dumps(clean_t3_url)}\n"
+                f"os.makedirs('/root/.t3', exist_ok=True)\n"
+                f"with open('/root/.t3/public_url', 'w') as f:\n"
+                f"    f.write(url + '\\n')\n"
+                f"for p in ['/etc/environment', '/root/.bashrc']:\n"
+                f"    try:\n"
+                f"        with open(p, 'a+') as f:\n"
+                f"            f.seek(0)\n"
+                f"            c = f.read()\n"
+                f"            if 'T3_PUBLIC_URL=' not in c:\n"
+                f"                f.write(f'export T3_PUBLIC_URL=\"{{url}}\"\\n')\n"
+                f"    except Exception:\n"
+                f"        pass\n"
+                f"rt = '/root/.t3/userdata/server-runtime.json'\n"
+                f"for _ in range(20):\n"
+                f"    if os.path.isfile(rt):\n"
+                f"        try:\n"
+                f"            with open(rt, 'r') as f:\n"
+                f"                d = json.load(f)\n"
+                f"            if d.get('devUrl') != url:\n"
+                f"                d['devUrl'] = url\n"
+                f"                tmp = rt + '.tmp'\n"
+                f"                with open(tmp, 'w') as f:\n"
+                f"                    json.dump(d, f, indent=2)\n"
+                f"                os.replace(tmp, rt)\n"
+                f"            break\n"
+                f"        except Exception:\n"
+                f"            pass\n"
+                f"    time.sleep(0.25)\n"
+            )
+            proc_cfg = sandbox.exec("python3", "-c", cfg_script)
+            proc_cfg.wait()
+        except Exception:
+            pass
+
         # Mint the 24-hour pairing token directly from the container's pre-baked t3 binary
         try:
             proc = sandbox.exec("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
@@ -348,7 +388,7 @@ def run_sandbox_launch(
                     pairing_data = json.loads(out)
                     credential = pairing_data.get("credential")
                     if credential:
-                        t3_pair_url = f"{t3_url}/pair#token={credential}"
+                        t3_pair_url = f"{clean_t3_url}/pair#token={credential}"
                         t3_qr_code = generate_ascii_qr(t3_pair_url)
         except Exception:
             pass
@@ -364,7 +404,7 @@ def run_sandbox_launch(
                             pairing_data = json.loads(out)
                             credential = pairing_data.get("credential")
                             if credential:
-                                t3_pair_url = f"{t3_url}/pair#token={credential}"
+                                t3_pair_url = f"{clean_t3_url}/pair#token={credential}"
                                 t3_qr_code = generate_ascii_qr(t3_pair_url)
                                 break
                 except Exception:
@@ -372,7 +412,7 @@ def run_sandbox_launch(
                 time.sleep(0.5)
 
         if not t3_pair_url:
-            t3_pair_url = t3_url
+            t3_pair_url = clean_t3_url
 
     print_access_info(
         sandbox,
