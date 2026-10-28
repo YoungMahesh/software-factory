@@ -251,6 +251,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_ANTIGRAVITY_SECRET_MGH,
             LOCAL_ANTIGRAVITY_SECRET_ANV,
             REMOTE_ANTIGRAVITY_SECRET_ANV,
+            LOCAL_ANTIGRAVITY_ENV,
+            REMOTE_ANTIGRAVITY_ENV,
             LOCAL_MODAL_SECRET,
             REMOTE_MODAL_SECRET,
         )
@@ -280,6 +282,7 @@ class TestSandboxImageStaging(unittest.TestCase):
                 (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
                 (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
                 (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
             ],
         )
 

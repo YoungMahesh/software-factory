@@ -1,5 +1,6 @@
 """Subsystem tests for Modal Sandbox runner and configuration."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -115,6 +116,53 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("Antigravity (ANV)", content)
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
+            self.assertIn("antigravity.env", content)
+
+    def test_setup_script_decrypts_antigravity_env(self):
+        import tempfile
+        setup_script = self.repo_root / "scripts" / "setup.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            secrets_dir = tmp_path / "secrets"
+            secrets_dir.mkdir()
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            home_dir = tmp_path / "home"
+            home_dir.mkdir()
+
+            sops_mock = bin_dir / "sops"
+            sops_mock.write_text(
+                "#!/usr/bin/env bash\n"
+                "for arg in \"$@\"; do\n"
+                "  if [[ \"$arg\" == *\"antigravity.env\"* ]]; then\n"
+                "    echo \"ANTIGRAVITY_CLIENT_ID=custom-client-id.apps.googleusercontent.com\"\n"
+                "    echo \"ANTIGRAVITY_CLIENT_SECRET=custom-client-secret\"\n"
+                "    exit 0\n"
+                "  elif [[ \"$arg\" == *\"antigravity-oauth-token.json\"* ]]; then\n"
+                "    echo \x27{\"refresh_token\": \"mock-refresh-token\"}\x27\n"
+                "    exit 0\n"
+                "  fi\n"
+                "done\n"
+            )
+            sops_mock.chmod(0o755)
+
+            (secrets_dir / "antigravity.env").write_text("DUMMY_ENCRYPTED")
+            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY_ENCRYPTED")
+
+            env = {
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
+                "HOME": str(home_dir),
+                "SECRETS_DIR": str(secrets_dir),
+            }
+            res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")
+
+            acp_token_path = home_dir / ".gemini" / "antigravity-acp" / "acp_token.json"
+            self.assertTrue(acp_token_path.exists(), "acp_token.json was not generated")
+            acp_data = json.loads(acp_token_path.read_text())
+            self.assertEqual(acp_data["client_id"], "custom-client-id.apps.googleusercontent.com")
+            self.assertEqual(acp_data["client_secret"], "custom-client-secret")
+            self.assertEqual(acp_data["refresh_token"], "mock-refresh-token")
 
     def test_switch_agy_profile_offline_with_cached_profiles(self):
         import tempfile
@@ -139,15 +187,19 @@ class TestT3CodeIntegration(unittest.TestCase):
             LOCAL_ANTIGRAVITY_SECRET,
             LOCAL_ANTIGRAVITY_SECRET_MGH,
             LOCAL_ANTIGRAVITY_SECRET_ANV,
+            LOCAL_ANTIGRAVITY_ENV,
             REMOTE_ANTIGRAVITY_SECRET,
             REMOTE_ANTIGRAVITY_SECRET_MGH,
             REMOTE_ANTIGRAVITY_SECRET_ANV,
+            REMOTE_ANTIGRAVITY_ENV,
         )
 
         self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_MGH).endswith("antigravity-oauth-token-mgh.json"))
         self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_ANV).endswith("antigravity-oauth-token-anv.json"))
+        self.assertTrue(str(LOCAL_ANTIGRAVITY_ENV).endswith("antigravity.env"))
         self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/secrets/antigravity-oauth-token-mgh.json")
         self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/secrets/antigravity-oauth-token-anv.json")
+        self.assertEqual(REMOTE_ANTIGRAVITY_ENV, "/root/secrets/antigravity.env")
 
     def test_startup_and_setup_scripts_contain_opencode_preauth(self):
         startup_content = self.startup_sh.read_text()
@@ -227,9 +279,11 @@ class TestT3CodeIntegration(unittest.TestCase):
             LOCAL_ANTIGRAVITY_SECRET,
             LOCAL_ANTIGRAVITY_SECRET_MGH,
             LOCAL_ANTIGRAVITY_SECRET_ANV,
+            LOCAL_ANTIGRAVITY_ENV,
             REMOTE_ANTIGRAVITY_SECRET,
             REMOTE_ANTIGRAVITY_SECRET_MGH,
             REMOTE_ANTIGRAVITY_SECRET_ANV,
+            REMOTE_ANTIGRAVITY_ENV,
         )
 
         with patch("shared.image.base_image") as mock_base, patch(
@@ -263,6 +317,7 @@ class TestT3CodeIntegration(unittest.TestCase):
                             (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
                             (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
                             (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                            (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
                         ],
                     ),
                 ]

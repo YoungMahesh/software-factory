@@ -527,6 +527,14 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
             echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
             chmod 600 ~/.config/sops/age/keys.txt
 
+            if [ -f "/root/secrets/antigravity.env" ]; then
+                while IFS= read -r line || [ -n "$line" ]; do
+                    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                    [[ -z "${line// }" ]] && continue
+                    export "$line"
+                done < <(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/antigravity.env" 2>/dev/null || true)
+            fi
+
             setup_args=()
             if [ "${ENABLE_MODAL:-}" = "1" ]; then
                 setup_args+=("--modal")
@@ -554,7 +562,7 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
 fi
 
 # Scrub staged encrypted tooling secrets immediately after decryption
-rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml
+rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml /root/secrets/antigravity.env
 
 if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "🔐 SOPS credentials retained in sandbox (~/.config/sops/age/keys.txt)."

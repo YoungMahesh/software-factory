@@ -50,6 +50,13 @@ if [ "$DECRYPT_MODAL" = true ]; then
 fi
 
 if [ "$DECRYPT_AGY" = true ] || [ "$DECRYPT_T3" = true ]; then
+    if [ -f "$SECRETS_DIR/antigravity.env" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "${line// }" ]] && continue
+            export "$line"
+        done < <(sops decrypt "$SECRETS_DIR/antigravity.env" 2>/dev/null || true)
+    fi
     mkdir -p ~/.gemini/antigravity-cli/profiles
     if [ -f "$SECRETS_DIR/antigravity-oauth-token.json" ]; then
         sops decrypt "$SECRETS_DIR/antigravity-oauth-token.json" > ~/.gemini/antigravity-cli/profiles/m47
@@ -200,7 +207,7 @@ if not has_opencode and os.path.exists(opencode_env_path):
         with open(opencode_env_path, "r") as ef:
             for eline in ef:
                 if eline.startswith("OPENCODE_GO_API_KEY="):
-                    val = eline.split("=", 1)[1].strip().strip(""").strip(chr(39))
+                    val = eline.split("=", 1)[1].strip().strip("\"").strip(chr(39))
                     if val:
                         has_opencode = True
                         break

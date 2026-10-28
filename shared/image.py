@@ -40,6 +40,10 @@ LOCAL_ANTIGRAVITY_SECRET_ANV = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-anv.json"
 )
 REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/secrets/antigravity-oauth-token-anv.json"
+LOCAL_ANTIGRAVITY_ENV = (
+    Path(__file__).resolve().parent.parent / "secrets" / "antigravity.env"
+)
+REMOTE_ANTIGRAVITY_ENV = "/root/secrets/antigravity.env"
 LOCAL_MODAL_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "modal.toml"
 REMOTE_MODAL_SECRET = "/root/secrets/modal.toml"
 LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
@@ -246,6 +250,7 @@ def build_sandbox_image(
                 (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
                 (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
                 (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
             ],
         )
 
@@ -320,6 +325,7 @@ def build_sandbox_image(
                     (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
                     (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
                     (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                    (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
                 ],
             )
 
