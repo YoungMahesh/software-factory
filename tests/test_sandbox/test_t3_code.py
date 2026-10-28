@@ -408,6 +408,76 @@ class TestT3CodeIntegration(unittest.TestCase):
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
         mock_sandbox.exec.assert_called_with("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
+        exec_calls = mock_sandbox.exec.call_args_list
+        self.assertEqual(len(exec_calls), 2)
+        self.assertEqual(exec_calls[0].args[0], "python3")
+        self.assertEqual(exec_calls[0].args[1], "-c")
+        self.assertIn("T3_PUBLIC_URL", exec_calls[0].args[2])
+        self.assertIn("https://t3.modal.run", exec_calls[0].args[2])
+        self.assertIn("devUrl", exec_calls[0].args[2])
         call_kwargs = mock_print_access.call_args.kwargs
         self.assertEqual(call_kwargs["t3_pair_url"], "https://t3.modal.run/pair#token=SECRET_TOKEN_XYZ")
         self.assertIsNotNone(call_kwargs["t3_qr_code"])
+
+    def test_startup_script_installs_t3_wrapper_script(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("cat << 'EOF' > /usr/local/bin/t3.wrapper", content)
+        self.assertIn('REAL_T3="/opt/t3/t3"', content)
+        self.assertIn('if [ "${1:-}" = "pair" ]; then', content)
+        self.assertIn("devUrl", content)
+        self.assertIn("/root/.t3/public_url", content)
+        self.assertIn("chmod +x /usr/local/bin/t3.wrapper", content)
+
+    def test_t3_wrapper_script_syncs_dev_url(self):
+        import json
+        import tempfile
+        import subprocess
+
+        content = self.startup_sh.read_text()
+        start_marker = "cat << 'EOF' > /usr/local/bin/t3.wrapper\n"
+        end_marker = "EOF\n    chmod +x /usr/local/bin/t3.wrapper.wrapper"
+        start_pos = content.find(start_marker) + len(start_marker)
+        end_pos = content.find(end_marker, start_pos)
+        wrapper_template = content[start_pos:end_pos]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            t3_dir = tmp_path / ".t3" / "userdata"
+            t3_dir.mkdir(parents=True)
+            runtime_json = t3_dir / "server-runtime.json"
+            runtime_json.write_text(json.dumps({
+                "version": 1,
+                "pid": 1234,
+                "origin": "http://127.0.0.1:3775",
+                "port": 3775,
+                "startedAt": "2026-10-28T00:00:00Z"
+            }))
+
+            public_url_file = tmp_path / ".t3" / "public_url"
+            public_url_file.write_text("https://my-modal-url.modal.host\n")
+
+            mock_bin = tmp_path / "mock_t3_bin"
+            mock_bin.write_text("#!/usr/bin/env bash\necho \"MOCK_CALLED: $@\"\n")
+            mock_bin.chmod(0o755)
+
+            # Substitute paths for isolated sandbox test
+            script = wrapper_template.replace("/root/.t3", str(tmp_path / ".t3"))
+            script = script.replace('"/opt/t3/t3"', f'"{mock_bin}"')
+
+            wrapper = tmp_path / "t3_wrapper"
+            wrapper.write_text(script)
+            wrapper.chmod(0o755)
+
+            # Test non-pair command: server-runtime.json not modified
+            res_serve = subprocess.run([str(wrapper), "serve"], capture_output=True, text=True)
+            self.assertEqual(res_serve.returncode, 0)
+            self.assertIn("MOCK_CALLED: serve", res_serve.stdout)
+            data_after_serve = json.loads(runtime_json.read_text())
+            self.assertNotIn("devUrl", data_after_serve)
+
+            # Test pair command: devUrl is injected into server-runtime.json
+            res_pair = subprocess.run([str(wrapper), "pair"], capture_output=True, text=True)
+            self.assertEqual(res_pair.returncode, 0)
+            self.assertIn("MOCK_CALLED: pair", res_pair.stdout)
+            data_after_pair = json.loads(runtime_json.read_text())
+            self.assertEqual(data_after_pair["devUrl"], "https://my-modal-url.modal.host")
