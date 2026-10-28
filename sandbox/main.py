@@ -197,6 +197,8 @@ def run_sandbox_launch(
         env["NO_REPO"] = "1"
     if target_repo:
         env["GH_REPO"] = target_repo
+    if args.full_clone:
+        env["FULL_CLONE"] = "1"
     if not cloudflare_active:
         env["ENABLE_CLOUDFLARE"] = "0"
 
@@ -257,6 +259,8 @@ def run_sandbox_launch(
     features = []
     if not args.no_cloudflare:
         features.append("Cloudflare Tunnel")
+    if args.full_clone:
+        features.append("Full Git Clone")
     if args.react_native:
         features.append("React Native")
     if args.agy:

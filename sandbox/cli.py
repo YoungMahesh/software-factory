@@ -151,6 +151,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Git branch to checkout. Only branches are supported (not tags or commits). Default: main",
     )
     parser.add_argument(
+        "--full-clone",
+        action="store_true",
+        help="Clone complete Git commit history instead of default shallow clone (--depth 50).",
+    )
+    parser.add_argument(
         "-s",
         "--secret",
         dest="secret",
@@ -280,6 +285,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.t3
             or args.herdr
             or args.pi
+            or args.full_clone
         ):
             parser.error("--snapshot cannot be used with launch configuration arguments.")
     else:
@@ -299,6 +305,10 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--github-branch cannot be used without -s/--secret.")
         if not args.secret and args.testing:
             parser.error("--testing cannot be used without -s/--secret.")
+        if args.from_snapshot and args.full_clone:
+            parser.error("--full-clone cannot be used with --from-snapshot.")
+        if not args.secret and args.full_clone:
+            parser.error("--full-clone cannot be used without -s/--secret.")
 
 
 def capture_snapshot(

@@ -5,7 +5,6 @@ import subprocess
 import unittest
 from unittest.mock import ANY, MagicMock, patch
 
-
 class TestSandboxCliArgs(unittest.TestCase):
     def setUp(self):
         self.repo_root = Path(__file__).resolve().parents[2]
@@ -60,13 +59,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_run_sandbox_launch_standalone_sets_no_repo_env(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_run_sandbox_launch_standalone_sets_no_repo_env(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         from sandbox.main import create_parser, run_sandbox_launch
 
         mock_image = MagicMock()
@@ -89,7 +82,6 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "standalone-app")
         self.assertEqual(call_kwargs["env"]["NO_REPO"], "1")
         self.assertNotIn("GH_REPO", call_kwargs["env"])
-
 
     def test_help_contains_github_branch_flag(self):
         res = subprocess.run(
@@ -170,7 +162,6 @@ class TestSandboxCliArgs(unittest.TestCase):
             )
             self.assertIn("initial commit", git_log.stdout)
 
-
     def test_parser_parses_github_branch_flag(self):
         from sandbox.main import create_parser
 
@@ -223,13 +214,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_repo_launch_uses_constant_app_name_and_unique_named_sandbox(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_repo_launch_uses_constant_app_name_and_unique_named_sandbox(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         from sandbox.main import create_parser, run_sandbox_launch
         import tempfile
 
@@ -262,13 +247,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_testing_launch_uses_test_prefixed_constant_app(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_testing_launch_uses_test_prefixed_constant_app(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         from sandbox.main import create_parser, run_sandbox_launch
         import tempfile
 
@@ -301,13 +280,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_already_exists_error_exits_with_code_1(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_already_exists_error_exits_with_code_1(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         import modal.exception
         from sandbox.main import create_parser, run_sandbox_launch
 
@@ -326,13 +299,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_vm_launch_uses_stable_runtime_and_burstable_memory(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_vm_launch_uses_stable_runtime_and_burstable_memory(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         from sandbox.main import create_parser, run_sandbox_launch
 
         mock_image = MagicMock()
@@ -358,13 +325,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_vm_launch_with_memory_soft_deprecation(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_vm_launch_with_memory_soft_deprecation(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         import io
         from sandbox.main import create_parser, run_sandbox_launch
 
@@ -392,13 +353,7 @@ class TestSandboxCliArgs(unittest.TestCase):
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_standard_launch_uses_gvisor_runtime(
-        self,
-        mock_load_pubkey,
-        mock_build_image,
-        mock_app_lookup,
-        mock_sandbox_create,
-    ):
+    def test_standard_launch_uses_gvisor_runtime(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
         from sandbox.main import create_parser, run_sandbox_launch
 
         mock_image = MagicMock()
@@ -419,3 +374,86 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertNotIn("experimental_options", call_kwargs)
         self.assertNotIn("ENABLE_DOCKER", call_kwargs["env"])
 
+    def test_help_contains_full_clone_flag(self):
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("--full-clone", res.stdout)
+
+    def test_parser_parses_full_clone_flag(self):
+        from sandbox.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["-s", "my-secret", "--full-clone"])
+        self.assertTrue(args.full_clone)
+
+        args_default = parser.parse_args(["-s", "my-secret"])
+        self.assertFalse(args_default.full_clone)
+
+    def test_full_clone_validation(self):
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--name", "my-app", "--full-clone"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--full-clone cannot be used without -s/--secret", res.stderr)
+
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--full-clone"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--snapshot cannot be used with launch configuration arguments", res.stderr)
+
+        res = subprocess.run(
+            ["python3", str(self.sandbox_main), "--from-snapshot", "im-123", "--name", "my-app", "--full-clone"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("--full-clone cannot be used with --from-snapshot", res.stderr)
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_full_clone_sets_env_and_feature_in_launch(self, mock_load_pubkey, mock_build_image, mock_app_lookup, mock_sandbox_create):
+        from sandbox.main import create_parser, run_sandbox_launch
+        import tempfile
+        import io
+
+        mock_image = MagicMock()
+        mock_image.add_local_dir.return_value = mock_image
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-full-1"
+        mock_sandbox.tunnels.return_value = {}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_dir = Path(tmpdir) / "secrets" / "full-repo"
+            secrets_dir.mkdir(parents=True)
+            (secrets_dir / "fetch.env").write_text("GH_REPO=owner/full-repo")
+
+            parser = create_parser()
+            args = parser.parse_args(["-s", "full-repo", "--full-clone"])
+
+            stdout_buf = io.StringIO()
+            with patch("sys.stdout", stdout_buf):
+                run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+            call_kwargs = mock_sandbox_create.call_args.kwargs
+            self.assertEqual(call_kwargs["env"]["FULL_CLONE"], "1")
+            self.assertIn("Full Git Clone", stdout_buf.getvalue())
+
+    def test_startup_script_full_clone_support(self):
+        startup_sh = self.repo_root / "shared" / "startup.sh"
+        content = startup_sh.read_text()
+        self.assertIn('if [ "${FULL_CLONE:-0}" = "1" ]; then', content)
+        self.assertIn("git clone --quiet --branch", content)
+        self.assertIn("git clone --quiet --depth 50 --branch", content)
