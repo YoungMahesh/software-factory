@@ -753,8 +753,8 @@ for instance_id, display_name, token_path, is_primary in accounts:
             continue
 
         acp_token = {
-            "client_id": "dummy-client-id.apps.googleusercontent.com",
-            "client_secret": "dummy-client-secret",
+            "client_id": os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID", "dummy-client-id.apps.googleusercontent.com"),
+            "client_secret": os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET", "dummy-client-secret"),
             "refresh_token": refresh_token,
             "token_uri": "https://oauth2.googleapis.com/token",
             "scopes": [

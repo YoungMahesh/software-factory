@@ -106,7 +106,7 @@ class TestT3CodeIntegration(unittest.TestCase):
         for content in [startup_content, setup_content]:
             self.assertIn("acp_token.json", content)
             self.assertIn("oauth-personal", content)
-            self.assertIn("dummy-client-id", content)
+            self.assertIn("GOOGLE_CLIENT_ID", content)
             self.assertIn("providerInstances", content)
             self.assertIn("antigravity", content)
             self.assertIn("antigravity-mgh", content)
