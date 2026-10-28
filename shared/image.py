@@ -91,7 +91,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [\
 
 # Shared Base Image: Cached once by Modal and shared between Standard and VM Sandboxes
 base_image = (
-    modal.Image.from_registry("ubuntu:24.04")
+    modal.Image.from_registry("ubuntu:24.04", add_python="3.12")
     .env({"DEBIAN_FRONTEND": "noninteractive"})
     .apt_install(
         "curl",
