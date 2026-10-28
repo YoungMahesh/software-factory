@@ -11,15 +11,23 @@ Format a round like so:
 
 ```
 ❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+a. <concrete choice> (Recommended)
+...
+<last letter>. Other: (specify custom input)
 
 ➡️ <your recommended answer>
 
 ---
 
 ❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+a. <concrete choice> (Recommended)
+...
+<last letter>. Other: (specify custom input)
 
 ➡️ <your recommended answer>
 ```
+
+Offer only concrete, actionable choices (`a, b, ...`): keep options minimal while covering distinct alternatives (a second choice is not compulsory), ending with **Other** for user write-in. If the user provides custom input via Other, graft it directly onto the design tree.
 
 Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
