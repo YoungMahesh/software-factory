@@ -7,35 +7,21 @@ Interview the user relentlessly until you reach a shared understanding. Map this
 
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
 
-If the `ask_question` tool is available in your toolset:
-- Call `ask_question` to present the round's frontier questions through the interactive UI.
-- Bundle all questions for the current round in a single `ask_question` call.
-- Provide clear, mutually exclusive or multi-select `options` for each question, listing your recommended choice first and prefixing it with `(Recommended)`.
-- Set `is_multi_select: true` when multiple options may be selected.
-
-If the `ask_question` tool is not available (e.g. inside subagents or non-interactive environments), format the round like so:
+Format a round like so:
 
 ```
 ❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
-a. <concrete choice> (Recommended)
-...
-<last letter>. Other: (specify custom input)
 
 ➡️ <your recommended answer>
 
 ---
 
 ❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
-a. <concrete choice> (Recommended)
-...
-<last letter>. Other: (specify custom input)
 
 ➡️ <your recommended answer>
 ```
 
 Word each question so "yes" accepts your recommended answer.
-
-Offer only concrete, actionable choices (`a, b, ...`): keep options minimal while covering distinct alternatives (a second choice is not compulsory), ending with **Other** for user write-in. If the user provides custom input via Other, graft it directly onto the design tree.
 
 Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
