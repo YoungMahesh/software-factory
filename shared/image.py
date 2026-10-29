@@ -54,9 +54,6 @@ REMOTE_ORG_SECRETS_DIR = "/root/secrets/org"
 REMOTE_ORG_TOKEN = "/root/secrets/org/token"
 SHARED_SECRET_NAME = "share0"
 
-LOCAL_FACTORY_ENTRYPOINT = SHARED_DIR / "factory_entrypoint.sh"
-REMOTE_FACTORY_ENTRYPOINT = "/root/factory_entrypoint.sh"
-
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
 GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"
 

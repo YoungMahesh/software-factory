@@ -1,6 +1,6 @@
 # Modal Sandboxes
 
-Isolated cloud development and execution environments running on Modal with agent and development tooling.
+Isolated cloud development and execution environments running on Modal with developer and agent tooling.
 
 ## Language
 
@@ -24,18 +24,20 @@ _Avoid_: Static runner, single-app runner, constant container
 A Git checkout optimization in development sandboxes that truncates commit history on the target branch to a fixed maximum depth of 50 commits, accelerating container boot latency and saving network transfer while maintaining sufficient recent history for active development.
 _Avoid_: Partial clone, shallow branch, depth clone, truncated repo
 
+**Full Git Clone**:
+An opt-in Git checkout configuration (`--full-clone`) in development sandboxes that downloads all commits of the target branch during container provisioning, bypassing the shallow clone depth limit for workflows requiring complete commit histories.
+_Avoid_: Unshallow clone, complete fetch, deep repo
 
 **Filesystem Snapshot**:
 A point-in-time, copy-on-write capture of a Modal sandbox's root filesystem stored as a reusable `modal.Image` with an associated Time-To-Live (TTL), used to persist workspace state or accelerate subsequent sandbox cold starts without repeating repository cloning and dependency installation.
 _Avoid_: Memory snapshot, container backup, sandbox image, VM snapshot
-
 
 **OpenCode Server**:
 A background web and agent server bound to a dedicated encrypted tunnel port, protected by a per-launch generated access password.
 _Avoid_: OpenCode IDE, code server
 
 **T3 Code Server**:
-A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents (Antigravity, OpenCode) across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
+A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
 _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 
 **Herdr Multiplexer**:
@@ -43,7 +45,7 @@ An agent-aware terminal multiplexer and background session runtime (https://herd
 _Avoid_: Terminal multiplexer, tmux clone, herdr daemon, herdr runner
 
 **Pi Coding Agent CLI**:
-A minimal, extensible terminal coding agent interface (https://pi.dev) installed into the sandbox user environment via `--pi` and configured with OpenCode Go and DeepSeek V4.1 Flash.
+A minimal, extensible terminal coding agent interface (https://pi.dev) installed into the sandbox user environment via `--pi`.
 _Avoid_: Pi agent, pi terminal, pi runner
 
 **Antigravity CLI**:
@@ -98,11 +100,6 @@ _Avoid_: Default test repo, test mock, dummy repo
 An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`software-factory-09-test/test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
-**Private-by-Default Repository Policy**:
-The standard security convention where new target repositories instantiated via Factory Studio or the repository creation endpoints in the Test Organization (`software-factory-09-test`) are provisioned with private visibility on GitHub by default, with opt-out capability to create public repositories when explicitly declared.
-_Avoid_: Public-by-default, default public repo, open test repos
-
-
 **SOPS Decryption**:
 A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt repository credentials and tooling configuration, purging encryption keys by default before user session handoff unless explicitly retained via `--sops`.
 _Avoid_: Sops setup, age injection, secret script
@@ -151,248 +148,6 @@ _Avoid_: Browser MCP, headless browser setup, chrome layer
 A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
 
-**Modal Application Tunnel**:
-An ephemeral encrypted HTTPS tunnel provided by Modal (`sandbox.tunnels()[3000].url`) forwarding traffic to container port 3000, yielding a unique, collision-free preview URL per sandbox for interactive application testing in Factory Studio.
-_Avoid_: Modal web tunnel, web url tunnel, preview port forward
-
-**Dedicated Preview Sandbox**:
-_Deprecated_: Superseded by Unified Studio Sandbox. Formerly an ephemeral Modal sandbox provisioned to build and serve a target application's active branch on port 3000 without executing the multi-agent assembly line.
-_Avoid_: Dev runner, preview container, standalone server, test preview container
-
-**Unified Studio Sandbox**:
-A persistent Modal sandbox provisioned for an active repository in Factory Studio combining a background Vite development server bound to a Modal Application Tunnel on port 3000 with on-demand Assembly Line Pipeline execution via in-sandbox process execution (`sandbox.exec`).
-_Avoid_: Dual sandbox, preview container, dev runner, split runner
-
-
-**Software Factory**:
-An automated software delivery system that ingests work items from an Issue Tracker, provisions ephemeral Modal Sandboxes, and executes a sequential multi-agent assembly line to implement and verify changes.
-_Avoid_: Agent swarm, AI dev platform, autonomous loop
-
-**Factory Orchestrator**:
-A serverless Modal application that manages factory job lifecycles, dispatches ephemeral worker sandboxes, monitors stage transitions, and updates ticket states.
-_Avoid_: Master runner, factory daemon, background coordinator
-
-**Assembly Line Pipeline**:
-A sequential workflow where specialized single-responsibility agents execute distinct stages with strict transition artifacts between them.
-_Avoid_: Autonomous loop, dynamic swarm, generalist runner
-
-**Issue Tracker Provider**:
-An abstraction interface within the assembly line harness that decouples ticket discovery, claiming, and resolution from underlying storage engines (GitHub Issue Tracker or Local Markdown Issue Tracker).
-_Avoid_: Ticket provider, tracker backend, issue driver
-
-**GitHub Issue Tracker**:
-A cloud-hosted task tracking convention that manages feature specifications and work items using GitHub Issues, Milestones, Labels, and Pull Requests. In Factory Studio, this serves as the sole convention for web UI operations.
-_Avoid_: GitHub project, issue board, repo issues
-
-**Local Markdown Issue Tracker**:
-A filesystem-based task tracking convention that stores specifications and work items as markdown documents under `.scratch/<feature>/`. Used for CLI dispatchers, headless batch workflows, and internal Factory Hub development, but deprecated and excluded from web UI operations.
-_Avoid_: Flat notes, scratchpad, local tickets
-
-**Feature Pull Request**:
-A GitHub Pull Request opened from a Feature Branch targeting `main` in Draft mode that aggregates sequential ticket commits and serves as the final human review and merge gate.
-_Avoid_: PR review, factory PR, merge request
-
-**Quality Gate**:
-A multi-tier verification barrier requiring passing deterministic test suites, verified reproduction/acceptance tests, and independent automated review before a work item is marked resolved.
-_Avoid_: CI check, validation pass
-
-**Factory Hub**:
-The central repository (`software-factory`) containing the serverless Factory Orchestrator and CLI Dispatcher. Its own `.scratch/` directory is strictly reserved for modifications to the software factory codebase itself, while all target projects maintain their own independent `.scratch/` directories or GitHub Issue Trackers.
-_Avoid_: Master repo, factory workspace, coordinator root
-
-**Target Project Workspace**:
-The cloned repository within an ephemeral Modal Sandbox that contains its domain context documentation and is operated on by the assembly line harness.
-_Avoid_: Remote repo, target directory, child workspace
-
-**OpenCode Go Provider**:
-The LLM inference provider authenticated via `OPENCODE_GO_API_KEY` from OpenCode Credentials, serving `MiMo-V2.6-Flash` and `DeepSeek V4.1 Flash` to the Pi Agent Harness inside the sandbox.
-_Avoid_: OpenCode LLM, custom AI endpoint
-
-**Autonomous Feature Batch**:
-A continuous execution mode that sequentially claims, executes, and resolves all unblocked tickets on the frontier of a feature inside a single warm sandbox.
-_Avoid_: Batch mode, multi-run, auto sweep
-
-**Ticket Lifecycle**:
-The end-to-end execution path of a work item through claiming, sandbox execution, quality gate verification, and resolution status updating.
-_Avoid_: Issue flow, job run
-
-**Self-Correction Loop**:
-An automated feedback cycle where test execution logs or reviewer rejections are returned to the coding agent for up to two retry attempts before human escalation.
-_Avoid_: Auto-heal loop, infinite retry
-
-**CLI Dispatcher**:
-The local command-line interface (`factory/run.py`) used to validate target project secrets (`secrets/<project-name>`), provision autonomous factory sandboxes, and stream progress logs.
-_Avoid_: Job submitter, factory CLI
-
-**Pi Agent Harness**:
-The TypeScript execution framework based on `@earendil-works/pi-agent-core` that drives in-sandbox assembly line stages with pre-built file editing, search, and shell tools.
-_Avoid_: Custom agent runner, python agent runner, generic LLM client
-
-**Planner Agent**:
-A read-only reasoning agent that analyzes the ticket, explores the codebase, and outputs a structured implementation plan.
-_Avoid_: Architect, spec agent, design agent
-
-**Coder Agent**:
-The execution agent that consumes the plan and ticket, writes implementation and reproduction tests, and makes git commits on the feature branch.
-_Avoid_: Developer agent, worker agent, programmer
-
-**Deterministic Verifier**:
-A non-agentic test execution stage that runs the target repository's automated test suites with bounded execution timeouts (60 seconds default) and captures exact exit codes and output logs. Strictly enforces non-interactive execution by filtering out long-running dev servers (`dev`, `serve`, `start`) and production builds that collide with active studio servers.
-_Avoid_: Test agent, verification bot, QA agent
-
-**Reviewer Agent**:
-A read-only audit agent that compares the git diff and plan against repo standards and outputs a structured review verdict.
-_Avoid_: Audit agent, QA bot, gatekeeper
-
-**Feature Branch**:
-A shared Git branch named `factory/<feature>` on the target repository where sequential ticket commits within a feature are accumulated and pushed for final review.
-_Avoid_: Issue branch, task branch, temporary branch
-
-**Pre-flight Guard**:
-A validation check executed upon repository checkout in the sandbox verifying that domain prerequisites (`CONTEXT.md` or `GLOSSARY.md`, and active issue tracker configuration) are present before assembly line stages proceed.
-_Avoid_: Healthcheck, bootstrap check, repo validator
-
-**Factory Testing Console**:
-_Deprecated_: Superseded by Factory Studio. Formerly an interactive local web interface running on the developer workstation used to configure and dispatch test parameters across ephemeral sandboxes. Consolidated into Factory Studio with the Studio Issue Drawer for execution controls and the Activity Drawer for multi-run history and telemetry.
-_Avoid_: Factory UI, test dashboard, web runner, factory web app
-
-**Factory Studio**:
-An interactive web workspace providing a conversational prompt interface and live application preview for iteratively generating frontend applications on the Software Factory. Binds to port 3010 by default (overrideable via `PORT` environment variable) and is protected by HTTP Basic Authentication (`FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`), with a local development fallback (`admin`:`admin`) and startup warning.
-_Avoid_: Factory UI, Lovable clone, app builder UI, prompt dashboard
-
-**Cohere Editorial Design System**:
-The enterprise design language implemented across Factory Studio inspired by Cohere's web interface, characterized by a stark white editorial canvas and soft stone secondary surfaces bounded by hairline containment rules, contrasted against high-contrast dark console execution blocks, monospaced technical telemetry, coral taxonomy chips, and pill-centric interactive controls.
-_Avoid_: Dark mode dashboard, generic Tailwind theme, slate UI
-
-
-**Studio Issue Drawer**:
-A slide-over interface within Factory Studio that displays GitHub issues for the active repository, providing controls to inspect specifications, configure execution settings (model selection and VM sandbox virtualization), trigger the Grill-Before-Change Protocol, or directly dispatch the Assembly Line Pipeline.
-_Avoid_: Issue panel, issue modal, GitHub view, issue selector
-
-**Delivery Gate Card**:
-A structured conversational card in Factory Studio Chat History summarizing Feature Pull Request status, resolved work items, and test verdicts, with controls to review and merge into main.
-_Avoid_: PR card, merge card, gate message
-
-**In-Studio Merge Control**:
-An interactive control in Factory Studio that triggers a squash merge of a Feature Pull Request into main via the GitHub API, deletes the remote Feature Branch, and synchronizes the Unified Studio Sandbox.
-_Avoid_: Merge button, quick merge, direct merge
-
-**Agent Event Stream**:
-A real-time structured telemetry channel emitting fine-grained LLM reasoning deltas, tool invocations, and execution outputs from the in-sandbox Pi Agent Harness across Modal container standard output into Factory Studio.
-_Avoid_: Agent socket, LLM log stream, debug stream, thought pipe
-
-**Grilling Assistant**:
-A conversational reasoning service in Factory Studio that executes the `grilling` and `domain-modeling` protocols, interviewing the developer with structured question frontiers grounded in repository code facts, and drafting Architectural Decision Records (ADRs) conditionally before code changes are executed.
-_Avoid_: Chat bot, prompt helper, grilling bot, interview agent
-
-**Grill-Before-Change Protocol**:
-An interactive requirement alignment workflow where user chat prompts in Factory Studio undergo interview rounds, codebase grounding, and domain terminology sharpening before synthesizing issues and dispatching the Assembly Line Pipeline.
-_Avoid_: Manual interview, prompt delay, question loop
-
-**Interactive Question Frontier**:
-An interactive chat card in Factory Studio rendering Grilling Assistant questions with mutually exclusive option radio groups, custom override inputs, and an inline submission control that serializes developer decisions into chat history.
-_Avoid_: Grill form, radio question card, option picker
-
-**Repository Codebase Grounding**:
-The autonomous discovery and inspection of target repository file trees and candidate component source code by the Grilling Assistant before generating interview questions, grounding requirement alignment in verified code facts rather than speculative assumptions.
-_Avoid_: Static analysis, repo scanning, vector search
-
-**Conditional ADR Policy**:
-The requirement alignment principle ("Offer ADRs sparingly") where Architectural Decision Records (`docs/adr/`) are drafted strictly for changes introducing irreversible or fundamental architectural trade-offs, omitting draft ADRs (`draft_adr: null`) for localized component edits, deletions, bug fixes, and styling adjustments.
-_Avoid_: Universal ADR, mandatory ADR, indiscriminate ADR
-
-**Prompt Archetype**:
-A classification heuristic (`deletion`, `component_modification`, `styling`, `new_feature`) used by the Grilling Assistant to tailor interview questions to the developer's intent and prevent irrelevant routing or architectural proposals.
-_Avoid_: Prompt category, intent tag, prompt type
-
-**Externalized Prompt Templates**:
-Dedicated, version-controlled markdown files (`.md`) colocated within their execution runtime directories (`factory/ui/grill/prompts/` and `sandbox/factory/harness/prompts/`) that define LLM system personas, operational constraints, and JSON schemas, parsed with double-curly brace (`{{variable}}`) substitution and cached in memory to eliminate string escaping collisions with JSON schemas and prevent code file bloat.
-_Avoid_: Hardcoded prompts, inline prompt strings, prompt constants, raw prompt templates
-
-**Inference Error Turn**:
-An explicit conversational turn emitted when remote LLM inference encounters a network, authentication, or provider failure, persisted to Studio Chat History and rendered with diagnostic details and a retry trigger instead of silently falling back to mock responses.
-_Avoid_: Silent fallback, mock error, failed message
-
-**Target Project Skills**:
-The suite of Matt Pocock engineering skills (`.agents/skills/`), domain glossary (`CONTEXT.md`), architectural records (`docs/adr/`), and agent configurations (`docs/agents/`) scaffolded into every application developed on the Software Factory.
-_Avoid_: Target skills, repo configs, agent templates
-
-**Canonical Template Repository**:
-The reference GitHub repository (`software-factory-09-test/tanstack-start-template`) providing a minimal, unencumbered TanStack Start SPA starter used as the baseline for instantiating new applications in Factory Studio.
-_Avoid_: Base repo, default repo, starter repo, app seed
-
-**Template Provisioning Readiness**:
-The operational state of a newly generated GitHub repository where asynchronous template file replication has completed, establishing a valid HEAD commit and default branch reference (`main`) before Target Project Skills and architectural decision records are committed.
-_Avoid_: Repo ready, git sync, template wait, repo bootstrap status
-
-**ADR Quality Gate**:
-A mandatory verification check during the Pre-flight Guard and Reviewer Agent stage ensuring that `docs/adr/` exists and that implementation diffs strictly adhere to all accepted architectural decisions.
-_Avoid_: ADR check, architecture test
-
-**Studio Database**:
-A cloud-hosted libSQL database (backed by Turso) connected directly over TLS that stores Factory Studio Chat History, Job records, and Agent Telemetry Logs in development and production environments, while utilizing an in-memory SQLite database (`:memory:`) for automated test isolation.
-_Avoid_: Local DB, chat database, studio cache
-
-**Studio Chat History**:
-The durable chronological sequence of user prompts, Grilling Assistant question frontiers, developer responses, and approved plan cards associated with a target repository.
-_Avoid_: Prompt log, conversation memory, message cache
-
-**Agent Telemetry Log**:
-A durable database record capturing structured events (stage transitions, tool invocations, model reasoning deltas) and standard output console streams emitted during Assembly Line Pipeline execution, indexed by Job ID.
-_Avoid_: Run log, container output, worker debug
-
-**Live Preview Branch Selector**:
-An interactive dropdown control in the Factory Studio Live Preview toolbar displaying the active Git branch and allowing developers to switch between `main` and active `factory/<feature>` branches in place via `sandbox.exec` without container teardown.
-_Avoid_: Branch pill, branch toggle, git dropdown, preview branch switcher
-
-**Trunk Synchronization**:
-An interactive and in-place container git orchestration mechanism in Factory Studio that synchronizes the Unified Studio Sandbox with the default trunk branch (`main`), pulling latest remote commits via `sandbox.exec`, resolving dependency drift, and refreshing the Live Preview without container restart.
-_Avoid_: Auto-pull, git sync daemon, background fetcher, main updater
-
-**Turn Rollback**:
-The atomic reversal of a completed code-producing conversational turn in Factory Studio, reverting its feature branch commit, synchronizing the Unified Studio Sandbox dev server in place, reopening the associated work item, and recording an append-only rollback event in Studio Chat History.
-_Avoid_: Undo turn, revert version, turn reset, conversational rewind
-
 **Universal File Line Budget**:
 A repository-wide size constraint requiring every production source file and executable automated test file to contain no more than 500 physical lines (`wc -l`).
 _Avoid_: File size limit, code line limit, test budget, 500-line rule
-
-**Test Suite Decomposition**:
-The structural partitioning of a monolithic test file into a modular directory package or focused subsystem test modules adhering to deep module principles without altering test coverage.
-_Avoid_: Test splitting, test refactor, test slicing, test modularization
-
-**Command Failure Diagnostics**:
-A dedicated telemetry inspection surface in Factory Studio's Activity Drawer that captures, isolates, and displays non-zero exit code shell executions from both the Coder Agent and Deterministic Verifier stages to facilitate diagnosing missing environment dependencies and refining agent system prompts.
-_Avoid_: Error tab, failed bash tab, debug view, command log
-
-**Agent Bottleneck Profiler**:
-A dedicated performance profiling surface in Factory Studio's Activity Drawer and REST API that measures, ranks, and categorizes execution durations across agent shell commands, verifier test runs, and LLM thinking phases within an active job and aggregated across historical repository runs.
-_Avoid_: Slow command log, performance tab, latency viewer, bottleneck tracker
-
-**Infrastructure Bottleneck Heuristics**:
-Pattern-matching categorization rules that classify agent command executions and telemetry events into discrete infrastructure domains (`Package Install`, `Test Suite`, `Build / Compile`, `Git / VCS`, `LLM Thinking`) based on executable binaries, CLI arguments, and pipeline stages to isolate systemic pipeline latency.
-_Avoid_: Command classifier, category heuristics, bottleneck badges, command tagging
-
-**Clean Canvas Invariant**:
-The architectural guarantee across the Canonical Template Repository, Assembly Line Agent prompts, ticket synthesis, and quality gates requiring generated web applications to start with an empty, unencumbered route container and neutral branding baseline, ensuring autonomous agents cleanly overwrite placeholder markup rather than appending components beneath template boilerplate cards.
-_Avoid_: Blank screen, bare canvas, empty starter, template leftover
-
-**Exa Web Search Tool**:
-A read-only search tool (`web_search`) powered by the Exa AI Search API (`https://api.exa.ai/search`) using `EXA_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to retrieve modern documentation, ecosystem guides, release notes, and error diagnosis with clean text extracts.
-_Avoid_: Web scraper, google search tool, bing tool, generic search
-
-**Context7 Documentation Tool**:
-A read-only documentation lookup tool (`docs_search`) powered by the Context7 API (`https://context7.com/api/v3/search`) using `CONTEXT7_API_KEY` from OpenCode Credentials, enabling the Planner Agent and Coder Agent to query official library documentation, component APIs, CLI commands, and syntax-highlighted code snippets.
-_Avoid_: Doc scraper, library crawler, context tool, c7 tool
-
-**In-Studio Code Viewer**:
-A file tree and source code inspection interface in Factory Studio that renders project files via a hybrid retrieval pipeline querying the Unified Studio Sandbox or GitHub Git API.
-_Avoid_: File browser, repo explorer, in-studio code editor, web IDE file tree
-
-**Pre-Merge Diff Viewer**:
-A side-by-side or unified Git comparison interface in Factory Studio displaying working-tree uncommitted changes or feature branch diffs prior to triggering the In-Studio Merge Control.
-_Avoid_: Diff tab, branch comparator, merge diff viewer
-
-**In-Sandbox Interactive Terminal**:
-A full-duplex interactive terminal emulator tab powered by xterm.js in Factory Studio's Activity Drawer, connected over WebSockets to a pseudo-terminal (`pty=True`) in the Unified Studio Sandbox.
-_Avoid_: Web shell, container console, remote terminal, cloud ssh web

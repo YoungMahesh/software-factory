@@ -1,6 +1,6 @@
-# Software Factory
+# Modal Sandboxes
 
-Automated software delivery pipeline executing multi-agent assembly lines in ephemeral Modal Sandboxes.
+Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal with SSH, Cloudflare Tunnel ingress, and integrated AI developer tooling.
 
 ---
 
@@ -11,96 +11,94 @@ pip install -r requirements.txt
 bash scripts/setup.sh --modal --agy --opencode
 ```
 
-Decrypts credentials via local SOPS into standard user paths (`~/.modal.toml`, `~/.gemini/antigravity-cli/`, `~/.config/opencode/`).
-
-For frontend development, Node.js 24 and pnpm 10 are required:
-```bash
-pnpm --dir factory/ui/frontend install
-```
+Decrypts versioned credentials via local SOPS into standard user paths (`~/.modal.toml`, `~/.gemini/antigravity-cli/`, `~/.config/opencode/`).
 
 ---
 
-## 2. Web Workspace (Factory Studio & Console)
+## 2. Launching Sandboxes
 
-The web workspace is a compiled Vite React SPA statically served by FastAPI at `/` (per ADR 0036).
-
-### Launch Server (Compiled React SPA)
+The **Unified Sandbox Runner** ([`sandbox/main.py`](sandbox/main.py)) is the canonical entry point:
 
 ```bash
-python factory/run.py --ui  # Default: http://127.0.0.1:3010
+# Repository Sandbox (clones repo from encrypted fetch credentials)
+python sandbox/main.py -s <secret-name> [flags]
+
+# Standalone Sandbox (boots clean environment without repo clone)
+python sandbox/main.py --name <app-name> [flags]
+
+# Linux VM Sandbox with Docker and swapfile allocation
+python sandbox/main.py -s <secret-name> --vm --memory 2
+
+# Sandbox with Agent & Tooling Environments
+python sandbox/main.py -s <secret-name> --opencode --t3 --agy
 ```
 
-- **Factory Studio**: Split-pane prompt interface with live preview (`https://3000.mahesh0.dev`) for frontend applications.
-- **Factory Testing Console**: Real-time assembly line orchestration, SSE log streaming, and milestone stepper for `software-factory-09-test`.
-- **Auth**: Basic HTTP Auth (`admin:admin` default; configure via `FACTORY_AUTH_USER` and `FACTORY_AUTH_PASS`).
-- **Flags**: `--host <ip>` (default `127.0.0.1`), `--port <port>` (default `3010`), `--open` (auto-open browser).
-
-### Frontend Development (Vite HMR)
-
-For active React UI development with Hot Module Replacement (HMR):
-
-```bash
-# 1. Start backend API server on port 3010:
-python factory/run.py --ui
-
-# 2. Start Vite React dev server on port 5173 (proxies /api to port 3010):
-pnpm --dir factory/ui/frontend dev
-
-# 3. Compile production bundle into factory/ui/static/dist/:
-pnpm --dir factory/ui/frontend build
-
-# 4. Run Vitest test suite:
-pnpm --dir factory/ui/frontend test
-```
-
----
-
-## 3. CLI Dispatcher
-
-```bash
-# Autonomous batch on Test Organization:
-python factory/run.py -p <repo> -f <feature> --testing
-
-# Single ticket execution on Test Organization:
-python factory/run.py -p <repo> -f <feature> -i 01 --testing
-
-# Production repository (configured under secrets/<project>/):
-python factory/run.py -p <project> -f <feature>
-```
+### Core CLI Flags
 
 | Flag | Description | Default |
 | :--- | :--- | :--- |
-| `-p, --project` | Target repository name | *Required* |
-| `-f, --feature` | Target feature slug (`.scratch/<feature>/`) | *Required* (or `-i`) |
-| `-i, --issue` | Specific ticket ID (e.g. `01`). Omit for full batch | Full batch |
-| `--testing` | Target repositories under Test Organization `software-factory-09-test` | `False` |
-| `--vm` | Provision a VM Sandbox with Docker support instead of a Standard Sandbox | `False` |
-| `--memory <GB>` | RAM allocation in GB (for VM sandboxes; 2× swap) | `1` |
-| `-m, --model` | LLM selection (`deepseek-v4.1-flash` or `mimo-v2.6-flash`) | `deepseek-v4.1-flash` |
-| `--dev` | Maintain in-sandbox dev preview keep-alive server on port 3000 | `False` |
-| `--tracker` | Issue tracker backend (`github` or `local`) | Auto-detected |
-| `--ui` | Launch web interface on `--host` and `--port` | `False` |
+| `-s, --secret` | Repository secret name under `secrets/<secret-name>/fetch.env` | None |
+| `--name` | Modal App name (required for standalone and snapshot resumes) | None |
+| `-b, --github-branch` | Git branch to checkout | `main` |
+| `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
+| `--vm` | Provision a Linux VM Sandbox with Docker daemon instead of container | `False` |
+| `--memory <GB>` | RAM allocation in GB (for VM sandboxes; allocates 2× swap) | `1` |
+| `--testing` | Target repositories under test organization `software-factory-09-test` | `False` |
+| `--opencode` | Launch OpenCode server on port 4096 with web tunnel | `False` |
+| `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
+| `--agy` | Enable Antigravity CLI and Antigravity Remote Control daemon | `False` |
+| `--pi` | Install Pi Coding Agent CLI | `False` |
+| `--herdr` | Install Herdr terminal multiplexer | `False` |
+| `--modal` | Provision Modal Development Tooling (`modal` SDK & credentials) | `False` |
+| `--react-native` | Android toolchain (SDK/NDK/Java 17) and Metro tunnel (port 8081) | `False` |
+| `--browser` | Headless Google Chrome for browser MCP tooling | `False` |
+| `--sops` | Retain Age private key in `~/.config/sops` for interactive debugging | `False` |
+| `--no-cloudflare` | Disable default Cloudflare Tunnel ingress on port 3000 | `False` |
 
 ---
 
-## 4. Modal Sandboxes
+## 3. Filesystem Snapshots
 
-Standalone cloud development sandboxes with SSH and Cloudflare Tunnel ingress:
+Capture copy-on-write root filesystem images of running sandboxes for near-instant cold starts:
 
 ```bash
-python sandbox/main.py -s <secret-name> [--vm] [--opencode] [--agy] [--modal]
-```
+# Capture snapshot from an active sandbox
+python sandbox/main.py --snapshot <sandbox-id> [--snapshot-ttl 30] [--terminate]
 
-See [`sandbox/readme.md`](sandbox/readme.md) for secrets configuration (`share0`, `fetch.env`, `env.map`) and runner options.
+# Resume/launch directly from a snapshot image
+python sandbox/main.py --from-snapshot <image-id> --name resumed-app [--vm]
+```
 
 ---
 
-## 5. Prompt Templates
+## 4. Access & Ingress
 
-Externalized system prompt templates used across Factory Studio and the Assembly Line:
+- **SSH**: Uses tracked public key [`shared/ssh-key.pub`](shared/ssh-key.pub) and private key `~/.ssh/modal-sandbox`:
+  ```bash
+  ssh -i ~/.ssh/modal-sandbox -p <port> root@<host>
+  # Or via Modal CLI:
+  modal shell <sandbox-id>
+  ```
+- **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes `https://3000.mahesh0.dev` to container `localhost:3000`.
+- **OpenCode (Port 4096)**: HTTPS tunnel URL and one-time password printed on launch when `--opencode` is passed.
+- **T3 Code Server**: Pairing URL and QR code printed on launch when `--t3` is passed.
 
-- [grilling_assistant.md](factory/ui/grill/prompts/grilling_assistant.md)
-- [planner_system.md](sandbox/factory/harness/prompts/planner_system.md)
-- [coder_system.md](sandbox/factory/harness/prompts/coder_system.md)
-- [reviewer_system.md](sandbox/factory/harness/prompts/reviewer_system.md)
+---
 
+## 5. Sandbox Lifecycle Management
+
+```bash
+# List active running sandboxes
+python scripts/list-sandboxes.py
+
+# Interactive management & termination CLI
+python scripts/manage_sandboxes.py
+```
+
+---
+
+## 6. Verification & Automated Tests
+
+```bash
+pytest tests/test_sandbox tests/test_manage_sandboxes.py
+```
