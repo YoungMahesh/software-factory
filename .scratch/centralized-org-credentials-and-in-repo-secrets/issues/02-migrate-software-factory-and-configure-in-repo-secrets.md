@@ -5,10 +5,10 @@ Create private repository `sFactory0/software-factory` on GitHub using the organ
 
 **Blocked by:** 01: Stage Centralized Organization Credentials in secrets/github-orgs.env
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Private repository `sFactory0/software-factory` is created on GitHub under the `sFactory0` organization.
-- [ ] Directory `.secrets/` is established inside `software-factory` containing `env.map` pointing `studio.env=.env`.
-- [ ] The encrypted `.secrets/studio.env` file is placed and verified to decrypt with `AGE_PRIVATE_KEY`.
-- [ ] The repository is pushed to `sFactory0/software-factory` main branch.
-- [ ] The local directory `secrets/software-factory/` is removed from the host.
+- [x] Private repository `sFactory0/software-factory` is created on GitHub under the `sFactory0` organization.
+- [x] Directory `.secrets/` is established inside `software-factory` containing `env.map` pointing `studio.env=.env`.
+- [x] The encrypted `.secrets/studio.env` file is placed and verified to decrypt with `AGE_PRIVATE_KEY`.
+- [x] The repository is pushed to `sFactory0/software-factory` main branch.
+- [x] The local directory `secrets/software-factory/` is removed from the host.
