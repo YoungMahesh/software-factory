@@ -344,6 +344,13 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertIn("watchman --version", content)
         self.assertIn("npm list -g @expo/ngrok", content)
 
+    def test_base_image_declares_github_cli(self):
+        import inspect
+        from shared import image
+
+        source = inspect.getsource(image)
+        self.assertIn('"gh"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

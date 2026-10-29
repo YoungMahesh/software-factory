@@ -95,10 +95,8 @@ class TestT3CodeIntegration(unittest.TestCase):
 
     def test_startup_script_contains_t3_daemon_and_check_script(self):
         content = self.startup_sh.read_text()
-        self.assertIn("ENABLE_T3", content)
-        self.assertIn("check-t3", content)
-        self.assertIn("t3 serve", content)
-        self.assertIn("--auto-bootstrap-project-from-cwd", content)
+        for token in ["ENABLE_T3", "check-t3", "t3 serve", "GitHub CLI", "--auto-bootstrap-project-from-cwd"]:
+            self.assertIn(token, content)
 
     def test_startup_and_setup_scripts_contain_antigravity_preauth(self):
         startup_content = self.startup_sh.read_text()

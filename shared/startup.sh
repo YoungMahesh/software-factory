@@ -558,6 +558,8 @@ if [ "${ENABLE_T3:-}" = "1" ]; then
     cat << 'EOF' > /usr/local/bin/check-t3
 #!/usr/bin/env bash
 echo "=== T3 Code Binary ===" && which t3 && t3 --version
+echo "=== GitHub CLI ===" && (which gh && gh --version || echo "gh not found")
+echo "=== GitHub Auth Status ===" && (gh auth status 2>&1 || true)
 echo "=== T3 Public URL ===" && cat /root/.t3/public_url 2>/dev/null || true
 echo "=== T3 Runtime State ===" && cat /root/.t3/userdata/server-runtime.json 2>/dev/null || true
 echo "=== T3 Code Process ===" && ps aux | grep [t]3

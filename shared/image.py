@@ -103,6 +103,7 @@ base_image = (
     .apt_install(
         "curl",
         "git",
+        "gh",
         "htop",
         "jq",
         "openssh-server",
