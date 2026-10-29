@@ -7,6 +7,8 @@ Toolkit for provisioning, managing, and snapshotting isolated cloud execution en
 ## 1. Setup
 
 ```bash
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 bash scripts/setup.sh --modal --agy --opencode
 ```
