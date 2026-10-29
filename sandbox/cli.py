@@ -28,8 +28,8 @@ def generate_ascii_qr(data: str) -> str | None:
 
 
 def print_access_info(
-    sandbox: modal.Sandbox,
-    app_name: str,
+    sandbox: modal.Sandbox | None = None,
+    app_name: str = "",
     sandbox_name: str | None = None,
     ssh_info: tuple[str, int] | None = None,
     opencode_url: str | None = None,
@@ -47,13 +47,15 @@ def print_access_info(
     cloudflare_enabled: bool = True,
     sops_enabled: bool = False,
     is_vm: bool = False,
+    sandbox_id: str | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
     print(f"  • App:      {app_name}")
     if sandbox_name:
         print(f"  • Sandbox:  {sandbox_name}")
-    print(f"  • Shell:    modal shell {sandbox.object_id}")
+    sb_id = sandbox_id or (sandbox.object_id if sandbox else "unknown")
+    print(f"  • Shell:    modal shell {sb_id}")
     if cloudflare_enabled:
         print(f"  • Cloudflare: https://{DEFAULT_WEB_PORT}.mahesh0.dev (port {DEFAULT_WEB_PORT})")
     if memory_gb:
@@ -100,6 +102,32 @@ def print_access_info(
     print("=" * 60 + "\n")
 
 
+def print_snapshot_info(
+    sandbox_id: str,
+    image_id: str,
+    ttl_days: int = 30,
+    ttl_seconds: int | None = None,
+    is_vm: bool = False,
+    terminate: bool = False,
+) -> None:
+    """Formats and prints snapshot capture confirmation."""
+    ttl_secs = ttl_seconds if ttl_seconds is not None else ttl_days * 86400
+    vm_flag = " --vm" if is_vm else ""
+    print("\n" + "=" * 60)
+    print("📸  Filesystem Snapshot Captured!")
+    print(f"  • Sandbox ID:  {sandbox_id}")
+    print(f"  • Image ID:    {image_id}")
+    print(f"  • Retention:   {ttl_days} days ({ttl_secs}s)")
+    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
+    print("=" * 60 + "\n")
+
+    if terminate:
+        print(f"🧹 Terminating sandbox {sandbox_id}...")
+        print(f"✅ Sandbox {sandbox_id} terminated.")
+    else:
+        print(f"ℹ️  Sandbox {sandbox_id} remains running (non-destructive snapshot).")
+
+
 class SnapshotTTLAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values)
@@ -110,6 +138,19 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress"
     )
+    # Remote execution flags
+    parser.add_argument(
+        "--remote",
+        action="store_true",
+        help="Delegate execution to the hosted Modal control plane function.",
+    )
+    parser.add_argument(
+        "--endpoint-url",
+        default=None,
+        metavar="URL",
+        help="Override endpoint URL for --remote (defaults to MODAL_SANDBOX_ENDPOINT_URL).",
+    )
+
     # Filesystem Snapshot capture flags
     parser.add_argument(
         "--snapshot",
@@ -262,6 +303,9 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.endpoint_url and not args.remote:
+        parser.error("--endpoint-url can only be used with --remote.")
+
     if args.snapshot:
         if args.from_snapshot:
             parser.error("--snapshot and --from-snapshot cannot be used together.")

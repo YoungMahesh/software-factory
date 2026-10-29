@@ -1,10 +1,12 @@
+"""CLI entrypoint for launching and managing Modal sandboxes (local or remote)."""
+
 import argparse
 import json
+import os
 from pathlib import Path
-import secrets
 import sys
-import time
-import uuid
+import urllib.error
+import urllib.request
 
 import modal
 
@@ -19,68 +21,157 @@ from shared.image import (
     get_gradle_volumes,
     load_ssh_pub_key,
 )
-
 from sandbox.config import (
-    DEFAULT_ORG,
-    TIMEOUT_SECS,
-    IDLE_TIMEOUT_SECS,
-    DEFAULT_WEB_PORT,
-    DEFAULT_OPENCODE_PORT,
     DEFAULT_METRO_PORT,
+    DEFAULT_OPENCODE_PORT,
+    DEFAULT_ORG,
     DEFAULT_T3_PORT,
+    DEFAULT_WEB_PORT,
+    IDLE_TIMEOUT_SECS,
+    TIMEOUT_SECS,
 )
-
 from sandbox.cli import (
     SnapshotTTLAction,
-    create_parser,
-    validate_args,
     capture_snapshot,
+    create_parser,
     generate_ascii_qr,
     print_access_info,
+    print_snapshot_info,
+    validate_args,
 )
+from sandbox.core import (
+    LaunchRequest,
+    launch_sandbox,
+)
+
+
+def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:
+    """Sends a synchronous JSON POST request to the remote Modal control plane."""
+    target_url = endpoint_url.rstrip("/") + path
+    data = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    auth_token = os.environ.get("MODAL_SANDBOX_AUTH_TOKEN")
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    req = urllib.request.Request(target_url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            resp_body = resp.read().decode("utf-8")
+            return json.loads(resp_body)
+    except urllib.error.HTTPError as exc:
+        err_body = exc.read().decode("utf-8")
+        try:
+            detail = json.loads(err_body).get("detail", err_body)
+        except Exception:
+            detail = err_body
+        raise RuntimeError(f"Remote control plane error ({exc.code}): {detail}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Failed to communicate with remote control plane: {exc}") from exc
+
+
+def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
+    """Delegates sandbox launch or snapshot capture to the hosted Modal control plane."""
+    endpoint_url = args.endpoint_url or os.environ.get("MODAL_SANDBOX_ENDPOINT_URL")
+    if not endpoint_url:
+        msg = "--remote requires --endpoint-url or the MODAL_SANDBOX_ENDPOINT_URL environment variable."
+        if parser:
+            parser.error(msg)
+        raise ValueError(msg)
+
+    if args.snapshot:
+        print(f"📡 Delegating snapshot capture for {args.snapshot} to {endpoint_url}...")
+        payload = {
+            "sandbox_id": args.snapshot,
+            "ttl_days": args.snapshot_ttl,
+            "terminate": args.terminate,
+        }
+        res = run_remote_request(endpoint_url, "/snapshot", payload)
+        print_snapshot_info(
+            sandbox_id=res["sandbox_id"],
+            image_id=res["image_id"],
+            ttl_days=res["ttl_days"],
+            ttl_seconds=res.get("ttl_seconds"),
+            terminate=res.get("terminated", False),
+        )
+        return
+
+    print(f"📡 Delegating sandbox launch to remote control plane ({endpoint_url})...")
+    payload = {
+        "repo": args.repo,
+        "testing": args.testing,
+        "github_branch": args.github_branch,
+        "full_clone": args.full_clone,
+        "name": args.name,
+        "from_snapshot": args.from_snapshot,
+        "vm": args.vm,
+        "memory": args.memory,
+        "no_cloudflare": args.no_cloudflare,
+        "opencode": args.opencode,
+        "opencode_port": args.opencode_port,
+        "t3": args.t3,
+        "t3_port": args.t3_port,
+        "t3_ssh_host": args.t3_ssh_host,
+        "react_native": args.react_native,
+        "metro_port": args.metro_port,
+        "modal": args.modal,
+        "sops": args.sops,
+        "browser": args.browser,
+        "agy": args.agy,
+        "herdr": args.herdr,
+        "pi": args.pi,
+    }
+    data = run_remote_request(endpoint_url, "/launch", payload)
+    print_fn = getattr(sys.modules.get("sandbox.main"), "print_access_info", print_access_info)
+    print_fn(
+        app_name=data.get("app_name", ""),
+        sandbox_name=data.get("sandbox_name"),
+        sandbox_id=data.get("sandbox_id"),
+        ssh_info=tuple(data["ssh_info"]) if data.get("ssh_info") else None,
+        opencode_url=data.get("opencode_url"),
+        opencode_port=data.get("opencode_port"),
+        opencode_password=data.get("opencode_password"),
+        metro_url=data.get("metro_url"),
+        metro_port=data.get("metro_port"),
+        t3_url=data.get("t3_url"),
+        t3_port=data.get("t3_port"),
+        t3_pair_url=data.get("t3_pair_url"),
+        t3_qr_code=data.get("t3_qr_code"),
+        t3_ssh_host=data.get("t3_ssh_host"),
+        memory_gb=data.get("memory_gb"),
+        agy_enabled=data.get("agy_enabled", False),
+        cloudflare_enabled=data.get("cloudflare_enabled", True),
+        sops_enabled=data.get("sops_enabled", False),
+        is_vm=data.get("is_vm", False),
+    )
 
 
 def run_sandbox_launch(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
     repo_root: Path | None = None,
-):
+) -> None:
+    """Validates configuration and launches a sandbox locally or remotely."""
+    if getattr(args, "remote", False):
+        run_remote_launch(args, parser=parser)
+        return
+
     if parser is None:
         parser = create_parser()
 
     if repo_root is None:
         repo_root = Path(__file__).resolve().parent.parent
 
-    # Normalize repository name and detect testing mode
     clean_repo = args.repo.strip().rstrip("/") if args.repo else None
-    is_testing = args.testing
-    target_repo = None
-    org_name = None
-    bare_repo = None
     orgs_env_file = repo_root / "secrets" / "github-orgs.env"
 
-    if clean_repo:
-        if not orgs_env_file.is_file():
-            parser.error(
-                f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env)."
-            )
-
-        if "/" in clean_repo:
-            org_name, raw_repo = clean_repo.split("/", 1)
-        else:
-            org_name = DEFAULT_ORG
-            raw_repo = clean_repo
-
-        if is_testing:
-            org_name = DEFAULT_ORG
-            if raw_repo.startswith("test-"):
-                bare_repo = raw_repo
-            else:
-                bare_repo = f"test-{raw_repo}"
-        else:
-            bare_repo = raw_repo
-
-        target_repo = f"{org_name}/{bare_repo}"
+    if clean_repo and not orgs_env_file.is_file():
+        parser.error(
+            f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env)."
+        )
 
     if args.memory is not None:
         if not args.vm:
@@ -123,309 +214,61 @@ def run_sandbox_launch(
             "--t3-port and --metro-port must differ: a port can only be exposed once."
         )
 
-    pubkey_content = load_ssh_pub_key()
-
-    random_id = uuid.uuid4().hex[:8]
-    if args.name:
-        app_name = args.name
-        sandbox_name = f"{app_name}-{random_id}"
-    else:
-        app_name = bare_repo if bare_repo else "sandbox"
-        sandbox_name = f"{app_name}-{random_id}"
-
-    app = modal.App.lookup(app_name, create_if_missing=True)
-
-    runtime_desc = "VM Sandbox" if args.vm else "Sandbox"
-
-    browser_active = browser_enabled(
-        browser=args.browser, opencode=args.opencode, agy=args.agy
+    req = LaunchRequest(
+        repo=args.repo,
+        testing=args.testing,
+        github_branch=args.github_branch,
+        full_clone=args.full_clone,
+        name=args.name,
+        from_snapshot=args.from_snapshot,
+        vm=args.vm,
+        memory=args.memory,
+        no_cloudflare=args.no_cloudflare,
+        opencode=args.opencode,
+        opencode_port=args.opencode_port,
+        t3=args.t3,
+        t3_port=args.t3_port,
+        t3_ssh_host=getattr(args, "t3_ssh_host", None),
+        react_native=args.react_native,
+        metro_port=args.metro_port,
+        modal=args.modal,
+        sops=args.sops,
+        browser=args.browser,
+        agy=args.agy,
+        herdr=args.herdr,
+        pi=args.pi,
     )
-
-    if args.from_snapshot:
-        image = modal.Image.from_id(args.from_snapshot)
-    else:
-        # Build the image incrementally based on the CLI flags passed.
-        image = build_sandbox_image(
-            opencode=args.opencode,
-            agy=args.agy,
-            browser=browser_active,
-            modal_tooling=args.modal,
-            react_native=args.react_native,
-            t3=args.t3,
-            herdr=args.herdr,
-            pi=args.pi,
-        )
-
-    if clean_repo and orgs_env_file.is_file():
-        image = image.add_local_file(orgs_env_file, "/root/secrets/github-orgs.env", copy=True)
-
-    cloudflare_active = not args.no_cloudflare
-
-    encrypted_ports: list[int] = []
-    sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
-    env: dict[str, str | None] = {
-        "SSH_AUTHORIZED_KEY": pubkey_content,
-        "PORT": str(DEFAULT_WEB_PORT),
-        "HOSTNAME": "0.0.0.0",
-        "APP_NAME": sandbox_name,
-        "MODAL_APP_NAME": app_name,
-        "SANDBOX_NAME": sandbox_name,
-    }
-    if args.from_snapshot:
-        env["RESUME_SNAPSHOT"] = "1"
-    if clean_repo is None:
-        env["NO_REPO"] = "1"
-    if target_repo:
-        env["GH_REPO"] = target_repo
-    if org_name:
-        env["GH_ORG"] = org_name
-    if args.full_clone:
-        env["FULL_CLONE"] = "1"
-    if not cloudflare_active:
-        env["ENABLE_CLOUDFLARE"] = "0"
-
-    memory_gb: int | None = None
-    if args.vm:
-        if args.memory is not None:
-            memory_gb = args.memory
-            swap_gb = memory_gb * 2
-        else:
-            swap_gb = 2
-        env["SWAP_GB"] = str(swap_gb)
-        env["ENABLE_DOCKER"] = "1"
-
-    opencode_password = None
-    if args.opencode:
-        encrypted_ports.append(args.opencode_port)
-        # Fresh password per launch, so nothing has to be pre-provisioned in the secret.
-        opencode_password = secrets.token_urlsafe(16)
-        sandbox_secrets.append(
-            modal.Secret.from_dict({"OPENCODE_SERVER_PASSWORD": opencode_password})
-        )
-        # Explicit trigger for startup.sh; OPENCODE_PORT is only the port value.
-        env["ENABLE_OPENCODE"] = "1"
-        env["OPENCODE_PORT"] = str(args.opencode_port)
-
-    t3_ssh_alias = getattr(args, "t3_ssh_host", None) or sandbox_name
-    if args.t3:
-        encrypted_ports.append(args.t3_port)
-        env["ENABLE_T3"] = "1"
-        env["T3_PORT"] = str(args.t3_port)
-        env["FLAGS_enforce_kernel_ipv6_support"] = "false"
-        env["T3_SSH_HOST"] = t3_ssh_alias
-
-    if args.agy:
-        # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
-        env["ENABLE_ANTIGRAVITY"] = "1"
-
-    if args.modal:
-        env["ENABLE_MODAL"] = "1"
-
-    if args.sops:
-        env["ENABLE_SOPS"] = "1"
-
-    if args.herdr:
-        env["ENABLE_HERDR"] = "1"
-
-    if args.pi:
-        env["ENABLE_PI"] = "1"
-
-    if browser_active:
-        env["ENABLE_BROWSER"] = "1"
-
-    volumes = {}
-    if args.react_native:
-        encrypted_ports.append(args.metro_port)
-        env["ENABLE_REACT_NATIVE"] = "1"
-        env["METRO_PORT"] = str(args.metro_port)
-        volumes.update(get_gradle_volumes())\
-
-    features = []
-    if not args.no_cloudflare:
-        features.append("Cloudflare Tunnel")
-    if args.full_clone:
-        features.append("Full Git Clone")
-    if args.react_native:
-        features.append("React Native")
-    if args.agy:
-        features.append("Antigravity")
-    if args.opencode:
-        features.append("OpenCode")
-    if args.t3:
-        features.append("T3 Code")
-    if args.modal:
-        features.append("Modal")
-    if args.sops:
-        features.append("SOPS")
-    if args.herdr:
-        features.append("Herdr")
-    if args.pi:
-        features.append("Pi")
-    if browser_active:
-        features.append("Browser")
-
-    features_suffix = f" & {' & '.join(features)}" if features else ""
-    from_suffix = f" from snapshot {args.from_snapshot}" if args.from_snapshot else ""
-    print(
-        f"🏝️  Launching Modal {runtime_desc}{from_suffix} with SSH"
-        f"{features_suffix} (App: {app_name}, Sandbox: {sandbox_name})..."
-    )
-
-    sandbox_kwargs: dict = {
-        "timeout": TIMEOUT_SECS,
-        "idle_timeout": IDLE_TIMEOUT_SECS,
-        "image": image,
-        "app": app,
-        "name": sandbox_name,
-        "volumes": volumes,
-        "unencrypted_ports": [22],
-        "encrypted_ports": encrypted_ports,
-        "cpu": (0.125, 4.0),
-        "env": env,
-    }
-    sandbox_kwargs["runtime"] = "vm" if args.vm else "gvisor"
-    sandbox_kwargs["memory"] = (128, 16384)
 
     try:
-        with modal.enable_output():
-            sandbox = modal.Sandbox.create(
-                "bash",
-                REMOTE_STARTUP_SCRIPT,
-                args.github_branch,
-                secrets=sandbox_secrets,
-                **sandbox_kwargs,
-            )
+        sandbox, result = launch_sandbox(req, repo_root=repo_root)
     except modal.exception.AlreadyExistsError as exc:
         print(
-            f"❌ Sandbox '{sandbox_name}' already exists and is running in App '{app_name}': {exc}",
+            f"❌ Sandbox already exists and is running: {exc}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # Retrieve forwarded tunnels
-    ssh_info = None
-    opencode_url = None
-    metro_url = None
-    t3_url = None
-    try:
-        tunnels = sandbox.tunnels()
-        if 22 in tunnels:
-            ssh_info = tunnels[22].tcp_socket
-        if args.opencode and args.opencode_port in tunnels:
-            opencode_url = tunnels[args.opencode_port].url
-        if args.react_native and args.metro_port in tunnels:
-            metro_url = tunnels[args.metro_port].url
-        if args.t3 and args.t3_port in tunnels:
-            t3_url = tunnels[args.t3_port].url
-    except Exception as exc:
-        print(f"⚠️  Could not obtain tunnel metadata: {exc}")
-
-    t3_pair_url = None
-    t3_qr_code = None
-    if args.t3 and t3_url:
-        clean_t3_url = t3_url.rstrip("/")
-        # Configure T3 public URL and SSH host in the sandbox environment and server runtime state
-        try:
-            cfg_script = (
-                f"import json, os, time\n"
-                f"url = {json.dumps(clean_t3_url)}\n"
-                f"ssh_host = {json.dumps(t3_ssh_alias)}\n"
-                f"os.makedirs('/root/.t3', exist_ok=True)\n"
-                f"with open('/root/.t3/public_url', 'w') as f:\n"
-                f"    f.write(url + '\\n')\n"
-                f"try:\n"
-                f"    with open('/etc/machine-info', 'w') as f:\n"
-                f"        f.write(f'PRETTY_HOSTNAME=\"{{ssh_host}}\"\\n')\n"
-                f"except Exception:\n"
-                f"    pass\n"
-                f"for p in ['/etc/environment', '/root/.bashrc']:\n"
-                f"    try:\n"
-                f"        with open(p, 'a+') as f:\n"
-                f"            f.seek(0)\n"
-                f"            c = f.read()\n"
-                f"            if 'T3_PUBLIC_URL=' not in c:\n"
-                f"                f.write(f'export T3_PUBLIC_URL=\"{{url}}\"\\n')\n"
-                f"            if 'T3_SSH_HOST=' not in c:\n"
-                f"                f.write(f'export T3_SSH_HOST=\"{{ssh_host}}\"\\n')\n"
-                f"    except Exception:\n"
-                f"        pass\n"
-                f"rt = '/root/.t3/userdata/server-runtime.json'\n"
-                f"for _ in range(20):\n"
-                f"    if os.path.isfile(rt):\n"
-                f"        try:\n"
-                f"            with open(rt, 'r') as f:\n"
-                f"                d = json.load(f)\n"
-                f"            if d.get('devUrl') != url:\n"
-                f"                d['devUrl'] = url\n"
-                f"                tmp = rt + '.tmp'\n"
-                f"                with open(tmp, 'w') as f:\n"
-                f"                    json.dump(d, f, indent=2)\n"
-                f"                os.replace(tmp, rt)\n"
-                f"            break\n"
-                f"        except Exception:\n"
-                f"            pass\n"
-                f"    time.sleep(0.25)\n"
-            )
-            proc_cfg = sandbox.exec("python3", "-c", cfg_script)
-            proc_cfg.wait()
-        except Exception:
-            pass
-
-        # Mint the 24-hour pairing token directly from the container's pre-baked t3 binary
-        try:
-            proc = sandbox.exec("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
-            if proc.wait() == 0:
-                out = proc.stdout.read().strip()
-                if out:
-                    pairing_data = json.loads(out)
-                    credential = pairing_data.get("credential")
-                    if credential:
-                        t3_pair_url = f"{clean_t3_url}/pair#token={credential}"
-                        t3_qr_code = generate_ascii_qr(t3_pair_url)
-        except Exception:
-            pass
-
-        # Fallback to /tmp/t3-pairing.json if direct exec failed
-        if not t3_pair_url:
-            for _ in range(6):
-                try:
-                    proc = sandbox.exec("cat", "/tmp/t3-pairing.json")
-                    if proc.wait() == 0:
-                        out = proc.stdout.read().strip()
-                        if out:
-                            pairing_data = json.loads(out)
-                            credential = pairing_data.get("credential")
-                            if credential:
-                                t3_pair_url = f"{clean_t3_url}/pair#token={credential}"
-                                t3_qr_code = generate_ascii_qr(t3_pair_url)
-                                break
-                except Exception:
-                    pass
-                time.sleep(0.5)
-
-        if not t3_pair_url:
-            t3_pair_url = clean_t3_url
-
-    print_access_info(
-        sandbox,
-        app_name,
-        sandbox_name=sandbox_name,
-        ssh_info=ssh_info,
-        opencode_url=opencode_url,
-        opencode_port=args.opencode_port if args.opencode else None,
-        opencode_password=opencode_password,
-        metro_url=metro_url,
-        metro_port=args.metro_port if args.react_native else None,
-        t3_url=t3_url,
-        t3_port=args.t3_port if args.t3 else None,
-        t3_pair_url=t3_pair_url,
-        t3_qr_code=t3_qr_code,
-        t3_ssh_host=getattr(args, "t3_ssh_host", None),
-        memory_gb=memory_gb,
-        agy_enabled=args.agy,
-        cloudflare_enabled=not args.no_cloudflare,
-        sops_enabled=args.sops,
-        is_vm=args.vm,
+    print_fn = getattr(sys.modules.get("sandbox.main"), "print_access_info", print_access_info)
+    print_fn(
+        sandbox=sandbox,
+        app_name=result.app_name,
+        sandbox_name=result.sandbox_name,
+        ssh_info=result.ssh_info,
+        opencode_url=result.opencode_url,
+        opencode_port=result.opencode_port,
+        opencode_password=result.opencode_password,
+        metro_url=result.metro_url,
+        metro_port=result.metro_port,
+        t3_url=result.t3_url,
+        t3_port=result.t3_port,
+        t3_pair_url=result.t3_pair_url,
+        t3_qr_code=result.t3_qr_code,
+        t3_ssh_host=result.t3_ssh_host,
+        memory_gb=result.memory_gb,
+        agy_enabled=result.agy_enabled,
+        cloudflare_enabled=result.cloudflare_enabled,
+        sops_enabled=result.sops_enabled,
+        is_vm=result.is_vm,
     )
 
 
@@ -434,7 +277,7 @@ def main():
     args = parser.parse_args()
     validate_args(parser, args)
 
-    if args.snapshot:
+    if args.snapshot and not args.remote:
         capture_snapshot(
             sandbox_id=args.snapshot,
             ttl_days=args.snapshot_ttl,

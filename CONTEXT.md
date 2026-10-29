@@ -159,3 +159,7 @@ _Avoid_: Org token file, github orgs secret, project fetch secret
 **In-Repo Secret Manifest**:
 A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `studio.env=.env`), decrypted during sandbox startup.
 _Avoid_: Secret mapping, repo env files, host secret mount
+
+**Hosted Sandbox Control Plane**:
+A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving a FastAPI HTTP API (`/launch`, `/snapshot`, `/health`) with bearer token authentication (`MODAL_SANDBOX_AUTH_TOKEN`), allowing external clients and the local CLI (`--remote`) to synchronously provision sandboxes and capture filesystem snapshots.
+_Avoid_: Sandbox server, runner API, modal webhook daemon
