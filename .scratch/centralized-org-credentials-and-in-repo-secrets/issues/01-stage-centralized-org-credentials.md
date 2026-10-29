@@ -5,9 +5,9 @@ Create and SOPS-encrypt a centralized organization credential store at `secrets/
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] `secrets/github-orgs.env` is created with `SFACTORY0_GH_TOKEN` set to the `sFactory0` fine-grained PAT.
-- [ ] `secrets/github-orgs.env` is encrypted using SOPS with the project Age public key.
-- [ ] Decryption test verifies that `sops decrypt secrets/github-orgs.env` yields the valid plaintext token.
-- [ ] The obsolete `secrets_org/` directory is deleted from version control and disk.
+- [x] `secrets/github-orgs.env` is created with `SFACTORY0_GH_TOKEN` set to the `sFactory0` fine-grained PAT.
+- [x] `secrets/github-orgs.env` is encrypted using SOPS with the project Age public key.
+- [x] Decryption test verifies that `sops decrypt secrets/github-orgs.env` yields the valid plaintext token.
+- [x] The obsolete `secrets_org/` directory is deleted from version control and disk.
