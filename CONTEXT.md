@@ -151,3 +151,11 @@ _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
 **Universal File Line Budget**:
 A repository-wide size constraint requiring every production source file and executable automated test file to contain no more than 500 physical lines (`wc -l`).
 _Avoid_: File size limit, code line limit, test budget, 500-line rule
+
+**Centralized Organization Credentials**:
+A single SOPS-encrypted file (`secrets/github-orgs.env`) containing GitHub Personal Access Tokens keyed by organization (e.g. `SFACTORY0_GH_TOKEN`), replacing legacy per-project secret folders and the deprecated `secrets_org/` directory.
+_Avoid_: Org token file, github orgs secret, project fetch secret
+
+**In-Repo Secret Manifest**:
+A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `studio.env=.env`), decrypted during sandbox startup.
+_Avoid_: Secret mapping, repo env files, host secret mount
