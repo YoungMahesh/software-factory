@@ -23,29 +23,29 @@ The **Unified Sandbox Runner** ([`sandbox/main.py`](sandbox/main.py)) is the can
 
 ```bash
 # Repository Sandbox (clones repo from encrypted fetch credentials)
-python sandbox/main.py -s <secret-name> [flags]
+python sandbox/main.py -r <repo-name> [flags]
 
 # Standalone Sandbox (boots clean environment without repo clone)
 python sandbox/main.py --name <app-name> [flags]
 
 # Linux VM Sandbox with Docker and swapfile allocation
-python sandbox/main.py -s <secret-name> --vm --memory 2
+python sandbox/main.py -r <repo-name> --vm --memory 2
 
 # Sandbox with Agent & Tooling Environments
-python sandbox/main.py -s <secret-name> --opencode --t3 --agy
+python sandbox/main.py -r <repo-name> --opencode --t3 --agy
 ```
 
 ### Core CLI Flags
 
 | Flag | Description | Default |
 | :--- | :--- | :--- |
-| `-s, --secret` | Repository secret name under `secrets/<secret-name>/fetch.env` | None |
+| `-r, --repo` | Target GitHub repository name (e.g. `sFactory0/<repo>` or `<repo>`) | None |
 | `--name` | Modal App name (required for standalone and snapshot resumes) | None |
 | `-b, --github-branch` | Git branch to checkout | `main` |
 | `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
 | `--vm` | Provision a Linux VM Sandbox with Docker daemon instead of container | `False` |
 | `--memory <GB>` | RAM allocation in GB (for VM sandboxes; allocates 2× swap) | `1` |
-| `--testing` | Target repositories under test organization `software-factory-09-test` | `False` |
+| `--testing` | Target repository under canonical organization `sFactory0` using `test-` prefix | `False` |
 | `--opencode` | Launch OpenCode server on port 4096 with web tunnel | `False` |
 | `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
 | `--agy` | Enable Antigravity CLI and Antigravity Remote Control daemon | `False` |

@@ -20,32 +20,32 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertIn("--sops", res.stdout)
         self.assertIn("Retain SOPS age private key", res.stdout)
 
-    def test_missing_secret_without_name_fails(self):
+    def test_missing_repo_without_name_fails(self):
         res = subprocess.run(
             ["python3", str(self.sandbox_main), "--sops"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--name is required when launching without --secret", res.stderr)
+        self.assertIn("--name is required when launching without -r/--repo", res.stderr)
 
-    def test_launch_without_secret_with_branch_fails(self):
+    def test_launch_without_repo_with_branch_fails(self):
         res = subprocess.run(
             ["python3", str(self.sandbox_main), "--name", "my-app", "-b", "dev"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--github-branch cannot be used without -s/--secret", res.stderr)
+        self.assertIn("--github-branch cannot be used without -r/--repo", res.stderr)
 
-    def test_launch_without_secret_with_testing_fails(self):
+    def test_launch_without_repo_with_testing_fails(self):
         res = subprocess.run(
             ["python3", str(self.sandbox_main), "--name", "my-app", "--testing"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--testing cannot be used without -s/--secret", res.stderr)
+        self.assertIn("--testing cannot be used without -r/--repo", res.stderr)
 
     def test_parser_parses_standalone_launch_with_name(self):
         from sandbox.main import create_parser
@@ -53,7 +53,7 @@ class TestSandboxCliArgs(unittest.TestCase):
         parser = create_parser()
         args = parser.parse_args(["--name", "standalone-app"])
         self.assertEqual(args.name, "standalone-app")
-        self.assertIsNone(args.secret)
+        self.assertIsNone(args.repo)
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
@@ -96,7 +96,7 @@ class TestSandboxCliArgs(unittest.TestCase):
 
     def test_github_ref_flag_is_rejected(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "-s", "dummy", "--github-ref", "main"],
+            ["python3", str(self.sandbox_main), "-r", "dummy", "--github-ref", "main"],
             capture_output=True,
             text=True,
         )
@@ -141,7 +141,7 @@ class TestSandboxCliArgs(unittest.TestCase):
             """
             res = subprocess.run(["bash", "-c", test_script], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, f"startup.sh failed: {res.stderr}\nstdout: {res.stdout}")
-            self.assertIn("No repository secret provided: skipping repository fetch.", res.stdout)
+            self.assertIn("No repository provided: skipping repository fetch.", res.stdout)
             self.assertIn("Initializing empty Git repository with branch main", res.stdout)
             target_dir = fake_root / "my-standalone-app"
             self.assertTrue(target_dir.is_dir())
@@ -166,13 +166,13 @@ class TestSandboxCliArgs(unittest.TestCase):
         from sandbox.main import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(["-s", "my-secret", "--github-branch", "feature/auth"])
+        args = parser.parse_args(["-r", "my-repo", "--github-branch", "feature/auth"])
         self.assertEqual(args.github_branch, "feature/auth")
 
-        args_short = parser.parse_args(["-s", "my-secret", "-b", "feature/dashboard"])
+        args_short = parser.parse_args(["-r", "my-repo", "-b", "feature/dashboard"])
         self.assertEqual(args_short.github_branch, "feature/dashboard")
 
-        args_default = parser.parse_args(["-s", "my-secret"])
+        args_default = parser.parse_args(["-r", "my-repo"])
         self.assertEqual(args_default.github_branch, "main")
 
     def test_git_symbolic_ref_behavior_on_branch_vs_tag(self):
@@ -201,14 +201,14 @@ class TestSandboxCliArgs(unittest.TestCase):
             res_tag = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=tag_clone, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.assertNotEqual(res_tag.returncode, 0)
 
-    def test_name_and_secret_mutually_exclusive(self):
+    def test_name_and_repo_mutually_exclusive(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "-s", "dummy", "--name", "my-app"],
+            ["python3", str(self.sandbox_main), "-r", "dummy", "--name", "my-app"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--name cannot be used with -s/--secret", res.stderr)
+        self.assertIn("--name cannot be used with -r/--repo", res.stderr)
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
@@ -220,7 +220,7 @@ class TestSandboxCliArgs(unittest.TestCase):
 
         mock_image = MagicMock()
         mock_staged_image = MagicMock()
-        mock_image.add_local_dir.return_value = mock_staged_image
+        mock_image.add_local_file.return_value = mock_staged_image
         mock_build_image.return_value = mock_image
 
         mock_sandbox = MagicMock()
@@ -229,12 +229,12 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "my-project"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("GH_REPO=owner/my-project")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "my-project"])
+            args = parser.parse_args(["-r", "my-project"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
         mock_app_lookup.assert_called_once_with("my-project", create_if_missing=True)
@@ -242,6 +242,7 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertTrue(call_kwargs["name"].startswith("my-project-"))
         self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
         self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-project")
+        self.assertEqual(call_kwargs["env"]["GH_REPO"], "sFactory0/my-project")
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
@@ -253,7 +254,7 @@ class TestSandboxCliArgs(unittest.TestCase):
 
         mock_image = MagicMock()
         mock_staged_image = MagicMock()
-        mock_image.add_local_dir.return_value = mock_staged_image
+        mock_image.add_local_file.return_value = mock_staged_image
         mock_build_image.return_value = mock_image
 
         mock_sandbox = MagicMock()
@@ -262,12 +263,12 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            org_secrets_dir = Path(tmpdir) / "secrets_org" / "software-factory-09-test"
-            org_secrets_dir.mkdir(parents=True)
-            (org_secrets_dir / "token").write_text("GITHUB_TOKEN=dummy")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "software-factory-09-test/test1", "--testing"])
+            args = parser.parse_args(["-r", "test1", "--testing"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
         mock_app_lookup.assert_called_once_with("test-test1", create_if_missing=True)
@@ -275,6 +276,7 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertTrue(call_kwargs["name"].startswith("test-test1-"))
         self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
         self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "test-test1")
+        self.assertEqual(call_kwargs["env"]["GH_REPO"], "sFactory0/test-test1")
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
@@ -387,10 +389,10 @@ class TestSandboxCliArgs(unittest.TestCase):
         from sandbox.main import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(["-s", "my-secret", "--full-clone"])
+        args = parser.parse_args(["-r", "my-repo", "--full-clone"])
         self.assertTrue(args.full_clone)
 
-        args_default = parser.parse_args(["-s", "my-secret"])
+        args_default = parser.parse_args(["-r", "my-repo"])
         self.assertFalse(args_default.full_clone)
 
     def test_full_clone_validation(self):
@@ -400,7 +402,7 @@ class TestSandboxCliArgs(unittest.TestCase):
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--full-clone cannot be used without -s/--secret", res.stderr)
+        self.assertIn("--full-clone cannot be used without -r/--repo", res.stderr)
 
         res = subprocess.run(
             ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--full-clone"],
@@ -436,12 +438,12 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "full-repo"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("GH_REPO=owner/full-repo")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "full-repo", "--full-clone"])
+            args = parser.parse_args(["-r", "full-repo", "--full-clone"])
 
             stdout_buf = io.StringIO()
             with patch("sys.stdout", stdout_buf):

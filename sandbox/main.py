@@ -12,9 +12,6 @@ import modal
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
-    REMOTE_FETCH_SECRET,
-    REMOTE_ORG_SECRETS_DIR,
-    REMOTE_REPO_SECRETS_DIR,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
     browser_enabled,
@@ -24,7 +21,7 @@ from shared.image import (
 )
 
 from sandbox.config import (
-    DEFAULT_TEST_ORG,
+    DEFAULT_ORG,
     TIMEOUT_SECS,
     IDLE_TIMEOUT_SECS,
     DEFAULT_WEB_PORT,
@@ -54,65 +51,36 @@ def run_sandbox_launch(
     if repo_root is None:
         repo_root = Path(__file__).resolve().parent.parent
 
-    # Normalize secret name and detect testing mode
-    clean_secret = args.secret.strip().rstrip("/") if args.secret else None
+    # Normalize repository name and detect testing mode
+    clean_repo = args.repo.strip().rstrip("/") if args.repo else None
     is_testing = args.testing
     target_repo = None
-    is_org = False
-    secrets_dir = None
     org_name = None
+    bare_repo = None
     orgs_env_file = repo_root / "secrets" / "github-orgs.env"
 
-    if clean_secret:
-        if clean_secret.startswith("secrets_testing/"):
-            clean_secret = clean_secret[len("secrets_testing/"):]
-            is_testing = True
-        elif clean_secret.startswith("secrets_org/"):
-            clean_secret = clean_secret[len("secrets_org/"):]
-            is_testing = True
-        elif clean_secret.startswith("secrets/"):
-            clean_secret = clean_secret[len("secrets/"):]
-        elif clean_secret.startswith(f"{DEFAULT_TEST_ORG}/") or clean_secret == DEFAULT_TEST_ORG:
-            is_testing = True
+    if clean_repo:
+        if not orgs_env_file.is_file():
+            parser.error(
+                f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env)."
+            )
+
+        if "/" in clean_repo:
+            org_name, raw_repo = clean_repo.split("/", 1)
+        else:
+            org_name = DEFAULT_ORG
+            raw_repo = clean_repo
 
         if is_testing:
-            if "/" in clean_secret:
-                org_name = clean_secret.split("/", 1)[0]
-                target_repo = clean_secret
+            org_name = DEFAULT_ORG
+            if raw_repo.startswith("test-"):
+                bare_repo = raw_repo
             else:
-                if (repo_root / "secrets_org" / clean_secret).is_dir():
-                    org_name = clean_secret
-                else:
-                    org_name = DEFAULT_TEST_ORG
-                    target_repo = f"{DEFAULT_TEST_ORG}/{clean_secret}"
-
-            legacy_token = repo_root / "secrets_org" / org_name / "token"
-            if legacy_token.is_file():
-                secrets_dir = repo_root / "secrets_org" / org_name
-                is_org = True
-            elif orgs_env_file.is_file():
-                secrets_dir = None
-            else:
-                parser.error(
-                    f"Organization token secret not found: {legacy_token} (expected secrets_org/{org_name}/token or secrets/github-orgs.env)."
-                )
+                bare_repo = f"test-{raw_repo}"
         else:
-            if "/" in clean_secret:
-                org_name = clean_secret.split("/", 1)[0]
-                target_repo = clean_secret
-            else:
-                org_name = "sFactory0"
-                target_repo = f"sFactory0/{clean_secret}"
+            bare_repo = raw_repo
 
-            legacy_secret = repo_root / "secrets" / clean_secret / "fetch.env"
-            if legacy_secret.is_file():
-                secrets_dir = repo_root / "secrets" / clean_secret
-            elif orgs_env_file.is_file():
-                secrets_dir = None
-            else:
-                parser.error(
-                    f"Repository secret file not found: {legacy_secret} (expected secrets/{clean_secret}/fetch.env or secrets/github-orgs.env)."
-                )
+        target_repo = f"{org_name}/{bare_repo}"
 
     if args.memory is not None:
         if not args.vm:
@@ -162,9 +130,7 @@ def run_sandbox_launch(
         app_name = args.name
         sandbox_name = f"{app_name}-{random_id}"
     else:
-        bare_repo = clean_secret.split("/")[-1] if clean_secret else "sandbox"
-        app_prefix = "test-" if is_testing else ""
-        app_name = f"{app_prefix}{bare_repo}"
+        app_name = bare_repo if bare_repo else "sandbox"
         sandbox_name = f"{app_name}-{random_id}"
 
     app = modal.App.lookup(app_name, create_if_missing=True)
@@ -190,10 +156,7 @@ def run_sandbox_launch(
             pi=args.pi,
         )
 
-    if secrets_dir:
-        remote_secrets_dir = REMOTE_ORG_SECRETS_DIR if is_org else REMOTE_REPO_SECRETS_DIR
-        image = image.add_local_dir(secrets_dir, remote_secrets_dir, copy=True)
-    elif clean_secret and orgs_env_file.is_file():
+    if clean_repo and orgs_env_file.is_file():
         image = image.add_local_file(orgs_env_file, "/root/secrets/github-orgs.env", copy=True)
 
     cloudflare_active = not args.no_cloudflare
@@ -210,7 +173,7 @@ def run_sandbox_launch(
     }
     if args.from_snapshot:
         env["RESUME_SNAPSHOT"] = "1"
-    if clean_secret is None:
+    if clean_repo is None:
         env["NO_REPO"] = "1"
     if target_repo:
         env["GH_REPO"] = target_repo

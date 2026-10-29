@@ -13,11 +13,11 @@ A lightweight container sandbox on Modal running directly on the container runti
 _Avoid_: Basic sandbox, container VM
 
 **Standalone Sandbox**:
-A Modal sandbox execution environment provisioned without a Repository Fetch Secret (`--secret`), launched under a constant Modal App named via `--name` with an empty Git repository and default `.gitignore` initialized under `/root/<sandbox-name>`, and configured to run without cloning a remote target repository.
+A Modal sandbox execution environment provisioned without a Target Repository (`-r/--repo`), launched under a constant Modal App named via `--name` with an empty Git repository and default `.gitignore` initialized under `/root/<sandbox-name>`, and configured to run without cloning a remote target repository.
 _Avoid_: Empty sandbox, blank runner, scratch container
 
 **Named Sandbox Runner**:
-A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository secret or `--name`) while individual sandbox execution environments are uniquely named inside that App.
+A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository name or `--name`) while individual sandbox execution environments are uniquely named inside that App.
 _Avoid_: Static runner, single-app runner, constant container
 
 **Shallow Repository Clone**:
@@ -89,15 +89,15 @@ A directory containing a SOPS-encrypted GitHub fine-grained personal access toke
 _Avoid_: Org token, org secret, organization token
 
 **Test Organization**:
-A dedicated GitHub organization (`software-factory-09-test`) configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
+The canonical GitHub organization (`sFactory0`) used with `test-` prefixed repositories configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
 _Avoid_: Test org, mock org, testing workspace
 
 **Test Repository Baseline**:
-The designated minimal test fixture repository (`software-factory-09-test/test1`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
+The designated minimal test fixture repository (`sFactory0/test-live-test1`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
 _Avoid_: Default test repo, test mock, dummy repo
 
 **Sandbox Live Verification**:
-An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`software-factory-09-test/test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
+An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`sFactory0/test-live-test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
 **SOPS Decryption**:

@@ -135,32 +135,6 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
             rm -f /root/secrets/github-orgs.env
             export ORG_TOKEN="1"
             export TRACKER="${TRACKER:-github}"
-        elif [ -f "/root/secrets/org/token" ]; then
-            echo "🔐 Decrypting organization token from /root/secrets/org/token..."
-            GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n' || true)
-            rm -f /root/secrets/org/token
-            export ORG_TOKEN="1"
-            export TRACKER="${TRACKER:-github}"
-        elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
-            FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
-            [ ! -f "$FETCH_SECRET_FILE" ] && FETCH_SECRET_FILE="/root/secrets/fetch.env"
-            echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
-            DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
-            if [ -n "$DECRYPTED_FETCH" ]; then
-                while IFS= read -r line || [ -n "$line" ]; do
-                    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-                    [[ -z "${line// }" ]] && continue
-                    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-                        var_name="${BASH_REMATCH[1]}"
-                        var_val="${BASH_REMATCH[2]}"
-                        if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
-                            var_val="${BASH_REMATCH[1]}"
-                        fi
-                        export "$var_name"="$var_val"
-                    fi
-                done <<< "$DECRYPTED_FETCH"
-            fi
-            rm -f "$FETCH_SECRET_FILE"
         fi
     fi
 
@@ -185,7 +159,7 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
     cd "$TARGET_DIR"
 else
     if [ "${NO_REPO:-0}" = "1" ]; then
-        echo "🏝️  No repository secret provided: skipping repository fetch."
+        echo "🏝️  No repository provided: skipping repository fetch."
         TARGET_DIR="/root/${APP_NAME:-sandbox}"
         mkdir -p "$TARGET_DIR"
         cd "$TARGET_DIR"
@@ -254,55 +228,8 @@ EOF
             echo "🧹 Purged encrypted organization secrets file from disk."
             export ORG_TOKEN="1"
             export TRACKER="${TRACKER:-github}"
-        elif [ -f "/root/secrets/org/token" ]; then
-            if [ -z "${GH_REPO:-}" ]; then
-                echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
-                exit 1
-            fi
-            echo "🔐 Decrypting organization token from /root/secrets/org/token..."
-            GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n')
-            if [ -z "$GH_TOKEN" ]; then
-                echo "ERROR: Failed to decrypt organization token using AGE_PRIVATE_KEY." >&2
-                rm -rf /root/secrets/org
-                exit 1
-            fi
-            rm -f /root/secrets/org/token
-            echo "🧹 Purged encrypted organization token from disk."
-            export ORG_TOKEN="1"
-            export TRACKER="${TRACKER:-github}"
-        elif [ -f "/root/secrets/repo/fetch.env" ] || [ -f "/root/secrets/fetch.env" ]; then
-            FETCH_SECRET_FILE=""
-            if [ -f "/root/secrets/repo/fetch.env" ]; then
-                FETCH_SECRET_FILE="/root/secrets/repo/fetch.env"
-            else
-                FETCH_SECRET_FILE="/root/secrets/fetch.env"
-            fi
-
-            echo "🔐 Decrypting repository fetch secret from $FETCH_SECRET_FILE..."
-            DECRYPTED_FETCH=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$FETCH_SECRET_FILE" 2>/dev/null || true)
-            if [ -z "$DECRYPTED_FETCH" ]; then
-                echo "ERROR: Failed to decrypt $FETCH_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-                rm -rf /root/secrets/repo
-                exit 1
-            fi
-
-            while IFS= read -r line || [ -n "$line" ]; do
-                [[ "$line" =~ ^[[:space:]]*# ]] && continue
-                [[ -z "${line// }" ]] && continue
-                if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-                    var_name="${BASH_REMATCH[1]}"
-                    var_val="${BASH_REMATCH[2]}"
-                    if [[ "$var_val" =~ ^\"(.*)\"$ ]] || [[ "$var_val" =~ ^\'(.*)\'$ ]]; then
-                        var_val="${BASH_REMATCH[1]}"
-                    fi
-                    export "$var_name"="$var_val"
-                fi
-            done <<< "$DECRYPTED_FETCH"
-
-            rm -f "$FETCH_SECRET_FILE"
-            echo "🧹 Purged encrypted fetch secret ($FETCH_SECRET_FILE) from disk."
         else
-            echo "ERROR: Repository secret not found (expected /root/secrets/org/token or /root/secrets/repo/fetch.env)." >&2
+            echo "ERROR: Organization credentials not found at /root/secrets/github-orgs.env." >&2
             exit 1
         fi
 
@@ -349,9 +276,6 @@ SECRETS_DIR=""
 if [ -f "$TARGET_DIR/.secrets/env.map" ]; then
     ENV_MAP_FILE="$TARGET_DIR/.secrets/env.map"
     SECRETS_DIR="$TARGET_DIR/.secrets"
-elif [ -f "/root/secrets/repo/env.map" ]; then
-    ENV_MAP_FILE="/root/secrets/repo/env.map"
-    SECRETS_DIR="/root/secrets/repo"
 fi
 
 if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
@@ -387,16 +311,6 @@ if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
             echo "   • Decrypted $src_rel -> $dest_rel"
         fi
     done < "$ENV_MAP_FILE"
-fi
-
-if [ -d /root/secrets/repo ]; then
-    rm -rf /root/secrets/repo
-    echo "🧹 Purged repository secrets staging directory (/root/secrets/repo)."
-fi
-
-if [ -d /root/secrets/org ]; then
-    rm -rf /root/secrets/org
-    echo "🧹 Purged organization secrets staging directory (/root/secrets/org)."
 fi
 
 if [ -f /root/secrets/github-orgs.env ]; then

@@ -32,11 +32,11 @@ class TestT3CodeIntegration(unittest.TestCase):
         from sandbox.main import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(["-s", "my-secret", "--t3"])
+        args = parser.parse_args(["-r", "my-repo", "--t3"])
         self.assertTrue(args.t3)
         self.assertEqual(args.t3_port, 3775)
 
-        args_alias = parser.parse_args(["-s", "my-secret", "--t3code", "--t3-port", "3776"])
+        args_alias = parser.parse_args(["-r", "my-repo", "--t3code", "--t3-port", "3776"])
         self.assertTrue(args_alias.t3)
         self.assertEqual(args_alias.t3_port, 3776)
 
@@ -56,12 +56,12 @@ class TestT3CodeIntegration(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "test-repo"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "test-repo", "--t3", "--t3-port", "3000"])
+            args = parser.parse_args(["-r", "test-repo", "--t3", "--t3-port", "3000"])
             with self.assertRaises(SystemExit):
                 run_sandbox_launch(args, repo_root=Path(tmpdir))
 
@@ -70,12 +70,12 @@ class TestT3CodeIntegration(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "test-repo"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "test-repo", "--t3", "--opencode", "--t3-port", "4096"])
+            args = parser.parse_args(["-r", "test-repo", "--t3", "--opencode", "--t3-port", "4096"])
             with self.assertRaises(SystemExit):
                 run_sandbox_launch(args, repo_root=Path(tmpdir))
 
@@ -84,12 +84,12 @@ class TestT3CodeIntegration(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "test-repo"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "test-repo", "--t3", "--react-native", "--t3-port", "8081"])
+            args = parser.parse_args(["-r", "test-repo", "--t3", "--react-native", "--t3-port", "8081"])
             with self.assertRaises(SystemExit):
                 run_sandbox_launch(args, repo_root=Path(tmpdir))
 
@@ -233,15 +233,15 @@ class TestT3CodeIntegration(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "my-secret"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "my-secret", "--t3"])
+            args = parser.parse_args(["-r", "my-repo", "--t3"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
-        mock_app_lookup.assert_called_once_with("my-secret", create_if_missing=True)
+        mock_app_lookup.assert_called_once_with("my-repo", create_if_missing=True)
         mock_build_image.assert_called_once_with(
             opencode=False,
             agy=False,
@@ -460,12 +460,12 @@ class TestT3CodeIntegration(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_dir = Path(tmpdir) / "secrets" / "my-secret"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["-s", "my-secret", "--t3"])
+            args = parser.parse_args(["-r", "my-repo", "--t3"])
             run_sandbox_launch(args, repo_root=Path(tmpdir))
 
         mock_sandbox.exec.assert_called_with("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")

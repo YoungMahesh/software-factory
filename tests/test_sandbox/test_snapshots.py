@@ -45,7 +45,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
         args = parser.parse_args(["--from-snapshot", "im-12345", "--name", "my-app"])
         self.assertEqual(args.from_snapshot, "im-12345")
         self.assertEqual(args.name, "my-app")
-        self.assertIsNone(args.secret)
+        self.assertIsNone(args.repo)
 
     def test_from_snapshot_without_secret_requires_name(self):
         res = subprocess.run(
@@ -54,7 +54,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("--name is required when launching from a snapshot without --secret", res.stderr)
+        self.assertIn("--name is required when launching from a snapshot without -r/--repo", res.stderr)
 
     def test_snapshot_mutual_exclusion_with_from_snapshot(self):
         res = subprocess.run(
@@ -65,14 +65,14 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("cannot be used together", res.stderr.lower())
 
-    def test_snapshot_mutual_exclusion_with_secret(self):
+    def test_snapshot_mutual_exclusion_with_repo(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "-s", "dummy"],
+            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("cannot be used with --secret", res.stderr)
+        self.assertIn("cannot be used with -r/--repo", res.stderr)
 
     def test_snapshot_mutual_exclusion_with_name(self):
         res = subprocess.run(
@@ -95,7 +95,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_terminate_without_snapshot_fails(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--terminate", "-s", "dummy"],
+            ["python3", str(self.sandbox_main), "--terminate", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
@@ -104,7 +104,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_ttl_without_snapshot_fails(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot-ttl", "10", "-s", "dummy"],
+            ["python3", str(self.sandbox_main), "--snapshot-ttl", "10", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
@@ -262,7 +262,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
     @patch("modal.Image.from_id")
     @patch("sandbox.main.build_sandbox_image")
     @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
-    def test_restore_from_snapshot_with_secret(
+    def test_restore_from_snapshot_with_repo(
         self,
         mock_load_pubkey,
         mock_build_image,
@@ -276,34 +276,34 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
 
         mock_image = MagicMock()
         mock_staged_image = MagicMock()
-        mock_image.add_local_dir.return_value = mock_staged_image
+        mock_image.add_local_file.return_value = mock_staged_image
         mock_image_from_id.return_value = mock_image
 
         mock_sandbox = MagicMock()
-        mock_sandbox.object_id = "sb-restored-secret"
+        mock_sandbox.object_id = "sb-restored-repo"
         mock_sandbox.tunnels.return_value = {}
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmp_secrets:
-            secrets_dir = Path(tmp_secrets) / "secrets" / "my-secret"
-            secrets_dir.mkdir(parents=True)
-            (secrets_dir / "fetch.env").write_text("DUMMY=1")
+            secrets_file = Path(tmp_secrets) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
 
             parser = create_parser()
-            args = parser.parse_args(["--from-snapshot", "im-snap-456", "-s", "my-secret"])
+            args = parser.parse_args(["--from-snapshot", "im-snap-456", "-r", "my-repo"])
 
             run_sandbox_launch(args, repo_root=Path(tmp_secrets))
 
         mock_build_image.assert_not_called()
         mock_image_from_id.assert_called_once_with("im-snap-456")
-        mock_image.add_local_dir.assert_called_once()
-        mock_app_lookup.assert_called_once_with("my-secret", create_if_missing=True)
+        mock_image.add_local_file.assert_called_once_with(secrets_file, "/root/secrets/github-orgs.env", copy=True)
+        mock_app_lookup.assert_called_once_with("my-repo", create_if_missing=True)
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertEqual(call_kwargs["image"], mock_staged_image)
         self.assertEqual(call_kwargs["env"]["RESUME_SNAPSHOT"], "1")
-        self.assertTrue(call_kwargs["name"].startswith("my-secret-"))
+        self.assertTrue(call_kwargs["name"].startswith("my-repo-"))
         self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])
-        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-secret")
+        self.assertEqual(call_kwargs["env"]["MODAL_APP_NAME"], "my-repo")
 
 
 class TestStartupScriptResume(unittest.TestCase):

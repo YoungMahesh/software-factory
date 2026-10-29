@@ -141,7 +141,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--name",
         default=None,
         metavar="APP_NAME",
-        help="Explicit Modal application name for standalone sandboxes (mandatory when launching without --secret; cannot be used with --secret).",
+        help="Explicit Modal application name for standalone sandboxes (mandatory when launching without -r/--repo; cannot be used with -r/--repo).",
     )
 
     parser.add_argument(
@@ -156,11 +156,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Clone complete Git commit history instead of default shallow clone (--depth 50).",
     )
     parser.add_argument(
-        "-s",
-        "--secret",
-        dest="secret",
+        "-r",
+        "--repo",
+        dest="repo",
         default=None,
-        help="Repository secret name under secrets/<secret-name>/fetch.env (optional; when omitted, launches a Standalone Sandbox without repository fetch).",
+        help="Target GitHub repository name (e.g. sFactory0/software-factory or shorthand software-factory). When omitted, launches a Standalone Sandbox without repository fetch.",
     )
 
     parser.add_argument(
@@ -168,7 +168,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--test",
         dest="testing",
         action="store_true",
-        help="Resolve repository secrets from canonical Test Organization (secrets_org/software-factory-09-test/token) instead of secrets/<secret-name>/fetch.env.",
+        help="Target repository under canonical organization sFactory0 using test- prefix (e.g. sFactory0/test-<repo>).",
     )
     parser.add_argument(
         "--opencode",
@@ -259,8 +259,8 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
     if args.snapshot:
         if args.from_snapshot:
             parser.error("--snapshot and --from-snapshot cannot be used together.")
-        if args.secret:
-            parser.error("--snapshot cannot be used with --secret.")
+        if args.repo:
+            parser.error("--snapshot cannot be used with -r/--repo.")
         if args.name:
             parser.error("--snapshot cannot be used with --name.")
         if args.testing:
@@ -293,22 +293,22 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--terminate can only be used with --snapshot.")
         if getattr(args, "_snapshot_ttl_specified", False):
             parser.error("--snapshot-ttl can only be used with --snapshot.")
-        if args.secret and args.name:
+        if args.repo and args.name:
             parser.error(
-                "--name cannot be used with -s/--secret: --name is strictly for standalone launches without --secret."
+                "--name cannot be used with -r/--repo: --name is strictly for standalone launches without -r/--repo."
             )
-        if args.from_snapshot and not args.secret and not args.name:
-            parser.error("--name is required when launching from a snapshot without --secret.")
-        if not args.secret and not args.name:
-            parser.error("--name is required when launching without --secret.")
-        if not args.secret and args.github_branch != "main":
-            parser.error("--github-branch cannot be used without -s/--secret.")
-        if not args.secret and args.testing:
-            parser.error("--testing cannot be used without -s/--secret.")
+        if args.from_snapshot and not args.repo and not args.name:
+            parser.error("--name is required when launching from a snapshot without -r/--repo.")
+        if not args.repo and not args.name:
+            parser.error("--name is required when launching without -r/--repo.")
+        if not args.repo and args.github_branch != "main":
+            parser.error("--github-branch cannot be used without -r/--repo.")
+        if not args.repo and args.testing:
+            parser.error("--testing cannot be used without -r/--repo.")
         if args.from_snapshot and args.full_clone:
             parser.error("--full-clone cannot be used with --from-snapshot.")
-        if not args.secret and args.full_clone:
-            parser.error("--full-clone cannot be used without -s/--secret.")
+        if not args.repo and args.full_clone:
+            parser.error("--full-clone cannot be used without -r/--repo.")
 
 
 def capture_snapshot(

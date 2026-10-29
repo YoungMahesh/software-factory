@@ -2,7 +2,7 @@
 """Automated Live Verification for Modal Sandboxes (Standard & VM).
 
 Implements the Sandbox Live Verification standard against Test Repository Baseline
-(software-factory-09-test/test1). Ephemeral execution with guaranteed teardown.
+(sFactory0/test-live-test1). Ephemeral execution with guaranteed teardown.
 """
 
 import argparse
@@ -21,8 +21,8 @@ from shared.image import (
     load_ssh_pub_key,
 )
 
-DEFAULT_TEST_ORG = "software-factory-09-test"
-DEFAULT_TEST_REPO = "test1"
+DEFAULT_ORG = "sFactory0"
+DEFAULT_TEST_REPO = "test-live-test1"
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -32,7 +32,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repo",
         default=DEFAULT_TEST_REPO,
-        help=f"Target repository name under {DEFAULT_TEST_ORG} (default: {DEFAULT_TEST_REPO})",
+        help=f"Target repository name under {DEFAULT_ORG} (default: {DEFAULT_TEST_REPO})",
     )
     parser.add_argument(
         "--vm",
@@ -57,10 +57,10 @@ def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
 
-    token_file = root_dir / "secrets_org" / DEFAULT_TEST_ORG / "token"
-    if not token_file.is_file():
+    orgs_env_file = root_dir / "secrets" / "github-orgs.env"
+    if not orgs_env_file.is_file():
         raise FileNotFoundError(
-            f"Test Organization token not found at {token_file}. Ensure organization credentials exist."
+            f"Organization credentials not found at {orgs_env_file}. Ensure secrets/github-orgs.env exists."
         )
 
     app_name = f"test-live-verifier-{args.repo}"
@@ -69,16 +69,16 @@ def main() -> None:
 
     print("================================================================")
     print("🚀 Sandbox Live Verification")
-    print(f"   Target: {DEFAULT_TEST_ORG}/{args.repo}")
+    print(f"   Target: {DEFAULT_ORG}/{args.repo}")
     print(f"   Mode:   {'VM Sandbox' if args.vm else 'Standard Sandbox'}")
     print(f"   Snapshots Check: {'Yes' if args.snapshots else 'No'}")
     print("================================================================\n")
 
-    # Build image with test organization token staged
+    # Build image with organization credentials staged
     image = build_sandbox_image()
-    image = image.add_local_dir(
-        root_dir / "secrets_org" / DEFAULT_TEST_ORG,
-        "/root/secrets/org",
+    image = image.add_local_file(
+        orgs_env_file,
+        "/root/secrets/github-orgs.env",
         copy=True,
     )
 
@@ -88,7 +88,7 @@ def main() -> None:
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
         "ENABLE_CLOUDFLARE": "0",
-        "GH_REPO": f"{DEFAULT_TEST_ORG}/{args.repo}",
+        "GH_REPO": f"{DEFAULT_ORG}/{args.repo}",
     }
 
     sandbox_kwargs: dict = {
@@ -110,7 +110,7 @@ def main() -> None:
 
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
 
-    print(f"📦 Provisioning ephemeral Modal Sandbox for {DEFAULT_TEST_ORG}/{args.repo}...")
+    print(f"📦 Provisioning ephemeral Modal Sandbox for {DEFAULT_ORG}/{args.repo}...")
     sandbox = modal.Sandbox.create(
         "bash",
         REMOTE_STARTUP_SCRIPT,
@@ -138,20 +138,20 @@ def main() -> None:
         if not ready:
             raise TimeoutError(f"Timed out waiting for repository clone at {target_path}")
 
-        # 2. Assert organization token was scrubbed from disk (ADR-0031 security invariant)
+        # 2. Assert organization credentials were scrubbed from disk
         scrub_proc = sandbox.exec(
-            "bash", "-c", "test ! -f /root/secrets/org/token && echo CLEAN || echo LEAKED"
+            "bash", "-c", "test ! -f /root/secrets/github-orgs.env && echo CLEAN || echo LEAKED"
         )
         scrub_out = scrub_proc.stdout.read().strip()
         if "CLEAN" in scrub_out:
-            print("🔒 Security check passed: organization token was scrubbed from disk.")
+            print("🔒 Security check passed: organization credentials were scrubbed from disk.")
         else:
-            raise RuntimeError("Security invariant violated: /root/secrets/org/token was not purged!")
+            raise RuntimeError("Security invariant violated: /root/secrets/github-orgs.env was not purged!")
 
         # 3. Assert git branch is valid
         branch_proc = sandbox.exec("bash", "-c", f"cd {target_path} && git symbolic-ref --short HEAD")
         branch_name = branch_proc.stdout.read().strip()
-        print(f"🌿 Git active branch verified: {branch_name}")
+        print(f"🌱 Git active branch verified: {branch_name}")
 
         # 4. If VM mode, verify Docker daemon is reachable
         if args.vm:

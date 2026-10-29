@@ -14,26 +14,31 @@ Decrypted ephemerally inside the sandbox during boot and scrubbed before shell h
 | Secret | Source | Required Keys | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Shared Workspace Secret** | Modal secret `share0` | `AGE_PRIVATE_KEY` | Master Age key used to decrypt versioned secrets. |
-| **Repository Fetch Secret** | `secrets/<secret-name>/fetch.env` | `GH_REPO`, `GH_TOKEN` (opt: `DOTENV_PRIVATE_KEY`) | Git clone credentials. |
-| **Repository Environment Secrets** | `secrets/<secret-name>/env.map` | `<encrypted_file>=<repo_relative_dest>` | Multi-application `.env` file provisioning. |
+| **Organization Credentials** | `secrets/github-orgs.env` | `<ORG>_GH_TOKEN` (e.g. `SFACTORY0_GH_TOKEN`) | GitHub repository authentication and cloning. |
+| **In-Repo Secret Manifest** | `.secrets/env.map` (in repo) | `<encrypted_file>=<repo_relative_dest>` | Multi-application `.env` file provisioning. |
 
 ---
 
 ## 2. Launching Sandboxes
 
 ```bash
-python sandbox/main.py -s <secret-name> [flags]
+python sandbox/main.py -r <repo-name> [flags]
 ```
 
 | Flag | Description | Default |
 | :--- | :--- | :--- |
-| `-s, --secret` | Repository secret name under `secrets/<secret-name>/fetch.env` | *Required* |
+| `-r, --repo` | Target GitHub repository name (e.g. `sFactory0/<repo>` or `<repo>`) | None |
+| `--name` | Modal App name (mandatory for standalone launches without `-r/--repo`) | None |
 | `-b, --github-branch` | Git branch to checkout (only branches supported; tags and commits rejected) | `main` |
-| `--testing` | Use credentials from Test Organization (`software-factory-09-test`) | `False` |
+| `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
+| `--testing` | Target repository under canonical organization `sFactory0` using `test-` prefix | `False` |
 | `--vm` | Provision a VM Sandbox with Docker daemon instead of a Standard Sandbox | `False` |
 | `--memory <GB>` | RAM allocation in GB (VM sandboxes only; 2× swap) | `1` |
 | `--opencode` | OpenCode server on port 4096 with WebUI tunnel | `False` |
+| `--t3` | T3 Code server with pairing token and WebUI tunnel | `False` |
 | `--agy` | Antigravity CLI and Antigravity Remote Control daemon (`antigravity.google.com`) | `False` |
+| `--pi` | Install Pi coding agent CLI | `False` |
+| `--herdr` | Install Herdr agent multiplexer | `False` |
 | `--modal` | Modal Development Tooling (Python 3, venv, Modal SDK, client credentials) | `False` |
 | `--react-native` | Android toolchain (SDK/NDK/Java 17) and Metro bundler tunnel on port 8081 | `False` |
 | `--browser` | Headless Google Chrome for browser MCP tooling (implied by `--opencode`/`--agy`) | `False` |
@@ -52,6 +57,7 @@ python sandbox/main.py -s <secret-name> [flags]
   ```
 - **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes `https://3000.mahesh0.dev` to `localhost:3000`.
 - **OpenCode (Port 4096)**: HTTPS tunnel URL and one-time password printed on launch when `--opencode` is passed.
+- **T3 Code (Port 3775)**: HTTPS pairing URL and ASCII QR code printed on launch when `--t3` is passed.
 - **Metro Bundler (Port 8081)**: HTTPS tunnel URL printed on launch when `--react-native` is passed.
 
 ---
@@ -60,21 +66,20 @@ python sandbox/main.py -s <secret-name> [flags]
 
 When verifying changes to `sandbox/main.py` against live Modal cloud infrastructure, all runs adhere to the **Sandbox Live Verification** standard:
 
-- **Target Repository**: Strictly uses the **Test Repository Baseline** (`software-factory-09-test/test1`) via Test Organization credentials (`secrets_org/software-factory-09-test/token`). Never live test against production repositories in `secrets/`.
+- **Target Repository**: Strictly uses the **Test Repository Baseline** (`sFactory0/test-live-test1`) via Organization credentials (`secrets/github-orgs.env`).
 - **Automated Verification**:
   ```bash
   python scripts/test_live_sandbox.py
   ```
-  Launches an ephemeral sandbox with a short timeout (300s), verifies token decryption and git checkout (`/root/test1`), asserts environment invariants, and guarantees immediate teardown in `finally:`.
+  Launches an ephemeral sandbox with a short timeout (300s), verifies token decryption and git checkout (`/root/test-live-test1`), asserts environment invariants, and guarantees immediate teardown in `finally:`.
 - **Manual Ad-hoc Verification**:
   ```bash
   # Launch test sandbox
-  python sandbox/main.py -s test1 --testing
+  python sandbox/main.py -r test1 --testing
 
   # Verify git clone inside sandbox
-  modal sandbox exec <sandbox-id> test -d /root/test1
+  modal sandbox exec <sandbox-id> test -d /root/test-test1
 
   # Immediately terminate to prevent lingering compute charges
   modal sandbox terminate <sandbox-id>
   ```
-
