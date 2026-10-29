@@ -119,16 +119,16 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
                 ORG_NAME="${BASH_REMATCH[1]}"
             fi
             ORG_NAME="${ORG_NAME:-sFactory0}"
-            ORG_VAR=$(echo "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -cs '[:alnum:]' '_')
+            ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
             TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
             DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
             if [ -n "$DECRYPTED_ORGS" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
                 if [ -z "$GH_TOKEN" ]; then
-                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
                 fi
                 if [ -z "$GH_TOKEN" ]; then
-                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
                 fi
                 [ -n "$GH_TOKEN" ] && export GH_TOKEN
             fi
@@ -226,7 +226,7 @@ EOF
                 ORG_NAME="${BASH_REMATCH[1]}"
             fi
             ORG_NAME="${ORG_NAME:-sFactory0}"
-            ORG_VAR=$(echo "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -cs '[:alnum:]' '_')
+            ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
             TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
 
             DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
@@ -236,12 +236,12 @@ EOF
                 exit 1
             fi
 
-            GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+            GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
             if [ -z "$GH_TOKEN" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
             fi
             if [ -z "$GH_TOKEN" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
             fi
 
             if [ -z "$GH_TOKEN" ]; then
