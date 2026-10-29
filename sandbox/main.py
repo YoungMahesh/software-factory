@@ -60,6 +60,8 @@ def run_sandbox_launch(
     target_repo = None
     is_org = False
     secrets_dir = None
+    org_name = None
+    orgs_env_file = repo_root / "secrets" / "github-orgs.env"
 
     if clean_secret:
         if clean_secret.startswith("secrets_testing/"):
@@ -84,19 +86,32 @@ def run_sandbox_launch(
                     org_name = DEFAULT_TEST_ORG
                     target_repo = f"{DEFAULT_TEST_ORG}/{clean_secret}"
 
-            secrets_dir = repo_root / "secrets_org" / org_name
-            token_file = secrets_dir / "token"
-            if not token_file.is_file():
+            legacy_token = repo_root / "secrets_org" / org_name / "token"
+            if legacy_token.is_file():
+                secrets_dir = repo_root / "secrets_org" / org_name
+                is_org = True
+            elif orgs_env_file.is_file():
+                secrets_dir = None
+            else:
                 parser.error(
-                    f"Organization token secret not found: {token_file} (expected secrets_org/{org_name}/token)."
+                    f"Organization token secret not found: {legacy_token} (expected secrets_org/{org_name}/token or secrets/github-orgs.env)."
                 )
-            is_org = True
         else:
-            secrets_dir = repo_root / "secrets" / clean_secret
-            secret_file = secrets_dir / "fetch.env"
-            if not secret_file.is_file():
+            if "/" in clean_secret:
+                org_name = clean_secret.split("/", 1)[0]
+                target_repo = clean_secret
+            else:
+                org_name = "sFactory0"
+                target_repo = f"sFactory0/{clean_secret}"
+
+            legacy_secret = repo_root / "secrets" / clean_secret / "fetch.env"
+            if legacy_secret.is_file():
+                secrets_dir = repo_root / "secrets" / clean_secret
+            elif orgs_env_file.is_file():
+                secrets_dir = None
+            else:
                 parser.error(
-                    f"Repository secret file not found: {secret_file} (expected secrets/{clean_secret}/fetch.env)."
+                    f"Repository secret file not found: {legacy_secret} (expected secrets/{clean_secret}/fetch.env or secrets/github-orgs.env)."
                 )
 
     if args.memory is not None:
@@ -178,6 +193,8 @@ def run_sandbox_launch(
     if secrets_dir:
         remote_secrets_dir = REMOTE_ORG_SECRETS_DIR if is_org else REMOTE_REPO_SECRETS_DIR
         image = image.add_local_dir(secrets_dir, remote_secrets_dir, copy=True)
+    elif clean_secret and orgs_env_file.is_file():
+        image = image.add_local_file(orgs_env_file, "/root/secrets/github-orgs.env", copy=True)
 
     cloudflare_active = not args.no_cloudflare
 
@@ -197,6 +214,8 @@ def run_sandbox_launch(
         env["NO_REPO"] = "1"
     if target_repo:
         env["GH_REPO"] = target_repo
+    if org_name:
+        env["GH_ORG"] = org_name
     if args.full_clone:
         env["FULL_CLONE"] = "1"
     if not cloudflare_active:

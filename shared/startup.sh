@@ -112,7 +112,30 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
 
     # Optional: Decrypt repository fetch secret or organization token if present
     if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
-        if [ -f "/root/secrets/org/token" ]; then
+        if [ -f "/root/secrets/github-orgs.env" ]; then
+            echo "🔐 Resolving organization credentials from /root/secrets/github-orgs.env..."
+            ORG_NAME="${GH_ORG:-}"
+            if [ -z "$ORG_NAME" ] && [[ "${GH_REPO:-}" =~ ^([^/]+)/ ]]; then
+                ORG_NAME="${BASH_REMATCH[1]}"
+            fi
+            ORG_NAME="${ORG_NAME:-sFactory0}"
+            ORG_VAR=$(echo "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -cs '[:alnum:]' '_')
+            TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
+            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
+            if [ -n "$DECRYPTED_ORGS" ]; then
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                if [ -z "$GH_TOKEN" ]; then
+                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                fi
+                if [ -z "$GH_TOKEN" ]; then
+                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+                fi
+                [ -n "$GH_TOKEN" ] && export GH_TOKEN
+            fi
+            rm -f /root/secrets/github-orgs.env
+            export ORG_TOKEN="1"
+            export TRACKER="${TRACKER:-github}"
+        elif [ -f "/root/secrets/org/token" ]; then
             echo "🔐 Decrypting organization token from /root/secrets/org/token..."
             GH_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/org/token" 2>/dev/null | tr -d '\r\n' || true)
             rm -f /root/secrets/org/token
@@ -192,7 +215,46 @@ EOF
             exit 1
         fi
 
-        if [ -f "/root/secrets/org/token" ]; then
+        if [ -f "/root/secrets/github-orgs.env" ]; then
+            if [ -z "${GH_REPO:-}" ]; then
+                echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
+                exit 1
+            fi
+            echo "🔐 Resolving organization credentials from /root/secrets/github-orgs.env..."
+            ORG_NAME="${GH_ORG:-}"
+            if [ -z "$ORG_NAME" ] && [[ "$GH_REPO" =~ ^([^/]+)/ ]]; then
+                ORG_NAME="${BASH_REMATCH[1]}"
+            fi
+            ORG_NAME="${ORG_NAME:-sFactory0}"
+            ORG_VAR=$(echo "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -cs '[:alnum:]' '_')
+            TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
+
+            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
+            if [ -z "$DECRYPTED_ORGS" ]; then
+                echo "ERROR: Failed to decrypt /root/secrets/github-orgs.env using AGE_PRIVATE_KEY." >&2
+                rm -f /root/secrets/github-orgs.env
+                exit 1
+            fi
+
+            GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+            if [ -z "$GH_TOKEN" ]; then
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+            fi
+            if [ -z "$GH_TOKEN" ]; then
+                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n')
+            fi
+
+            if [ -z "$GH_TOKEN" ]; then
+                echo "ERROR: Could not find $TOKEN_VAR in /root/secrets/github-orgs.env." >&2
+                rm -f /root/secrets/github-orgs.env
+                exit 1
+            fi
+
+            rm -f /root/secrets/github-orgs.env
+            echo "🧹 Purged encrypted organization secrets file from disk."
+            export ORG_TOKEN="1"
+            export TRACKER="${TRACKER:-github}"
+        elif [ -f "/root/secrets/org/token" ]; then
             if [ -z "${GH_REPO:-}" ]; then
                 echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
                 exit 1
@@ -249,6 +311,10 @@ EOF
             exit 1
         fi
 
+        if [[ "$GH_REPO" != *"/"* ]]; then
+            GH_REPO="sFactory0/$GH_REPO"
+        fi
+
         if [ -z "${GH_TOKEN:-}" ]; then
             echo "ERROR: GH_TOKEN is not set." >&2
             exit 1
@@ -278,8 +344,17 @@ EOF
 fi
 
 # Decrypt repository environment secrets if env.map is present
-ENV_MAP_FILE="/root/secrets/repo/env.map"
-if [ -f "$ENV_MAP_FILE" ]; then
+ENV_MAP_FILE=""
+SECRETS_DIR=""
+if [ -f "$TARGET_DIR/.secrets/env.map" ]; then
+    ENV_MAP_FILE="$TARGET_DIR/.secrets/env.map"
+    SECRETS_DIR="$TARGET_DIR/.secrets"
+elif [ -f "/root/secrets/repo/env.map" ]; then
+    ENV_MAP_FILE="/root/secrets/repo/env.map"
+    SECRETS_DIR="/root/secrets/repo"
+fi
+
+if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
     echo "📄 Decrypting repository environment secrets into $TARGET_DIR..."
     while IFS= read -r line || [ -n "$line" ]; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -292,12 +367,12 @@ if [ -f "$ENV_MAP_FILE" ]; then
             dest_rel=$(echo "$dest_rel" | tr -d '\r' | xargs)
             dest_rel="${dest_rel#/}"
 
-            src_file="/root/secrets/repo/$src_rel"
+            src_file="$SECRETS_DIR/$src_rel"
             dest_file="$TARGET_DIR/$dest_rel"
 
             if [ ! -f "$src_file" ]; then
                 echo "ERROR: Mapped repository secret file not found at $src_file." >&2
-                rm -rf /root/secrets/repo
+                [ "$SECRETS_DIR" = "/root/secrets/repo" ] && rm -rf /root/secrets/repo
                 exit 1
             fi
 
@@ -305,7 +380,7 @@ if [ -f "$ENV_MAP_FILE" ]; then
             if ! SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$src_file" > "$dest_file"; then
                 echo "ERROR: Failed to decrypt $src_file using AGE_PRIVATE_KEY." >&2
                 rm -f "$dest_file"
-                rm -rf /root/secrets/repo
+                [ "$SECRETS_DIR" = "/root/secrets/repo" ] && rm -rf /root/secrets/repo
                 exit 1
             fi
             chmod 600 "$dest_file"
@@ -324,6 +399,10 @@ if [ -d /root/secrets/org ]; then
     echo "🧹 Purged organization secrets staging directory (/root/secrets/org)."
 fi
 
+if [ -f /root/secrets/github-orgs.env ]; then
+    rm -f /root/secrets/github-orgs.env
+    echo "🧹 Purged organization secrets staging file (/root/secrets/github-orgs.env)."
+fi
 if [ -f /root/.bash_aliases ]; then
     grep -qxF "source /root/.bash_aliases" ~/.bashrc 2>/dev/null || echo "source /root/.bash_aliases" >> ~/.bashrc
 fi
@@ -610,12 +689,20 @@ else
     fi
 fi
 
-# Unconditionally scrub GH_TOKEN and ephemeral repository credentials from memory
-grep -qxF "unset GH_TOKEN" ~/.bashrc 2>/dev/null || echo "unset GH_TOKEN" >> ~/.bashrc
-grep -qxF "unset DOTENV_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset DOTENV_PRIVATE_KEY" >> ~/.bashrc
-unset GH_TOKEN
-unset DOTENV_PRIVATE_KEY
-unset DECRYPTED_FETCH
+# Manage repository credentials based on tooling requirements
+if [ "${ENABLE_T3:-0}" = "1" ] && [ -n "${GH_TOKEN:-}" ]; then
+    echo "🔐 T3 Code enabled: retaining GH_TOKEN in process environment for T3 Code."
+    export GH_TOKEN
+    grep -qxF "export GH_TOKEN="$GH_TOKEN"" ~/.bashrc 2>/dev/null || echo "export GH_TOKEN="$GH_TOKEN"" >> ~/.bashrc
+    grep -qxF "GH_TOKEN="$GH_TOKEN"" /etc/environment 2>/dev/null || echo "GH_TOKEN="$GH_TOKEN"" >> /etc/environment
+else
+    # Unconditionally scrub GH_TOKEN and ephemeral repository credentials from memory
+    grep -qxF "unset GH_TOKEN" ~/.bashrc 2>/dev/null || echo "unset GH_TOKEN" >> ~/.bashrc
+    grep -qxF "unset DOTENV_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset DOTENV_PRIVATE_KEY" >> ~/.bashrc
+    unset GH_TOKEN 2>/dev/null || true
+    unset DOTENV_PRIVATE_KEY 2>/dev/null || true
+    unset DECRYPTED_FETCH 2>/dev/null || true
+fi
 
 if [ "${setup_status:-0}" -ne 0 ]; then
     echo "ERROR: /root/scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
