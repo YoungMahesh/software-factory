@@ -696,18 +696,22 @@ p = "/opt/t3/t3"
 t = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpIHsKCXJldHVybiB7CgkJY29tbWFuZDogaW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAoJCWFyZ3M6IGlucHV0LnByb2ZpbGUucGxhdGZvcm0gPT09ICJsaW51eCIgPyBbIi0tdWlkPSJdIDogW10sCgkJY3dkOiBpbnB1dC5jd2QsCgkJZW52OiB7CgkJCS4uLmFudGlncmF2aXR5RW52aXJvbm1lbnQoaW5wdXQucHJvZmlsZSwgaW5wdXQuYmFzZUVudiA/PyBwcm9jZXNzLmVudiwgaW5wdXQuYXV0aCA/PyBBTlRJR1JBVklUWV9QRVJTT05BTF9BVVRILCBpbnB1dC5ydW50aW1lVGVtcERpcmVjdG9yeSksCgkJCUFOVElHUkFWSVRZX0hBUk5FU1NfUEFUSDogaW5wdXQuaW5zdGFsbGF0aW9uLmhhcm5lc3NQYXRoCgkJfSwKCQlleHRlbmRFbnY6IGZhbHNlCgl9Owp9")
 r = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaW5wdXQpewpyZXR1cm57CmNvbW1hbmQ6aW5wdXQuaW5zdGFsbGF0aW9uLmV4ZWN1dGFibGVQYXRoLAphcmdzOiBpbnB1dC5wcm9maWxlLnBsYXRmb3JtPT09ImxpbnV4Ij9bIi0tZW5mb3JjZV9rZXJuZWxfaXB2Nl9zdXBwb3J0PWZhbHNlIiwiLS11aWQ9Il06W10sCmN3ZDppbnB1dC5jd2QsCmVudjp7Ci4uLmFudGlncmF2aXR5RW52aXJvbm1lbnQoaW5wdXQucHJvZmlsZSxpbnB1dC5iYXNlRW52Pz9wcm9jZXNzLmVudiwgaW5wdXQuYXV0aD8/QU5USUdSQVZJVFlfUEVSU09OQUxfQVVUSCwgaW5wdXQucnVudGltZVRlbXBEaXJlY3RvcnkpLApBTlRJR1JBVklUWV9IQVJORVNTX1BBVEg6aW5wdXQuaW5zdGFsbGF0aW9uLmhhcm5lc3NQYXRoCn0sCmV4dGVuZEVudjpmYWxzZQp9Owp9")
 r_old = base64.b64decode("ZnVuY3Rpb24gYnVpbGRBbnRpZ3Jhdml0eUFjcFNwYXduSW5wdXQoaSl7cmV0dXJue2NvbW1hbmQ6aS5pbnN0YWxsYXRpb24uZXhlY3V0YWJsZVBhdGgsYXJnczppLnByb2ZpbGUucGxhdGZvcm09PT0ibGludXgiP1siLS1lbmZvcmNlX2tlcm5lbF9pcHY2X3N1cHBvcnQ9ZmFsc2UiLCItLXVpZD0iXTpbXSxjd2Q6aS5jd2Qs")
+t_ssh = base64.b64decode("Y29uc3Qgc2hvcnRIb3N0bmFtZSA9ICh5aWVsZCogSG9zdG5hbWUpLnNwbGl0KCIuIilbMF0/LnRyaW0oKTsKCQkJaWYgKHNob3J0SG9zdG5hbWUgIT09IHZvaWQgMCAmJiBzaG9ydEhvc3RuYW1lLmxlbmd0aCA+IDApIHRhcmdldHMucHVzaCh7CgkJCQlraW5kOiAibWRucyIsCgkJCQlob3N0OiBgJHtzaG9ydEhvc3RuYW1lfS5sb2NhbGAsCgkJCQkuLi51c2VybmFtZSA9PT0gbnVsbCA/IHt9IDogeyB1c2VybmFtZSB9CgkJCX0pOwoJCQk=")
+r_ssh = base64.b64decode("Y29uc3QgaCA9IHByb2Nlc3MuZW52LlQzX1NTSF9IT1NUfHwgcHJvY2Vzcy5lbnYuU0FOREJPWF9OQU1FOwoJCQljb25zdCBzID0gaCB8fCAoeWllbGQqIEhvc3RuYW1lKS5zcGxpdCgiLiIpWzBdPy50cmltKCk7CgkJCWlmIChzKSB0YXJnZXRzLnB1c2goewoJCQkJa2luZDogIm1kbnMiLAoJCQkJaG9zdDogaCB8fCBgJHtzfS5sb2NhbGAsCgkJCQkuLi51c2VybmFtZSA9PT0gbnVsbCA/IHt9IDogeyB1c2VybmFtZSB9CgkJCX0pOwoJCQk=")
 try:
     with open(p, "rb") as f:
         c = f.read()
-    if t in c:
+    new_c = c
+    if t in new_c:
+        new_c = new_c.replace(t, r, 1)
+    elif r_old in new_c:
+        pos = new_c.find(r_old)
+        new_c = new_c[:pos] + r + new_c[pos+426:]
+    if t_ssh in new_c:
+        new_c = new_c.replace(t_ssh, r_ssh, 1)
+    if new_c != c:
         with open(p + ".tmp", "wb") as f:
-            f.write(c.replace(t, r, 1))
-        os.chmod(p + ".tmp", 0o755)
-        os.replace(p + ".tmp", p)
-    elif r_old in c:
-        pos = c.find(r_old)
-        with open(p + ".tmp", "wb") as f:
-            f.write(c[:pos] + r + c[pos+426:])
+            f.write(new_c)
         os.chmod(p + ".tmp", 0o755)
         os.replace(p + ".tmp", p)
 except Exception:
@@ -950,6 +954,8 @@ exec "$REAL_T3" "$@"
 EOF
     chmod +x /usr/local/bin/t3.wrapper
     mv -f /usr/local/bin/t3.wrapper /usr/local/bin/t3
+
+    echo "PRETTY_HOSTNAME=\"${T3_SSH_HOST:-${SANDBOX_NAME:-$APP_NAME}}\"" > /etc/machine-info 2>/dev/null || true
 
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &

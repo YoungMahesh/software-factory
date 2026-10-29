@@ -41,6 +41,7 @@ def print_access_info(
     t3_port: int | None = None,
     t3_pair_url: str | None = None,
     t3_qr_code: str | None = None,
+    t3_ssh_host: str | None = None,
     memory_gb: int | None = None,
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
@@ -76,7 +77,7 @@ def print_access_info(
     elif t3_url:
         print(f"  • T3 Code:  {t3_url} (port {t3_port})")
         print(f"  • Web UI:   {t3_url}")
-    instance_name = sandbox_name or app_name
+    instance_name = t3_ssh_host or sandbox_name or app_name
     if agy_enabled:
         print(f"  • Remote Control: https://antigravity.google.com (Instance: {instance_name})")
     if ssh_info:
@@ -205,6 +206,11 @@ def create_parser() -> argparse.ArgumentParser:
         help=f"Port for the T3 Code server, only used with --t3 (default: {DEFAULT_T3_PORT})",
     )
     parser.add_argument(
+        "--t3-ssh-host",
+        default=None,
+        help="SSH host alias to use in T3 Code for 'Open in VS Code' links (defaults to sandbox instance name).",
+    )
+    parser.add_argument(
         "--react-native",
         action="store_true",
         help="Also configure Android SDK, NDK, OpenJDK 17, Gradle cache volumes, and Metro bundler port forwarding for React Native.",
@@ -283,6 +289,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.browser
             or args.agy
             or args.t3
+            or args.t3_ssh_host
             or args.herdr
             or args.pi
             or args.full_clone
@@ -309,6 +316,8 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--full-clone cannot be used with --from-snapshot.")
         if not args.repo and args.full_clone:
             parser.error("--full-clone cannot be used without -r/--repo.")
+        if args.t3_ssh_host and not args.t3:
+            parser.error("--t3-ssh-host can only be used with --t3.")
 
 
 def capture_snapshot(

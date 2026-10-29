@@ -36,8 +36,9 @@ python sandbox/main.py -r <repo-name> [flags]
 | `--memory <GB>` | RAM allocation in GB (VM sandboxes only; 2× swap) | `1` |
 | `--opencode` | OpenCode server on port 4096 with WebUI tunnel | `False` |
 | `--t3` | T3 Code server with pairing token and WebUI tunnel | `False` |
+| `--t3-ssh-host <alias>` | Custom SSH Host alias for T3 Code "Open in VS Code" remote links (requires `--t3`) | Sandbox instance name |
 | `--agy` | Antigravity CLI and Antigravity Remote Control daemon (`antigravity.google.com`) | `False` |
-| `--pi` | Install Pi coding agent CLI | `False` |
+| `--pi` | Install Pi coding agent CLI | `False` |\
 | `--herdr` | Install Herdr agent multiplexer | `False` |
 | `--modal` | Modal Development Tooling (Python 3, venv, Modal SDK, client credentials) | `False` |
 | `--react-native` | Android toolchain (SDK/NDK/Java 17) and Metro bundler tunnel on port 8081 | `False` |

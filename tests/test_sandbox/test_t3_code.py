@@ -542,3 +542,128 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("MOCK_CALLED: pair", res_pair.stdout)
             data_after_pair = json.loads(runtime_json.read_text())
             self.assertEqual(data_after_pair["devUrl"], "https://my-modal-url.modal.host")
+
+    def test_t3_ssh_remote_open_target_patch_exact_length(self):
+        import base64
+        from shared.image import (
+            T3_SSH_PATCH_TARGET,
+            T3_SSH_PATCH_REPLACEMENT,
+            T3_PATCH_SCRIPT,
+        )
+
+        t = base64.b64decode(T3_SSH_PATCH_TARGET)
+        r = base64.b64decode(T3_SSH_PATCH_REPLACEMENT)
+        self.assertEqual(len(t), 248)
+        self.assertEqual(len(r), 248)
+        self.assertEqual(len(t), len(r))
+        self.assertIn("T3_SSH_HOST", r.decode("utf-8"))
+        self.assertIn("SANDBOX_NAME", r.decode("utf-8"))
+        self.assertIn("assert len(t2) == len(r2) == 248", T3_PATCH_SCRIPT)
+
+    def test_startup_script_contains_t3_ssh_patch_and_machine_info(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("t_ssh = base64.b64decode", content)
+        self.assertIn("r_ssh = base64.b64decode", content)
+        self.assertIn("new_c.replace(t_ssh, r_ssh, 1)", content)
+        self.assertIn("PRETTY_HOSTNAME", content)
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    @patch("sandbox.main.print_access_info")
+    def test_run_sandbox_launch_sets_t3_ssh_host_env_and_cfg(
+        self,
+        mock_print_access,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+        import tempfile
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-t3-ssh-1"
+        mock_tunnel = MagicMock()
+        mock_tunnel.url = "https://t3.modal.run"
+        mock_sandbox.tunnels.return_value = {3775: mock_tunnel}
+
+        mock_exec_proc = MagicMock()
+        mock_exec_proc.wait.return_value = 0
+        mock_exec_proc.stdout.read.return_value = "{\"credential\": \"TOKEN\"}"
+        mock_sandbox.exec.return_value = mock_exec_proc
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+
+            parser = create_parser()
+            args = parser.parse_args(["-r", "my-repo", "--t3"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        create_kwargs = mock_sandbox_create.call_args.kwargs
+        env = create_kwargs["env"]
+        self.assertIn("T3_SSH_HOST", env)
+        self.assertTrue(env["T3_SSH_HOST"].startswith("my-repo-"))
+
+        exec_calls = mock_sandbox.exec.call_args_list
+        cfg_exec = exec_calls[0]
+        self.assertEqual(cfg_exec.args[0], "python3")
+        self.assertIn("T3_SSH_HOST=", cfg_exec.args[2])
+        self.assertIn("PRETTY_HOSTNAME", cfg_exec.args[2])
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    @patch("sandbox.main.print_access_info")
+    def test_run_sandbox_launch_custom_t3_ssh_host(
+        self,
+        mock_print_access,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+        import tempfile
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-t3-ssh-2"
+        mock_tunnel = MagicMock()
+        mock_tunnel.url = "https://t3.modal.run"
+        mock_sandbox.tunnels.return_value = {3775: mock_tunnel}
+
+        mock_exec_proc = MagicMock()
+        mock_exec_proc.wait.return_value = 0
+        mock_exec_proc.stdout.read.return_value = "{\"credential\": \"TOKEN\"}"
+        mock_sandbox.exec.return_value = mock_exec_proc
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+
+            parser = create_parser()
+            args = parser.parse_args(["-r", "my-repo", "--t3", "--t3-ssh-host", "my-custom-box"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        create_kwargs = mock_sandbox_create.call_args.kwargs
+        env = create_kwargs["env"]
+        self.assertEqual(env["T3_SSH_HOST"], "my-custom-box")
+
+        call_kwargs = mock_print_access.call_args.kwargs
+        self.assertEqual(call_kwargs["t3_ssh_host"], "my-custom-box")
+
+    def test_cli_validation_t3_ssh_host_requires_t3(self):
+        from sandbox.main import create_parser, validate_args
+        import pytest
+
+        parser = create_parser()
+        args = parser.parse_args(["-r", "my-repo", "--t3-ssh-host", "box1"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args)

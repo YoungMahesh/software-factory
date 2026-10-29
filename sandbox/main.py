@@ -206,11 +206,13 @@ def run_sandbox_launch(
         env["ENABLE_OPENCODE"] = "1"
         env["OPENCODE_PORT"] = str(args.opencode_port)
 
+    t3_ssh_alias = getattr(args, "t3_ssh_host", None) or sandbox_name
     if args.t3:
         encrypted_ports.append(args.t3_port)
         env["ENABLE_T3"] = "1"
         env["T3_PORT"] = str(args.t3_port)
         env["FLAGS_enforce_kernel_ipv6_support"] = "false"
+        env["T3_SSH_HOST"] = t3_ssh_alias
 
     if args.agy:
         # Explicit trigger for startup.sh to export the antigravity PATH in SSH sessions.
@@ -236,7 +238,7 @@ def run_sandbox_launch(
         encrypted_ports.append(args.metro_port)
         env["ENABLE_REACT_NATIVE"] = "1"
         env["METRO_PORT"] = str(args.metro_port)
-        volumes.update(get_gradle_volumes())
+        volumes.update(get_gradle_volumes())\
 
     features = []
     if not args.no_cloudflare:
@@ -322,14 +324,20 @@ def run_sandbox_launch(
     t3_qr_code = None
     if args.t3 and t3_url:
         clean_t3_url = t3_url.rstrip("/")
-        # Configure T3 public URL in the sandbox environment and server runtime state
+        # Configure T3 public URL and SSH host in the sandbox environment and server runtime state
         try:
             cfg_script = (
                 f"import json, os, time\n"
                 f"url = {json.dumps(clean_t3_url)}\n"
+                f"ssh_host = {json.dumps(t3_ssh_alias)}\n"
                 f"os.makedirs('/root/.t3', exist_ok=True)\n"
                 f"with open('/root/.t3/public_url', 'w') as f:\n"
                 f"    f.write(url + '\\n')\n"
+                f"try:\n"
+                f"    with open('/etc/machine-info', 'w') as f:\n"
+                f"        f.write(f'PRETTY_HOSTNAME=\"{{ssh_host}}\"\\n')\n"
+                f"except Exception:\n"
+                f"    pass\n"
                 f"for p in ['/etc/environment', '/root/.bashrc']:\n"
                 f"    try:\n"
                 f"        with open(p, 'a+') as f:\n"
@@ -337,6 +345,8 @@ def run_sandbox_launch(
                 f"            c = f.read()\n"
                 f"            if 'T3_PUBLIC_URL=' not in c:\n"
                 f"                f.write(f'export T3_PUBLIC_URL=\"{{url}}\"\\n')\n"
+                f"            if 'T3_SSH_HOST=' not in c:\n"
+                f"                f.write(f'export T3_SSH_HOST=\"{{ssh_host}}\"\\n')\n"
                 f"    except Exception:\n"
                 f"        pass\n"
                 f"rt = '/root/.t3/userdata/server-runtime.json'\n"
@@ -410,6 +420,7 @@ def run_sandbox_launch(
         t3_port=args.t3_port if args.t3 else None,
         t3_pair_url=t3_pair_url,
         t3_qr_code=t3_qr_code,
+        t3_ssh_host=getattr(args, "t3_ssh_host", None),
         memory_gb=memory_gb,
         agy_enabled=args.agy,
         cloudflare_enabled=not args.no_cloudflare,
