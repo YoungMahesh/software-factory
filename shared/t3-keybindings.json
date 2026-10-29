@@ -1,9 +1,5 @@
 [
   {
-    "key": "mod+b",
-    "command": "sidebar.toggle"
-  },
-  {
     "key": "mod+[",
     "command": "navigation.back",
     "when": "!terminalFocus"
@@ -12,10 +8,6 @@
     "key": "mod+]",
     "command": "navigation.forward",
     "when": "!terminalFocus"
-  },
-  {
-    "key": "mod+alt+b",
-    "command": "rightPanel.toggle"
   },
   {
     "key": "mod+shift+b",
@@ -399,5 +391,13 @@
   {
     "key": "mod+k",
     "command": "terminal.toggle"
+  },
+  {
+    "key": "mod+j",
+    "command": "sidebar.toggle"
+  },
+  {
+    "key": "mod+;",
+    "command": "rightPanel.toggle"
   }
 ]
