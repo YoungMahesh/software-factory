@@ -284,6 +284,8 @@ class TestT3CodeIntegration(unittest.TestCase):
             REMOTE_ANTIGRAVITY_SECRET_MGH,
             REMOTE_ANTIGRAVITY_SECRET_ANV,
             REMOTE_ANTIGRAVITY_ENV,
+            LOCAL_T3_KEYBINDINGS,
+            REMOTE_T3_KEYBINDINGS,
         )
 
         with patch("shared.image.base_image") as mock_base, patch(
@@ -309,6 +311,12 @@ class TestT3CodeIntegration(unittest.TestCase):
                         [
                             (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
                             (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+                        ],
+                    ),
+                    call(
+                        mock_img2,
+                        [
+                            (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
                         ],
                     ),
                     call(

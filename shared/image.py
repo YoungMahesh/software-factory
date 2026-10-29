@@ -28,6 +28,8 @@ LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
 LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
 REMOTE_PI_MODELS = "/root/.pi/agent/models.json"
+LOCAL_T3_KEYBINDINGS = SHARED_DIR / "t3-keybindings.json"
+REMOTE_T3_KEYBINDINGS = "/root/.t3/userdata/keybindings.json"
 LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
@@ -314,6 +316,12 @@ def build_sandbox_image(
             ),
             f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
             f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
+        )
+        image = add_local_files_if_present(
+            image,
+            [
+                (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
+            ],
         )
         if not agy:
             image = add_local_files_if_present(

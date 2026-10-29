@@ -255,6 +255,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_ANTIGRAVITY_ENV,
             LOCAL_MODAL_SECRET,
             REMOTE_MODAL_SECRET,
+            LOCAL_T3_KEYBINDINGS,
+            REMOTE_T3_KEYBINDINGS,
         )
 
         mock_add_files.side_effect = lambda img, files: img
@@ -304,6 +306,12 @@ class TestSandboxImageStaging(unittest.TestCase):
             [
                 (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
                 (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+            ],
+        )
+        mock_add_files.assert_any_call(
+            ANY,
+            [
+                (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
             ],
         )
 
