@@ -935,6 +935,7 @@ if [ "${1:-}" = "pair" ]; then
     fi
 
     if [ -n "$PUBLIC_URL" ]; then
+        export T3_PUBLIC_URL="$PUBLIC_URL"
         python3 -c "
 import json, os, sys
 
@@ -959,7 +960,6 @@ for p in candidates:
             pass
 " "$PUBLIC_URL" 2>/dev/null || true
     fi
-
     has_base_dir=0
     for arg in "$@"; do
         if [ "$arg" = "--base-dir" ] || [[ "$arg" == --base-dir=* ]]; then
@@ -985,5 +985,33 @@ EOF
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true
+
+    # Background sync loop to ensure server-runtime.json devUrl matches Modal public tunnel URL
+    (
+        for _ in $(seq 1 60); do
+            if [ -f "/root/.t3/public_url" ] && [ -f "/root/.t3/userdata/server-runtime.json" ]; then
+                P_URL=$(cat /root/.t3/public_url 2>/dev/null | tr -d '\r\n')
+                if [ -n "$P_URL" ]; then
+                    python3 -c "
+import json, sys
+p = '/root/.t3/userdata/server-runtime.json'
+try:
+    with open(p, 'r') as f:
+        d = json.load(f)
+    if d.get('devUrl') != sys.argv[1]:
+        d['devUrl'] = sys.argv[1]
+        tmp = p + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(d, f, indent=2)
+        os.replace(tmp, p)
+except Exception:
+    pass
+" "$P_URL" 2>/dev/null || true
+                    break
+                fi
+            fi
+            sleep 1
+        done
+    ) >/dev/null 2>&1 &
 fi
 exec sleep infinity

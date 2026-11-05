@@ -44,6 +44,8 @@ LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
 REMOTE_PI_MODELS = "/root/.pi/agent/models.json"
 LOCAL_T3_KEYBINDINGS = SHARED_DIR / "t3-keybindings.json"
 REMOTE_T3_KEYBINDINGS = "/root/.t3/userdata/keybindings.json"
+LOCAL_T3_WRAPPER = SHARED_DIR / "t3-wrapper.sh"
+REMOTE_T3_WRAPPER = "/usr/local/bin/t3"
 LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
@@ -327,6 +329,7 @@ def build_sandbox_image(
             image,
             [
                 (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
+                (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
             ],
         )
         if not agy:
