@@ -152,7 +152,11 @@ class TestT3CodeStartup(unittest.TestCase):
             )
 
     def test_switch_agy_profile_offline_with_cached_profiles(self):
+        agyprofile_script = self.repo_root / "scripts" / "agyprofile"
         switch_script = self.repo_root / "scripts" / "switch-agy-profile.sh"
+        self.assertTrue(agyprofile_script.exists())
+        self.assertTrue(switch_script.exists())
+
         with tempfile.TemporaryDirectory() as tmpdir:
             target_dir = Path(tmpdir) / ".gemini" / "antigravity-cli"
             profiles_dir = target_dir / "profiles"
@@ -162,10 +166,16 @@ class TestT3CodeStartup(unittest.TestCase):
             (profiles_dir / "m47").write_text('{"refresh_token": "token-m47"}')
 
             env = {"TARGET_DIR": str(target_dir), "PATH": os.environ["PATH"]}
-            res = subprocess.run(["bash", str(switch_script), "mgh"], capture_output=True, text=True, env=env)
+            res = subprocess.run(["bash", str(agyprofile_script), "mgh"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, f"Failed: {res.stderr}")
             self.assertIn("Switched Antigravity CLI profile to: mgh", res.stdout)
             self.assertEqual((target_dir / "antigravity-oauth-token").read_text(), '{"refresh_token": "token-mgh"}')
+
+            # Verify backwards compatibility symlink
+            res_legacy = subprocess.run(["bash", str(switch_script), "anv"], capture_output=True, text=True, env=env)
+            self.assertEqual(res_legacy.returncode, 0, f"Failed: {res_legacy.stderr}")
+            self.assertIn("Switched Antigravity CLI profile to: anv", res_legacy.stdout)
+            self.assertEqual((target_dir / "antigravity-oauth-token").read_text(), '{"refresh_token": "token-anv"}')
 
     def test_startup_and_setup_scripts_contain_opencode_preauth(self):
         startup_content = self.startup_sh.read_text()

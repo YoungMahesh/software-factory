@@ -34,8 +34,17 @@ REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json
 LOCAL_ANTIGRAVITY_ONBOARDING = SHARED_DIR / "antigravity-onboarding.json"
 REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
-LOCAL_SETUP_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "setup.sh"
+LOCAL_SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+LOCAL_SETUP_SCRIPT = LOCAL_SCRIPTS_DIR / "setup.sh"
 REMOTE_SETUP_SCRIPT = "/root/scripts/setup.sh"
+LOCAL_AGYQ = LOCAL_SCRIPTS_DIR / "agyq"
+REMOTE_AGYQ = "/usr/local/bin/agyq"
+LOCAL_GHLS = LOCAL_SCRIPTS_DIR / "ghls"
+REMOTE_GHLS = "/usr/local/bin/ghls"
+LOCAL_GHPR = LOCAL_SCRIPTS_DIR / "ghpr"
+REMOTE_GHPR = "/usr/local/bin/ghpr"
+LOCAL_AGYPROFILE = LOCAL_SCRIPTS_DIR / "agyprofile"
+REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
 LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
 REMOTE_OPENCODE_SECRET = "/root/secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
@@ -104,6 +113,10 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
     (LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978),
     (LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT),
+    (LOCAL_AGYQ, REMOTE_AGYQ),
+    (LOCAL_GHLS, REMOTE_GHLS),
+    (LOCAL_GHPR, REMOTE_GHPR),
+    (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
     (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
 ]
 
@@ -163,6 +176,18 @@ base_image = (
 )
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
+base_image = base_image.run_commands(
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/agyprofile /root/scripts/setup.sh 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
+    "mkdir -p /root/scripts",
+    "ln -sf /usr/local/bin/agyq /root/scripts/agyq 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghls /root/scripts/ghls 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghpr /root/scripts/ghpr 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/scripts/agyprofile 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile.sh 2>/dev/null || true",
+)
 
 
 def load_ssh_pub_key() -> str:

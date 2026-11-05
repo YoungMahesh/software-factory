@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# agyprofile anv
+# agyprofile m47
+# agyprofile mgh
+
+# Resolve symlink to get real script directory if applicable
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Fallback secrets directory search: explicit env, relative to script, or /root/secrets
+if [ -z "${SECRETS_DIR:-}" ]; then
+    if [ -d "$SCRIPT_DIR/../secrets" ]; then
+        SECRETS_DIR="$SCRIPT_DIR/../secrets"
+    elif [ -d "/root/secrets" ]; then
+        SECRETS_DIR="/root/secrets"
+    else
+        SECRETS_DIR="$SCRIPT_DIR/../secrets"
+    fi
+fi
+
+TARGET_DIR="${TARGET_DIR:-$HOME/.gemini/antigravity-cli}"
+TARGET_FILE="$TARGET_DIR/antigravity-oauth-token"
+PROFILES_DIR="${PROFILES_DIR:-$TARGET_DIR/profiles}"
+
+cmd_name="$(basename "$0")"
+
+usage() {
+    echo "Usage: $cmd_name {anv|m47|mgh}" >&2
+    exit 1
+}
+
+if [ "$#" -ne 1 ]; then
+    usage
+fi
+
+case "$1" in
+    anv)
+        SOURCE_FILE="$SECRETS_DIR/antigravity-oauth-token-anv.json"
+        PROFILE="anv"
+        ;;
+    m47)
+        SOURCE_FILE="$SECRETS_DIR/antigravity-oauth-token.json"
+        PROFILE="m47"
+        ;;
+    mgh)
+        SOURCE_FILE="$SECRETS_DIR/antigravity-oauth-token-mgh.json"
+        PROFILE="mgh"
+        ;;
+    -h|--help)
+        echo "Usage: $cmd_name {anv|m47|mgh}"
+        echo
+        echo "Switch Antigravity CLI OAuth profile:"
+        echo "  anv  - Switch to ANV profile (secrets/antigravity-oauth-token-anv.json or ~/.gemini/antigravity-cli/profiles/anv)"
+        echo "  m47  - Switch to M47 profile (secrets/antigravity-oauth-token.json or ~/.gemini/antigravity-cli/profiles/m47)"
+        echo "  mgh  - Switch to MGH profile (secrets/antigravity-oauth-token-mgh.json or ~/.gemini/antigravity-cli/profiles/mgh)"
+        exit 0
+        ;;
+    *)
+        echo "ERROR: Unknown profile: $1" >&2
+        usage
+        ;;
+esac
+
+mkdir -p "$TARGET_DIR"
+
+if [ -f "$PROFILES_DIR/$PROFILE" ]; then
+    cp -f "$PROFILES_DIR/$PROFILE" "$TARGET_FILE"
+    chmod 600 "$TARGET_FILE"
+    echo "Switched Antigravity CLI profile to: $PROFILE"
+    exit 0
+fi
+
+if [ ! -f "$SOURCE_FILE" ]; then
+    echo "ERROR: Secret file not found: $SOURCE_FILE (and no profile found at $PROFILES_DIR/$PROFILE)" >&2
+    exit 1
+fi
+
+TMP_FILE="$(mktemp "${TARGET_DIR}/antigravity-oauth-token.XXXXXX")"
+trap 'rm -f "$TMP_FILE"' EXIT
+chmod 600 "$TMP_FILE"
+
+sops decrypt "$SOURCE_FILE" > "$TMP_FILE"
+mv -f "$TMP_FILE" "$TARGET_FILE"
+trap - EXIT
+
+chmod 600 "$TARGET_FILE"
+
+echo "Switched Antigravity CLI profile to: $PROFILE"

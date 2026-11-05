@@ -194,6 +194,14 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GITCONFIG_MAHESH471978,
             LOCAL_SETUP_SCRIPT,
             REMOTE_SETUP_SCRIPT,
+            LOCAL_AGYQ,
+            REMOTE_AGYQ,
+            LOCAL_GHLS,
+            REMOTE_GHLS,
+            LOCAL_GHPR,
+            REMOTE_GHPR,
+            LOCAL_AGYPROFILE,
+            REMOTE_AGYPROFILE,
             LOCAL_CLOUDFLARE_SECRET,
             REMOTE_CLOUDFLARE_SECRET,
         )
@@ -204,9 +212,42 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
             (LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978),
             (LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT),
+            (LOCAL_AGYQ, REMOTE_AGYQ),
+            (LOCAL_GHLS, REMOTE_GHLS),
+            (LOCAL_GHPR, REMOTE_GHPR),
+            (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
             (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
+
+    def test_developer_commands_staged_and_symlinked_system_wide(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        from shared.image import (
+            LOCAL_AGYQ,
+            REMOTE_AGYQ,
+            LOCAL_GHLS,
+            REMOTE_GHLS,
+            LOCAL_GHPR,
+            REMOTE_GHPR,
+            LOCAL_AGYPROFILE,
+            REMOTE_AGYPROFILE,
+        )
+
+        self.assertEqual(REMOTE_AGYQ, "/usr/local/bin/agyq")
+        self.assertEqual(REMOTE_GHLS, "/usr/local/bin/ghls")
+        self.assertEqual(REMOTE_GHPR, "/usr/local/bin/ghpr")
+        self.assertEqual(REMOTE_AGYPROFILE, "/usr/local/bin/agyprofile")
+
+        self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
+        self.assertTrue(LOCAL_GHLS.exists(), "scripts/ghls must exist")
+        self.assertTrue(LOCAL_GHPR.exists(), "scripts/ghpr must exist")
+        self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
+
+        startup_content = (repo_root / "shared" / "startup.sh").read_text()
+        self.assertIn("chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/agyprofile", startup_content)
+        self.assertIn("ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile", startup_content)
+        self.assertIn("ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh", startup_content)
+        self.assertIn("export PATH=\"/usr/local/bin:$PATH\"", startup_content)
 
     def test_add_local_files_if_present_stages_existing_and_skips_missing(self):
         from shared.image import add_local_files_if_present
