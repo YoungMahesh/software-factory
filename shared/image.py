@@ -43,6 +43,8 @@ LOCAL_GHLS = LOCAL_SCRIPTS_DIR / "ghls"
 REMOTE_GHLS = "/usr/local/bin/ghls"
 LOCAL_GHPR = LOCAL_SCRIPTS_DIR / "ghpr"
 REMOTE_GHPR = "/usr/local/bin/ghpr"
+LOCAL_GHCLONE = LOCAL_SCRIPTS_DIR / "ghclone"
+REMOTE_GHCLONE = "/usr/local/bin/ghclone"
 LOCAL_AGYPROFILE = LOCAL_SCRIPTS_DIR / "agyprofile"
 REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
 LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
@@ -116,6 +118,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_AGYQ, REMOTE_AGYQ),
     (LOCAL_GHLS, REMOTE_GHLS),
     (LOCAL_GHPR, REMOTE_GHPR),
+    (LOCAL_GHCLONE, REMOTE_GHCLONE),
     (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
     (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
 ]
@@ -177,13 +180,14 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/agyprofile /root/scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /root/scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
     "mkdir -p /root/scripts",
     "ln -sf /usr/local/bin/agyq /root/scripts/agyq 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghls /root/scripts/ghls 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghpr /root/scripts/ghpr 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghclone /root/scripts/ghclone 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/scripts/agyprofile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile.sh 2>/dev/null || true",

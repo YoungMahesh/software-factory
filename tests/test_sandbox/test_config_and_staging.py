@@ -200,6 +200,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHLS,
             LOCAL_GHPR,
             REMOTE_GHPR,
+            LOCAL_GHCLONE,
+            REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
             LOCAL_CLOUDFLARE_SECRET,
@@ -215,6 +217,7 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_AGYQ, REMOTE_AGYQ),
             (LOCAL_GHLS, REMOTE_GHLS),
             (LOCAL_GHPR, REMOTE_GHPR),
+            (LOCAL_GHCLONE, REMOTE_GHCLONE),
             (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
             (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
         ]
@@ -229,6 +232,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHLS,
             LOCAL_GHPR,
             REMOTE_GHPR,
+            LOCAL_GHCLONE,
+            REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
         )
@@ -236,15 +241,17 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertEqual(REMOTE_AGYQ, "/usr/local/bin/agyq")
         self.assertEqual(REMOTE_GHLS, "/usr/local/bin/ghls")
         self.assertEqual(REMOTE_GHPR, "/usr/local/bin/ghpr")
+        self.assertEqual(REMOTE_GHCLONE, "/usr/local/bin/ghclone")
         self.assertEqual(REMOTE_AGYPROFILE, "/usr/local/bin/agyprofile")
 
         self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
         self.assertTrue(LOCAL_GHLS.exists(), "scripts/ghls must exist")
         self.assertTrue(LOCAL_GHPR.exists(), "scripts/ghpr must exist")
+        self.assertTrue(LOCAL_GHCLONE.exists(), "scripts/ghclone must exist")
         self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
 
         startup_content = (repo_root / "shared" / "startup.sh").read_text()
-        self.assertIn("chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/agyprofile", startup_content)
+        self.assertIn("chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile", startup_content)
         self.assertIn("ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile", startup_content)
         self.assertIn("ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh", startup_content)
         self.assertIn("export PATH=\"/usr/local/bin:$PATH\"", startup_content)
@@ -398,4 +405,3 @@ class TestSandboxImageStaging(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

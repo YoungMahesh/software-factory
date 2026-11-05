@@ -329,12 +329,12 @@ grep -qxF "export PORT=${PORT:-3000}" ~/.bashrc 2>/dev/null || echo "export PORT
 grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
 
 # Ensure developer CLI tools in /usr/local/bin are executable and symlinked
-chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/agyprofile 2>/dev/null || true
+chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true
 
 # If staged in /root/scripts, ensure symlinks in /usr/local/bin exist
-for cmd in agyq ghls ghpr agyprofile; do
+for cmd in agyq ghls ghpr ghclone agyprofile; do
     if [ -f "/root/scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
         ln -sf "/root/scripts/$cmd" "/usr/local/bin/$cmd"
         chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
@@ -343,7 +343,7 @@ done
 
 # Ensure convenience symlinks in /root/scripts point to /usr/local/bin
 mkdir -p /root/scripts 2>/dev/null || true
-for cmd in agyq ghls ghpr agyprofile; do
+for cmd in agyq ghls ghpr ghclone agyprofile; do
     if [ -f "/usr/local/bin/$cmd" ] && [ ! -e "/root/scripts/$cmd" ]; then
         ln -sf "/usr/local/bin/$cmd" "/root/scripts/$cmd" 2>/dev/null || true
     fi

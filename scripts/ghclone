@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_ORG="sFactory0"
+
+show_help() {
+  cat <<'EOF'
+Usage: ghclone <repo> [destination] [gh repo clone / git clone flags...]
+
+Clone a repository from GitHub (defaults to sFactory0) into ~/ path in the sandbox.
+
+Arguments:
+  repo                  Repository name (e.g. 'my-repo', 'sFactory0/my-repo', or 'org/repo').
+                        If the owner prefix is omitted, it defaults to sFactory0.
+  destination           Target directory (defaults to ~/<repo-name>).
+                        Can be relative or absolute, and '~' is expanded to $HOME.
+
+Options:
+  -h, --help            Show this help message and exit
+
+Any other flags (or flags after '--') are passed directly to 'gh repo clone'.
+
+Examples:
+  ghclone my-repo                         # Clones sFactory0/my-repo to ~/my-repo
+  ghclone my-repo ~/custom-dir            # Clones sFactory0/my-repo to ~/custom-dir
+  ghclone other-org/repo                  # Clones other-org/repo to ~/repo
+  ghclone my-repo -- --depth 1            # Clones shallow with depth 1
+EOF
+}
+
+# Check for help flags
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+    exit 0
+  fi
+done
+
+if [[ $# -eq 0 || "$1" == -* ]]; then
+  echo "Error: No repository specified." >&2
+  echo "Usage: ghclone <repo> [destination] [flags...]" >&2
+  echo "Run 'ghclone --help' for details." >&2
+  exit 1
+fi
+
+RAW_REPO="$1"
+shift
+
+if [[ "$RAW_REPO" == *"/"* ]]; then
+  TARGET_REPO="$RAW_REPO"
+else
+  TARGET_REPO="${DEFAULT_ORG}/${RAW_REPO}"
+fi
+
+REPO_NAME="${TARGET_REPO##*/}"
+
+# Determine destination directory
+TARGET_DIR=""
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  TARGET_DIR="$1"
+  shift
+fi
+
+# Expand tilde if present, or default to $HOME/$REPO_NAME
+if [[ -z "$TARGET_DIR" ]]; then
+  TARGET_DIR="${HOME}/${REPO_NAME}"
+elif [[ "$TARGET_DIR" == "~" ]]; then
+  TARGET_DIR="${HOME}"
+elif [[ "$TARGET_DIR" == "~/"* ]]; then
+  TARGET_DIR="${HOME}/${TARGET_DIR#"~/"}"
+fi
+
+exec gh repo clone "$TARGET_REPO" "$TARGET_DIR" "$@"
