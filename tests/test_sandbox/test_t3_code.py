@@ -114,7 +114,41 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("Antigravity (ANV)", content)
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
+            self.assertNotIn("gemini-3.8-flash-medium", content)
+            self.assertNotIn("gemini-3.8-flash-low", content)
             self.assertIn("antigravity.env", content)
+
+            anv_pos = content.find("\"antigravity-anv\"")
+            mgh_pos = content.find("\"antigravity-mgh\"")
+            self.assertLess(anv_pos, mgh_pos)
+
+    def test_t3_patch_script_contains_driver_order_and_model_pruning(self):
+        from shared.image import (
+            T3_DRIVER_ORDER_PATCH_TARGET,
+            T3_DRIVER_ORDER_PATCH_REPLACEMENT,
+            T3_CURRENT_MODELS_PATCH_TARGET,
+            T3_CURRENT_MODELS_PATCH_REPLACEMENT,
+            T3_MODELS_MANIFEST_PATCH_TARGET,
+            T3_MODELS_MANIFEST_PATCH_REPLACEMENT,
+            T3_PATCH_SCRIPT,
+        )
+        import base64
+
+        t_order = base64.b64decode(T3_DRIVER_ORDER_PATCH_TARGET).decode("utf-8")
+        r_order = base64.b64decode(T3_DRIVER_ORDER_PATCH_REPLACEMENT).decode("utf-8")
+        self.assertIn('"opencode"', t_order)
+        self.assertIn('"antigravity"', r_order)
+        self.assertLess(t_order.find('"opencode"'), t_order.find('"antigravity"'))
+        self.assertLess(r_order.find('"antigravity"'), r_order.find('"opencode"'))
+
+        t_cur = base64.b64decode(T3_CURRENT_MODELS_PATCH_TARGET).decode("utf-8")
+        r_cur = base64.b64decode(T3_CURRENT_MODELS_PATCH_REPLACEMENT).decode("utf-8")
+        self.assertIn("gemini-3.8-flash-medium", t_cur)
+        self.assertIn("\"gemini-3.8-flash-high\"/*", r_cur)
+
+        self.assertIn(T3_DRIVER_ORDER_PATCH_TARGET, T3_PATCH_SCRIPT)
+        self.assertIn(T3_CURRENT_MODELS_PATCH_TARGET, T3_PATCH_SCRIPT)
+        self.assertIn(T3_MODELS_MANIFEST_PATCH_TARGET, T3_PATCH_SCRIPT)
 
     def test_setup_script_decrypts_antigravity_env(self):
         import tempfile

@@ -79,8 +79,8 @@ import hashlib, json, os
 
 accounts = [
     ("antigravity", "Antigravity", os.path.expanduser("~/.gemini/antigravity-cli/profiles/m47"), True),
-    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
     ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
+    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
 ]
 
 t3_settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
@@ -172,18 +172,6 @@ for instance_id, display_name, token_path, is_primary in accounts:
                     "isCustom": False,
                     "isDefault": True,
                     "aliases": [f"{instance_id}-default"],
-                    "capabilities": {"optionDescriptors": []}
-                },
-                {
-                    "slug": "gemini-3.8-flash-medium",
-                    "name": "Gemini 3.8 Flash (Medium)",
-                    "isCustom": False,
-                    "capabilities": {"optionDescriptors": []}
-                },
-                {
-                    "slug": "gemini-3.8-flash-low",
-                    "name": "Gemini 3.8 Flash (Low)",
-                    "isCustom": False,
                     "capabilities": {"optionDescriptors": []}
                 }
             ],

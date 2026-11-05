@@ -709,6 +709,18 @@ try:
         new_c = new_c[:pos] + r + new_c[pos+426:]
     if t_ssh in new_c:
         new_c = new_c.replace(t_ssh, r_ssh, 1)
+    t_order = base64.b64decode("QlVJTFRfSU5fRFJJVkVSX09SREVSID0gWwoJCSJjb2RleCIsCgkJImNsYXVkZUFnZW50IiwKCQkiY3Vyc29yIiwKCQkiZ3JvayIsCgkJIm9wZW5jb2RlIiwKCQkiYW50aWdyYXZpdHkiLAoJCSJmeCIKCV07")
+    r_order = base64.b64decode("QlVJTFRfSU5fRFJJVkVSX09SREVSID0gWwoJCSJjb2RleCIsCgkJImNsYXVkZUFnZW50IiwKCQkiY3Vyc29yIiwKCQkiZ3JvayIsCgkJImFudGlncmF2aXR5IiwKCQkib3BlbmNvZGUiLAoJCSJmeCIKCV07")
+    t_cur = base64.b64decode("CQkiYW50aWdyYXZpdHkiOiBbCgkJCSJnZW1pbmktMy44LWZsYXNoLWhpZ2giLAoJCQkiZ2VtaW5pLTMuOC1mbGFzaC1tZWRpdW0iLAoJCQkiZ2VtaW5pLTMuOC1mbGFzaC1sb3ciCgkJXQ==")
+    r_cur = base64.b64decode("CQkiYW50aWdyYXZpdHkiOiBbCgkJCSJnZW1pbmktMy44LWZsYXNoLWhpZ2giLyoKCQkJImdlbWluaS0zLjgtZmxhc2gtbWVkaXVtIiwKCQkJImdlbWluaS0zLjgtZmxhc2gtbG93IiovXQ==")
+    t_mod = base64.b64decode("ImFudGlncmF2aXR5IjogewoJCQkiZGVmYXVsdHMiOiB7ICJjaGF0IjogImdlbWluaS0zLjgtZmxhc2gtaGlnaCIgfSwKCQkJInByb2ZpbGVzIjoge30sCgkJCSJtb2RlbHMiOiBbCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuOC1mbGFzaC1oaWdoIiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy44IEZsYXNoIChIaWdoKSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy44LWZsYXNoLW1lZGl1bSIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuOCBGbGFzaCAoTWVkaXVtKSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy44LWZsYXNoLWxvdyIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuOCBGbGFzaCAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy43LWZsYXNoLWhpZ2giLAoJCQkJCSJuYW1lIjogIkdlbWluaSAzLjcgRmxhc2ggKEhpZ2gpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuNy1mbGFzaC1tZWRpdW0iLAoJCQkJCSJuYW1lIjogIkdlbWluaSAzLjcgRmxhc2ggKE1lZGl1bSkiLAoJCQkJCSJzdGF0dXMiOiAibGVnYWN5IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy43LWZsYXNoLWxvdyIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNyBGbGFzaCAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCQl9LAoJCQkJewoJCQkJCSJzbHVnIjogImdlbWluaS0zLjYtZmxhc2gtaGlnaCIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNiBGbGFzaCAoSGlnaCkiLAoJCQkJCSJzdGF0dXMiOiAibGVnYWN5IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy42LWZsYXNoLW1lZGl1bSIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNiBGbGFzaCAoTWVkaXVtKSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCQl9LAoJCQkJewoJCQkJCSJzbHVnIjogImdlbWluaS0zLjYtZmxhc2gtbG93IiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy42IEZsYXNoIChMb3cpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLXByby1hZ2VudCIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuMSBQcm8gKEhpZ2gpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuMS1wcm8tbG93IiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy4xIFBybyAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCQl9CgkJCV0=")
+    r_mod = base64.b64decode("ImFudGlncmF2aXR5IjogewoJCQkiZGVmYXVsdHMiOiB7ICJjaGF0IjogImdlbWluaS0zLjgtZmxhc2gtaGlnaCIgfSwKCQkJInByb2ZpbGVzIjoge30sCgkJCSJtb2RlbHMiOiBbCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuOC1mbGFzaC1oaWdoIiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy44IEZsYXNoIChIaWdoKSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfS8qCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy44LWZsYXNoLW1lZGl1bSIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuOCBGbGFzaCAoTWVkaXVtKSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy44LWZsYXNoLWxvdyIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuOCBGbGFzaCAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJjdXJyZW50IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy43LWZsYXNoLWhpZ2giLAoJCQkJCSJuYW1lIjogIkdlbWluaSAzLjcgRmxhc2ggKEhpZ2gpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuNy1mbGFzaC1tZWRpdW0iLAoJCQkJCSJuYW1lIjogIkdlbWluaSAzLjcgRmxhc2ggKE1lZGl1bSkiLAoJCQkJCSJzdGF0dXMiOiAibGVnYWN5IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy43LWZsYXNoLWxvdyIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNyBGbGFzaCAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCQl9LAoJCQkJewoJCQkJCSJzbHVnIjogImdlbWluaS0zLjYtZmxhc2gtaGlnaCIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNiBGbGFzaCAoSGlnaCkiLAoJCQkJCSJzdGF0dXMiOiAibGVnYWN5IgoJCQkJfSwKCQkJCXsKCQkJCQkic2x1ZyI6ICJnZW1pbmktMy42LWZsYXNoLW1lZGl1bSIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuNiBGbGFzaCAoTWVkaXVtKSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCQl9LAoJCQkJewoJCQkJCSJzbHVnIjogImdlbWluaS0zLjYtZmxhc2gtbG93IiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy42IEZsYXNoIChMb3cpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLXByby1hZ2VudCIsCgkJCQkJIm5hbWUiOiAiR2VtaW5pIDMuMSBQcm8gKEhpZ2gpIiwKCQkJCQkic3RhdHVzIjogImxlZ2FjeSIKCQkJCX0sCgkJCQl7CgkJCQkJInNsdWciOiAiZ2VtaW5pLTMuMS1wcm8tbG93IiwKCQkJCQkibmFtZSI6ICJHZW1pbmkgMy4xIFBybyAoTG93KSIsCgkJCQkJInN0YXR1cyI6ICJsZWdhY3kiCgkJCSovCgkJCV0=")
+    if t_order in new_c:
+        new_c = new_c.replace(t_order, r_order, 1)
+    if t_cur in new_c:
+        new_c = new_c.replace(t_cur, r_cur, 1)
+    if t_mod in new_c:
+        new_c = new_c.replace(t_mod, r_mod, 1)
     if new_c != c:
         with open(p + ".tmp", "wb") as f:
             f.write(new_c)
@@ -734,8 +746,8 @@ import hashlib, json, os
 
 accounts = [
     ("antigravity", "Antigravity", os.path.expanduser("~/.gemini/antigravity-cli/profiles/m47"), True),
-    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
     ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
+    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
 ]
 
 t3_settings_path = "/root/.t3/userdata/settings.json"
@@ -826,18 +838,6 @@ for instance_id, display_name, token_path, is_primary in accounts:
                     "isCustom": False,
                     "isDefault": True,
                     "aliases": [f"{instance_id}-default"],
-                    "capabilities": {"optionDescriptors": []}
-                },
-                {
-                    "slug": "gemini-3.8-flash-medium",
-                    "name": "Gemini 3.8 Flash (Medium)",
-                    "isCustom": False,
-                    "capabilities": {"optionDescriptors": []}
-                },
-                {
-                    "slug": "gemini-3.8-flash-low",
-                    "name": "Gemini 3.8 Flash (Low)",
-                    "isCustom": False,
                     "capabilities": {"optionDescriptors": []}
                 }
             ],
