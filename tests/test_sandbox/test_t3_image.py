@@ -83,6 +83,8 @@ class TestT3CodeImage(unittest.TestCase):
             REMOTE_ANTIGRAVITY_ENV,
             LOCAL_T3_KEYBINDINGS,
             REMOTE_T3_KEYBINDINGS,
+            LOCAL_T3_WRAPPER,
+            REMOTE_T3_WRAPPER,
         )
 
         with patch("shared.image.base_image") as mock_base, patch(
@@ -114,6 +116,7 @@ class TestT3CodeImage(unittest.TestCase):
                         mock_img2,
                         [
                             (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
+                            (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
                         ],
                     ),
                     call(

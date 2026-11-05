@@ -193,7 +193,7 @@ class TestT3CodeStartup(unittest.TestCase):
     def test_t3_wrapper_script_syncs_dev_url(self):
         content = self.startup_sh.read_text()
         start_marker = "cat << 'EOF' > /usr/local/bin/t3.wrapper\n"
-        end_marker = "EOF\n    chmod +x /usr/local/bin/t3.wrapper.wrapper"
+        end_marker = "EOF\n    chmod +x /usr/local/bin/t3.wrapper"
         start_pos = content.find(start_marker) + len(start_marker)
         end_pos = content.find(end_marker, start_pos)
         wrapper_template = content[start_pos:end_pos]

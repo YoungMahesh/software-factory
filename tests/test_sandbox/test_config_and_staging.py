@@ -257,6 +257,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_MODAL_SECRET,
             LOCAL_T3_KEYBINDINGS,
             REMOTE_T3_KEYBINDINGS,
+            LOCAL_T3_WRAPPER,
+            REMOTE_T3_WRAPPER,
         )
 
         mock_add_files.side_effect = lambda img, files: img
@@ -312,6 +314,7 @@ class TestSandboxImageStaging(unittest.TestCase):
             ANY,
             [
                 (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
+                (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
             ],
         )
 
