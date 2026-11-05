@@ -83,7 +83,7 @@ accounts = [
     ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
 ]
 
-t3_settings_path = "/root/.t3/userdata/settings.json"
+t3_settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
 os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
 settings = {}
 if os.path.exists(t3_settings_path):
@@ -95,7 +95,8 @@ if os.path.exists(t3_settings_path):
 if "providerInstances" not in settings:
     settings["providerInstances"] = {}
 
-t3_cache_dir = "/root/.t3/caches"
+# Path to T3 caches directory (defaults to /root/.t3/caches in standard sandbox)
+t3_cache_dir = os.path.expanduser("~/.t3/caches")
 os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
 
 for instance_id, display_name, token_path, is_primary in accounts:
@@ -125,7 +126,7 @@ for instance_id, display_name, token_path, is_primary in accounts:
         }
         acp_settings = {"auth": {"type": "oauth-personal"}}
         t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
-        target_dirs = [f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp"]
+        target_dirs = [os.path.expanduser(f"~/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp")]
         if is_primary:
             target_dirs.append(os.path.expanduser("~/.gemini/antigravity-acp"))
 
@@ -214,16 +215,18 @@ if not has_opencode and os.path.exists(opencode_env_path):
     except Exception:
         pass
 if has_opencode:
+    # Default binary path: /root/.opencode/bin/opencode
+    opencode_bin = os.path.expanduser("~/.opencode/bin/opencode")
     if "opencode" not in settings["providerInstances"]:
         settings["providerInstances"]["opencode"] = {
             "driver": "opencode",
             "displayName": "OpenCode",
             "enabled": True,
-            "binaryPath": "/root/.opencode/bin/opencode"
+            "binaryPath": opencode_bin
         }
     else:
         settings["providerInstances"]["opencode"]["enabled"] = True
-        settings["providerInstances"]["opencode"]["binaryPath"] = "/root/.opencode/bin/opencode"
+        settings["providerInstances"]["opencode"]["binaryPath"] = opencode_bin
 
 if "claudeAgent" not in settings["providerInstances"]:
     settings["providerInstances"]["claudeAgent"] = {
@@ -259,7 +262,7 @@ if [ "$DECRYPT_OPENCODE" = true ] || [ "$DECRYPT_PI" = true ]; then
     if [ "$DECRYPT_OPENCODE" = true ] && command -v python3 >/dev/null 2>&1; then
         python3 -c '
 import json, os
-t3_settings_path = "/root/.t3/userdata/settings.json"
+t3_settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
 if os.path.exists(os.path.dirname(t3_settings_path)) or os.path.exists("/opt/t3"):
     os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
     settings = {}
@@ -271,16 +274,18 @@ if os.path.exists(os.path.dirname(t3_settings_path)) or os.path.exists("/opt/t3"
             settings = {}
     if "providerInstances" not in settings:
         settings["providerInstances"] = {}
+    # Default binary path: /root/.opencode/bin/opencode
+    opencode_bin = os.path.expanduser("~/.opencode/bin/opencode")
     if "opencode" not in settings["providerInstances"]:
         settings["providerInstances"]["opencode"] = {
             "driver": "opencode",
             "displayName": "OpenCode",
             "enabled": True,
-            "binaryPath": "/root/.opencode/bin/opencode"
+            "binaryPath": opencode_bin
         }
     else:
         settings["providerInstances"]["opencode"]["enabled"] = True
-        settings["providerInstances"]["opencode"]["binaryPath"] = "/root/.opencode/bin/opencode"
+        settings["providerInstances"]["opencode"]["binaryPath"] = opencode_bin
     with open(t3_settings_path, "w") as fp:
         json.dump(settings, fp, indent=2)
     os.chmod(t3_settings_path, 0o644)
