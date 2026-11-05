@@ -69,24 +69,8 @@ A runtime development environment within the sandbox combining a pre-baked Pytho
 _Avoid_: Python tooling, python runner, modal env
 
 **Shared Workspace Secret**:
-The centralized Modal secret collection (`share0`) mounted into all sandboxes unconditionally, providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—used to decrypt the Repository Fetch Secret, Cloudflare Tunnel token, and opt-in agent/tooling credentials.
+The centralized Modal secret collection (`share0`) mounted into all sandboxes unconditionally, providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—used to decrypt Centralized Organization Credentials (`secrets/github-orgs.env`), the Cloudflare Tunnel token (`secrets/cloudflare.env`), In-Repo Secret Manifests, and opt-in agent/tooling credentials.
 _Avoid_: Global secret, root secret, default secret
-
-**Repository Fetch Secret**:
-A SOPS-encrypted environment file stored in version control at `secrets/<secret-name>/fetch.env`, staged into the sandbox image under `/root/secrets/repo/` and decrypted ephemerally into memory at container boot in `startup.sh` using `AGE_PRIVATE_KEY` to supply repository clone credentials (`GH_REPO`, `GH_TOKEN`, and optional `DOTENV_PRIVATE_KEY`), immediately scrubbed from disk before interactive shells or servers initialize.
-_Avoid_: Repo secret, secret collection, fetch config, local secret
-
-**Repository Environment Secrets**:
-SOPS-encrypted environment files stored alongside `fetch.env` under `secrets/<secret-name>/` and mapped to destination file paths in the cloned repository via `secrets/<secret-name>/env.map`, decrypted ephemerally into the repository during container boot in `startup.sh` before staging files and `AGE_PRIVATE_KEY` are scrubbed.
-_Avoid_: Dotenv secrets, repo envs, app secrets, env mappings
-
-**Repository Env Mapping**:
-The configuration file (`secrets/<secret-name>/env.map`) that defines explicit key-value associations between local encrypted secret files and their repository-relative destination file paths.
-_Avoid_: Location file, env config, secret locations
-
-**Organization Credentials**:
-A directory containing a SOPS-encrypted GitHub fine-grained personal access token (`token`) and a declared permission manifest (`permissions.yml`) stored under `secrets_org/<org-name>/` providing scoped organizational access across member repositories.
-_Avoid_: Org token, org secret, organization token
 
 **Test Organization**:
 The canonical GitHub organization (`sFactory0`) used with `test-` prefixed repositories configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
@@ -157,7 +141,7 @@ A single SOPS-encrypted file (`secrets/github-orgs.env`) containing GitHub Perso
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
 **In-Repo Secret Manifest**:
-A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `studio.env=.env`), decrypted during sandbox startup.
+A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `app.env=.env`), decrypted during sandbox startup.
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
