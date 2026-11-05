@@ -104,6 +104,30 @@ python scripts/manage_sandboxes.py
 
 ## 6. Verification & Automated Tests
 
+### Automated Unit & Subsystem Tests
+
 ```bash
 pytest tests/test_sandbox tests/test_manage_sandboxes.py
 ```
+
+### Sandbox Live Verification
+
+When verifying changes to `sandbox/main.py` against live Modal cloud infrastructure, all runs adhere to the **Sandbox Live Verification** standard:
+
+- **Target Repository**: Strictly uses the **Test Repository Baseline** (`sFactory0/test-live-test1`) via Organization credentials (`secrets/github-orgs.env`).
+- **Automated Verification**:
+  ```bash
+  python scripts/test_live_sandbox.py
+  ```
+  Launches an ephemeral sandbox with a short timeout (300s), verifies token decryption and git checkout (`/root/test-live-test1`), asserts environment invariants, and guarantees immediate teardown in `finally:`.
+- **Manual Ad-hoc Verification**:
+  ```bash
+  # Launch test sandbox
+  python sandbox/main.py -r test1 --testing
+
+  # Verify git clone inside sandbox
+  modal sandbox exec <sandbox-id> test -d /root/test-test1
+
+  # Immediately terminate to prevent lingering compute charges
+  modal sandbox terminate <sandbox-id>
+  ```

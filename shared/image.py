@@ -70,10 +70,6 @@ LOCAL_GITHUB_ORGS_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "github-orgs.env"
 )
 REMOTE_GITHUB_ORGS_SECRET = "/root/secrets/github-orgs.env"
-REMOTE_FETCH_SECRET = "/root/secrets/fetch.env"
-REMOTE_REPO_SECRETS_DIR = "/root/secrets/repo"
-REMOTE_ORG_SECRETS_DIR = "/root/secrets/org"
-REMOTE_ORG_TOKEN = "/root/secrets/org/token"
 SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"

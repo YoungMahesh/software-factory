@@ -300,7 +300,6 @@ if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
 
             if [ ! -f "$src_file" ]; then
                 echo "ERROR: Mapped repository secret file not found at $src_file." >&2
-                [ "$SECRETS_DIR" = "/root/secrets/repo" ] && rm -rf /root/secrets/repo
                 exit 1
             fi
 
@@ -308,7 +307,6 @@ if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
             if ! SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$src_file" > "$dest_file"; then
                 echo "ERROR: Failed to decrypt $src_file using AGE_PRIVATE_KEY." >&2
                 rm -f "$dest_file"
-                [ "$SECRETS_DIR" = "/root/secrets/repo" ] && rm -rf /root/secrets/repo
                 exit 1
             fi
             chmod 600 "$dest_file"
@@ -621,7 +619,6 @@ else
     grep -qxF "unset DOTENV_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset DOTENV_PRIVATE_KEY" >> ~/.bashrc
     unset GH_TOKEN 2>/dev/null || true
     unset DOTENV_PRIVATE_KEY 2>/dev/null || true
-    unset DECRYPTED_FETCH 2>/dev/null || true
 fi
 
 if [ "${setup_status:-0}" -ne 0 ]; then
