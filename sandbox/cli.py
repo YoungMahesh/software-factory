@@ -2,6 +2,9 @@
 
 import argparse
 import io
+import os
+from pathlib import Path
+import sys
 
 import modal
 
@@ -25,6 +28,62 @@ def generate_ascii_qr(data: str) -> str | None:
         return buf.getvalue().rstrip()
     except Exception:
         return None
+
+
+def generate_ssh_config_snippet(
+    instance_name: str,
+    ssh_host: str,
+    ssh_port: int,
+) -> str:
+    """Generates the SSH client config block for the sandbox instance."""
+    return (
+        f"Host {instance_name}\n"
+        f"  HostName {ssh_host}\n"
+        f"  Port {ssh_port}\n"
+        f"  User root\n"
+        f"  IdentityFile ~/.ssh/modal-sandbox\n"
+        f"  StrictHostKeyChecking no\n"
+        f"  UserKnownHostsFile /dev/null\n"
+    )
+
+
+def append_ssh_config(
+    instance_name: str,
+    ssh_host: str,
+    ssh_port: int,
+    config_path: Path | None = None,
+) -> bool:
+    """Appends SSH connection details to ~/.ssh/config.
+
+    Returns True if successfully appended, False otherwise.
+    Never raises an exception; logs warning to stderr on failure.
+    """
+    if config_path is None:
+        config_path = Path("~/.ssh/config").expanduser()
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        snippet = generate_ssh_config_snippet(instance_name, ssh_host, ssh_port)
+
+        prefix = ""
+        if config_path.is_file() and config_path.stat().st_size > 0:
+            with open(config_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                if not content.endswith("\n\n"):
+                    if content.endswith("\n"):
+                        prefix = "\n"
+                    else:
+                        prefix = "\n\n"
+
+        with open(config_path, "a", encoding="utf-8") as f:
+            f.write(prefix + snippet)
+        return True
+    except Exception as exc:
+        print(
+            f"⚠️  Warning: Failed to append SSH connection details to {config_path}: {exc}",
+            file=sys.stderr,
+        )
+        return False
 
 
 def print_access_info(
@@ -89,12 +148,7 @@ def print_access_info(
         )
         print(f"  • SSH:      {ssh_cmd}")
         print("\nVS Code / SSH Config snippet:")
-        print(f"Host {instance_name}")
-        print(f"  HostName {ssh_host}")
-        print(f"  Port {ssh_port}")
-        print("  User root")
-        print("  IdentityFile ~/.ssh/modal-sandbox")
-        print("  StrictHostKeyChecking no")
+        print(generate_ssh_config_snippet(instance_name, ssh_host, ssh_port).rstrip("\n"))
     if t3_qr_code:
         print("\n📱 Scan with T3 Code Mobile App (iOS / Android):")
         for line in t3_qr_code.splitlines():
@@ -285,6 +339,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable the default Cloudflare Tunnel (3000.mahesh0.dev) for this sandbox.",
     )
     parser.add_argument(
+        "--no-ssh-config",
+        action="store_true",
+        help="Do not automatically append SSH connection details to ~/.ssh/config.",
+    )
+    parser.add_argument(
         "--sops",
         action="store_true",
         help="Retain SOPS age private key and credentials in ~/.config/sops for interactive debugging.",
@@ -337,6 +396,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.herdr
             or args.pi
             or args.full_clone
+            or getattr(args, "no_ssh_config", False)
         ):
             parser.error("--snapshot cannot be used with launch configuration arguments.")
     else:

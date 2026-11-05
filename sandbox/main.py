@@ -32,9 +32,11 @@ from sandbox.config import (
 )
 from sandbox.cli import (
     SnapshotTTLAction,
+    append_ssh_config,
     capture_snapshot,
     create_parser,
     generate_ascii_qr,
+    generate_ssh_config_snippet,
     print_access_info,
     print_snapshot_info,
     validate_args,
@@ -125,12 +127,13 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         "pi": args.pi,
     }
     data = run_remote_request(endpoint_url, "/launch", payload)
+    ssh_info = tuple(data["ssh_info"]) if data.get("ssh_info") else None
     print_fn = getattr(sys.modules.get("sandbox.main"), "print_access_info", print_access_info)
     print_fn(
         app_name=data.get("app_name", ""),
         sandbox_name=data.get("sandbox_name"),
         sandbox_id=data.get("sandbox_id"),
-        ssh_info=tuple(data["ssh_info"]) if data.get("ssh_info") else None,
+        ssh_info=ssh_info,
         opencode_url=data.get("opencode_url"),
         opencode_port=data.get("opencode_port"),
         opencode_password=data.get("opencode_password"),
@@ -147,6 +150,14 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         sops_enabled=data.get("sops_enabled", False),
         is_vm=data.get("is_vm", False),
     )
+    if ssh_info and not getattr(args, "no_ssh_config", False):
+        instance_name = data.get("t3_ssh_host") or data.get("sandbox_name") or data.get("app_name", "")
+        append_fn = getattr(sys.modules.get("sandbox.main"), "append_ssh_config", append_ssh_config)
+        append_fn(
+            instance_name=instance_name,
+            ssh_host=ssh_info[0],
+            ssh_port=ssh_info[1],
+        )
 
 
 def run_sandbox_launch(
@@ -270,6 +281,15 @@ def run_sandbox_launch(
         sops_enabled=result.sops_enabled,
         is_vm=result.is_vm,
     )
+
+    if result.ssh_info and not getattr(args, "no_ssh_config", False):
+        instance_name = result.t3_ssh_host or result.sandbox_name or result.app_name
+        append_fn = getattr(sys.modules.get("sandbox.main"), "append_ssh_config", append_ssh_config)
+        append_fn(
+            instance_name=instance_name,
+            ssh_host=result.ssh_info[0],
+            ssh_port=result.ssh_info[1],
+        )
 
 
 def main():

@@ -56,6 +56,7 @@ python sandbox/main.py -r <repo-name> --opencode --t3 --agy
 | `--browser` | Headless Google Chrome for browser MCP tooling | `False` |
 | `--sops` | Retain Age private key in `~/.config/sops` for interactive debugging | `False` |
 | `--no-cloudflare` | Disable default Cloudflare Tunnel ingress on port 3000 | `False` |
+| `--no-ssh-config` | Do not automatically append SSH connection details to `~/.ssh/config` | `False` |
 
 ---
 
@@ -75,8 +76,10 @@ python sandbox/main.py --from-snapshot <image-id> --name resumed-app [--vm]
 
 ## 4. Access & Ingress
 
-- **SSH**: Uses tracked public key [`shared/ssh-key.pub`](shared/ssh-key.pub) and private key `~/.ssh/modal-sandbox`:
+- **SSH**: Uses tracked public key [`shared/ssh-key.pub`](shared/ssh-key.pub) and private key `~/.ssh/modal-sandbox`. On launch, connection details are automatically appended to `~/.ssh/config` (skip with `--no-ssh-config`):
   ```bash
+  ssh <instance_name>
+  # Or with explicit port/key:
   ssh -i ~/.ssh/modal-sandbox -p <port> root@<host>
   # Or via Modal CLI:
   modal shell <sandbox-id>
