@@ -296,7 +296,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
 
         mock_build_image.assert_not_called()
         mock_image_from_id.assert_called_once_with("im-snap-456")
-        mock_image.add_local_file.assert_called_once_with(secrets_file, "/root/secrets/github-orgs.env", copy=True)
+        mock_image.add_local_file.assert_called_once_with(secrets_file, "/root/.secrets/github-orgs.env", copy=True)
         mock_app_lookup.assert_called_once_with("my-repo", create_if_missing=True)
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertEqual(call_kwargs["image"], mock_staged_image)

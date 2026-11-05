@@ -36,7 +36,7 @@ REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
 LOCAL_SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 LOCAL_SETUP_SCRIPT = LOCAL_SCRIPTS_DIR / "setup.sh"
-REMOTE_SETUP_SCRIPT = "/root/scripts/setup.sh"
+REMOTE_SETUP_SCRIPT = "/root/.scripts/setup.sh"
 LOCAL_AGYQ = LOCAL_SCRIPTS_DIR / "agyq"
 REMOTE_AGYQ = "/usr/local/bin/agyq"
 LOCAL_GHLS = LOCAL_SCRIPTS_DIR / "ghls"
@@ -48,7 +48,7 @@ REMOTE_GHCLONE = "/usr/local/bin/ghclone"
 LOCAL_AGYPROFILE = LOCAL_SCRIPTS_DIR / "agyprofile"
 REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
 LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
-REMOTE_OPENCODE_SECRET = "/root/secrets/opencode.env"
+REMOTE_OPENCODE_SECRET = "/root/.secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
 LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
@@ -60,27 +60,27 @@ REMOTE_T3_WRAPPER = "/usr/local/bin/t3"
 LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
-REMOTE_ANTIGRAVITY_SECRET = "/root/secrets/antigravity-oauth-token.json"
+REMOTE_ANTIGRAVITY_SECRET = "/root/.secrets/antigravity-oauth-token.json"
 LOCAL_ANTIGRAVITY_SECRET_MGH = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-mgh.json"
 )
-REMOTE_ANTIGRAVITY_SECRET_MGH = "/root/secrets/antigravity-oauth-token-mgh.json"
+REMOTE_ANTIGRAVITY_SECRET_MGH = "/root/.secrets/antigravity-oauth-token-mgh.json"
 LOCAL_ANTIGRAVITY_SECRET_ANV = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-anv.json"
 )
-REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/secrets/antigravity-oauth-token-anv.json"
+REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/.secrets/antigravity-oauth-token-anv.json"
 LOCAL_ANTIGRAVITY_ENV = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity.env"
 )
-REMOTE_ANTIGRAVITY_ENV = "/root/secrets/antigravity.env"
+REMOTE_ANTIGRAVITY_ENV = "/root/.secrets/antigravity.env"
 LOCAL_MODAL_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "modal.toml"
-REMOTE_MODAL_SECRET = "/root/secrets/modal.toml"
+REMOTE_MODAL_SECRET = "/root/.secrets/modal.toml"
 LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
-REMOTE_CLOUDFLARE_SECRET = "/root/secrets/cloudflare.env"
+REMOTE_CLOUDFLARE_SECRET = "/root/.secrets/cloudflare.env"
 LOCAL_GITHUB_ORGS_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "github-orgs.env"
 )
-REMOTE_GITHUB_ORGS_SECRET = "/root/secrets/github-orgs.env"
+REMOTE_GITHUB_ORGS_SECRET = "/root/.secrets/github-orgs.env"
 SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
@@ -180,17 +180,17 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /root/scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
-    "mkdir -p /root/scripts",
-    "ln -sf /usr/local/bin/agyq /root/scripts/agyq 2>/dev/null || true",
-    "ln -sf /usr/local/bin/ghls /root/scripts/ghls 2>/dev/null || true",
-    "ln -sf /usr/local/bin/ghpr /root/scripts/ghpr 2>/dev/null || true",
-    "ln -sf /usr/local/bin/ghclone /root/scripts/ghclone 2>/dev/null || true",
-    "ln -sf /usr/local/bin/agyprofile /root/scripts/agyprofile 2>/dev/null || true",
-    "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile 2>/dev/null || true",
-    "ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile.sh 2>/dev/null || true",
+    "mkdir -p /root/.scripts /root/.secrets",
+    "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghls /root/.scripts/ghls 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghpr /root/.scripts/ghpr 2>/dev/null || true",
+    "ln -sf /usr/local/bin/ghclone /root/.scripts/ghclone 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/.scripts/agyprofile 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null || true",
+    "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true",
 )
 
 

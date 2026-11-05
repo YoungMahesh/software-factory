@@ -14,9 +14,13 @@ while [ -h "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
-# Fallback secrets directory search: explicit env, relative to script, or /root/secrets
+# Fallback secrets directory search: explicit env, relative to script, or /root/.secrets
 if [ -z "${SECRETS_DIR:-}" ]; then
-    if [ -d "$SCRIPT_DIR/../secrets" ]; then
+    if [ -d "$SCRIPT_DIR/../.secrets" ]; then
+        SECRETS_DIR="$SCRIPT_DIR/../.secrets"
+    elif [ -d "/root/.secrets" ]; then
+        SECRETS_DIR="/root/.secrets"
+    elif [ -d "$SCRIPT_DIR/../secrets" ]; then
         SECRETS_DIR="$SCRIPT_DIR/../secrets"
     elif [ -d "/root/secrets" ]; then
         SECRETS_DIR="/root/secrets"

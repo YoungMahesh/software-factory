@@ -55,9 +55,9 @@ class TestT3CodeImage(unittest.TestCase):
         self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_MGH).endswith("antigravity-oauth-token-mgh.json"))
         self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_ANV).endswith("antigravity-oauth-token-anv.json"))
         self.assertTrue(str(LOCAL_ANTIGRAVITY_ENV).endswith("antigravity.env"))
-        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/secrets/antigravity-oauth-token-mgh.json")
-        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/secrets/antigravity-oauth-token-anv.json")
-        self.assertEqual(REMOTE_ANTIGRAVITY_ENV, "/root/secrets/antigravity.env")
+        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/.secrets/antigravity-oauth-token-mgh.json")
+        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/.secrets/antigravity-oauth-token-anv.json")
+        self.assertEqual(REMOTE_ANTIGRAVITY_ENV, "/root/.secrets/antigravity.env")
 
     def test_build_sandbox_image_layers_t3(self):
         from shared.image import (

@@ -78,7 +78,7 @@ def main() -> None:
     image = build_sandbox_image()
     image = image.add_local_file(
         orgs_env_file,
-        "/root/secrets/github-orgs.env",
+        "/root/.secrets/github-orgs.env",
         copy=True,
     )
 
@@ -140,13 +140,13 @@ def main() -> None:
 
         # 2. Assert organization credentials were scrubbed from disk
         scrub_proc = sandbox.exec(
-            "bash", "-c", "test ! -f /root/secrets/github-orgs.env && echo CLEAN || echo LEAKED"
+            "bash", "-c", "test ! -f /root/.secrets/github-orgs.env && test ! -f /root/secrets/github-orgs.env && echo CLEAN || echo LEAKED"
         )
         scrub_out = scrub_proc.stdout.read().strip()
         if "CLEAN" in scrub_out:
             print("🔒 Security check passed: organization credentials were scrubbed from disk.")
         else:
-            raise RuntimeError("Security invariant violated: /root/secrets/github-orgs.env was not purged!")
+            raise RuntimeError("Security invariant violated: /root/.secrets/github-orgs.env was not purged!")
 
         # 3. Assert git branch is valid
         branch_proc = sandbox.exec("bash", "-c", f"cd {target_path} && git symbolic-ref --short HEAD")

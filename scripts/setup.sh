@@ -42,7 +42,19 @@ while [ "$#" -gt 0 ]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECRETS_DIR="${SECRETS_DIR:-$SCRIPT_DIR/../secrets}"
+if [ -z "${SECRETS_DIR:-}" ]; then
+    if [ -d "$SCRIPT_DIR/../.secrets" ]; then
+        SECRETS_DIR="$SCRIPT_DIR/../.secrets"
+    elif [ -d "/root/.secrets" ]; then
+        SECRETS_DIR="/root/.secrets"
+    elif [ -d "$SCRIPT_DIR/../secrets" ]; then
+        SECRETS_DIR="$SCRIPT_DIR/../secrets"
+    elif [ -d "/root/secrets" ]; then
+        SECRETS_DIR="/root/secrets"
+    else
+        SECRETS_DIR="$SCRIPT_DIR/../secrets"
+    fi
+fi
 
 if [ "$DECRYPT_MODAL" = true ]; then
     sops decrypt "$SECRETS_DIR/modal.toml" > ~/.modal.toml

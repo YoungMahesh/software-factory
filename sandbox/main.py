@@ -177,11 +177,13 @@ def run_sandbox_launch(
         repo_root = Path(__file__).resolve().parent.parent
 
     clean_repo = args.repo.strip().rstrip("/") if args.repo else None
-    orgs_env_file = repo_root / "secrets" / "github-orgs.env"
+    orgs_env_file = repo_root / ".secrets" / "github-orgs.env"
+    if not orgs_env_file.is_file():
+        orgs_env_file = repo_root / "secrets" / "github-orgs.env"
 
     if clean_repo and not orgs_env_file.is_file():
         parser.error(
-            f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env)."
+            f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env or .secrets/github-orgs.env)."
         )
 
     if args.memory is not None:

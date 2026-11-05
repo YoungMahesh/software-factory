@@ -22,7 +22,10 @@ if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
         exit 1
     fi
 
-    CLOUDFLARE_SECRET_FILE="/root/secrets/cloudflare.env"
+    CLOUDFLARE_SECRET_FILE="/root/.secrets/cloudflare.env"
+    if [ ! -f "$CLOUDFLARE_SECRET_FILE" ] && [ -f "/root/secrets/cloudflare.env" ]; then
+        CLOUDFLARE_SECRET_FILE="/root/secrets/cloudflare.env"
+    fi
     if [ ! -f "$CLOUDFLARE_SECRET_FILE" ]; then
         echo "ERROR: Cloudflare Tunnel secret file not found at $CLOUDFLARE_SECRET_FILE." >&2
         exit 1
@@ -112,8 +115,10 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
 
     # Optional: Decrypt repository fetch secret or organization token if present
     if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
-        if [ -f "/root/secrets/github-orgs.env" ]; then
-            echo "🔐 Resolving organization credentials from /root/secrets/github-orgs.env..."
+        ORGS_SECRET_FILE="/root/.secrets/github-orgs.env"
+        [ ! -f "$ORGS_SECRET_FILE" ] && [ -f "/root/secrets/github-orgs.env" ] && ORGS_SECRET_FILE="/root/secrets/github-orgs.env"
+        if [ -f "$ORGS_SECRET_FILE" ]; then
+            echo "🔐 Resolving organization credentials from $ORGS_SECRET_FILE..."
             ORG_NAME="${GH_ORG:-}"
             if [ -z "$ORG_NAME" ] && [[ "${GH_REPO:-}" =~ ^([^/]+)/ ]]; then
                 ORG_NAME="${BASH_REMATCH[1]}"
@@ -121,7 +126,7 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
             ORG_NAME="${ORG_NAME:-sFactory0}"
             ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
             TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
-            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
+            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ORGS_SECRET_FILE" 2>/dev/null || true)
             if [ -n "$DECRYPTED_ORGS" ]; then
                 GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
                 if [ -z "$GH_TOKEN" ]; then
@@ -132,7 +137,7 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
                 fi
                 [ -n "$GH_TOKEN" ] && export GH_TOKEN
             fi
-            rm -f /root/secrets/github-orgs.env
+            rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
             export ORG_TOKEN="1"
             export TRACKER="${TRACKER:-github}"
         fi
@@ -192,12 +197,14 @@ EOF
             exit 1
         fi
 
-        if [ -f "/root/secrets/github-orgs.env" ]; then
+        ORGS_SECRET_FILE="/root/.secrets/github-orgs.env"
+        [ ! -f "$ORGS_SECRET_FILE" ] && [ -f "/root/secrets/github-orgs.env" ] && ORGS_SECRET_FILE="/root/secrets/github-orgs.env"
+        if [ -f "$ORGS_SECRET_FILE" ]; then
             if [ -z "${GH_REPO:-}" ]; then
                 echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
                 exit 1
             fi
-            echo "🔐 Resolving organization credentials from /root/secrets/github-orgs.env..."
+            echo "🔐 Resolving organization credentials from $ORGS_SECRET_FILE..."
             ORG_NAME="${GH_ORG:-}"
             if [ -z "$ORG_NAME" ] && [[ "$GH_REPO" =~ ^([^/]+)/ ]]; then
                 ORG_NAME="${BASH_REMATCH[1]}"
@@ -206,10 +213,10 @@ EOF
             ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
             TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
 
-            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/github-orgs.env" 2>/dev/null || true)
+            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ORGS_SECRET_FILE" 2>/dev/null || true)
             if [ -z "$DECRYPTED_ORGS" ]; then
-                echo "ERROR: Failed to decrypt /root/secrets/github-orgs.env using AGE_PRIVATE_KEY." >&2
-                rm -f /root/secrets/github-orgs.env
+                echo "ERROR: Failed to decrypt $ORGS_SECRET_FILE using AGE_PRIVATE_KEY." >&2
+                rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
                 exit 1
             fi
 
@@ -222,17 +229,17 @@ EOF
             fi
 
             if [ -z "$GH_TOKEN" ]; then
-                echo "ERROR: Could not find $TOKEN_VAR in /root/secrets/github-orgs.env." >&2
-                rm -f /root/secrets/github-orgs.env
+                echo "ERROR: Could not find $TOKEN_VAR in $ORGS_SECRET_FILE." >&2
+                rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
                 exit 1
             fi
 
-            rm -f /root/secrets/github-orgs.env
+            rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
             echo "🧹 Purged encrypted organization secrets file from disk."
             export ORG_TOKEN="1"
             export TRACKER="${TRACKER:-github}"
         else
-            echo "ERROR: Organization credentials not found at /root/secrets/github-orgs.env." >&2
+            echo "ERROR: Organization credentials not found at /root/.secrets/github-orgs.env (or /root/secrets/github-orgs.env)." >&2
             exit 1
         fi
 
@@ -315,9 +322,9 @@ if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
     done < "$ENV_MAP_FILE"
 fi
 
-if [ -f /root/secrets/github-orgs.env ]; then
-    rm -f /root/secrets/github-orgs.env
-    echo "🧹 Purged organization secrets staging file (/root/secrets/github-orgs.env)."
+if [ -f /root/.secrets/github-orgs.env ] || [ -f /root/secrets/github-orgs.env ]; then
+    rm -f /root/.secrets/github-orgs.env /root/secrets/github-orgs.env
+    echo "🧹 Purged organization secrets staging file."
 fi
 if [ -f /root/.bash_aliases ]; then
     grep -qxF "source /root/.bash_aliases" ~/.bashrc 2>/dev/null || echo "source /root/.bash_aliases" >> ~/.bashrc
@@ -333,23 +340,26 @@ chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true
 
-# If staged in /root/scripts, ensure symlinks in /usr/local/bin exist
+# If staged in /root/.scripts, ensure symlinks in /usr/local/bin exist
 for cmd in agyq ghls ghpr ghclone agyprofile; do
-    if [ -f "/root/scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
+    if [ -f "/root/.scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
+        ln -sf "/root/.scripts/$cmd" "/usr/local/bin/$cmd"
+        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+    elif [ -f "/root/scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
         ln -sf "/root/scripts/$cmd" "/usr/local/bin/$cmd"
         chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
     fi
 done
 
-# Ensure convenience symlinks in /root/scripts point to /usr/local/bin
-mkdir -p /root/scripts 2>/dev/null || true
+# Ensure convenience symlinks in /root/.scripts point to /usr/local/bin
+mkdir -p /root/.scripts 2>/dev/null || true
 for cmd in agyq ghls ghpr ghclone agyprofile; do
-    if [ -f "/usr/local/bin/$cmd" ] && [ ! -e "/root/scripts/$cmd" ]; then
-        ln -sf "/usr/local/bin/$cmd" "/root/scripts/$cmd" 2>/dev/null || true
+    if [ -f "/usr/local/bin/$cmd" ] && [ ! -e "/root/.scripts/$cmd" ]; then
+        ln -sf "/usr/local/bin/$cmd" "/root/.scripts/$cmd" 2>/dev/null || true
     fi
 done
-ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile 2>/dev/null || true
-ln -sf /usr/local/bin/agyprofile /root/scripts/switch-agy-profile.sh 2>/dev/null || true
+ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null || true
+ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true
 
 # sshd builds a clean environment for login sessions, so image-level PATH alone
 # does not reach interactive shells.
@@ -523,7 +533,7 @@ echo "=== Process ===" && ps aux | grep [c]loudflared
 echo "=== Port Watcher Process ===" && ps aux | grep [c]loudflared-port-watcher
 echo "=== Port Watcher Log ===" && cat /var/log/cloudflared-watcher.log 2>/dev/null || true
 echo "=== Config / Token ===" && ls -la /etc/cloudflared/
-echo "=== Secret File ===" && ls -la /root/secrets/cloudflare.env 2>/dev/null || true
+echo "=== Secret File ===" && (ls -la /root/.secrets/cloudflare.env 2>/dev/null || ls -la /root/secrets/cloudflare.env 2>/dev/null || true)
 EOF
     chmod +x /usr/local/bin/check-cloudflare 2>/dev/null || true
     ln -sf /usr/local/bin/check-cloudflare /usr/local/bin/check-cf
@@ -550,12 +560,14 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
             echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
             chmod 600 ~/.config/sops/age/keys.txt
 
-            if [ -f "/root/secrets/antigravity.env" ]; then
+            ANTIGRAVITY_ENV_FILE="/root/.secrets/antigravity.env"
+            [ ! -f "$ANTIGRAVITY_ENV_FILE" ] && [ -f "/root/secrets/antigravity.env" ] && ANTIGRAVITY_ENV_FILE="/root/secrets/antigravity.env"
+            if [ -f "$ANTIGRAVITY_ENV_FILE" ]; then
                 while IFS= read -r line || [ -n "$line" ]; do
                     [[ "$line" =~ ^[[:space:]]*# ]] && continue
                     [[ -z "${line// }" ]] && continue
                     export "$line"
-                done < <(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "/root/secrets/antigravity.env" 2>/dev/null || true)
+                done < <(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ANTIGRAVITY_ENV_FILE" 2>/dev/null || true)
             fi
 
             setup_args=()
@@ -576,16 +588,21 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
             fi
 
             setup_status=0
-            if [ ${#setup_args[@]} -gt 0 ] && [ -f "/root/scripts/setup.sh" ]; then
+            SETUP_SCRIPT="/root/.scripts/setup.sh"
+            [ ! -f "$SETUP_SCRIPT" ] && [ -f "/root/scripts/setup.sh" ] && SETUP_SCRIPT="/root/scripts/setup.sh"
+            if [ ${#setup_args[@]} -gt 0 ] && [ -f "$SETUP_SCRIPT" ]; then
                 echo "🔐 Decrypting tooling credentials with SOPS..."
-                bash /root/scripts/setup.sh "${setup_args[@]}" || setup_status=$?
+                bash "$SETUP_SCRIPT" "${setup_args[@]}" || setup_status=$?
             fi
         fi
     fi
 fi
 
 # Scrub staged encrypted tooling secrets immediately after decryption
-rm -f /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml /root/secrets/antigravity.env
+rm -f /root/.secrets/opencode.env /root/.secrets/antigravity-oauth-token*.json /root/.secrets/modal.toml /root/.secrets/antigravity.env \
+      /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml /root/secrets/antigravity.env
+rmdir /root/.secrets 2>/dev/null || true
+rmdir /root/secrets 2>/dev/null || true
 
 if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "🔐 SOPS credentials retained in sandbox (~/.config/sops/age/keys.txt)."
@@ -648,7 +665,7 @@ else
 fi
 
 if [ "${setup_status:-0}" -ne 0 ]; then
-    echo "ERROR: /root/scripts/setup.sh failed to execute (exit code: $setup_status)." >&2
+    echo "ERROR: ${SETUP_SCRIPT:-/root/.scripts/setup.sh} failed to execute (exit code: $setup_status)." >&2
     exit "$setup_status"
 fi
 

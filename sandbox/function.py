@@ -33,11 +33,13 @@ image = (
     )
     .add_local_python_source("shared", "sandbox")
     .add_local_dir(str(repo_root / "shared"), "/root/shared")
-    .add_local_dir(str(repo_root / "scripts"), "/root/scripts")
+    .add_local_dir(str(repo_root / "scripts"), "/root/.scripts")
 )
 
-if (repo_root / "secrets").is_dir():
-    image = image.add_local_dir(str(repo_root / "secrets"), "/root/secrets")
+if (repo_root / ".secrets").is_dir():
+    image = image.add_local_dir(str(repo_root / ".secrets"), "/root/.secrets")
+elif (repo_root / "secrets").is_dir():
+    image = image.add_local_dir(str(repo_root / "secrets"), "/root/.secrets")
 
 web_app = FastAPI(
     title="Modal Sandbox Control Plane",

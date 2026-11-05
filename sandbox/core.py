@@ -202,19 +202,23 @@ def launch_sandbox(
     validate_launch_request(req)
 
     if repo_root is None:
-        if Path("/root/secrets/github-orgs.env").is_file():
+        if (Path("/root/.secrets") / "github-orgs.env").is_file():
+            repo_root = Path("/root")
+        elif Path("/root/secrets/github-orgs.env").is_file():
             repo_root = Path("/root")
         else:
             repo_root = Path(__file__).resolve().parent.parent
 
     clean_repo = req.repo.strip().rstrip("/") if req.repo else None
     target_repo, org_name, bare_repo = None, None, None
-    orgs_env_file = repo_root / "secrets" / "github-orgs.env"
+    orgs_env_file = repo_root / ".secrets" / "github-orgs.env"
+    if not orgs_env_file.is_file():
+        orgs_env_file = repo_root / "secrets" / "github-orgs.env"
 
     if clean_repo:
         if not orgs_env_file.is_file():
             raise FileNotFoundError(
-                f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env)."
+                f"Organization credentials file not found: {orgs_env_file} (expected .secrets/github-orgs.env or secrets/github-orgs.env)."
             )
         org_name, raw_repo = clean_repo.split("/", 1) if "/" in clean_repo else (DEFAULT_ORG, clean_repo)
         if req.testing:
@@ -250,7 +254,7 @@ def launch_sandbox(
         )
 
     if clean_repo and orgs_env_file.is_file():
-        image = image.add_local_file(orgs_env_file, "/root/secrets/github-orgs.env", copy=True)
+        image = image.add_local_file(orgs_env_file, "/root/.secrets/github-orgs.env", copy=True)
 
     cloudflare_active = not req.no_cloudflare
     encrypted_ports: list[int] = []

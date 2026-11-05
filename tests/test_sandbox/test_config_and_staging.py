@@ -222,6 +222,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
+        self.assertEqual(REMOTE_SETUP_SCRIPT, "/root/.scripts/setup.sh")
+        self.assertEqual(REMOTE_CLOUDFLARE_SECRET, "/root/.secrets/cloudflare.env")
 
     def test_developer_commands_staged_and_symlinked_system_wide(self):
         repo_root = Path(__file__).resolve().parents[2]
