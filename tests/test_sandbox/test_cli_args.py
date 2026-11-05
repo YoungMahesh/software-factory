@@ -459,3 +459,8 @@ class TestSandboxCliArgs(unittest.TestCase):
         self.assertIn('if [ "${FULL_CLONE:-0}" = "1" ]; then', content)
         self.assertIn("git clone --quiet --branch", content)
         self.assertIn("git clone --quiet --depth 50 --branch", content)
+
+    def test_startup_script_configures_wildcard_fetch_refspec(self):
+        startup_sh = self.repo_root / "shared" / "startup.sh"
+        content = startup_sh.read_text()
+        self.assertIn('config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"', content)

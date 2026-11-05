@@ -157,6 +157,9 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
     TARGET_DIR="${TARGET_DIR:-/root}"
     echo "📁 Workspace resolved to $TARGET_DIR"
     cd "$TARGET_DIR"
+    if [ -d "$TARGET_DIR/.git" ] && git -C "$TARGET_DIR" remote get-url origin >/dev/null 2>&1; then
+        git -C "$TARGET_DIR" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    fi
 else
     if [ "${NO_REPO:-0}" = "1" ]; then
         echo "🏝️  No repository provided: skipping repository fetch."
@@ -259,6 +262,7 @@ EOF
                 GIT_ASKPASS=echo git clone --quiet --depth 50 --branch "$BRANCH" --single-branch \
                     "https://oauth2:${GH_TOKEN}@github.com/${GH_REPO}.git" "$TARGET_DIR"
             fi
+            git -C "$TARGET_DIR" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
         fi
 
         cd "$TARGET_DIR"
