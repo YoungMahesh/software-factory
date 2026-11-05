@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_ORG="sFactory0"
+
+show_help() {
+  cat <<'EOF'
+Usage: ghpr [repo] [gh pr list flags...]
+
+List pull requests for a repository in sFactory0 (or specified repo).
+
+Arguments:
+  repo                  Repository name (e.g. 'software-factory' or 'sFactory0/software-factory').
+                        If omitted, inferred automatically from the current git repository.
+
+Options:
+  -h, --help            Show this help message and exit
+
+Any other flags are passed directly to 'gh pr list'.
+
+Examples:
+  ghpr                                  # Open PRs in the current sFactory0 repository
+  ghpr software-factory                 # Open PRs in sFactory0/software-factory
+  ghpr software-factory --state all     # All PRs in sFactory0/software-factory
+  ghpr --state all                      # All PRs in the current repository
+  ghpr --web                            # Open current repo's PR list in web browser
+EOF
+}
+
+# Check for help flags
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+    exit 0
+  fi
+done
+
+detect_current_repo() {
+  # Try using gh repo view
+  local repo_name
+  if repo_name=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null) && [[ -n "$repo_name" ]]; then
+    echo "$repo_name"
+    return 0
+  fi
+
+  # Fallback to git remote url
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local remote_url
+    remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+    if [[ -n "$remote_url" ]]; then
+      # Handle git@github.com:org/repo.git or https://github.com/org/repo.git
+      local parsed
+      parsed=$(echo "$remote_url" | sed -E 's#(.*github\.com[:/])(.*)(\.git)?#\2#' | sed 's#\.git$##')
+      if [[ -n "$parsed" ]]; then
+        echo "$parsed"
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
+}
+
+TARGET_REPO=""
+
+if [[ $# -eq 0 || "$1" == -* ]]; then
+  # No repo provided or first argument is a flag: infer from current directory
+  if ! TARGET_REPO=$(detect_current_repo); then
+    echo "Error: No repository specified and unable to detect repository from current directory." >&2
+    echo "Usage: ghpr [repo] [gh pr list flags...]" >&2
+    exit 1
+  fi
+else
+  # First argument is repo name
+  RAW_REPO="$1"
+  shift
+  if [[ "$RAW_REPO" == *"/"* ]]; then
+    TARGET_REPO="$RAW_REPO"
+  else
+    TARGET_REPO="${DEFAULT_ORG}/${RAW_REPO}"
+  fi
+fi
+
+exec gh pr list --repo "$TARGET_REPO" "$@"
