@@ -753,6 +753,7 @@ if "providerInstances" not in settings:
 t3_cache_dir = "/root/.t3/caches"
 os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
 
+configured_antigravity = []
 for instance_id, display_name, token_path, is_primary in accounts:
     if not os.path.exists(token_path) and is_primary:
         token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
@@ -800,6 +801,7 @@ for instance_id, display_name, token_path, is_primary in accounts:
             "displayName": display_name,
             "enabled": True
         }
+        configured_antigravity.append(instance_id)
 
         t3_cache_file = os.path.join(t3_cache_dir, f"{instance_id}.json")
         cache_data = {
@@ -892,6 +894,25 @@ if "codex" not in settings["providerInstances"]:
         "driver": "codex",
         "enabled": False
     }
+
+default_agy_instance = None
+for candidate in ["antigravity-anv", "antigravity-mgh", "antigravity"]:
+    if candidate in configured_antigravity:
+        default_agy_instance = candidate
+        break
+if default_agy_instance is None and configured_antigravity:
+    default_agy_instance = configured_antigravity[0]
+
+if default_agy_instance:
+    model_sel = {
+        "instanceId": default_agy_instance,
+        "model": "gemini-3.8-flash-low"
+    }
+    if not settings.get("sourceControlWriterModelSelection") or settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex":
+        settings["sourceControlWriterModelSelection"] = model_sel
+    if not settings.get("textGenerationModelSelection") or settings.get("textGenerationModelSelection", {}).get("instanceId") == "codex":
+        settings["textGenerationModelSelection"] = model_sel
+
 with open(t3_settings_path, "w") as fp:
     json.dump(settings, fp, indent=2)
 os.chmod(t3_settings_path, 0o644)

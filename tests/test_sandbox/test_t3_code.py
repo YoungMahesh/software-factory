@@ -115,6 +115,9 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
             self.assertIn("antigravity.env", content)
+            self.assertIn("sourceControlWriterModelSelection", content)
+            self.assertIn("textGenerationModelSelection", content)
+            self.assertIn("gemini-3.8-flash-low", content)
 
     def test_setup_script_decrypts_antigravity_env(self):
         import tempfile
@@ -161,6 +164,68 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertEqual(acp_data["client_id"], "custom-client-id.apps.googleusercontent.com")
             self.assertEqual(acp_data["client_secret"], "custom-client-secret")
             self.assertEqual(acp_data["refresh_token"], "mock-refresh-token")
+
+            settings_path = home_dir / ".t3" / "userdata" / "settings.json"
+            self.assertTrue(settings_path.exists(), "settings.json was not generated")
+            settings_data = json.loads(settings_path.read_text())
+            self.assertEqual(
+                settings_data["sourceControlWriterModelSelection"],
+                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+            )
+            self.assertEqual(
+                settings_data["textGenerationModelSelection"],
+                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+            )
+
+    def test_setup_script_prioritizes_anv_antigravity_model_selection(self):
+        import tempfile
+        setup_script = self.repo_root / "scripts" / "setup.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            secrets_dir = tmp_path / "secrets"
+            secrets_dir.mkdir()
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            home_dir = tmp_path / "home"
+            home_dir.mkdir()
+
+            sops_mock = bin_dir / "sops"
+            sops_mock.write_text(
+                "#!/usr/bin/env bash\n"
+                "for arg in \"$@\"; do\n"
+                "  if [[ \"$arg\" == *\"antigravity-oauth-token-anv.json\"* ]]; then\n"
+                "    echo \x27{\"refresh_token\": \"anv-token\"}\x27\n"
+                "    exit 0\n"
+                "  elif [[ \"$arg\" == *\"antigravity-oauth-token.json\"* ]]; then\n"
+                "    echo \x27{\"refresh_token\": \"m47-token\"}\x27\n"
+                "    exit 0\n"
+                "  fi\n"
+                "done\n"
+            )
+            sops_mock.chmod(0o755)
+
+            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY")
+            (secrets_dir / "antigravity-oauth-token-anv.json").write_text("DUMMY")
+
+            env = {
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
+                "HOME": str(home_dir),
+                "SECRETS_DIR": str(secrets_dir),
+            }
+            res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")
+
+            settings_path = home_dir / ".t3" / "userdata" / "settings.json"
+            self.assertTrue(settings_path.exists())
+            settings_data = json.loads(settings_path.read_text())
+            self.assertEqual(
+                settings_data["sourceControlWriterModelSelection"],
+                {"instanceId": "antigravity-anv", "model": "gemini-3.8-flash-low"},
+            )
+            self.assertEqual(
+                settings_data["textGenerationModelSelection"],
+                {"instanceId": "antigravity-anv", "model": "gemini-3.8-flash-low"},
+            )
 
     def test_switch_agy_profile_offline_with_cached_profiles(self):
         import tempfile
