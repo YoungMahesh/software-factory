@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_ORG="sFactory0"
+DEFAULT_LIMIT="30"
+
+show_help() {
+  cat <<'EOF'
+Usage: ghls [org] [gh repo list flags...]
+
+List repositories in a GitHub organization (defaults to sFactory0).
+
+Arguments:
+  org                   Target GitHub organization or owner (default: sFactory0)
+
+Options:
+  -h, --help            Show this help message and exit
+
+Any other flags are passed directly to 'gh repo list'.
+
+Examples:
+  ghls                  # List up to 30 repos in sFactory0
+  ghls --limit 50       # List up to 50 repos in sFactory0
+  ghls other-org        # List repos in another organization
+  ghls --json name      # Output repository names as JSON
+EOF
+}
+
+# Check for help flags
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+    exit 0
+  fi
+done
+
+ORG="$DEFAULT_ORG"
+HAS_EXPLICIT_LIMIT=0
+
+# If first arg doesn't start with '-', treat it as the target org
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  ORG="$1"
+  shift
+fi
+
+# Check if user provided an explicit --limit flag in remaining arguments
+for arg in "$@"; do
+  if [[ "$arg" == "--limit" || "$arg" == -L* || "$arg" == --limit=* ]]; then
+    HAS_EXPLICIT_LIMIT=1
+    break
+  fi
+done
+
+if [[ $HAS_EXPLICIT_LIMIT -eq 1 ]]; then
+  exec gh repo list "$ORG" "$@"
+else
+  exec gh repo list "$ORG" --limit "$DEFAULT_LIMIT" "$@"
+fi
