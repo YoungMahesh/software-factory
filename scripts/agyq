@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+Antigravity Gemini Quota Checker (agyq)
+
+Checks Google Gemini model quota remaining for Antigravity accounts:
+- m47 (default / antigravity)
+- anv (antigravity-anv)
+- mgh (antigravity-mgh)
+"""
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+ACCOUNT_CONFIGS = {
+    "m47": {
+        "displayName": "Antigravity",
+        "instanceId": "antigravity",
+        "description": "Primary account (m47)",
+    },
+    "anv": {
+        "displayName": "Antigravity (ANV)",
+        "instanceId": "antigravity-anv",
+        "description": "Secondary account (anv)",
+    },
+    "mgh": {
+        "displayName": "Antigravity (MGH)",
+        "instanceId": "antigravity-mgh",
+        "description": "Tertiary account (mgh)",
+    },
+}
+
+DEFAULT_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get(
+    "GOOGLE_CLIENT_ID", "dummy-client-id.apps.googleusercontent.com"
+)
+DEFAULT_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get(
+    "GOOGLE_CLIENT_SECRET", "dummy-client-secret"
+)
+
+
+def resolve_account_token(profile_key: str):
+    cfg = ACCOUNT_CONFIGS.get(profile_key)
+    if not cfg:
+        return None, f"Unknown profile: {profile_key}"
+
+    instance_id = cfg["instanceId"]
+    inst_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+
+    # 1. Look in T3 ACP provider directory
+    t3_acp_path = os.path.expanduser(
+        f"~/.t3/userdata/providers/antigravity/{inst_hash}/antigravity-acp/acp_token.json"
+    )
+    if os.path.exists(t3_acp_path):
+        try:
+            with open(t3_acp_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("refresh_token"):
+                return data, None
+        except Exception as e:
+            pass
+
+    # 2. Look in gemini profiles directory
+    profile_path = os.path.expanduser(f"~/.gemini/antigravity-cli/profiles/{profile_key}")
+    if os.path.exists(profile_path):
+        try:
+            with open(profile_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            rt = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
+            if rt:
+                return {
+                    "client_id": data.get("client_id") or DEFAULT_CLIENT_ID,
+                    "client_secret": data.get("client_secret") or DEFAULT_CLIENT_SECRET,
+                    "refresh_token": rt,
+                }, None
+        except Exception:
+            pass
+
+    # 3. Fallback for m47: default token
+    if profile_key == "m47":
+        default_tok = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+        if os.path.exists(default_tok):
+            try:
+                with open(default_tok, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                rt = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
+                if rt:
+                    return {
+                        "client_id": data.get("client_id") or DEFAULT_CLIENT_ID,
+                        "client_secret": data.get("client_secret") or DEFAULT_CLIENT_SECRET,
+                        "refresh_token": rt,
+                    }, None
+            except Exception:
+                pass
+
+    return None, f"Credentials not found for profile '{profile_key}'"
+
+
+def get_gemini_quota(token_dict: dict):
+    client_id = token_dict.get("client_id") or DEFAULT_CLIENT_ID
+    client_secret = token_dict.get("client_secret") or DEFAULT_CLIENT_SECRET
+    refresh_token = token_dict.get("refresh_token")
+
+    if not refresh_token:
+        raise ValueError("Missing refresh_token in credentials")
+
+    refresh_payload = urllib.parse.urlencode({
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }).encode("utf-8")
+
+    token_req = urllib.request.Request(
+        "https://oauth2.googleapis.com/token",
+        data=refresh_payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(token_req, timeout=15) as resp:
+        token_res = json.loads(resp.read().decode("utf-8"))
+
+    access_token = token_res.get("access_token")
+    if not access_token:
+        raise ValueError("Failed to retrieve access token from Google OAuth")
+
+    models_req = urllib.request.Request(
+        "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+        data=b"{}",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "antigravity/hub/1.0.0 (aidev_client; os_type=linux; arch=x64)",
+        },
+    )
+    with urllib.request.urlopen(models_req, timeout=15) as resp:
+        models_data = json.loads(resp.read().decode("utf-8"))
+
+    models = models_data.get("models", {})
+    # Look for gemini-3.8-flash-tiered or any Google model with quotaInfo
+    target_info = None
+    target_model_name = "Gemini Flash Pool"
+
+    preferred_slugs = ["gemini-3.8-flash-tiered", "gemini-3.5-flash-lite", "gemini-2.5-pro"]
+    for slug in preferred_slugs:
+        if slug in models and "quotaInfo" in models[slug]:
+            target_info = models[slug]["quotaInfo"]
+            target_model_name = models[slug].get("displayName", slug)
+            break
+
+    if not target_info:
+        for m_slug, m_val in models.items():
+            if m_val.get("modelProvider") == "MODEL_PROVIDER_GOOGLE" and "quotaInfo" in m_val:
+                target_info = m_val["quotaInfo"]
+                target_model_name = m_val.get("displayName", m_slug)
+                break
+
+    if not target_info:
+        raise RuntimeError("No Google Gemini quotaInfo returned by API")
+
+    remaining_fraction = float(target_info.get("remainingFraction", 0.0))
+    reset_time_str = target_info.get("resetTime")
+
+    return {
+        "modelName": target_model_name,
+        "remainingPercent": remaining_fraction * 100.0,
+        "usedPercent": (1.0 - remaining_fraction) * 100.0,
+        "resetTime": reset_time_str,
+    }
+
+
+def format_time_remaining(reset_time_str: str) -> str:
+    if not reset_time_str:
+        return "N/A"
+    try:
+        # ISO format: 2026-11-05T13:42:21Z
+        clean_time = reset_time_str.replace("Z", "+00:00")
+        reset_dt = datetime.datetime.fromisoformat(clean_time)
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        diff = reset_dt - now_dt
+        total_seconds = int(diff.total_seconds())
+        if total_seconds <= 0:
+            return "ready to reset"
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        if hours > 0:
+            return f"{hours}h {minutes:02d}m"
+        return f"{minutes}m"
+    except Exception:
+        return "N/A"
+
+
+def format_reset_time(reset_time_str: str) -> str:
+    if not reset_time_str:
+        return "N/A"
+    try:
+        clean_time = reset_time_str.replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(clean_time)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        return reset_time_str
+
+
+def print_single_account(profile_key: str, as_json: bool = False):
+    cfg = ACCOUNT_CONFIGS[profile_key]
+    token, err = resolve_account_token(profile_key)
+    if err:
+        if as_json:
+            print(json.dumps({"profile": profile_key, "error": err}))
+        else:
+            print(f"Error ({profile_key}): {err}", file=sys.stderr)
+        return False
+
+    try:
+        quota = get_gemini_quota(token)
+        if as_json:
+            result = {
+                "profile": profile_key,
+                "displayName": cfg["displayName"],
+                **quota,
+            }
+            print(json.dumps(result, indent=2))
+        else:
+            time_left = format_time_remaining(quota["resetTime"])
+            reset_formatted = format_reset_time(quota["resetTime"])
+            print(f"Account:     {profile_key} ({cfg['displayName']})")
+            print(f"Gemini Pool: {quota['remainingPercent']:.2f}% remaining ({quota['usedPercent']:.2f}% used)")
+            print(f"Resets at:   {reset_formatted} (in {time_left})")
+        return True
+    except Exception as e:
+        if as_json:
+            print(json.dumps({"profile": profile_key, "error": str(e)}))
+        else:
+            print(f"Error checking {profile_key}: {e}", file=sys.stderr)
+        return False
+
+
+def print_all_accounts(as_json: bool = False):
+    results = []
+    for p_key, cfg in ACCOUNT_CONFIGS.items():
+        token, err = resolve_account_token(p_key)
+        if err:
+            results.append({"profile": p_key, "displayName": cfg["displayName"], "error": err})
+            continue
+        try:
+            quota = get_gemini_quota(token)
+            results.append({
+                "profile": p_key,
+                "displayName": cfg["displayName"],
+                **quota,
+            })
+        except Exception as e:
+            results.append({"profile": p_key, "displayName": cfg["displayName"], "error": str(e)})
+
+    if as_json:
+        print(json.dumps(results, indent=2))
+        return
+
+    print(f"{'ACCOUNT':<9} {'DISPLAY NAME':<21} {'REMAINING':<11} {'USED':<9} {'RESET TIME (UTC)':<21} {'TIME LEFT'}")
+    print("-" * 84)
+    for r in results:
+        if "error" in r:
+            print(f"{r['profile']:<9} {r['displayName']:<21} {'ERROR':<11} {'-':<9} {r['error']}")
+        else:
+            rem_str = f"{r['remainingPercent']:.2f}%"
+            used_str = f"{r['usedPercent']:.2f}%"
+            reset_dt = format_reset_time(r['resetTime'])
+            time_left = format_time_remaining(r['resetTime'])
+            print(f"{r['profile']:<9} {r['displayName']:<21} {rem_str:<11} {used_str:<9} {reset_dt:<21} {time_left}")
+
+
+def main():
+    invoked_name = os.path.basename(sys.argv[0])
+    target = None
+
+    if "agyqm47" in invoked_name:
+        target = "m47"
+    elif "agyqanv" in invoked_name:
+        target = "anv"
+    elif "agyqmgh" in invoked_name:
+        target = "mgh"
+
+    parser = argparse.ArgumentParser(
+        description="Check Google Gemini pool quota remaining for Antigravity accounts."
+    )
+    parser.add_argument(
+        "profile",
+        nargs="?",
+        default=target,
+        choices=["m47", "anv", "mgh", "all"],
+        help="Account profile to check (default: based on command name or all).",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON data instead of formatted table.",
+    )
+
+    args = parser.parse_args()
+
+    selected = args.profile
+    if not selected:
+        print_all_accounts(as_json=args.json)
+    elif selected == "all":
+        print_all_accounts(as_json=args.json)
+    else:
+        success = print_single_account(selected, as_json=args.json)
+        if not success:
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
