@@ -115,7 +115,7 @@ class TestT3CodeIntegration(unittest.TestCase):
             self.assertIn("/root/.t3/caches", content)
             self.assertIn("gemini-3.8-flash-high", content)
             self.assertNotIn("gemini-3.8-flash-medium", content)
-            self.assertNotIn("gemini-3.8-flash-low", content)
+            self.assertNotIn("Gemini 3.8 Flash (Low)", content)
             self.assertIn("antigravity.env", content)
             self.assertIn("sourceControlWriterModelSelection", content)
             self.assertIn("textGenerationModelSelection", content)
