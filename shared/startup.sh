@@ -281,6 +281,9 @@ EOF
     fi
 fi
 
+# Scrub GH_REPO from environment so tooling and T3 Code dynamically detect git remotes
+unset GH_REPO 2>/dev/null || true
+
 # Decrypt repository environment secrets if env.map is present
 ENV_MAP_FILE=""
 SECRETS_DIR=""
@@ -663,6 +666,8 @@ else
     unset GH_TOKEN 2>/dev/null || true
     unset DOTENV_PRIVATE_KEY 2>/dev/null || true
 fi
+grep -qxF "unset GH_REPO" ~/.bashrc 2>/dev/null || echo "unset GH_REPO" >> ~/.bashrc
+unset GH_REPO 2>/dev/null || true
 
 if [ "${setup_status:-0}" -ne 0 ]; then
     echo "ERROR: ${SETUP_SCRIPT:-/root/.scripts/setup.sh} failed to execute (exit code: $setup_status)." >&2
@@ -967,6 +972,9 @@ print("✨ Pre-authenticated Antigravity providers in T3 Code")
     cat << 'EOF' > /usr/local/bin/t3.wrapper
 #!/usr/bin/env bash
 REAL_T3="/opt/t3/t3"
+
+# Ensure GH_REPO is unset so T3 Code resolves repositories from git remotes
+unset GH_REPO
 
 if [ "${1:-}" = "pair" ]; then
     PUBLIC_URL="${T3_PUBLIC_URL:-}"

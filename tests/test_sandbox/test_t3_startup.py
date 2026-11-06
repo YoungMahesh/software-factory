@@ -256,3 +256,15 @@ class TestT3CodeStartup(unittest.TestCase):
         self.assertIn("r_ssh = base64.b64decode", content)
         self.assertIn("new_c.replace(t_ssh, r_ssh, 1)", content)
         self.assertIn("PRETTY_HOSTNAME", content)
+
+    def test_startup_script_scrubs_gh_repo_and_t3_wrapper_unsets_it(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("unset GH_REPO", content)
+        self.assertIn('grep -qxF "unset GH_REPO" ~/.bashrc', content)
+
+        start_marker = "cat << 'EOF' > /usr/local/bin/t3.wrapper\n"
+        end_marker = "EOF\n    chmod +x /usr/local/bin/t3.wrapper"
+        start_pos = content.find(start_marker) + len(start_marker)
+        end_pos = content.find(end_marker, start_pos)
+        wrapper_template = content[start_pos:end_pos]
+        self.assertIn("unset GH_REPO", wrapper_template)
