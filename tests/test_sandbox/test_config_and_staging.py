@@ -87,6 +87,12 @@ class TestSandboxGitConfig(unittest.TestCase):
         self.assertTrue(LOCAL_GITCONFIG.exists())
         self.assertTrue(LOCAL_GITCONFIG_MAHESH471978.exists())
 
+    def test_base_gitconfig_declares_github_credential_helpers(self):
+        content = self.gitconfig_path.read_text()
+        self.assertIn('[credential "https://github.com"]', content)
+        self.assertIn('helper = !/usr/bin/gh auth git-credential', content)
+        self.assertIn('[credential "https://gist.github.com"]', content)
+
     def test_base_gitconfig_declares_primary_identity_and_conditional_inclusion(self):
         content = self.gitconfig_path.read_text()
         self.assertIn("name = Mahesh", content)

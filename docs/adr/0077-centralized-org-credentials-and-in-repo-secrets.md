@@ -27,6 +27,7 @@ We decided to adopt a two-tier architecture: **Centralized Organization Credenti
    - For T3 Code sessions (`--t3`), `GH_TOKEN` is retained in the process environment (`/etc/environment` and `~/.bashrc`) so `t3 serve` and child coding agents can query PRs and execute VCS operations without authentication errors.
    - In standard non-T3 sessions, `GH_TOKEN` is scrubbed from the shell environment.
    - Ephemeral repository identifiers such as `GH_REPO` are scrubbed from the shell environment and unset in the `t3` CLI wrapper post-clone. This prevents stale repository overrides, ensuring GitHub CLI and T3 Code dynamically detect git remotes from local repositories and worktrees.
+   - Global Git configuration (`shared/gitconfig`) declaratively configures GitHub CLI as the credential helper (`credential.https://github.com.helper=!/usr/bin/gh auth git-credential`), enabling Git and T3 Code VCS drivers to authenticate against repositories cloned without inline credentials.
    - If `--sops` is specified, `AGE_PRIVATE_KEY` is preserved in `~/.config/sops/age/keys.txt`; otherwise, all SOPS keys and staging files are scrubbed before handoff.
 
 ## Consequences
