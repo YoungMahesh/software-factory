@@ -1,13 +1,13 @@
-"""Web UI API routes and server for Modal Sandbox Runner.
+"""Web UI API routes and router for Modal Sandbox Runner.
 
 Provides REST endpoints for inspecting and terminating sandboxes, capturing
 and listing filesystem snapshots, launching from snapshots, and serving the
 embedded HTML5 single-page application across multiple Modal workspace profiles.
+Exclusively hosted in Modal cloud via sandbox/function.py.
 """
 
 from __future__ import annotations
 
-import argparse
 import base64
 import logging
 import os
@@ -44,18 +44,19 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def check_authentication(request: Request) -> None:
-    """Enforces HTTP Basic and Bearer authentication when credentials are configured."""
+    """Enforces HTTP Basic authentication against WEB_UI_USERNAME and WEB_UI_PASSWORD."""
     # Allow favicon and health checks to proceed unauthenticated
     if request.url.path in ("/favicon.ico", "/health"):
         return
 
     expected_user = os.environ.get("WEB_UI_USERNAME")
     expected_pass = os.environ.get("WEB_UI_PASSWORD")
-    token_auth = os.environ.get("MODAL_SANDBOX_AUTH_TOKEN")
 
-    # If neither password nor token auth is configured, allow permissive access
-    if not expected_pass and not token_auth:
-        return
+    if not expected_user or not expected_pass:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server authentication misconfigured: WEB_UI_USERNAME and WEB_UI_PASSWORD must be set",
+        )
 
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -65,45 +66,31 @@ def check_authentication(request: Request) -> None:
             headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
         )
 
-    # Support Bearer token authentication
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:].strip()
-        expected = token_auth or expected_pass
-        if expected and secrets.compare_digest(token, expected):
-            return
+    if not auth_header.startswith("Basic "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Bearer token",
+            detail="Invalid authentication scheme; expected Basic authentication",
             headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
         )
 
-    # Support HTTP Basic authentication
-    if auth_header.startswith("Basic "):
-        try:
-            encoded = auth_header[6:].strip()
-            decoded = base64.b64decode(encoded).decode("utf-8")
-            if ":" in decoded:
-                username, password = decoded.split(":", 1)
-            else:
-                username, password = decoded, ""
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Basic authentication encoding",
-                headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
-            )
+    try:
+        encoded = auth_header[6:].strip()
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        if ":" in decoded:
+            username, password = decoded.split(":", 1)
+        else:
+            username, password = decoded, ""
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Basic authentication encoding",
+            headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
+        )
 
-        if expected_pass:
-            valid_user = True
-            if expected_user:
-                valid_user = secrets.compare_digest(username, expected_user)
-            valid_pass = secrets.compare_digest(password, expected_pass)
-            if valid_user and valid_pass:
-                return
-
-        if token_auth:
-            if secrets.compare_digest(password, token_auth) or secrets.compare_digest(username, token_auth):
-                return
+    valid_user = secrets.compare_digest(username, expected_user)
+    valid_pass = secrets.compare_digest(password, expected_pass)
+    if valid_user and valid_pass:
+        return
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -292,7 +279,7 @@ def index_page() -> HTMLResponse:
 
 
 def create_app() -> FastAPI:
-    """Constructs the standalone FastAPI app."""
+    """Constructs the standalone FastAPI app for testing and inspection."""
     app = FastAPI(
         title="Modal Sandbox Runner Web UI",
         description="Web UI and REST API for managing Modal sandboxes and filesystem snapshots across multi-tenant profiles.",
@@ -303,23 +290,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
-
-def main() -> int:
-    import uvicorn
-
-    parser = argparse.ArgumentParser(description="Start the Modal Sandbox Runner Web UI server.")
-    parser.add_argument("--host", default="0.0.0.0", help="Host interface to bind to (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
-    parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
-
-    args = parser.parse_args()
-    print(f"🚀 Starting Sandbox Runner Web UI on http://{args.host}:{args.port}")
-    uvicorn.run("sandbox.web:app", host=args.host, port=args.port, reload=args.reload)
-    return 0
-
-
-if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())

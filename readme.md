@@ -90,7 +90,9 @@ python sandbox/main.py --from-snapshot <image-id> --name resumed-app [--vm]
 
 ---
 
-## 5. Sandbox Lifecycle Management
+## 5. Sandbox Lifecycle & Control Plane
+
+### CLI Management
 
 ```bash
 # List active running sandboxes
@@ -99,6 +101,21 @@ python scripts/list-sandboxes.py
 # Interactive management & termination CLI
 python scripts/manage_sandboxes.py
 ```
+
+### Hosted Control Plane & Web Dashboard
+
+The Web Dashboard and management API run in the cloud via Modal:
+
+```bash
+# Deploy control plane to Modal Cloud (requires WEB_UI_USERNAME and WEB_UI_PASSWORD)
+modal deploy sandbox/function.py
+
+# Interactive development serve mode
+modal serve sandbox/function.py
+```
+
+- **Web Dashboard**: Access `GET /` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`).
+- **Headless API**: Access `POST /launch` and `POST /snapshot` with Bearer token authentication (`MODAL_SANDBOX_AUTH_TOKEN`).
 
 ---
 

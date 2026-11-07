@@ -3,6 +3,7 @@
 import hmac
 import os
 from pathlib import Path
+import sys
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -23,6 +24,62 @@ APP_NAME = "sandbox-control-plane"
 app = modal.App(APP_NAME)
 
 repo_root = Path(__file__).resolve().parent.parent
+
+
+def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None) -> dict[str, str]:
+    """Resolves and validates WEB_UI_USERNAME and WEB_UI_PASSWORD.
+
+    Checks os.environ, falling back to .env / secrets/.env. Raises a RuntimeError
+    during modal deploy or modal serve if required credentials are missing.
+    Bypassed during test execution when running under pytest unless enforce=True.
+    """
+    credentials: dict[str, str] = {}
+    for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN"):
+        val = os.environ.get(key)
+        if val:
+            credentials[key] = val
+
+    if not credentials.get("WEB_UI_USERNAME") or not credentials.get("WEB_UI_PASSWORD"):
+        candidate_files = [
+            root / ".env",
+            root / ".secrets" / ".env",
+            root / "secrets" / ".env",
+        ]
+        for env_file in candidate_files:
+            if env_file.is_file():
+                for line in env_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN") and k not in credentials:
+                            credentials[k] = v
+
+    if enforce is None:
+        is_testing = (
+            "pytest" in sys.modules
+            or "PYTEST_CURRENT_TEST" in os.environ
+            or any("pytest" in str(arg) for arg in sys.argv)
+        )
+        should_enforce = not is_testing
+    else:
+        should_enforce = enforce
+
+    if not should_enforce:
+        return credentials
+
+    missing = [key for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD") if not credentials.get(key)]
+    if missing:
+        missing_str = ", ".join(missing)
+        raise RuntimeError(
+            f"Missing required environment variable(s) for Web UI deployment: {missing_str}. "
+            "Please configure WEB_UI_USERNAME and WEB_UI_PASSWORD in your environment or .env file "
+            "before running 'modal deploy' or 'modal serve'."
+        )
+
+    return credentials
+
 
 image = (
     modal.Image.debian_slim()
@@ -51,15 +108,12 @@ elif (repo_root / "secrets").is_dir():
 
 function_secrets: list[modal.Secret] = [modal.Secret.from_name(SHARED_SECRET_NAME)]
 
-# Forward authentication credentials from local environment or .env file to Modal function container
-auth_env: dict[str, str] = {}
-for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN"):
-    val = os.environ.get(key)
-    if val:
-        auth_env[key] = val
-
+auth_env = resolve_and_validate_web_credentials(repo_root)
 if auth_env:
     function_secrets.append(modal.Secret.from_dict(auth_env))
+    for k, v in auth_env.items():
+        if k not in os.environ:
+            os.environ[k] = v
 elif (repo_root / ".env").is_file():
     function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
 

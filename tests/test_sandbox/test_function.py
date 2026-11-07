@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +11,7 @@ import modal
 
 from sandbox.cli import create_parser, validate_args
 from sandbox.core import LaunchResponse, SnapshotResponse
-from sandbox.function import web_app
+from sandbox.function import resolve_and_validate_web_credentials, web_app
 from sandbox.main import run_sandbox_launch
 
 
@@ -136,6 +137,55 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         self.assertEqual(data["sandbox_id"], "sb-active-123")
         self.assertEqual(data["image_id"], "im-snapshot-456")
         self.assertTrue(data["terminated"])
+
+
+class TestWebCredentialValidation(unittest.TestCase):
+    def test_missing_credentials_raises_error_when_enforced(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_root = Path(tmpdir)
+            env = {}
+            with patch.dict("os.environ", env, clear=True):
+                with self.assertRaises(RuntimeError) as cm:
+                    resolve_and_validate_web_credentials(empty_root, enforce=True)
+                self.assertIn("WEB_UI_USERNAME", str(cm.exception))
+                self.assertIn("WEB_UI_PASSWORD", str(cm.exception))
+
+    def test_credentials_resolved_from_environment(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_root = Path(tmpdir)
+            env = {
+                "WEB_UI_USERNAME": "env_user",
+                "WEB_UI_PASSWORD": "env_password",
+            }
+            with patch.dict("os.environ", env, clear=True):
+                creds = resolve_and_validate_web_credentials(empty_root)
+                self.assertEqual(creds.get("WEB_UI_USERNAME"), "env_user")
+                self.assertEqual(creds.get("WEB_UI_PASSWORD"), "env_password")
+
+    def test_credentials_resolved_from_dotenv(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dotenv_file = tmp_root / ".env"
+            dotenv_file.write_text(
+                "WEB_UI_USERNAME=file_user\nWEB_UI_PASSWORD=file_pass\nMODAL_SANDBOX_AUTH_TOKEN=file_tok\n",
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {}, clear=True):
+                creds = resolve_and_validate_web_credentials(tmp_root)
+                self.assertEqual(creds.get("WEB_UI_USERNAME"), "file_user")
+                self.assertEqual(creds.get("WEB_UI_PASSWORD"), "file_pass")
+                self.assertEqual(creds.get("MODAL_SANDBOX_AUTH_TOKEN"), "file_tok")
+
+    def test_no_modal_sandbox_auth_token_required(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_root = Path(tmpdir)
+            env = {
+                "WEB_UI_USERNAME": "u",
+                "WEB_UI_PASSWORD": "p",
+            }
+            with patch.dict("os.environ", env, clear=True):
+                creds = resolve_and_validate_web_credentials(empty_root, enforce=True)
+                self.assertNotIn("MODAL_SANDBOX_AUTH_TOKEN", creds)
 
 
 class TestSandboxCliRemoteIntegration(unittest.TestCase):
