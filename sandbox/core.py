@@ -13,11 +13,14 @@ import modal
 from pydantic import BaseModel
 
 from shared.image import (
+    DEFAULT_T3_USAGE_VOLUME,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
+    T3_STORAGE_MOUNT_PATH,
     browser_enabled,
     build_sandbox_image,
     get_gradle_volumes,
+    get_t3_usage_volumes,
     load_ssh_pub_key,
 )
 from sandbox.config import (
@@ -29,7 +32,7 @@ from sandbox.config import (
     IDLE_TIMEOUT_SECS,
     TIMEOUT_SECS,
 )
-from sandbox.cli import generate_ascii_qr
+from sandbox.t3 import setup_t3 as _setup_t3
 
 
 class LaunchRequest(BaseModel):
@@ -47,6 +50,8 @@ class LaunchRequest(BaseModel):
     t3: bool = False
     t3_port: int = DEFAULT_T3_PORT
     t3_ssh_host: str | None = None
+    t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
+    no_t3_persist: bool = False
     react_native: bool = False
     metro_port: int = DEFAULT_METRO_PORT
     modal: bool = False
@@ -72,6 +77,8 @@ class LaunchResponse(BaseModel):
     t3_pair_url: str | None = None
     t3_qr_code: str | None = None
     t3_ssh_host: str | None = None
+    t3_persist: bool = False
+    t3_usage_volume: str | None = None
     memory_gb: int | None = None
     agy_enabled: bool = False
     cloudflare_enabled: bool = True
@@ -102,6 +109,15 @@ def validate_launch_request(req: LaunchRequest) -> None:
         if req.memory < 1:
             raise ValueError("--memory must be a positive integer number of GB.")
 
+    if req.t3_ssh_host and not req.t3:
+        raise ValueError("--t3-ssh-host can only be used with --t3.")
+    if req.no_t3_persist and not req.t3:
+        raise ValueError("--no-t3-persist can only be used with --t3.")
+    if req.t3_usage_volume != DEFAULT_T3_USAGE_VOLUME and not req.t3:
+        raise ValueError("--t3-usage-volume can only be used with --t3.")
+    if req.no_t3_persist and req.t3_usage_volume != DEFAULT_T3_USAGE_VOLUME:
+        raise ValueError("--no-t3-persist and --t3-usage-volume cannot be used together.")
+
     ports: list[tuple[str, int]] = []
     if req.opencode:
         ports.append(("--opencode-port", req.opencode_port))
@@ -130,67 +146,6 @@ def _resolve_fn(name: str, fallback: Callable) -> Callable:
     if main_mod and hasattr(main_mod, name):
         return getattr(main_mod, name)
     return fallback
-
-
-def _setup_t3(sandbox: modal.Sandbox, t3_url: str, ssh_host: str) -> tuple[str | None, str | None]:
-    clean_url = t3_url.rstrip("/")
-    try:
-        cfg = (
-            f"import json, os, time\nurl = {json.dumps(clean_url)}\nhost = {json.dumps(ssh_host)}\n"
-            "os.makedirs('/root/.t3', exist_ok=True)\n"
-            "open('/root/.t3/public_url', 'w').write(url + '\\n')\n"
-            "try:\n open('/etc/machine-info', 'w').write(f'PRETTY_HOSTNAME=\"{host}\"\\n')\n"
-            "except Exception: pass\n"
-            "for p in ['/etc/environment', '/root/.bashrc']:\n"
-            " try:\n"
-            "  c = open(p).read() if os.path.exists(p) else ''\n"
-            "  with open(p, 'a+') as f:\n"
-            "   if 'T3_PUBLIC_URL=' not in c: f.write(f'export T3_PUBLIC_URL=\"{url}\"\\n')\n"
-            "   if 'T3_SSH_HOST=' not in c: f.write(f'export T3_SSH_HOST=\"{host}\"\\n')\n"
-            " except Exception: pass\n"
-            "rt = '/root/.t3/userdata/server-runtime.json'\n"
-            "for _ in range(20):\n"
-            " if os.path.isfile(rt):\n"
-            "  try:\n"
-            "   d = json.load(open(rt))\n"
-            "   if d.get('devUrl') != url:\n"
-            "    d['devUrl'] = url\n"
-            "    json.dump(d, open(rt + '.tmp', 'w'), indent=2)\n"
-            "    os.replace(rt + '.tmp', rt)\n"
-            "   break\n"
-            "  except Exception: pass\n"
-            " time.sleep(0.25)\n"
-        )
-        sandbox.exec("python3", "-c", cfg).wait()
-    except Exception:
-        pass
-
-    pair_url, qr_code = None, None
-    try:
-        p = sandbox.exec("t3", "auth", "pairing", "create", "--ttl", "24h", "--json")
-        if p.wait() == 0:
-            cred = json.loads(p.stdout.read().strip()).get("credential")
-            if cred:
-                pair_url = f"{clean_url}/pair#token={cred}"
-                qr_code = generate_ascii_qr(pair_url)
-    except Exception:
-        pass
-
-    if not pair_url:
-        for _ in range(6):
-            try:
-                p = sandbox.exec("cat", "/tmp/t3-pairing.json")
-                if p.wait() == 0:
-                    cred = json.loads(p.stdout.read().strip()).get("credential")
-                    if cred:
-                        pair_url = f"{clean_url}/pair#token={cred}"
-                        qr_code = generate_ascii_qr(pair_url)
-                        break
-            except Exception:
-                pass
-            time.sleep(0.5)
-
-    return pair_url or clean_url, qr_code
 
 
 def launch_sandbox(
@@ -300,6 +255,7 @@ def launch_sandbox(
         env["ENABLE_OPENCODE"] = "1"
         env["OPENCODE_PORT"] = str(req.opencode_port)
 
+    t3_persist_enabled = req.t3 and not req.no_t3_persist
     t3_ssh_alias = req.t3_ssh_host or sandbox_name
     if req.t3:
         encrypted_ports.append(req.t3_port)
@@ -307,6 +263,10 @@ def launch_sandbox(
         env["T3_PORT"] = str(req.t3_port)
         env["FLAGS_enforce_kernel_ipv6_support"] = "false"
         env["T3_SSH_HOST"] = t3_ssh_alias
+        if t3_persist_enabled:
+            env["ENABLE_T3_PERSISTENCE"] = "1"
+            env["T3_USAGE_VOLUME"] = req.t3_usage_volume
+            env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
     for flag, key in [
         (req.agy, "ENABLE_ANTIGRAVITY"),
@@ -320,6 +280,8 @@ def launch_sandbox(
             env[key] = "1"
 
     volumes = {}
+    if t3_persist_enabled:
+        volumes.update(get_t3_usage_volumes(req.t3_usage_volume))
     if req.react_native:
         encrypted_ports.append(req.metro_port)
         env["ENABLE_REACT_NATIVE"] = "1"
@@ -333,6 +295,7 @@ def launch_sandbox(
         (req.agy, "Antigravity"),
         (req.opencode, "OpenCode"),
         (req.t3, "T3 Code"),
+        (t3_persist_enabled, "T3 Usage Persistence"),
         (req.modal, "Modal"),
         (req.sops, "SOPS"),
         (req.herdr, "Herdr"),
@@ -408,6 +371,8 @@ def launch_sandbox(
         t3_pair_url=t3_pair_url,
         t3_qr_code=t3_qr_code,
         t3_ssh_host=t3_ssh_alias,
+        t3_persist=t3_persist_enabled,
+        t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None,
         memory_gb=memory_gb,
         agy_enabled=req.agy,
         cloudflare_enabled=cloudflare_active,

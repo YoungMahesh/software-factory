@@ -18,6 +18,15 @@ class TestT3CodeStartup(unittest.TestCase):
         for token in ["ENABLE_T3", "check-t3", "t3 serve", "GitHub CLI", "--auto-bootstrap-project-from-cwd"]:
             self.assertIn(token, content)
 
+    def test_startup_script_contains_t3_usage_persistence_logic(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("ENABLE_T3_PERSISTENCE", content)
+        self.assertIn("t3-usage-sync hydrate", content)
+        self.assertIn("t3-usage-sync daemon", content)
+        self.assertIn("cleanup_t3", content)
+        self.assertIn("trap cleanup_t3 EXIT SIGTERM", content)
+        self.assertIn("ANTIGRAVITY_DATA_DIR", content)
+
     def test_startup_and_setup_scripts_contain_antigravity_preauth(self):
         startup_content = self.startup_sh.read_text()
         setup_content = (self.repo_root / "scripts" / "setup.sh").read_text()

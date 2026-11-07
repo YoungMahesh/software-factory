@@ -525,6 +525,10 @@ echo "=== T3 Code Process ===" && ps aux | grep [t]3
 echo "=== T3 Server Log ===" && tail -n 20 /tmp/t3.log 2>/dev/null || true
 echo "=== Listening Sockets ===" && (ss -tulpn 2>/dev/null | grep 3775 || netstat -tulpn 2>/dev/null | grep 3775 || true)
 echo "=== T3 Settings ===" && cat /root/.t3/userdata/settings.json 2>/dev/null || true
+echo "=== T3 Usage Persistence ===" && (/usr/local/bin/t3-usage-sync status 2>/dev/null || echo "t3-usage-sync not available")
+echo "=== T3 Usage Sync Daemon ===" && (ps aux | grep [t]3_usage_sync || ps aux | grep [t]3-usage-sync || echo "t3-usage-sync not running")
+echo "=== T3 Storage Volume Contents ===" && (ls -la /root/.t3-storage/ 2>/dev/null || echo "storage not mounted")
+echo "=== T3 Usage Cache Files ===" && (ls -la /root/.t3/userdata/usage* 2>/dev/null || true)
 echo "=== T3 Antigravity Token ===" && ls -la /root/.t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json 2>/dev/null || true
 echo "=== T3 OpenCode Config ===" && ls -la /root/.config/opencode/opencode.json /root/.config/opencode/opencode.env 2>/dev/null || true
 EOF
@@ -1034,9 +1038,28 @@ EOF
 
     echo "PRETTY_HOSTNAME=\"${T3_SSH_HOST:-${SANDBOX_NAME:-$APP_NAME}}\"" > /etc/machine-info 2>/dev/null || true
 
+    # Persistent T3 usage and transcript hydration
+    if [ "${ENABLE_T3_PERSISTENCE:-1}" = "1" ] && [ -d "/root/.t3-storage" ]; then
+        echo "📦 Hydrating T3 Code usage and transcripts from persistent storage..."
+        export ANTIGRAVITY_DATA_DIR="/root/.t3-storage/conversations"
+        echo 'export ANTIGRAVITY_DATA_DIR="/root/.t3-storage/conversations"' >> /etc/environment 2>/dev/null || true
+        echo 'export ANTIGRAVITY_DATA_DIR="/root/.t3-storage/conversations"' >> /root/.bashrc 2>/dev/null || true
+        if [ -x "/usr/local/bin/t3-usage-sync" ]; then
+            /usr/local/bin/t3-usage-sync hydrate 2>&1 || true
+        fi
+    fi
+
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
     nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true
+
+    # Background daemon to continuously sync T3 Code usage and conversations to persistent volume
+    if [ "${ENABLE_T3_PERSISTENCE:-1}" = "1" ] && [ -d "/root/.t3-storage" ]; then
+        if [ -x "/usr/local/bin/t3-usage-sync" ]; then
+            echo "🔄 Launching T3 usage sync daemon..."
+            nohup /usr/local/bin/t3-usage-sync daemon > /tmp/t3-usage-sync.log 2>&1 &
+        fi
+    fi
 
     # Background sync loop to ensure server-runtime.json devUrl matches Modal public tunnel URL
     (
@@ -1066,4 +1089,11 @@ except Exception:
         done
     ) >/dev/null 2>&1 &
 fi
+cleanup_t3() {
+    if [ -x "/usr/local/bin/t3-usage-sync" ] && [ -d "/root/.t3-storage" ]; then
+        /usr/local/bin/t3-usage-sync sync 2>/dev/null || true
+    fi
+}
+trap cleanup_t3 EXIT SIGTERM
+
 exec sleep infinity

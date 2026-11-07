@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+from shared.image import T3_STORAGE_MOUNT_PATH, DEFAULT_T3_USAGE_VOLUME
+
 
 class TestT3CodeLaunchSSH(unittest.TestCase):
     def setUp(self):
@@ -33,11 +35,14 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
                 t3_port=3775,
                 t3_pair_url="https://test-t3.modal.run/pair#token=ABCD123",
                 t3_qr_code="  █▀▀█\n  ▀▀▀▀",
+                t3_persist=True,
+                t3_usage_volume="t3code-usage-v1",
                 cloudflare_enabled=False,
             )
 
         output = stdout_buf.getvalue()
         self.assertIn("• T3 Code:  https://test-t3.modal.run/pair#token=ABCD123", output)
+        self.assertIn("• T3 Storage: Persistent volume (t3code-usage-v1)", output)
         self.assertIn("Scan with T3 Code Mobile App (iOS / Android):", output)
         self.assertIn("█▀▀█", output)
 
@@ -88,6 +93,82 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         self.assertEqual(call_kwargs["env"]["ENABLE_T3"], "1")
         self.assertEqual(call_kwargs["env"]["T3_PORT"], "3775")
         self.assertEqual(call_kwargs["env"]["FLAGS_enforce_kernel_ipv6_support"], "false")
+        self.assertEqual(call_kwargs["env"]["ENABLE_T3_PERSISTENCE"], "1")
+        self.assertEqual(call_kwargs["env"]["T3_USAGE_VOLUME"], DEFAULT_T3_USAGE_VOLUME)
+        self.assertEqual(call_kwargs["env"]["ANTIGRAVITY_DATA_DIR"], f"{T3_STORAGE_MOUNT_PATH}/conversations")
+        self.assertIn(T3_STORAGE_MOUNT_PATH, call_kwargs["volumes"])
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_run_sandbox_launch_no_t3_persist(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-t3-no-persist"
+        mock_tunnel = MagicMock()
+        mock_tunnel.url = "https://test-t3.modal.run"
+        mock_sandbox.tunnels.return_value = {3775: mock_tunnel}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+
+            parser = create_parser()
+            args = parser.parse_args(["-r", "my-repo", "--t3", "--no-t3-persist"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["env"]["ENABLE_T3"], "1")
+        self.assertNotIn("ENABLE_T3_PERSISTENCE", call_kwargs["env"])
+        self.assertNotIn(T3_STORAGE_MOUNT_PATH, call_kwargs["volumes"])
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    @patch("sandbox.main.build_sandbox_image")
+    @patch("sandbox.main.load_ssh_pub_key", return_value="ssh-rsa dummy")
+    def test_run_sandbox_launch_custom_t3_usage_volume(
+        self,
+        mock_load_pubkey,
+        mock_build_image,
+        mock_app_lookup,
+        mock_sandbox_create,
+    ):
+        from sandbox.main import create_parser, run_sandbox_launch
+
+        mock_image = MagicMock()
+        mock_build_image.return_value = mock_image
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-t3-custom-vol"
+        mock_tunnel = MagicMock()
+        mock_tunnel.url = "https://test-t3.modal.run"
+        mock_sandbox.tunnels.return_value = {3775: mock_tunnel}
+        mock_sandbox_create.return_value = mock_sandbox
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
+            secrets_file.parent.mkdir(parents=True)
+            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+
+            parser = create_parser()
+            args = parser.parse_args(["-r", "my-repo", "--t3", "--t3-usage-volume", "custom-usage-volume"])
+            run_sandbox_launch(args, repo_root=Path(tmpdir))
+
+        call_kwargs = mock_sandbox_create.call_args.kwargs
+        self.assertEqual(call_kwargs["env"]["ENABLE_T3_PERSISTENCE"], "1")
+        self.assertEqual(call_kwargs["env"]["T3_USAGE_VOLUME"], "custom-usage-volume")
+        self.assertIn(T3_STORAGE_MOUNT_PATH, call_kwargs["volumes"])
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, 
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from shared.image import DEFAULT_T3_USAGE_VOLUME
 from sandbox.core import (
     DEFAULT_OPENCODE_PORT,
     DEFAULT_T3_PORT,
@@ -128,6 +129,8 @@ class SnapshotLaunchPayload(BaseModel):
     no_cloudflare: bool = False
     opencode: bool = False
     t3: bool = False
+    t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
+    no_t3_persist: bool = False
     agy: bool = False
     herdr: bool = False
     pi: bool = False
@@ -243,6 +246,8 @@ def api_launch_from_snapshot(image_id: str, payload: SnapshotLaunchPayload) -> L
         no_cloudflare=payload.no_cloudflare,
         opencode=payload.opencode,
         t3=payload.t3,
+        t3_usage_volume=payload.t3_usage_volume,
+        no_t3_persist=payload.no_t3_persist,
         agy=payload.agy,
         herdr=payload.herdr,
         pi=payload.pi,

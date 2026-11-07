@@ -5,6 +5,8 @@ import subprocess
 import unittest
 import pytest
 
+from shared.image import DEFAULT_T3_USAGE_VOLUME
+
 
 class TestT3CodeCli(unittest.TestCase):
     def setUp(self):
@@ -23,6 +25,8 @@ class TestT3CodeCli(unittest.TestCase):
         self.assertIn("--t3", res.stdout)
         self.assertIn("--t3code", res.stdout)
         self.assertIn("--t3-port", res.stdout)
+        self.assertIn("--t3-usage-volume", res.stdout)
+        self.assertIn("--no-t3-persist", res.stdout)
         self.assertIn("T3 Code server", res.stdout)
 
     def test_parser_t3_flags(self):
@@ -32,10 +36,23 @@ class TestT3CodeCli(unittest.TestCase):
         args = parser.parse_args(["-r", "my-repo", "--t3"])
         self.assertTrue(args.t3)
         self.assertEqual(args.t3_port, 3775)
+        self.assertEqual(args.t3_usage_volume, DEFAULT_T3_USAGE_VOLUME)
+        self.assertFalse(args.no_t3_persist)
 
         args_alias = parser.parse_args(["-r", "my-repo", "--t3code", "--t3-port", "3776"])
         self.assertTrue(args_alias.t3)
         self.assertEqual(args_alias.t3_port, 3776)
+
+    def test_parser_t3_persistence_flags(self):
+        from sandbox.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["-r", "my-repo", "--t3", "--t3-usage-volume", "my-custom-vol"])
+        self.assertEqual(args.t3_usage_volume, "my-custom-vol")
+        self.assertFalse(args.no_t3_persist)
+
+        args_no_persist = parser.parse_args(["-r", "my-repo", "--t3", "--no-t3-persist"])
+        self.assertTrue(args_no_persist.no_t3_persist)
 
     def test_snapshot_cannot_be_used_with_t3(self):
         import sys
@@ -47,6 +64,18 @@ class TestT3CodeCli(unittest.TestCase):
         )
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("--snapshot cannot be used with launch configuration arguments", res.stderr)
+
+    def test_snapshot_cannot_be_used_with_t3_persistence_flags(self):
+        from sandbox.main import create_parser, validate_args
+
+        parser = create_parser()
+        args1 = parser.parse_args(["--snapshot", "sb-123", "--no-t3-persist"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args1)
+
+        args2 = parser.parse_args(["--snapshot", "sb-123", "--t3-usage-volume", "custom-vol"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args2)
 
     def test_t3_port_collision_with_reserved_web_port(self):
         from sandbox.main import create_parser, run_sandbox_launch
@@ -95,5 +124,29 @@ class TestT3CodeCli(unittest.TestCase):
 
         parser = create_parser()
         args = parser.parse_args(["-r", "my-repo", "--t3-ssh-host", "box1"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args)
+
+    def test_cli_validation_t3_usage_volume_requires_t3(self):
+        from sandbox.main import create_parser, validate_args
+
+        parser = create_parser()
+        args = parser.parse_args(["-r", "my-repo", "--t3-usage-volume", "custom-vol"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args)
+
+    def test_cli_validation_no_t3_persist_requires_t3(self):
+        from sandbox.main import create_parser, validate_args
+
+        parser = create_parser()
+        args = parser.parse_args(["-r", "my-repo", "--no-t3-persist"])
+        with pytest.raises(SystemExit):
+            validate_args(parser, args)
+
+    def test_cli_validation_no_t3_persist_conflicts_with_custom_volume(self):
+        from sandbox.main import create_parser, validate_args
+
+        parser = create_parser()
+        args = parser.parse_args(["-r", "my-repo", "--t3", "--no-t3-persist", "--t3-usage-volume", "custom-vol"])
         with pytest.raises(SystemExit):
             validate_args(parser, args)

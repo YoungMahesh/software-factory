@@ -61,6 +61,8 @@ LOCAL_T3_KEYBINDINGS = SHARED_DIR / "t3-keybindings.json"
 REMOTE_T3_KEYBINDINGS = "/root/.t3/userdata/keybindings.json"
 LOCAL_T3_WRAPPER = SHARED_DIR / "t3-wrapper.sh"
 REMOTE_T3_WRAPPER = "/usr/local/bin/t3"
+LOCAL_T3_USAGE_SYNC = SHARED_DIR / "t3_usage_sync.py"
+REMOTE_T3_USAGE_SYNC = "/usr/local/bin/t3-usage-sync"
 LOCAL_ANTIGRAVITY_SECRET = (
     Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
 )
@@ -90,6 +92,10 @@ SHARED_SECRET_NAME = "share0"
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
 GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"
 
+T3_USAGE_VOLUME_NAME = "t3code-usage-v1"
+T3_STORAGE_MOUNT_PATH = "/root/.t3-storage"
+DEFAULT_T3_USAGE_VOLUME = T3_USAGE_VOLUME_NAME
+
 
 def get_gradle_volumes() -> dict[str, modal.Volume]:
     """Returns the Gradle cache and wrapper volume mounts for React Native."""
@@ -101,6 +107,16 @@ def get_gradle_volumes() -> dict[str, modal.Volume]:
             "gradle-wrapper", create_if_missing=True
         ),
     }
+
+
+def get_t3_usage_volume(name: str = T3_USAGE_VOLUME_NAME) -> modal.Volume:
+    """Returns the persistent volume for T3 Code usage and transcripts."""
+    return modal.Volume.from_name(name, create_if_missing=True)
+
+
+def get_t3_usage_volumes(name: str = T3_USAGE_VOLUME_NAME) -> dict[str, modal.Volume]:
+    """Returns the volume mount mapping for T3 Code usage persistence."""
+    return {T3_STORAGE_MOUNT_PATH: get_t3_usage_volume(name)}
 
 
 def add_local_files_if_present(
@@ -127,6 +143,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
     (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
     (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
+    (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
 ]
 
 
@@ -186,11 +203,12 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/decrypt-repo-env /usr/local/bin/encrypt-repo-env /root/.scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/decrypt-repo-env /usr/local/bin/encrypt-repo-env /usr/local/bin/t3-usage-sync /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/decrypt-repo-env /usr/local/bin/decrypt_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/encrypt-repo-env /usr/local/bin/encrypt_repo_env.py 2>/dev/null || true",
+    "ln -sf /usr/local/bin/t3-usage-sync /usr/local/bin/t3_usage_sync 2>/dev/null || true",
     "mkdir -p /root/.scripts /root/.secrets",
     "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghls /root/.scripts/ghls 2>/dev/null || true",
@@ -201,6 +219,7 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/decrypt-repo-env /root/.scripts/decrypt-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/encrypt-repo-env /root/.scripts/encrypt-repo-env 2>/dev/null || true",
+    "ln -sf /usr/local/bin/t3-usage-sync /root/.scripts/t3-usage-sync 2>/dev/null || true",
 )
 
 
@@ -228,27 +247,23 @@ def browser_enabled(
     return browser or opencode or agy
 
 
-T3_VERSION = "0.1.3"
+# T3 Code release configuration and binary patch target
+T3_VERSION = "0.1.15"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
-T3_ANTIGRAVITY_VERSION = "1.3.0"
-T3_ANTIGRAVITY_RELEASE_ID = (
-    "9fb60956af0a9d76220a4db91ca9ac88e2a2372ad68f985ab5fceace6b825b96"
-)
-T3_ANTIGRAVITY_URL = (
-    f"https://dl.google.com/agy-extensions/releases/linux/"
-    f"agy-acp-server-{T3_ANTIGRAVITY_VERSION}-linux-x86_64.zip"
-)
+# Antigravity ACP plugin bundle configuration
+T3_ANTIGRAVITY_VERSION = "0.0.4"
+T3_ANTIGRAVITY_URL = f"https://github.com/pingdotgg/antigravity-releases/releases/download/v{T3_ANTIGRAVITY_VERSION}/antigravity-acp-v{T3_ANTIGRAVITY_VERSION}-linux-x64.zip"
 T3_ANTIGRAVITY_MANAGED_DIR = "/root/.t3/tools/antigravity-acp/linux-x64"
 T3_ANTIGRAVITY_VERSION_DIR = (
-    f"{T3_ANTIGRAVITY_MANAGED_DIR}/versions/{T3_ANTIGRAVITY_RELEASE_ID}"
+    f"{T3_ANTIGRAVITY_MANAGED_DIR}/antigravity-acp-{T3_ANTIGRAVITY_VERSION}"
 )
 T3_INSTALL_COMPLETE_JSON = (
-    f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}","version":"{T3_ANTIGRAVITY_VERSION}",'
-    f'"executable":{{"name":"agy_acp_server.par","bytes":926533965}},'
-    f'"harness":{{"name":"localharness_external","bytes":130388040}}}}'
+    '{"version":"'
+    + T3_ANTIGRAVITY_VERSION
+    + '","installedAt":"2026-10-27T12:00:00.000Z"}'
 )
-T3_ACTIVE_JSON = f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}"}}'
+T3_ACTIVE_JSON = '{"activeVersion":"' + T3_ANTIGRAVITY_VERSION + '"}'
 
 
 def build_sandbox_image(
@@ -262,12 +277,14 @@ def build_sandbox_image(
     herdr: bool = False,
     pi: bool = False,
 ) -> modal.Image:
-    """Constructs the layered Modal image according to requested features."""
+    """Builds a sandbox image layered with only the requested tooling."""
     image = base_image
     path_prefixes: list[str] = []
 
     if opencode or t3:
-        image = image.run_commands("curl -fsSL https://opencode.ai/v2/install | bash")
+        image = image.run_commands(
+            "curl -fsSL https://opencode.ai/v2/install | bash"
+        )
         path_prefixes.append("/root/.opencode/bin")
         image = add_local_files_if_present(
             image,
@@ -279,10 +296,9 @@ def build_sandbox_image(
 
     if agy:
         image = image.run_commands(
-            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-            "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
+            "curl -fsSL https://antigravity.google.com/download/linux | bash",
+            "mkdir -p /root/.gemini/antigravity-cli/cache",
         )
-        path_prefixes.append("/root/.local/bin")
         image = add_local_files_if_present(
             image,
             [
@@ -296,46 +312,19 @@ def build_sandbox_image(
             ],
         )
 
-    if browser:
-        # Single shared Google Chrome used by both the Playwright and Chrome
-        # DevTools MCP servers. Playwright installs it at
-        # /opt/google/chrome/chrome -- the "chrome"/"stable" channel both MCP
-        # servers resolve to by default -- and pulls the OS libraries it needs.
-        image = image.run_commands("npx -y playwright install --with-deps chrome")
-
-    if react_native:
-        image = (
-            image.apt_install("openjdk-17-jdk-headless", "watchman")
-            .env(
-                {
-                    "ANDROID_HOME": "/opt/android-sdk",
-                    "ANDROID_SDK_ROOT": "/opt/android-sdk",
-                    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
-                }
-            )
-            .run_commands(
-                "npm install --global @expo/ngrok@^4.1.0",
-                "mkdir -p /opt/android-sdk/cmdline-tools",
-                "wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip",
-                "unzip -q /tmp/cmdline-tools.zip -d /opt/android-sdk/cmdline-tools",
-                "mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest",
-                "rm -f /tmp/cmdline-tools.zip",
-                "yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses",
-                "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "
-                '"platform-tools" '
-                '"platforms;android-34" "build-tools;34.0.0" '
-                '"platforms;android-35" "build-tools;35.0.0" '
-                '"ndk;26.1.10909125" "cmake;3.22.1"',
-            )
-        )
-        path_prefixes.extend(
-            [
-                "/opt/android-sdk/cmdline-tools/latest/bin",
-                "/opt/android-sdk/platform-tools",
-            ]
+    if browser_enabled(browser=browser, opencode=opencode, agy=agy):
+        image = image.run_commands(
+            "uvx playwright install --with-deps chromium",
+            "chmod -R 777 /root/.cache/ms-playwright 2>/dev/null || true",
         )
 
     if modal_tooling:
+        image = image.run_commands(
+            "python3 -m venv /opt/modal-env",
+            "/opt/modal-env/bin/pip install --upgrade modal",
+            "mkdir -p /root/.modal",
+        )
+        path_prefixes.append("/opt/modal-env/bin")
         image = add_local_files_if_present(
             image,
             [

@@ -94,6 +94,8 @@ def print_access_info(
     t3_pair_url: str | None = None,
     t3_qr_code: str | None = None,
     t3_ssh_host: str | None = None,
+    t3_persist: bool = False,
+    t3_usage_volume: str | None = None,
     memory_gb: int | None = None,
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
@@ -131,6 +133,8 @@ def print_access_info(
     elif t3_url:
         print(f"  • T3 Code:  {t3_url} (port {t3_port})")
         print(f"  • Web UI:   {t3_url}")
+    if t3_persist and (t3_pair_url or t3_url):
+        print(f"  • T3 Storage: Persistent volume ({t3_usage_volume or 't3code-usage-v1'})")
     instance_name = t3_ssh_host or sandbox_name or app_name
     if agy_enabled:
         print(f"  • Remote Control: https://antigravity.google.com (Instance: {instance_name})")
@@ -143,33 +147,35 @@ def print_access_info(
         print("\nVS Code / SSH Config snippet:")
         print(generate_ssh_config_snippet(instance_name, ssh_host, ssh_port).rstrip("\n"))
     if t3_qr_code:
-        print("\n📱 Scan with T3 Code Mobile App (iOS / Android):")
+        print("\nScan with T3 Code Mobile App (iOS / Android):")
         for line in t3_qr_code.splitlines():
             print(f"  {line}")
     print("=" * 60 + "\n")
 
 
 def print_snapshot_info(
-    sandbox_id: str,
+    snapshot_id: str,
     image_id: str,
-    ttl_days: int = 30,
-    ttl_seconds: int | None = None,
-    is_vm: bool = False,
-    terminate: bool = False,
+    name: str,
+    ttl_days: int,
+    expires_at: float,
+    sandbox_id: str,
+    profile: str | None = None,
 ) -> None:
-    """Formats and prints snapshot capture confirmation."""
-    ttl_secs = ttl_seconds if ttl_seconds is not None else ttl_days * 86400
-    vm_flag = " --vm" if is_vm else ""
-    print("\n" + "=" * 60)
-    print("📸  Filesystem Snapshot Captured!")
-    print(f"  • Sandbox ID:  {sandbox_id}")
-    print(f"  • Image ID:    {image_id}")
-    print(f"  • Retention:   {ttl_days} days ({ttl_secs}s)")
-    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
-    print("=" * 60 + "\n")
+    """Prints friendly CLI summary for captured or inspected snapshots."""
+    import datetime
 
-    if terminate:
-        print(f"🧹 Terminating sandbox {sandbox_id}...")
-        print(f"✅ Sandbox {sandbox_id} terminated.")
-    else:
-        print(f"ℹ️  Sandbox {sandbox_id} remains running (non-destructive snapshot).")
+    exp_date = datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
+    print("\n" + "=" * 60)
+    print("📸  Snapshot Summary")
+    print(f"  • Name:        {name}")
+    print(f"  • Snapshot ID: {snapshot_id}")
+    print(f"  • Image ID:    {image_id}")
+    print(f"  • Source SB:   {sandbox_id}")
+    if profile:
+        print(f"  • Profile:     {profile}")
+    print(f"  • Retention:   {ttl_days} days (Expires: {exp_date})")
+    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox")
+    print("=" * 60 + "\n")

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import modal
 
+from shared.image import DEFAULT_T3_USAGE_VOLUME
 from .config import (
     DEFAULT_METRO_PORT,
     DEFAULT_OPENCODE_PORT,
@@ -50,12 +51,18 @@ def create_parser() -> argparse.ArgumentParser:
         help="Capture a root filesystem snapshot of an active sandbox by ID.",
     )
     parser.add_argument(
+        "--from-snapshot",
+        metavar="IMAGE_ID",
+        default=None,
+        help="Launch a new sandbox restored from a filesystem snapshot image ID.",
+    )
+    parser.add_argument(
         "--snapshot-ttl",
         type=int,
         default=30,
-        action=SnapshotTTLAction,
         metavar="DAYS",
-        help="Time-to-live in days for the captured snapshot image (default: 30 days).",
+        action=SnapshotTTLAction,
+        help="Snapshot retention time in days (default: 30 days).",
     )
     parser.add_argument(
         "--terminate",
@@ -63,20 +70,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Terminate the target sandbox immediately after snapshot capture.",
     )
 
-    # Filesystem Snapshot restoration flags
+    # Standard sandbox launcher options
     parser.add_argument(
-        "--from-snapshot",
-        metavar="IMAGE_ID",
-        default=None,
-        help="Launch a sandbox directly from a filesystem snapshot image ID.",
-    )
-    parser.add_argument(
+        "-n",
         "--name",
+        dest="name",
         default=None,
-        metavar="APP_NAME",
-        help="Explicit Modal application name for standalone sandboxes (mandatory when launching without -r/--repo; cannot be used with -r/--repo).",
+        help="Instance name for standalone launches without a repository (e.g. standalone-my-box).",
     )
-
     parser.add_argument(
         "-b",
         "--github-branch",
@@ -141,6 +142,16 @@ def create_parser() -> argparse.ArgumentParser:
         "--t3-ssh-host",
         default=None,
         help="SSH host alias to use in T3 Code for 'Open in VS Code' links (defaults to sandbox instance name).",
+    )
+    parser.add_argument(
+        "--t3-usage-volume",
+        default=DEFAULT_T3_USAGE_VOLUME,
+        help=f"Modal Volume name used to persist T3 Code usage and transcripts (default: {DEFAULT_T3_USAGE_VOLUME}).",
+    )
+    parser.add_argument(
+        "--no-t3-persist",
+        action="store_true",
+        help="Disable persistent T3 Code usage and transcript volume synchronization across sandboxes.",
     )
     parser.add_argument(
         "--react-native",
@@ -230,6 +241,8 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or args.agy
             or args.t3
             or args.t3_ssh_host
+            or getattr(args, "no_t3_persist", False)
+            or getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME) != DEFAULT_T3_USAGE_VOLUME
             or args.herdr
             or args.pi
             or args.full_clone
@@ -259,6 +272,12 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--full-clone cannot be used without -r/--repo.")
         if args.t3_ssh_host and not args.t3:
             parser.error("--t3-ssh-host can only be used with --t3.")
+        if getattr(args, "no_t3_persist", False) and not args.t3:
+            parser.error("--no-t3-persist can only be used with --t3.")
+        if getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME) != DEFAULT_T3_USAGE_VOLUME and not args.t3:
+            parser.error("--t3-usage-volume can only be used with --t3.")
+        if getattr(args, "no_t3_persist", False) and getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME) != DEFAULT_T3_USAGE_VOLUME:
+            parser.error("--no-t3-persist and --t3-usage-volume cannot be used together.")
 
 
 def capture_snapshot(

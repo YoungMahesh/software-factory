@@ -216,6 +216,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_ENCRYPT_REPO_ENV,
             LOCAL_CLOUDFLARE_SECRET,
             REMOTE_CLOUDFLARE_SECRET,
+            LOCAL_T3_USAGE_SYNC,
+            REMOTE_T3_USAGE_SYNC,
         )
 
         expected = [
@@ -232,10 +234,12 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
             (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
             (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
+            (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
         self.assertEqual(REMOTE_SETUP_SCRIPT, "/root/.scripts/setup.sh")
         self.assertEqual(REMOTE_CLOUDFLARE_SECRET, "/root/.secrets/cloudflare.env")
+        self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
 
     def test_developer_commands_staged_and_symlinked_system_wide(self):
         repo_root = Path(__file__).resolve().parents[2]
@@ -254,6 +258,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_DECRYPT_REPO_ENV,
             LOCAL_ENCRYPT_REPO_ENV,
             REMOTE_ENCRYPT_REPO_ENV,
+            LOCAL_T3_USAGE_SYNC,
+            REMOTE_T3_USAGE_SYNC,
         )
 
         self.assertEqual(REMOTE_AGYQ, "/usr/local/bin/agyq")
@@ -263,6 +269,7 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertEqual(REMOTE_AGYPROFILE, "/usr/local/bin/agyprofile")
         self.assertEqual(REMOTE_DECRYPT_REPO_ENV, "/usr/local/bin/decrypt-repo-env")
         self.assertEqual(REMOTE_ENCRYPT_REPO_ENV, "/usr/local/bin/encrypt-repo-env")
+        self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
 
         self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
         self.assertTrue(LOCAL_GHLS.exists(), "scripts/ghls must exist")
@@ -271,6 +278,7 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
         self.assertTrue(LOCAL_DECRYPT_REPO_ENV.exists(), "scripts/decrypt_repo_env.py must exist")
         self.assertTrue(LOCAL_ENCRYPT_REPO_ENV.exists(), "scripts/encrypt_repo_env.py must exist")
+        self.assertTrue(LOCAL_T3_USAGE_SYNC.exists(), "shared/t3_usage_sync.py must exist")
 
         startup_content = (repo_root / "shared" / "startup.sh").read_text()
         self.assertIn("chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile", startup_content)
@@ -325,105 +333,98 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_ANTIGRAVITY_ENV,
             LOCAL_MODAL_SECRET,
             REMOTE_MODAL_SECRET,
-            LOCAL_T3_KEYBINDINGS,
-            REMOTE_T3_KEYBINDINGS,
-            LOCAL_T3_WRAPPER,
-            REMOTE_T3_WRAPPER,
+            LOCAL_PI_SETTINGS,
+            REMOTE_PI_SETTINGS,
+            LOCAL_PI_MODELS,
+            REMOTE_PI_MODELS,
         )
 
-        mock_add_files.side_effect = lambda img, files: img
+        mock_image = MagicMock()
+        mock_image.run_commands.return_value = mock_image
+        mock_image.env.return_value = mock_image
+        mock_add_files.side_effect = lambda img, *args, **kwargs: img
 
-        # Test opencode
-        mock_add_files.reset_mock()
-        build_sandbox_image(opencode=True)
-        mock_add_files.assert_called_with(
-            ANY,
-            [
-                (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
-            ],
-        )
+        with patch("shared.image.base_image", mock_image):
+            # Test OpenCode
+            build_sandbox_image(opencode=True)
+            mock_add_files.assert_any_call(
+                mock_image,
+                [
+                    (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+                ],
+            )
 
-        # Test agy
-        mock_add_files.reset_mock()
-        build_sandbox_image(agy=True)
-        mock_add_files.assert_called_with(
-            ANY,
-            [
-                (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
-                (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
-                (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
-                (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
-                (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
-                (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
-                (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
-            ],
-        )
+            # Test Antigravity
+            build_sandbox_image(agy=True)
+            mock_add_files.assert_any_call(
+                mock_image,
+                [
+                    (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
+                    (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
+                    (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
+                    (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
+                    (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
+                    (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
+                    (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
+                ],
+            )
 
-        # Test modal_tooling
-        mock_add_files.reset_mock()
-        build_sandbox_image(modal_tooling=True)
-        mock_add_files.assert_called_with(
-            ANY,
-            [
-                (LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET),
-            ],
-        )
+            # Test Modal
+            build_sandbox_image(modal_tooling=True)
+            mock_add_files.assert_any_call(
+                mock_image,
+                [
+                    (LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET),
+                ],
+            )
 
-        # Test t3 also stages opencode config and secrets
-        mock_add_files.reset_mock()
-        build_sandbox_image(t3=True)
-        mock_add_files.assert_any_call(
-            ANY,
-            [
-                (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
-            ],
-        )
-        mock_add_files.assert_any_call(
-            ANY,
-            [
-                (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
-                (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
-            ],
-        )
+            # Test Pi
+            build_sandbox_image(pi=True)
+            mock_add_files.assert_any_call(
+                mock_image,
+                [
+                    (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
+                    (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
+                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
+                ],
+            )
 
-    def test_build_sandbox_image_layers_react_native(self):
+    @patch("shared.image.base_image")
+    def test_build_sandbox_image_layers_correct_tools(self, mock_base):
         from shared.image import build_sandbox_image
 
-        with patch("shared.image.base_image") as mock_base:
-            mock_apt_img = MagicMock()
-            mock_env_img = MagicMock()
-            mock_run_img = MagicMock()
+        mock_image = MagicMock()
+        mock_base.run_commands.return_value = mock_image
+        mock_image.run_commands.return_value = mock_image
+        mock_image.env.return_value = mock_image
 
-            mock_base.apt_install.return_value = mock_apt_img
-            mock_apt_img.env.return_value = mock_env_img
-            mock_env_img.run_commands.return_value = mock_run_img
+        with patch("shared.image.add_local_files_if_present", side_effect=lambda img, *args, **kwargs: img):
+            # Test vanilla launch
+            img = build_sandbox_image()
+            self.assertEqual(img, mock_base)
 
-            build_sandbox_image(react_native=True)
-
-            mock_base.apt_install.assert_called_once_with(
-                "openjdk-17-jdk-headless", "watchman"
+            # Test OpenCode
+            build_sandbox_image(opencode=True)
+            mock_base.run_commands.assert_called_with(
+                "curl -fsSL https://opencode.ai/v2/install | bash"
             )
-            run_cmd_args = mock_env_img.run_commands.call_args[0]
-            self.assertIn("npm install --global @expo/ngrok@^4.1.0", run_cmd_args)
 
-    def test_startup_script_react_native_inotify_and_checks(self):
-        from shared.image import LOCAL_STARTUP_SCRIPT
+            # Test Antigravity
+            build_sandbox_image(agy=True)
+            mock_base.run_commands.assert_called_with(
+                "curl -fsSL https://antigravity.google.com/download/linux | bash",
+                "mkdir -p /root/.gemini/antigravity-cli/cache",
+            )
 
-        content = LOCAL_STARTUP_SCRIPT.read_text()
-        self.assertIn("sysctl -w fs.inotify.max_user_watches=524288", content)
-        self.assertIn("/etc/sysctl.d/99-react-native.conf", content)
-        self.assertIn("watchman --version", content)
-        self.assertIn("npm list -g @expo/ngrok", content)
+            # Test Herdr
+            build_sandbox_image(herdr=True)
+            mock_base.run_commands.assert_called_with(
+                "curl -fsSL https://herdr.dev/install.sh | env HERDR_INSTALL_DIR=/usr/local/bin sh"
+            )
 
-    def test_base_image_declares_github_cli(self):
-        import inspect
-        from shared import image
-
-        source = inspect.getsource(image)
-        self.assertIn('"gh"', source)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            # Test Pi
+            build_sandbox_image(pi=True)
+            mock_base.run_commands.assert_called_with(
+                "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+            )

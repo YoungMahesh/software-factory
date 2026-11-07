@@ -14,6 +14,7 @@ import modal
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shared.image import (
+    DEFAULT_T3_USAGE_VOLUME,
     REMOTE_STARTUP_SCRIPT,
     SHARED_SECRET_NAME,
     browser_enabled,
@@ -101,7 +102,7 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         )
         return
 
-    print(f"📡 Delegating sandbox launch to remote control plane ({endpoint_url})...")
+    print(f"📡 Delegating sandbox launch to {endpoint_url}...")
     payload = {
         "repo": args.repo,
         "testing": args.testing,
@@ -117,6 +118,8 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         "t3": args.t3,
         "t3_port": args.t3_port,
         "t3_ssh_host": args.t3_ssh_host,
+        "t3_usage_volume": getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME),
+        "no_t3_persist": getattr(args, "no_t3_persist", False),
         "react_native": args.react_native,
         "metro_port": args.metro_port,
         "modal": args.modal,
@@ -144,6 +147,8 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         t3_pair_url=data.get("t3_pair_url"),
         t3_qr_code=data.get("t3_qr_code"),
         t3_ssh_host=data.get("t3_ssh_host"),
+        t3_persist=data.get("t3_persist", False),
+        t3_usage_volume=data.get("t3_usage_volume"),
         memory_gb=data.get("memory_gb"),
         agy_enabled=data.get("agy_enabled", False),
         cloudflare_enabled=data.get("cloudflare_enabled", True),
@@ -165,66 +170,19 @@ def run_sandbox_launch(
     parser: argparse.ArgumentParser | None = None,
     repo_root: Path | None = None,
 ) -> None:
-    """Validates configuration and launches a sandbox locally or remotely."""
-    if getattr(args, "remote", False):
+    """Launches a sandbox locally using the Modal client SDK."""
+    if args.remote:
         run_remote_launch(args, parser=parser)
         return
 
     if parser is None:
         parser = create_parser()
 
-    if repo_root is None:
-        repo_root = Path(__file__).resolve().parent.parent
-
-    clean_repo = args.repo.strip().rstrip("/") if args.repo else None
-    orgs_env_file = repo_root / ".secrets" / "github-orgs.env"
-    if not orgs_env_file.is_file():
-        orgs_env_file = repo_root / "secrets" / "github-orgs.env"
-
-    if clean_repo and not orgs_env_file.is_file():
-        parser.error(
-            f"Organization credentials file not found: {orgs_env_file} (expected secrets/github-orgs.env or .secrets/github-orgs.env)."
-        )
-
     if args.memory is not None:
-        if not args.vm:
-            parser.error("--memory can only be used with --vm.")
-        if args.memory < 1:
-            parser.error("--memory must be a positive integer number of GB.")
         print(
             "⚠️  Warning: --memory is deprecated. VM Sandboxes now use standard burstable RAM (128, 16384) MiB. "
             f"Using value to configure swapfile ({args.memory * 2} GB).",
             file=sys.stderr,
-        )
-
-    if args.opencode and args.opencode_port == DEFAULT_WEB_PORT:
-        parser.error(
-            f"--opencode-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
-        )
-
-    if args.react_native:
-        if args.metro_port == DEFAULT_WEB_PORT:
-            parser.error(
-                f"--metro-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
-            )
-        if args.opencode and args.metro_port == args.opencode_port:
-            parser.error(
-                "--metro-port and --opencode-port must differ: a port can only be exposed once."
-            )
-
-    if args.t3 and args.t3_port == DEFAULT_WEB_PORT:
-        parser.error(
-            f"--t3-port cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
-        )
-
-    if args.t3 and args.opencode and args.t3_port == args.opencode_port:
-        parser.error(
-            "--t3-port and --opencode-port must differ: a port can only be exposed once."
-        )
-
-    if args.t3 and args.react_native and args.t3_port == args.metro_port:
-        parser.error(
-            "--t3-port and --metro-port must differ: a port can only be exposed once."
         )
 
     req = LaunchRequest(
@@ -242,6 +200,8 @@ def run_sandbox_launch(
         t3=args.t3,
         t3_port=args.t3_port,
         t3_ssh_host=getattr(args, "t3_ssh_host", None),
+        t3_usage_volume=getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME),
+        no_t3_persist=getattr(args, "no_t3_persist", False),
         react_native=args.react_native,
         metro_port=args.metro_port,
         modal=args.modal,
@@ -254,6 +214,8 @@ def run_sandbox_launch(
 
     try:
         sandbox, result = launch_sandbox(req, repo_root=repo_root)
+    except (ValueError, FileNotFoundError) as exc:
+        parser.error(str(exc))
     except modal.exception.AlreadyExistsError as exc:
         print(
             f"❌ Sandbox already exists and is running: {exc}",
@@ -277,6 +239,8 @@ def run_sandbox_launch(
         t3_pair_url=result.t3_pair_url,
         t3_qr_code=result.t3_qr_code,
         t3_ssh_host=result.t3_ssh_host,
+        t3_persist=result.t3_persist,
+        t3_usage_volume=result.t3_usage_volume,
         memory_gb=result.memory_gb,
         agy_enabled=result.agy_enabled,
         cloudflare_enabled=result.cloudflare_enabled,
