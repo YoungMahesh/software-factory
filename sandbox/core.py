@@ -83,6 +83,7 @@ class SnapshotRequest(BaseModel):
     sandbox_id: str
     ttl_days: int = 30
     terminate: bool = False
+    name: str = ""
 
 
 class SnapshotResponse(BaseModel):
@@ -197,6 +198,7 @@ def launch_sandbox(
     repo_root: Path | None = None,
     build_image_fn: Callable | None = None,
     load_pubkey_fn: Callable | None = None,
+    client: modal.Client | None = None,
 ) -> tuple[modal.Sandbox, LaunchResponse]:
     """Provisions a Modal sandbox and executes the post-launch setup pipeline."""
     validate_launch_request(req)
@@ -234,7 +236,10 @@ def launch_sandbox(
     random_id = uuid.uuid4().hex[:8]
     app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
     sandbox_name = f"{app_name}-{random_id}"
-    app = modal.App.lookup(app_name, create_if_missing=True)
+    if client is not None:
+        app = modal.App.lookup(app_name, client=client, create_if_missing=True)
+    else:
+        app = modal.App.lookup(app_name, create_if_missing=True)
 
     browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy)
 
@@ -321,29 +326,20 @@ def launch_sandbox(
         env["METRO_PORT"] = str(req.metro_port)
         volumes.update(get_gradle_volumes())
 
-    features = []
-    if not req.no_cloudflare:
-        features.append("Cloudflare Tunnel")
-    if req.full_clone:
-        features.append("Full Git Clone")
-    if req.react_native:
-        features.append("React Native")
-    if req.agy:
-        features.append("Antigravity")
-    if req.opencode:
-        features.append("OpenCode")
-    if req.t3:
-        features.append("T3 Code")
-    if req.modal:
-        features.append("Modal")
-    if req.sops:
-        features.append("SOPS")
-    if req.herdr:
-        features.append("Herdr")
-    if req.pi:
-        features.append("Pi")
-    if browser_active:
-        features.append("Browser")
+    feature_flags = [
+        (not req.no_cloudflare, "Cloudflare Tunnel"),
+        (req.full_clone, "Full Git Clone"),
+        (req.react_native, "React Native"),
+        (req.agy, "Antigravity"),
+        (req.opencode, "OpenCode"),
+        (req.t3, "T3 Code"),
+        (req.modal, "Modal"),
+        (req.sops, "SOPS"),
+        (req.herdr, "Herdr"),
+        (req.pi, "Pi"),
+        (browser_active, "Browser"),
+    ]
+    features = [label for active, label in feature_flags if active]
 
     runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
     features_suffix = f" & {' & '.join(features)}" if features else ""
@@ -367,6 +363,8 @@ def launch_sandbox(
         "runtime": "vm" if req.vm else "gvisor",
         "memory": (128, 16384),
     }
+    if client is not None:
+        sandbox_kwargs["client"] = client
 
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
@@ -423,15 +421,66 @@ def capture_snapshot_core(
     sandbox_id: str,
     ttl_days: int = 30,
     terminate: bool = False,
+    name: str = "",
+    profile: str | None = None,
+    client: modal.Client | None = None,
 ) -> SnapshotResponse:
     """Flushes buffers and captures a filesystem snapshot of an active sandbox."""
-    sandbox = modal.Sandbox.from_id(sandbox_id)
+    from sandbox.profiles import get_all_clients, get_client_for_profile
+
+    target_client = client
+    target_profile = profile
+    if target_client is None:
+        if target_profile:
+            try:
+                target_client = get_client_for_profile(target_profile)
+            except Exception:
+                target_client = None
+        else:
+            # Discover which profile has access to sandbox_id
+            for prof_name, cli in get_all_clients().items():
+                try:
+                    sb_probe = modal.Sandbox.from_id(sandbox_id, client=cli)
+                    sb_probe.poll()
+                    target_client = cli
+                    target_profile = prof_name
+                    break
+                except Exception:
+                    pass
+
+    sandbox = (
+        modal.Sandbox.from_id(sandbox_id, client=target_client)
+        if target_client
+        else modal.Sandbox.from_id(sandbox_id)
+    )
     sync_proc = sandbox.exec("sync")
     sync_proc.wait()
+
+    is_vm = False
+    try:
+        vm_proc = sandbox.exec("sh", "-c", "[ -S /var/run/docker.sock ] || [ -f /swapfile ]")
+        if vm_proc.wait() == 0:
+            is_vm = True
+    except Exception:
+        is_vm = False
 
     ttl_seconds = ttl_days * 86400
     snapshot_image = sandbox.snapshot_filesystem(ttl=ttl_seconds)
     image_id = snapshot_image.object_id
+
+    try:
+        from sandbox.snapshots import record_snapshot
+
+        record_snapshot(
+            image_id=image_id,
+            sandbox_id=sandbox_id,
+            name=name,
+            ttl_days=ttl_days,
+            is_vm=is_vm,
+            profile=target_profile,
+        )
+    except Exception:
+        pass
 
     if terminate:
         sandbox.terminate()

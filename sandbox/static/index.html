@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modal Sandbox Runner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white"
+      x-data="sandboxApp()" x-init="init()" x-cloak>
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/30">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
+            Modal Sandbox Runner
+            <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">Control Plane</span>
+          </h1>
+        </div>
+      </div>
+
+      <!-- Navigation & Global Controls -->
+      <div class="flex items-center space-x-3 sm:space-x-4">
+        <!-- Profile Switcher Dropdown -->
+        <div class="relative" x-data="{ open: false }">
+          <button @click="open = !open"
+                  class="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors">
+            <span class="w-2 h-2 rounded-full mr-2" :class="selectedProfile === 'all' ? 'bg-indigo-400' : 'bg-emerald-400'"></span>
+            <span class="text-slate-400 mr-1 hidden sm:inline">Profile:</span>
+            <span class="font-semibold text-white" x-text="selectedProfile === 'all' ? 'All Profiles' : selectedProfile"></span>
+            <svg class="w-3.5 h-3.5 ml-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <div x-show="open" @click.away="open = false"
+               class="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 text-xs">
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800">
+              Workspace Profiles
+            </div>
+            <button @click="selectProfile('all'); open = false;"
+                    class="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
+                    :class="selectedProfile === 'all' ? 'text-indigo-400 font-semibold bg-slate-800/40' : 'text-slate-300'">
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span>All Profiles (Aggregated)</span>
+              </div>
+              <span x-show="selectedProfile === 'all'" class="text-indigo-400 font-bold">✓</span>
+            </button>
+            <template x-for="p in profiles" :key="p.name">
+              <button @click="selectProfile(p.name); open = false;"
+                      class="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
+                      :class="selectedProfile === p.name ? 'text-indigo-400 font-semibold bg-slate-800/40' : 'text-slate-300'">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2 h-2 rounded-full" :class="p.active ? 'bg-emerald-400' : 'bg-slate-500'"></span>
+                  <span x-text="p.name"></span>
+                  <span x-show="p.active" class="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-emerald-400 font-mono">active</span>
+                </div>
+                <span x-show="selectedProfile === p.name" class="text-indigo-400 font-bold">✓</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Auto-refresh Toggle -->
+        <label class="hidden md:flex items-center space-x-2 text-xs text-slate-400 cursor-pointer select-none">
+          <input type="checkbox" x-model="autoRefresh" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0">
+          <span>Auto-refresh (5s)</span>
+        </label>
+
+        <!-- Refresh Button -->
+        <button @click="refreshAll()" :disabled="loading"
+                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium text-slate-200 transition-colors disabled:opacity-50">
+          <svg class="w-4 h-4 mr-1.5" :class="{'animate-spin': loading}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <!-- Tab Controls & Filter -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <nav class="flex space-x-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <button @click="currentTab = 'sandboxes'"
+                :class="currentTab === 'sandboxes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+          </svg>
+          <span>Sandboxes</span>
+          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+                x-text="runningCount + ' / ' + sandboxes.length"></span>
+        </button>
+
+        <button @click="currentTab = 'snapshots'"
+                :class="currentTab === 'snapshots' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>Snapshots</span>
+          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+                x-text="snapshots.length"></span>
+        </button>
+      </nav>
+
+      <!-- Quick Filter -->
+      <div class="flex items-center space-x-3">
+        <div class="relative w-full sm:w-64">
+          <input type="text" x-model="searchQuery" placeholder="Filter by ID, name, profile..."
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+          <svg class="w-4 h-4 absolute left-3 top-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: SANDBOXES LIST -->
+    <div x-show="currentTab === 'sandboxes'" class="space-y-4">
+      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
+        <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
+          <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <tr>
+              <th scope="col" class="px-6 py-4">Status</th>
+              <th scope="col" class="px-6 py-4">Profile</th>
+              <th scope="col" class="px-6 py-4">Instance / App Name</th>
+              <th scope="col" class="px-6 py-4">Sandbox ID</th>
+              <th scope="col" class="px-6 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60 font-mono">
+            <template x-for="sb in filteredSandboxes" :key="sb.id">
+              <tr class="hover:bg-slate-800/40 transition-colors">
+                <!-- Status Badge -->
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <template x-if="sb.running">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      RUNNING
+                    </span>
+                  </template>
+                  <template x-if="!sb.running">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                      STOPPED <span x-show="sb.exit_code !== null" x-text="'(' + sb.exit_code + ')'" class="ml-1"></span>
+                    </span>
+                  </template>
+                </td>
+
+                <!-- Profile Badge -->
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                        x-text="sb.profile || 'default'"></span>
+                </td>
+
+                <!-- Instance Name -->
+                <td class="px-6 py-4 whitespace-nowrap font-sans">
+                  <div class="font-medium text-slate-200" x-text="sb.name || '—'"></div>
+                  <div class="text-xs text-slate-500" x-text="sb.app_name || 'default-app'"></div>
+                </td>
+
+                <!-- Sandbox ID -->
+                <td class="px-6 py-4 whitespace-nowrap text-slate-300">
+                  <div class="flex items-center space-x-2">
+                    <span x-text="sb.id"></span>
+                    <button @click="copyText(sb.id, 'Sandbox ID copied!')" title="Copy Sandbox ID"
+                            class="text-slate-500 hover:text-slate-300">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+
+                <!-- Actions -->
+                <td class="px-6 py-4 whitespace-nowrap text-right font-sans space-x-2">
+                  <!-- Snapshot Button -->
+                  <button @click="openSnapshotModal(sb)" :disabled="!sb.running"
+                          class="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    </svg>
+                    Snapshot
+                  </button>
+
+                  <!-- SSH Copy Button -->
+                  <button @click="copySshCommand(sb)" :disabled="!sb.running"
+                          class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-40">
+                    SSH
+                  </button>
+
+                  <!-- Terminate Button -->
+                  <button @click="confirmTerminate(sb)" :disabled="!sb.running"
+                          class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    Terminate
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="filteredSandboxes.length === 0">
+              <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
+                No matching sandboxes found in selected workspace profile.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: SNAPSHOTS LIST -->
+    <div x-show="currentTab === 'snapshots'" class="space-y-4">
+      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
+        <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
+          <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <tr>
+              <th scope="col" class="px-6 py-4">Snapshot Label</th>
+              <th scope="col" class="px-6 py-4">Profile</th>
+              <th scope="col" class="px-6 py-4">Image ID</th>
+              <th scope="col" class="px-6 py-4">Source Sandbox</th>
+              <th scope="col" class="px-6 py-4">Created / TTL</th>
+              <th scope="col" class="px-6 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60 font-mono">
+            <template x-for="snap in filteredSnapshots" :key="snap.image_id">
+              <tr class="hover:bg-slate-800/40 transition-colors">
+                <!-- Label & Mode -->
+                <td class="px-6 py-4 whitespace-nowrap font-sans">
+                  <div class="font-medium text-slate-200" x-text="snap.name || 'Unnamed Snapshot'"></div>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span x-show="snap.is_vm" class="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-300 font-mono">Linux VM</span>
+                    <span x-show="!snap.is_vm" class="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/20 text-blue-300 font-mono">Container</span>
+                  </div>
+                </td>
+
+                <!-- Profile Badge -->
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-800 text-indigo-300 border border-slate-700"
+                        x-text="snap.profile || 'any'"></span>
+                </td>
+
+                <!-- Image ID -->
+                <td class="px-6 py-4 whitespace-nowrap text-slate-300">
+                  <div class="flex items-center space-x-2">
+                    <span x-text="snap.image_id"></span>
+                    <button @click="copyText(snap.image_id, 'Image ID copied!')" title="Copy Image ID"
+                            class="text-slate-500 hover:text-slate-300">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+
+                <!-- Source Sandbox -->
+                <td class="px-6 py-4 whitespace-nowrap text-slate-400 text-xs">
+                  <span x-text="snap.sandbox_id || '—'"></span>
+                </td>
+
+                <!-- Created / Retention -->
+                <td class="px-6 py-4 whitespace-nowrap font-sans text-xs text-slate-400">
+                  <div x-text="formatDate(snap.created_at)"></div>
+                  <div class="text-slate-500" x-text="snap.ttl_days ? (snap.ttl_days + ' days retention') : ''"></div>
+                </td>
+
+                <!-- Actions -->
+                <td class="px-6 py-4 whitespace-nowrap text-right font-sans space-x-2">
+                  <!-- Launch Button -->
+                  <button @click="openLaunchModal(snap)"
+                          class="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-sm">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Launch Sandbox
+                  </button>
+
+                  <!-- Delete Record Button -->
+                  <button @click="deleteSnapshotRecord(snap)"
+                          class="inline-flex items-center px-2 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 border border-slate-700 text-xs transition-colors">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="filteredSnapshots.length === 0">
+              <td colspan="6" class="px-6 py-12 text-center text-slate-500 font-sans">
+                No saved snapshots found in the registry.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: CREATE SNAPSHOT -->
+  <div x-show="snapshotModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div @click.away="snapshotModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          </svg>
+          Capture Filesystem Snapshot
+        </h3>
+        <button @click="snapshotModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Target Sandbox</label>
+            <input type="text" :value="snapshotTarget?.id" disabled
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono cursor-not-allowed">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Workspace Profile</label>
+            <input type="text" :value="snapshotTarget?.profile || 'default'" disabled
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-indigo-300 font-mono cursor-not-allowed">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Snapshot Label / Description</label>
+          <input type="text" x-model="snapshotForm.name" placeholder="e.g. dev-checkpoint-v1"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Retention TTL (Days)</label>
+          <input type="number" min="1" max="365" x-model.number="snapshotForm.ttl_days"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="pt-2">
+          <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+            <input type="checkbox" x-model="snapshotForm.terminate" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
+            <span>Terminate target sandbox immediately after snapshot</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+        <button @click="snapshotModalOpen = false"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+          Cancel
+        </button>
+        <button @click="executeSnapshot()" :disabled="snapshotSubmitting"
+                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+          <svg x-show="snapshotSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Capture Snapshot
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LAUNCH FROM SNAPSHOT -->
+  <div x-show="launchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div @click.away="launchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          </svg>
+          Launch Sandbox from Snapshot
+        </h3>
+        <button @click="launchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Target Profile Workspace -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Target Modal Profile Workspace</label>
+          <select x-model="launchForm.profile"
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
+            <template x-for="p in profiles" :key="p.name">
+              <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
+            </template>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Snapshot Image ID</label>
+          <input type="text" :value="launchTarget?.image_id" disabled
+                 class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 font-mono cursor-not-allowed">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Sandbox App Name (--name)</label>
+          <input type="text" x-model="launchForm.name" placeholder="resumed-sandbox"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <!-- Runtime Mode -->
+        <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+          <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer select-none">
+            <div>
+              <div class="font-medium">Linux VM Sandbox Mode</div>
+              <div class="text-slate-500 text-[11px]">Enables virtualized hardware and Docker daemon</div>
+            </div>
+            <input type="checkbox" x-model="launchForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+          </label>
+          <div x-show="launchForm.vm" class="pt-2 border-t border-slate-800">
+            <label class="block text-[11px] font-medium text-slate-400 mb-1">RAM Memory (GB)</label>
+            <input type="number" min="1" max="16" x-model.number="launchForm.memory" placeholder="1"
+                   class="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+          </div>
+        </div>
+
+        <!-- Developer Tooling -->
+        <div class="space-y-2">
+          <label class="block text-xs font-medium text-slate-400">Integrated Tooling</label>
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.opencode" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>OpenCode</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.t3" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>T3 Code Server</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Antigravity</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Modal SDK</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+        <button @click="launchModalOpen = false"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+          Cancel
+        </button>
+        <button @click="executeLaunch()" :disabled="launchSubmitting"
+                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+          <svg x-show="launchSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Launch Sandbox
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LAUNCH RESULT / CONNECTION DETAILS -->
+  <div x-show="resultModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div @click.away="resultModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 class="text-base font-semibold text-emerald-400 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Sandbox Launched Successfully!
+        </h3>
+        <button @click="resultModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+      </div>
+
+      <div class="space-y-4 text-sm">
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <div class="text-slate-500">Sandbox ID</div>
+            <div class="font-mono text-slate-200 mt-0.5" x-text="launchResult?.sandbox_id"></div>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <div class="text-slate-500">App Name</div>
+            <div class="font-mono text-slate-200 mt-0.5" x-text="launchResult?.app_name"></div>
+          </div>
+        </div>
+
+        <!-- SSH Command Snippet -->
+        <div class="space-y-1">
+          <div class="text-xs text-slate-400 font-medium">SSH Connection</div>
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
+            <span x-text="'ssh ' + (launchResult?.sandbox_name || launchResult?.sandbox_id)"></span>
+            <button @click="copyText('ssh ' + (launchResult?.sandbox_name || launchResult?.sandbox_id), 'SSH command copied!')" class="text-slate-400 hover:text-white">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- OpenCode Tunnel -->
+        <div x-show="launchResult?.opencode_url" class="space-y-1">
+          <div class="text-xs text-slate-400 font-medium">OpenCode Server</div>
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
+            <a :href="launchResult?.opencode_url" target="_blank" class="text-indigo-400 underline" x-text="launchResult?.opencode_url"></a>
+            <span class="text-slate-500" x-text="'Password: ' + launchResult?.opencode_password"></span>
+          </div>
+        </div>
+
+        <!-- T3 Pair URL -->
+        <div x-show="launchResult?.t3_pair_url" class="space-y-1">
+          <div class="text-xs text-slate-400 font-medium">T3 Code Server</div>
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs">
+            <a :href="launchResult?.t3_pair_url" target="_blank" class="text-indigo-400 underline" x-text="launchResult?.t3_pair_url"></a>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end pt-4 border-t border-slate-800">
+        <button @click="resultModalOpen = false; currentTab = 'sandboxes'; refreshAll();"
+                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md">
+          View in Sandboxes Table
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div x-show="toast.visible" x-transition
+       class="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-700 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm">
+    <span class="text-indigo-400 font-bold">ℹ</span>
+    <span x-text="toast.message"></span>
+  </div>
+
+  <!-- APPLICATION JAVASCRIPT -->
+  <script>
+    function sandboxApp() {
+      return {
+        currentTab: 'sandboxes',
+        loading: false,
+        autoRefresh: false,
+        refreshTimer: null,
+        searchQuery: '',
+
+        profiles: [],
+        selectedProfile: 'all',
+
+        sandboxes: [],
+        snapshots: [],
+
+        // Snapshot Modal State
+        snapshotModalOpen: false,
+        snapshotTarget: null,
+        snapshotSubmitting: false,
+        snapshotForm: {
+          name: '',
+          ttl_days: 30,
+          terminate: false
+        },
+
+        // Launch Modal State
+        launchModalOpen: false,
+        launchTarget: null,
+        launchSubmitting: false,
+        launchForm: {
+          profile: '',
+          name: '',
+          vm: false,
+          memory: null,
+          opencode: false,
+          t3: false,
+          agy: false,
+          modal: false
+        },
+
+        // Result Modal State
+        resultModalOpen: false,
+        launchResult: null,
+
+        // Toast State
+        toast: {
+          visible: false,
+          message: ''
+        },
+
+        async init() {
+          await this.fetchProfiles();
+          await this.refreshAll();
+          this.$watch('autoRefresh', (val) => {
+            if (val) {
+              this.refreshTimer = setInterval(() => this.refreshAll(true), 5000);
+            } else if (this.refreshTimer) {
+              clearInterval(this.refreshTimer);
+              this.refreshTimer = null;
+            }
+          });
+        },
+
+        async fetchProfiles() {
+          try {
+            const res = await fetch('/api/profiles');
+            if (res.ok) {
+              this.profiles = await res.json();
+            }
+          } catch (err) {
+            console.error('Failed fetching profiles:', err);
+          }
+        },
+
+        selectProfile(name) {
+          this.selectedProfile = name;
+          this.refreshAll();
+        },
+
+        get runningCount() {
+          return this.sandboxes.filter(s => s.running).length;
+        },
+
+        get filteredSandboxes() {
+          const q = this.searchQuery.toLowerCase().trim();
+          if (!q) return this.sandboxes;
+          return this.sandboxes.filter(s =>
+            (s.id && s.id.toLowerCase().includes(q)) ||
+            (s.name && s.name.toLowerCase().includes(q)) ||
+            (s.app_name && s.app_name.toLowerCase().includes(q)) ||
+            (s.profile && s.profile.toLowerCase().includes(q))
+          );
+        },
+
+        get filteredSnapshots() {
+          const q = this.searchQuery.toLowerCase().trim();
+          if (!q) return this.snapshots;
+          return this.snapshots.filter(s =>
+            (s.image_id && s.image_id.toLowerCase().includes(q)) ||
+            (s.name && s.name.toLowerCase().includes(q)) ||
+            (s.sandbox_id && s.sandbox_id.toLowerCase().includes(q)) ||
+            (s.profile && s.profile.toLowerCase().includes(q))
+          );
+        },
+
+        async refreshAll(silent = false) {
+          if (!silent) this.loading = true;
+          try {
+            const profileParam = this.selectedProfile !== 'all' ? `?profile=${encodeURIComponent(this.selectedProfile)}` : '';
+            const [sbRes, snapRes] = await Promise.all([
+              fetch(`/api/sandboxes${profileParam}`),
+              fetch(`/api/snapshots${profileParam}`)
+            ]);
+            if (sbRes.ok) this.sandboxes = await sbRes.json();
+            if (snapRes.ok) this.snapshots = await snapRes.json();
+          } catch (err) {
+            console.error('Failed refreshing data:', err);
+          } finally {
+            if (!silent) this.loading = false;
+          }
+        },
+
+        openSnapshotModal(sb) {
+          this.snapshotTarget = sb;
+          this.snapshotForm.name = (sb.name || sb.id) + '-snapshot';
+          this.snapshotForm.ttl_days = 30;
+          this.snapshotForm.terminate = false;
+          this.snapshotModalOpen = true;
+        },
+
+        async executeSnapshot() {
+          if (!this.snapshotTarget) return;
+          this.snapshotSubmitting = true;
+          try {
+            const payload = {
+              ...this.snapshotForm,
+              profile: this.snapshotTarget.profile || null
+            };
+            const res = await fetch(`/api/sandboxes/${this.snapshotTarget.id}/snapshot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.detail || 'Snapshot capture failed');
+            }
+            const data = await res.json();
+            this.showToast(`Snapshot captured: ${data.image_id}`);
+            this.snapshotModalOpen = false;
+            await this.refreshAll();
+          } catch (err) {
+            alert('Error: ' + err.message);
+          } finally {
+            this.snapshotSubmitting = false;
+          }
+        },
+
+        openLaunchModal(snap) {
+          this.launchTarget = snap;
+          const activeProf = this.profiles.find(p => p.active)?.name || (this.profiles[0]?.name || '');
+          this.launchForm.profile = snap.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : activeProf);
+          this.launchForm.name = 'resumed-' + snap.image_id.replace(/^im-/, '').slice(0, 8);
+          this.launchForm.vm = !!snap.is_vm;
+          this.launchForm.memory = snap.is_vm ? 2 : null;
+          this.launchForm.opencode = false;
+          this.launchForm.t3 = false;
+          this.launchForm.agy = false;
+          this.launchForm.modal = false;
+          this.launchModalOpen = true;
+        },
+
+        async executeLaunch() {
+          if (!this.launchTarget) return;
+          this.launchSubmitting = true;
+          try {
+            const res = await fetch(`/api/snapshots/${this.launchTarget.image_id}/launch`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.launchForm)
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.detail || 'Launch failed');
+            }
+            this.launchResult = await res.json();
+            this.launchModalOpen = false;
+            this.resultModalOpen = true;
+          } catch (err) {
+            alert('Error launching sandbox: ' + err.message);
+          } finally {
+            this.launchSubmitting = false;
+          }
+        },
+
+        async confirmTerminate(sb) {
+          const targetName = sb.name ? `${sb.name} (${sb.id})` : sb.id;
+          if (!confirm(`Are you sure you want to terminate sandbox ${targetName}?`)) return;
+          try {
+            const profileParam = sb.profile ? `?profile=${encodeURIComponent(sb.profile)}` : '';
+            const res = await fetch(`/api/sandboxes/${sb.id}/terminate${profileParam}`, { method: 'POST' });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.detail || 'Termination failed');
+            }
+            this.showToast(`Sandbox ${sb.id} terminated.`);
+            await this.refreshAll();
+          } catch (err) {
+            alert('Error terminating sandbox: ' + err.message);
+          }
+        },
+
+        async deleteSnapshotRecord(snap) {
+          if (!confirm(`Remove snapshot record ${snap.image_id} from the registry?`)) return;
+          try {
+            const res = await fetch(`/api/snapshots/${snap.image_id}`, { method: 'DELETE' });
+            if (res.ok) {
+              this.showToast(`Snapshot record removed.`);
+              await this.refreshAll();
+            }
+          } catch (err) {
+            alert('Error deleting snapshot record: ' + err.message);
+          }
+        },
+
+        copyText(text, msg = 'Copied to clipboard!') {
+          navigator.clipboard.writeText(text);
+          this.showToast(msg);
+        },
+
+        copySshCommand(sb) {
+          const cmd = sb.name ? `ssh ${sb.name}` : `modal shell ${sb.id}`;
+          this.copyText(cmd, `SSH command copied: ${cmd}`);
+        },
+
+        showToast(message) {
+          this.toast.message = message;
+          this.toast.visible = true;
+          setTimeout(() => { this.toast.visible = false; }, 3000);
+        },
+
+        formatDate(iso) {
+          if (!iso) return '—';
+          try {
+            const d = new Date(iso);
+            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch (e) {
+            return iso;
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>

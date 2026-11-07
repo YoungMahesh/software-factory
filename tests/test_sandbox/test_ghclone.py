@@ -77,7 +77,12 @@ class TestGhClone(unittest.TestCase):
             mock_decrypt.chmod(mock_decrypt.stat().st_mode | stat.S_IXUSR)
 
             env = os.environ.copy()
-            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+            orig_path = env.get("PATH", "")
+            if use_py_script_name:
+                orig_path = ":".join(
+                    p for p in orig_path.split(":") if not (Path(p) / "decrypt-repo-env").exists()
+                )
+            env["PATH"] = f"{bin_dir}:{orig_path}"
             if home_dir:
                 env["HOME"] = str(home_dir)
 
@@ -119,22 +124,37 @@ class TestGhClone(unittest.TestCase):
 
     def test_clone_with_custom_destination(self):
         with tempfile.TemporaryDirectory() as home_td:
-            args = self._run_with_mock_gh(["my-repo", "/opt/custom/path"], home_dir=home_td)
+            args = self._run_with_mock_gh(
+                ["my-repo", f"{home_td}/custom-dest"], home_dir=home_td
+            )
             self.assertEqual(
-                args, [repo for repo in ["repo", "clone", "sFactory0/my-repo", "/opt/custom/path"]]
+                args, ["repo", "clone", "sFactory0/my-repo", f"{home_td}/custom-dest"]
             )
 
-    def test_clone_with_tilde_destination_expansion(self):
+    def test_clone_with_relative_destination(self):
         with tempfile.TemporaryDirectory() as home_td:
-            args = self._run_with_mock_gh(["my-repo", "~/workspace/target"], home_dir=home_td)
+            args = self._run_with_mock_gh(["my-repo", "relative-dir"], home_dir=home_td)
             self.assertEqual(
-                args,
-                ["repo", "clone", "sFactory0/my-repo", f"{home_td}/workspace/target"],
+                args, ["repo", "clone", "sFactory0/my-repo", "relative-dir"]
             )
 
-    def test_clone_forwards_additional_git_flags(self):
+    def test_clone_with_tilde_destination(self):
         with tempfile.TemporaryDirectory() as home_td:
-            args = self._run_with_mock_gh(["my-repo", "--", "--depth", "1"], home_dir=home_td)
+            args = self._run_with_mock_gh(["my-repo", "~"], home_dir=home_td)
+            self.assertEqual(args, ["repo", "clone", "sFactory0/my-repo", str(home_td)])
+
+    def test_clone_with_tilde_subpath(self):
+        with tempfile.TemporaryDirectory() as home_td:
+            args = self._run_with_mock_gh(["my-repo", "~/nested/target"], home_dir=home_td)
+            self.assertEqual(
+                args, ["repo", "clone", "sFactory0/my-repo", f"{home_td}/nested/target"]
+            )
+
+    def test_clone_with_passthrough_flags(self):
+        with tempfile.TemporaryDirectory() as home_td:
+            args = self._run_with_mock_gh(
+                ["my-repo", "--", "--depth", "1"], home_dir=home_td
+            )
             self.assertEqual(
                 args,
                 [
@@ -148,22 +168,20 @@ class TestGhClone(unittest.TestCase):
                 ],
             )
 
-    def test_clone_with_custom_destination_and_additional_flags(self):
+    def test_clone_with_mixed_passthrough_flags_and_custom_dest(self):
         with tempfile.TemporaryDirectory() as home_td:
             args = self._run_with_mock_gh(
-                ["other-org/repo", "/tmp/dest", "--", "--branch", "dev"],
-                home_dir=home_td,
+                ["my-repo", f"{home_td}/out", "--depth", "1"], home_dir=home_td
             )
             self.assertEqual(
                 args,
                 [
                     "repo",
                     "clone",
-                    "other-org/repo",
-                    "/tmp/dest",
-                    "--",
-                    "--branch",
-                    "dev",
+                    "sFactory0/my-repo",
+                    f"{home_td}/out",
+                    "--depth",
+                    "1",
                 ],
             )
 

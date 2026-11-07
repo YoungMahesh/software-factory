@@ -17,6 +17,7 @@ from sandbox.core import (
     capture_snapshot_core,
     launch_sandbox,
 )
+from sandbox.web import router as web_router
 
 APP_NAME = "sandbox-control-plane"
 app = modal.App(APP_NAME)
@@ -36,16 +37,38 @@ image = (
     .add_local_dir(str(repo_root / "scripts"), "/root/.scripts")
 )
 
+modal_toml = Path.home() / ".modal.toml"
+if modal_toml.is_file():
+    image = image.add_local_file(str(modal_toml), "/root/.modal.toml")
+
+if (repo_root / "sandbox" / "static").is_dir():
+    image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
+
 if (repo_root / ".secrets").is_dir():
     image = image.add_local_dir(str(repo_root / ".secrets"), "/root/.secrets")
 elif (repo_root / "secrets").is_dir():
     image = image.add_local_dir(str(repo_root / "secrets"), "/root/.secrets")
 
+function_secrets: list[modal.Secret] = [modal.Secret.from_name(SHARED_SECRET_NAME)]
+
+# Forward authentication credentials from local environment or .env file to Modal function container
+auth_env: dict[str, str] = {}
+for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN"):
+    val = os.environ.get(key)
+    if val:
+        auth_env[key] = val
+
+if auth_env:
+    function_secrets.append(modal.Secret.from_dict(auth_env))
+elif (repo_root / ".env").is_file():
+    function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
+
 web_app = FastAPI(
     title="Modal Sandbox Control Plane",
-    description="Synchronous HTTP API for provisioning and snapshotting Modal sandboxes.",
+    description="Synchronous HTTP API and Web UI for provisioning and snapshotting Modal sandboxes.",
     version="1.0.0",
 )
+web_app.include_router(web_router)
 
 
 def verify_bearer_token(
@@ -130,6 +153,7 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
             sandbox_id=req.sandbox_id,
             ttl_days=req.ttl_days,
             terminate=req.terminate,
+            name=req.name,
         )
     except Exception as exc:
         raise HTTPException(
@@ -140,7 +164,7 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
 
 @app.function(
     image=image,
-    secrets=[modal.Secret.from_name(SHARED_SECRET_NAME)],
+    secrets=function_secrets,
     timeout=180,
 )
 @modal.asgi_app()
