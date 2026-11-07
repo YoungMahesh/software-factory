@@ -5,9 +5,10 @@ DEFAULT_ORG="sFactory0"
 
 show_help() {
   cat <<'EOF'
-Usage: ghclone <repo> [destination] [gh repo clone / git clone flags...]
+Usage: ghclone <repo> [destination] [options] [gh repo clone / git clone flags...]
 
-Clone a repository from GitHub (defaults to sFactory0) into ~/ path in the sandbox.
+Clone a repository from GitHub (defaults to sFactory0) into ~/ path in the sandbox
+and decrypt repository environment secrets defined in .secrets/env.map.
 
 Arguments:
   repo                  Repository name (e.g. 'my-repo', 'sFactory0/my-repo', or 'org/repo').
@@ -16,14 +17,16 @@ Arguments:
                         Can be relative or absolute, and '~' is expanded to $HOME.
 
 Options:
+  --no-decrypt          Skip automatic decryption of repository environment secrets.
   -h, --help            Show this help message and exit
 
 Any other flags (or flags after '--') are passed directly to 'gh repo clone'.
 
 Examples:
-  ghclone my-repo                         # Clones sFactory0/my-repo to ~/my-repo
-  ghclone my-repo ~/custom-dir            # Clones sFactory0/my-repo to ~/custom-dir
-  ghclone other-org/repo                  # Clones other-org/repo to ~/repo
+  ghclone my-repo                         # Clones sFactory0/my-repo to ~/my-repo and decrypts env
+  ghclone my-repo ~/custom-dir            # Clones sFactory0/my-repo to ~/custom-dir and decrypts env
+  ghclone other-org/repo                  # Clones other-org/repo to ~/repo and decrypts env
+  ghclone my-repo --no-decrypt            # Clones without decrypting environment secrets
   ghclone my-repo -- --depth 1            # Clones shallow with depth 1
 EOF
 }
@@ -35,6 +38,18 @@ for arg in "$@"; do
     exit 0
   fi
 done
+
+# Separate --no-decrypt / --skip-decrypt from other args
+NO_DECRYPT=0
+FILTERED_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--no-decrypt" || "$arg" == "--skip-decrypt" ]]; then
+    NO_DECRYPT=1
+  else
+    FILTERED_ARGS+=("$arg")
+  fi
+done
+set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 
 if [[ $# -eq 0 || "$1" == -* ]]; then
   echo "Error: No repository specified." >&2
@@ -70,4 +85,32 @@ elif [[ "$TARGET_DIR" == "~/"* ]]; then
   TARGET_DIR="${HOME}/${TARGET_DIR#"~/"}"
 fi
 
-exec gh repo clone "$TARGET_REPO" "$TARGET_DIR" "$@"
+gh repo clone "$TARGET_REPO" "$TARGET_DIR" "$@"
+
+if [[ "$NO_DECRYPT" -eq 0 && -f "${TARGET_DIR}/.secrets/env.map" ]]; then
+  decrypt_cmd=()
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  if command -v decrypt-repo-env >/dev/null 2>&1; then
+    decrypt_cmd=("decrypt-repo-env")
+  elif command -v decrypt_repo_env.py >/dev/null 2>&1; then
+    decrypt_cmd=("decrypt_repo_env.py")
+  elif [[ -x "${script_dir}/decrypt-repo-env" ]]; then
+    decrypt_cmd=("${script_dir}/decrypt-repo-env")
+  elif [[ -x "${script_dir}/decrypt_repo_env.py" ]]; then
+    decrypt_cmd=("${script_dir}/decrypt_repo_env.py")
+  elif [[ -f "${script_dir}/decrypt_repo_env.py" ]]; then
+    decrypt_cmd=("python3" "${script_dir}/decrypt_repo_env.py")
+  elif [[ -x "/usr/local/bin/decrypt-repo-env" ]]; then
+    decrypt_cmd=("/usr/local/bin/decrypt-repo-env")
+  elif [[ -x "/root/.scripts/decrypt-repo-env" ]]; then
+    decrypt_cmd=("/root/.scripts/decrypt-repo-env")
+  fi
+
+  if [[ ${#decrypt_cmd[@]} -eq 0 ]]; then
+    echo "Error: Repository has .secrets/env.map, but neither decrypt-repo-env nor decrypt_repo_env.py was found." >&2
+    exit 1
+  fi
+
+  "${decrypt_cmd[@]}" "$TARGET_DIR"
+fi

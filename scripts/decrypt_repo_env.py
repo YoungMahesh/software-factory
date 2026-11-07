@@ -56,6 +56,8 @@ def run_sops_decrypt(encrypted_file: Path, key_file: Path | None = None) -> str:
     target_key_file = key_file or DEFAULT_KEY_FILE
     if target_key_file.is_file() and "SOPS_AGE_KEY_FILE" not in env:
         env["SOPS_AGE_KEY_FILE"] = str(target_key_file)
+    if "SOPS_AGE_KEY" not in env and "AGE_PRIVATE_KEY" in env:
+        env["SOPS_AGE_KEY"] = env["AGE_PRIVATE_KEY"]
 
     cmd = ["sops", "decrypt", str(encrypted_file)]
     res = subprocess.run(cmd, capture_output=True, text=True, env=env)

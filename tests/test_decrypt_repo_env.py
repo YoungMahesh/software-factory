@@ -1,9 +1,10 @@
 """Unit tests for decrypt-repo-env script."""
 
+import os
 from pathlib import Path
 import tempfile
 from unittest import TestCase, main
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from scripts.decrypt_repo_env import (
     DecryptResult,
@@ -11,6 +12,7 @@ from scripts.decrypt_repo_env import (
     main as cli_main,
     parse_args,
     parse_env_map,
+    run_sops_decrypt,
 )
 
 
@@ -115,6 +117,29 @@ class TestDecryptRepoEnv(TestCase):
         self.assertEqual(len(results), 1)
         self.assertFalse(results[0].written)
         self.assertFalse((self.repo_dir / ".env").exists())
+
+    @patch("scripts.decrypt_repo_env.subprocess.run")
+    @patch("scripts.decrypt_repo_env.shutil.which")
+    def test_run_sops_decrypt_uses_age_private_key_env(self, mock_which, mock_subprocess):
+        mock_which.return_value = "/usr/bin/sops"
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "DECRYPTED_SECRET"
+        mock_subprocess.return_value = mock_res
+
+        secret_file = self.secrets_dir / "app.env"
+        secret_file.write_text("ENC")
+
+        clean_env = dict(os.environ)
+        clean_env.pop("SOPS_AGE_KEY", None)
+        clean_env.pop("SOPS_AGE_KEY_FILE", None)
+        clean_env["AGE_PRIVATE_KEY"] = "AGE-SECRET-KEY-1XYZ"
+
+        with patch.dict(os.environ, clean_env, clear=True):
+            out = run_sops_decrypt(secret_file)
+            self.assertEqual(out, "DECRYPTED_SECRET")
+            _, kwargs = mock_subprocess.call_args
+            self.assertEqual(kwargs["env"].get("SOPS_AGE_KEY"), "AGE-SECRET-KEY-1XYZ")
 
     def test_parse_args(self):
         args = parse_args(["/path/to/repo", "-m", "app.env", "-f", "-s", "--dry-run"])

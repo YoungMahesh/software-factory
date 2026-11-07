@@ -210,6 +210,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
+            LOCAL_DECRYPT_REPO_ENV,
+            REMOTE_DECRYPT_REPO_ENV,
+            LOCAL_ENCRYPT_REPO_ENV,
+            REMOTE_ENCRYPT_REPO_ENV,
             LOCAL_CLOUDFLARE_SECRET,
             REMOTE_CLOUDFLARE_SECRET,
         )
@@ -225,6 +229,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_GHPR, REMOTE_GHPR),
             (LOCAL_GHCLONE, REMOTE_GHCLONE),
             (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
+            (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
+            (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
             (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
@@ -244,6 +250,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
+            LOCAL_DECRYPT_REPO_ENV,
+            REMOTE_DECRYPT_REPO_ENV,
+            LOCAL_ENCRYPT_REPO_ENV,
+            REMOTE_ENCRYPT_REPO_ENV,
         )
 
         self.assertEqual(REMOTE_AGYQ, "/usr/local/bin/agyq")
@@ -251,12 +261,16 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertEqual(REMOTE_GHPR, "/usr/local/bin/ghpr")
         self.assertEqual(REMOTE_GHCLONE, "/usr/local/bin/ghclone")
         self.assertEqual(REMOTE_AGYPROFILE, "/usr/local/bin/agyprofile")
+        self.assertEqual(REMOTE_DECRYPT_REPO_ENV, "/usr/local/bin/decrypt-repo-env")
+        self.assertEqual(REMOTE_ENCRYPT_REPO_ENV, "/usr/local/bin/encrypt-repo-env")
 
         self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
         self.assertTrue(LOCAL_GHLS.exists(), "scripts/ghls must exist")
         self.assertTrue(LOCAL_GHPR.exists(), "scripts/ghpr must exist")
         self.assertTrue(LOCAL_GHCLONE.exists(), "scripts/ghclone must exist")
         self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
+        self.assertTrue(LOCAL_DECRYPT_REPO_ENV.exists(), "scripts/decrypt_repo_env.py must exist")
+        self.assertTrue(LOCAL_ENCRYPT_REPO_ENV.exists(), "scripts/encrypt_repo_env.py must exist")
 
         startup_content = (repo_root / "shared" / "startup.sh").read_text()
         self.assertIn("chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile", startup_content)

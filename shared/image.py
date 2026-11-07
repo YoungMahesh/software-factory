@@ -47,6 +47,10 @@ LOCAL_GHCLONE = LOCAL_SCRIPTS_DIR / "ghclone"
 REMOTE_GHCLONE = "/usr/local/bin/ghclone"
 LOCAL_AGYPROFILE = LOCAL_SCRIPTS_DIR / "agyprofile"
 REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
+LOCAL_DECRYPT_REPO_ENV = LOCAL_SCRIPTS_DIR / "decrypt_repo_env.py"
+REMOTE_DECRYPT_REPO_ENV = "/usr/local/bin/decrypt-repo-env"
+LOCAL_ENCRYPT_REPO_ENV = LOCAL_SCRIPTS_DIR / "encrypt_repo_env.py"
+REMOTE_ENCRYPT_REPO_ENV = "/usr/local/bin/encrypt-repo-env"
 LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
 REMOTE_OPENCODE_SECRET = "/root/.secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
@@ -120,6 +124,8 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_GHPR, REMOTE_GHPR),
     (LOCAL_GHCLONE, REMOTE_GHCLONE),
     (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
+    (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
+    (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
     (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
 ]
 
@@ -180,9 +186,11 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /root/.scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/decrypt-repo-env /usr/local/bin/encrypt-repo-env /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
+    "ln -sf /usr/local/bin/decrypt-repo-env /usr/local/bin/decrypt_repo_env.py 2>/dev/null || true",
+    "ln -sf /usr/local/bin/encrypt-repo-env /usr/local/bin/encrypt_repo_env.py 2>/dev/null || true",
     "mkdir -p /root/.scripts /root/.secrets",
     "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghls /root/.scripts/ghls 2>/dev/null || true",
@@ -191,6 +199,8 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/agyprofile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true",
+    "ln -sf /usr/local/bin/decrypt-repo-env /root/.scripts/decrypt-repo-env 2>/dev/null || true",
+    "ln -sf /usr/local/bin/encrypt-repo-env /root/.scripts/encrypt-repo-env 2>/dev/null || true",
 )
 
 
