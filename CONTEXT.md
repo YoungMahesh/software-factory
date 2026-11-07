@@ -145,5 +145,25 @@ A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environme
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
-A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving a FastAPI HTTP API (`/launch`, `/snapshot`, `/health`) with bearer token authentication (`MODAL_SANDBOX_AUTH_TOKEN`), allowing external clients and the local CLI (`--remote`) to synchronously provision sandboxes and capture filesystem snapshots.
+A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving both a FastAPI REST API (`/launch`, `/snapshot`, `/health`, `/api/sandboxes`, `/api/snapshots`, `/api/profiles`) and the embedded Sandbox Web Dashboard SPA (`/`), with bearer token authentication (`MODAL_SANDBOX_AUTH_TOKEN`), allowing external clients, the local CLI (`--remote`), and web browsers to inspect, provision, and manage sandboxes and snapshots across workspace profiles.
 _Avoid_: Sandbox server, runner API, modal webhook daemon
+
+**Sandbox Web Dashboard**:
+A responsive single-page web management dashboard served by `sandbox/web.py` (and launchable locally via `scripts/web_ui.py`) integrated into the Hosted Sandbox Control Plane, enabling real-time visual inspection, search and filtering, and termination of active sandboxes, as well as browsing, capturing, and deleting filesystem snapshots across configured Modal workspace profiles.
+_Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
+
+**Snapshot Registry**:
+A distributed catalog and metadata registry (`sandbox/snapshots.py`) tracking captured filesystem snapshots (including image ID, sandbox provenance, size, tags, and timestamps) backed by a named `modal.Dict` (`sandbox-snapshots`) with an automatic local JSON filesystem fallback (`~/.modal/sandbox-snapshots.json`).
+_Avoid_: Snapshot catalog, snapshot db, snapshot list, modal dict store
+
+**Multi-Profile Configuration**:
+A Modal workspace discovery and client management service (`sandbox/profiles.py`) that parses `~/.modal.toml` (or `MODAL_CONFIG_PATH`), discovers configured workspace profiles, and supplies profile-scoped authenticated `modal.Client` instances to discover, query, and manage sandboxes and snapshots across multiple Modal environments.
+_Avoid_: Modal profiles, multi-account setup, workspace selector
+
+**T3 Code Persistent Storage Volume**:
+A dedicated persistent Modal volume (`t3code-usage-v1` mounted at `/root/.t3-storage`) configured via `--t3-usage-volume` and toggled via `--no-t3-persist`, preserving Antigravity ACP conversation SQLite databases, T3 Code scan caches (`usage-scan-cache-v9.json`), model pricing rates (`usage-model-rates.json`), and multi-agent transcripts across ephemeral sandbox lifecycles.
+_Avoid_: T3 volume, persistent disk, usage storage, transcript volume
+
+**T3 Usage Synchronization Daemon**:
+A bidirectional background synchronization service (`t3-usage-sync` in `shared/t3_usage_sync.py`) running inside T3 Code sandboxes that hydrates historical conversation databases and token accounting caches from `/root/.t3-storage` during container startup prior to `t3 serve`, and continuously flushes modified SQLite databases and caches atomically every 30 seconds and upon container exit traps (`SIGTERM`/`EXIT`).
+_Avoid_: T3 sync daemon, usage daemon, transcript sync, storage syncer
