@@ -2,11 +2,19 @@ This repository is about creating scripts for modal.com sandboxes
 
 Documentation: https://modal.com/docs/sdk/py/latest/Sandbox
 
-## Domain docs
+## Agent skills
 
-- Single-context layout: [`CONTEXT.md`](CONTEXT.md) and [`docs/adr/`](docs/adr/) at root.
-- Adhere strictly to the domain glossary in [`CONTEXT.md`](CONTEXT.md).
-- Consult [`docs/adr/`](docs/adr/) before modifying architecture; flag any conflicts before proposing contradictory designs.
+### Issue tracker
+
+Local markdown files under `.scratch/<feature-slug>/`. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Canonical five-role triage vocabulary. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context layout (`GLOSSARY.md` and `docs/adr/` at repo root). See [`docs/agents/domain.md`](docs/agents/domain.md).
 
 ## Code standards
 
