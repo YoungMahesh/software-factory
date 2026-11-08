@@ -424,7 +424,7 @@
               <div class="font-medium">Linux VM Sandbox Mode</div>
               <div class="text-slate-500 text-[11px]">Enables virtualized hardware and Docker daemon</div>
             </div>
-            <input type="checkbox" x-model="launchForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+            <input type="checkbox" x-model="launchForm.vm" @change="if (launchForm.vm && !launchForm.memory) launchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
           </label>
           <div x-show="launchForm.vm" class="pt-2 border-t border-slate-800">
             <label class="block text-[11px] font-medium text-slate-400 mb-1">RAM Memory (GB)</label>
@@ -581,7 +581,7 @@
           vm: false,
           memory: null,
           opencode: false,
-          t3: false,
+          t3: true,
           agy: false,
           modal: false
         },
@@ -712,11 +712,18 @@
           this.launchTarget = snap;
           const activeProf = this.profiles.find(p => p.active)?.name || (this.profiles[0]?.name || '');
           this.launchForm.profile = snap.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : activeProf);
-          this.launchForm.name = 'resumed-' + snap.image_id.replace(/^im-/, '').slice(0, 8);
+          let baseName = '';
+          if (snap.name && typeof snap.name === 'string' && snap.name.trim() && snap.name.trim() !== 'Unnamed Snapshot') {
+            baseName = snap.name.trim().replace(/[-_ ]*snapshot$/i, '').replace(/[-_ ]+$/, '').trim();
+          }
+          if (!baseName) {
+            baseName = snap.image_id.replace(/^im-/, '').slice(0, 8);
+          }
+          this.launchForm.name = 'resumed-' + baseName;
           this.launchForm.vm = !!snap.is_vm;
-          this.launchForm.memory = snap.is_vm ? 2 : null;
+          this.launchForm.memory = snap.is_vm ? 1 : null;
           this.launchForm.opencode = false;
-          this.launchForm.t3 = false;
+          this.launchForm.t3 = true;
           this.launchForm.agy = false;
           this.launchForm.modal = false;
           this.launchModalOpen = true;

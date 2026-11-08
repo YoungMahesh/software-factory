@@ -115,7 +115,7 @@ class SnapshotLaunchPayload(BaseModel):
     memory: int | None = None
     no_cloudflare: bool = False
     opencode: bool = False
-    t3: bool = False
+    t3: bool = True
     t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
     no_t3_persist: bool = False
     agy: bool = False

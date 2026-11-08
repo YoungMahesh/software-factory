@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from sandbox.core import LaunchResponse, SnapshotResponse
-from sandbox.web import app
+from sandbox.web import SnapshotLaunchPayload, app
 
 
 class TestWebAPI(unittest.TestCase):
@@ -230,6 +230,34 @@ class TestWebAPI(unittest.TestCase):
         _, kwargs = mock_launch.call_args
         self.assertEqual(kwargs.get("client"), mock_client)
 
+    @patch("sandbox.web.launch_sandbox")
+    def test_launch_from_snapshot_default_payload(self, mock_launch):
+        mock_response = LaunchResponse(
+            sandbox_id="sb-default",
+            app_name="resumed-sandbox",
+            sandbox_name="resumed-sandbox-01",
+            ssh_info=("modal.internal", 2222),
+            is_vm=False,
+        )
+        mock_launch.return_value = (MagicMock(), mock_response)
+
+        payload_obj = SnapshotLaunchPayload()
+        self.assertTrue(payload_obj.t3)
+        self.assertFalse(payload_obj.opencode)
+        self.assertFalse(payload_obj.agy)
+        self.assertFalse(payload_obj.modal)
+
+        response = self.client.post("/api/snapshots/im-snap1/launch", json={})
+        self.assertEqual(response.status_code, 200)
+        mock_launch.assert_called_once()
+        req = mock_launch.call_args[0][0]
+        self.assertTrue(req.t3)
+        self.assertFalse(req.opencode)
+        self.assertFalse(req.agy)
+        self.assertFalse(req.modal)
+        self.assertFalse(req.vm)
+        self.assertIsNone(req.memory)
+
     def test_index_page_returns_html(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
@@ -239,6 +267,14 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("Snapshots", response.text)
         self.assertIn("Workspace Profiles", response.text)
         self.assertIn("overflow-x-auto", response.text)
+
+    def test_index_page_contains_updated_launch_defaults(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("this.launchForm.t3 = true;", html)
+        self.assertIn("this.launchForm.memory = snap.is_vm ? 1 : null;", html)
+        self.assertIn("replace(/[-_ ]*snapshot$/i, '')", html)
 
 
 class TestWebAuth(unittest.TestCase):
