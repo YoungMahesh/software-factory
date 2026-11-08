@@ -837,9 +837,31 @@ for instance_id, display_name, token_path, is_primary in accounts:
         if not refresh_token:
             continue
 
+        acp_settings = {"auth": {"type": "oauth-personal"}}
+        t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+        target_dirs = [f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp"]
+        if is_primary:
+            target_dirs.append(os.path.expanduser("~/.gemini/antigravity-acp"))
+
+        existing_tok = {}
+        for candidate_dir in target_dirs + [os.path.expanduser("~/.gemini/antigravity-acp")]:
+            candidate_file = os.path.join(candidate_dir, "acp_token.json")
+            if os.path.exists(candidate_file):
+                try:
+                    with open(candidate_file, "r") as fp:
+                        c_data = json.load(fp)
+                        if c_data.get("client_id") and c_data.get("client_id") != "dummy-client-id.apps.googleusercontent.com":
+                            existing_tok = c_data
+                            break
+                except Exception:
+                    pass
+
+        client_id = os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID") or existing_tok.get("client_id") or "dummy-client-id.apps.googleusercontent.com"
+        client_secret = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET") or existing_tok.get("client_secret") or "dummy-client-secret"
+
         acp_token = {
-            "client_id": os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID", "dummy-client-id.apps.googleusercontent.com"),
-            "client_secret": os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET", "dummy-client-secret"),
+            "client_id": client_id,
+            "client_secret": client_secret,
             "refresh_token": refresh_token,
             "token_uri": "https://oauth2.googleapis.com/token",
             "scopes": [
@@ -848,11 +870,10 @@ for instance_id, display_name, token_path, is_primary in accounts:
                 "https://www.googleapis.com/auth/aicode"
             ]
         }
-        acp_settings = {"auth": {"type": "oauth-personal"}}
-        t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
-        target_dirs = [f"/root/.t3/userdata/providers/antigravity/{t3_hash}/antigravity-acp"]
-        if is_primary:
-            target_dirs.append(os.path.expanduser("~/.gemini/antigravity-acp"))
+        if existing_tok.get("project_id"):
+            acp_token["project_id"] = existing_tok["project_id"]
+        elif os.environ.get("ANTIGRAVITY_PROJECT_ID"):
+            acp_token["project_id"] = os.environ.get("ANTIGRAVITY_PROJECT_ID")
 
         for d in target_dirs:
             os.makedirs(d, mode=0o700, exist_ok=True)

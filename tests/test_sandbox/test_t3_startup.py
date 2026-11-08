@@ -49,6 +49,8 @@ class TestT3CodeStartup(unittest.TestCase):
             self.assertIn("sourceControlWriterModelSelection", content)
             self.assertIn("textGenerationModelSelection", content)
             self.assertIn("gemini-3.8-flash-low", content)
+            self.assertIn("existing_tok", content)
+            self.assertIn("candidate_file", content)
 
             anv_pos = content.find('"antigravity-anv"')
             mgh_pos = content.find('"antigravity-mgh"')
@@ -277,3 +279,54 @@ class TestT3CodeStartup(unittest.TestCase):
         end_pos = content.find(end_marker, start_pos)
         wrapper_template = content[start_pos:end_pos]
         self.assertIn("unset GH_REPO", wrapper_template)
+
+    def test_setup_preserves_existing_acp_credentials_in_snapshot_resume(self):
+        setup_script = self.repo_root / "scripts" / "setup.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            secrets_dir = tmp_path / "secrets"
+            secrets_dir.mkdir()
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            home_dir = tmp_path / "home"
+            home_dir.mkdir()
+
+            sops_mock = bin_dir / "sops"
+            mock_code = (
+                "#!/usr/bin/env bash\n"
+                "for arg in \"$@\"; do\n"
+                "  if [[ \"$arg\" == *\"antigravity-oauth-token.json\"* ]]; then\n"
+                "    echo '{\"refresh_token\": \"mock-refresh-token\"}'\n"
+                "    exit 0\n"
+                "  fi\n"
+                "done\n"
+                "exit 1\n"
+            )
+            sops_mock.write_text(mock_code)
+            sops_mock.chmod(0o755)
+
+            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY")
+
+            preseeded_dir = home_dir / ".gemini" / "antigravity-acp"
+            preseeded_dir.mkdir(parents=True)
+            preseeded_token = preseeded_dir / "acp_token.json"
+            preseeded_token.write_text(json.dumps({
+                "client_id": "persisted-snapshot-client-id.apps.googleusercontent.com",
+                "client_secret": "persisted-snapshot-secret",
+                "refresh_token": "stale-token",
+                "project_id": "aicode-consumers"
+            }))
+
+            env = {
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
+                "HOME": str(home_dir),
+                "SECRETS_DIR": str(secrets_dir),
+            }
+            res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")
+
+            acp_data = json.loads(preseeded_token.read_text())
+            self.assertEqual(acp_data["client_id"], "persisted-snapshot-client-id.apps.googleusercontent.com")
+            self.assertEqual(acp_data["client_secret"], "persisted-snapshot-secret")
+            self.assertEqual(acp_data["project_id"], "aicode-consumers")
+            self.assertEqual(acp_data["refresh_token"], "mock-refresh-token")
