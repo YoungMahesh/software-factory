@@ -61,6 +61,23 @@ def resolve_instance_name(sb: modal.Sandbox) -> str | None:
     return None
 
 
+def resolve_app_name(sb: modal.Sandbox, fallback: str | None = None) -> str | None:
+    """Attempts to resolve the logical Modal App name or ID for a sandbox."""
+    tags = sb.get_tags() if hasattr(sb, "get_tags") else {}
+    if "app_name" in tags:
+        return tags["app_name"]
+
+    try:
+        proc = sb.exec("printenv", "MODAL_APP_NAME")
+        out = proc.stdout.read().strip()
+        if out:
+            return out
+    except Exception:
+        pass
+
+    return fallback
+
+
 def _query_profile_sandboxes(
     client: modal.Client,
     profile_name: str,
@@ -100,12 +117,17 @@ def _query_profile_sandboxes(
         poll_code = sb.poll()
         is_running = poll_code is None
         name = resolve_instance_name(sb) if is_running else None
+        app_id_fallback = getattr(sb, "app_id", getattr(sb, "_app_id", None))
+        app_label = target_app
+        if all_apps or not app_label:
+            resolved = resolve_app_name(sb, fallback=app_id_fallback) if is_running else app_id_fallback
+            app_label = resolved or target_app
         sandboxes.append({
             "id": sb.object_id,
             "name": name,
             "running": is_running,
             "exit_code": poll_code,
-            "app_name": target_app if not all_apps else getattr(sb, "app_id", None),
+            "app_name": app_label,
             "profile": profile_name,
         })
     return sandboxes

@@ -54,7 +54,7 @@ class TestWebAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["profile"], "team-a")
-        mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=False, profile="team-a")
+        mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=True, profile="team-a")
 
     @patch("sandbox.web.get_sandboxes")
     def test_list_sandboxes_aggregated_all_profiles(self, mock_get_sandboxes):
@@ -68,7 +68,24 @@ class TestWebAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(len(data), 2)
         self.assertEqual(data[1]["profile"], "mahesh471978")
-        mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=False, profile="all")
+        mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=True, profile="all")
+
+    @patch("sandbox.web.get_sandboxes")
+    def test_list_sandboxes_with_explicit_app_name(self, mock_get_sandboxes):
+        mock_get_sandboxes.return_value = [
+            {"id": "sb-1", "name": "inst-1", "running": True, "exit_code": None, "app_name": "custom-app", "profile": "prof-1"},
+        ]
+
+        response = self.client.get("/api/sandboxes?app_name=custom-app")
+        self.assertEqual(response.status_code, 200)
+        mock_get_sandboxes.assert_called_once_with(app_name="custom-app", all_apps=False, profile=None)
+
+    @patch("sandbox.web.get_sandboxes")
+    def test_list_sandboxes_with_explicit_all_apps_false(self, mock_get_sandboxes):
+        mock_get_sandboxes.return_value = []
+        response = self.client.get("/api/sandboxes?all_apps=false")
+        self.assertEqual(response.status_code, 200)
+        mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=False, profile=None)
 
     @patch("sandbox.web.get_available_profiles")
     def test_list_profiles(self, mock_get_profiles):

@@ -4,6 +4,7 @@ import json
 from unittest import TestCase, main
 from unittest.mock import MagicMock, patch
 
+from sandbox.lifecycle import resolve_app_name
 from scripts.manage_sandboxes import (
     get_sandboxes,
     resolve_instance_name,
@@ -71,6 +72,30 @@ class TestManageSandboxes(TestCase):
         name = resolve_instance_name(sb)
         self.assertEqual(name, "t3-antigravity-test-env")
 
+    def test_resolve_app_name_from_tags(self):
+        sb = MagicMock()
+        sb.get_tags.return_value = {"app_name": "resumed-sandbox"}
+        app_name = resolve_app_name(sb)
+        self.assertEqual(app_name, "resumed-sandbox")
+
+    def test_resolve_app_name_from_env(self):
+        sb = MagicMock()
+        sb.get_tags.return_value = {}
+        proc = MagicMock()
+        proc.stdout.read.return_value = "resumed-snapshot-abc\n"
+        sb.exec.return_value = proc
+
+        app_name = resolve_app_name(sb, fallback="fallback-app")
+        self.assertEqual(app_name, "resumed-snapshot-abc")
+
+    def test_resolve_app_name_fallback(self):
+        sb = MagicMock()
+        sb.get_tags.return_value = {}
+        sb.exec.side_effect = Exception("failed")
+
+        app_name = resolve_app_name(sb, fallback="ap-12345")
+        self.assertEqual(app_name, "ap-12345")
+
     def test_terminate_sandboxes_dry_run(self):
         results = terminate_sandboxes(["sb-1", "sb-2"], dry_run=True)
         self.assertEqual(len(results), 2)
@@ -112,6 +137,27 @@ class TestManageSandboxes(TestCase):
         self.assertTrue(results[0]["running"])
         self.assertEqual(results[0]["name"], "sf-active")
         self.assertFalse(results[1]["running"])
+
+    @patch("modal.Sandbox.list")
+    def test_get_sandboxes_all_apps_includes_snapshots(self, mock_list):
+        sb_repo = MagicMock()
+        sb_repo.object_id = "sb-repo"
+        sb_repo.poll.return_value = None
+        sb_repo.get_tags.return_value = {"instance_name": "software-factory-123", "app_name": "software-factory"}
+
+        sb_snap = MagicMock()
+        sb_snap.object_id = "sb-snap"
+        sb_snap.poll.return_value = None
+        sb_snap.get_tags.return_value = {"instance_name": "resumed-snapshot-abc", "app_name": "resumed-snapshot"}
+
+        mock_list.return_value = [sb_repo, sb_snap]
+
+        results = get_sandboxes(all_apps=True)
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["name"], "software-factory-123")
+        self.assertEqual(results[0]["app_name"], "software-factory")
+        self.assertEqual(results[1]["name"], "resumed-snapshot-abc")
+        self.assertEqual(results[1]["app_name"], "resumed-snapshot")
 
 
 if __name__ == "__main__":

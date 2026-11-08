@@ -654,10 +654,14 @@
         async refreshAll(silent = false) {
           if (!silent) this.loading = true;
           try {
-            const profileParam = this.selectedProfile ? `?profile=${encodeURIComponent(this.selectedProfile)}` : '';
+            const profileParam = this.selectedProfile ? `profile=${encodeURIComponent(this.selectedProfile)}` : '';
+            const sbParams = ['all_apps=true'];
+            if (profileParam) sbParams.push(profileParam);
+            const sbQuery = '?' + sbParams.join('&');
+            const snapQuery = profileParam ? `?${profileParam}` : '';
             const [sbRes, snapRes] = await Promise.all([
-              fetch(`/api/sandboxes${profileParam}`),
-              fetch(`/api/snapshots${profileParam}`)
+              fetch(`/api/sandboxes${sbQuery}`),
+              fetch(`/api/snapshots${snapQuery}`)
             ]);
             if (sbRes.ok) this.sandboxes = await sbRes.json();
             if (snapRes.ok) this.snapshots = await snapRes.json();

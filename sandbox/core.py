@@ -268,7 +268,7 @@ def launch_sandbox(
             env["T3_USAGE_VOLUME"] = req.t3_usage_volume
             env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
-    for flag, key in [
+    for flag, key in [\
         (req.agy, "ENABLE_ANTIGRAVITY"),
         (req.modal, "ENABLE_MODAL"),
         (req.sops, "ENABLE_SOPS"),
@@ -318,6 +318,7 @@ def launch_sandbox(
         "image": image,
         "app": app,
         "name": sandbox_name,
+        "tags": {"instance_name": sandbox_name, "app_name": app_name},
         "volumes": volumes,
         "unencrypted_ports": [22],
         "encrypted_ports": encrypted_ports,

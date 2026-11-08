@@ -146,13 +146,14 @@ def api_list_profiles() -> list[dict[str, Any]]:
 
 @router.get("/api/sandboxes", response_model=list[dict[str, Any]])
 def api_list_sandboxes(
-    app_name: str | None = Query(None, description="Filter by app name (defaults to software-factory if not all_apps)"),
-    all_apps: bool = Query(False, description="Scan environment-wide without scoping to an App"),
+    app_name: str | None = Query(None, description="Filter by app name (defaults to all apps if omitted)"),
+    all_apps: bool = Query(True, description="Scan environment-wide without scoping to an App"),
     profile: str | None = Query(None, description="Profile name or 'all' for aggregated across profiles"),
 ) -> list[dict[str, Any]]:
     """Lists existing Modal sandboxes with status, instance names, and owning profiles."""
     try:
-        return get_sandboxes(app_name=app_name, all_apps=all_apps, profile=profile)
+        effective_all_apps = all_apps if app_name is None else False
+        return get_sandboxes(app_name=app_name, all_apps=effective_all_apps, profile=profile)
     except Exception as exc:
         logger.error("Failed to list sandboxes: %s", exc)
         raise HTTPException(
