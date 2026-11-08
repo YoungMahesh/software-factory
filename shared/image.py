@@ -248,22 +248,28 @@ def browser_enabled(
 
 
 # T3 Code release configuration and binary patch target
-T3_VERSION = "0.1.15"
+T3_VERSION = "0.1.3"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
 # Antigravity ACP plugin bundle configuration
-T3_ANTIGRAVITY_VERSION = "0.0.4"
-T3_ANTIGRAVITY_URL = f"https://github.com/pingdotgg/antigravity-releases/releases/download/v{T3_ANTIGRAVITY_VERSION}/antigravity-acp-v{T3_ANTIGRAVITY_VERSION}-linux-x64.zip"
+T3_ANTIGRAVITY_VERSION = "1.3.0"
+T3_ANTIGRAVITY_RELEASE_ID = (
+    "9fb60956af0a9d76220a4db91ca9ac88e2a2372ad68f985ab5fceace6b825b96"
+)
+T3_ANTIGRAVITY_URL = (
+    f"https://dl.google.com/agy-extensions/releases/linux/"
+    f"agy-acp-server-{T3_ANTIGRAVITY_VERSION}-linux-x86_64.zip"
+)
 T3_ANTIGRAVITY_MANAGED_DIR = "/root/.t3/tools/antigravity-acp/linux-x64"
 T3_ANTIGRAVITY_VERSION_DIR = (
-    f"{T3_ANTIGRAVITY_MANAGED_DIR}/antigravity-acp-{T3_ANTIGRAVITY_VERSION}"
+    f"{T3_ANTIGRAVITY_MANAGED_DIR}/versions/{T3_ANTIGRAVITY_RELEASE_ID}"
 )
 T3_INSTALL_COMPLETE_JSON = (
-    '{"version":"'
-    + T3_ANTIGRAVITY_VERSION
-    + '","installedAt":"2026-10-27T12:00:00.000Z"}'
+    f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}","version":"{T3_ANTIGRAVITY_VERSION}",'
+    f'"executable":{{"name":"agy_acp_server.par","bytes":926533965}},'
+    f'"harness":{{"name":"localharness_external","bytes":130388040}}}}'
 )
-T3_ACTIVE_JSON = '{"activeVersion":"' + T3_ANTIGRAVITY_VERSION + '"}'
+T3_ACTIVE_JSON = f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}"}}'
 
 
 def build_sandbox_image(
@@ -296,9 +302,10 @@ def build_sandbox_image(
 
     if agy:
         image = image.run_commands(
-            "curl -fsSL https://antigravity.google.com/download/linux | bash",
-            "mkdir -p /root/.gemini/antigravity-cli/cache",
+            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+            "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
         )
+        path_prefixes.append("/root/.local/bin")
         image = add_local_files_if_present(
             image,
             [

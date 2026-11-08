@@ -413,8 +413,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             # Test Antigravity
             build_sandbox_image(agy=True)
             mock_base.run_commands.assert_called_with(
-                "curl -fsSL https://antigravity.google.com/download/linux | bash",
-                "mkdir -p /root/.gemini/antigravity-cli/cache",
+                "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+                "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
             )
 
             # Test Herdr
