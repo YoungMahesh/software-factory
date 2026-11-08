@@ -34,24 +34,73 @@ REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json
 LOCAL_ANTIGRAVITY_ONBOARDING = SHARED_DIR / "antigravity-onboarding.json"
 REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
-LOCAL_SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-LOCAL_SETUP_SCRIPT = LOCAL_SCRIPTS_DIR / "setup.sh"
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_dir(*candidates: Path) -> Path:
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return candidates[0]
+
+
+def _resolve_file(filename: str, *candidate_dirs: Path) -> Path:
+    for candidate_dir in candidate_dirs:
+        candidate_file = candidate_dir / filename
+        if candidate_file.is_file():
+            return candidate_file
+    return candidate_dirs[0] / filename
+
+
+LOCAL_SCRIPTS_DIR = _resolve_dir(
+    REPO_ROOT / "scripts",
+    REPO_ROOT / ".scripts",
+    Path("/root/.scripts"),
+    Path("/root/scripts"),
+)
+
+LOCAL_SECRETS_DIR = _resolve_dir(
+    REPO_ROOT / ".secrets",
+    REPO_ROOT / "secrets",
+    Path("/root/.secrets"),
+    Path("/root/secrets"),
+)
+
+_SCRIPTS_SEARCH_DIRS = (
+    LOCAL_SCRIPTS_DIR,
+    REPO_ROOT / "scripts",
+    REPO_ROOT / ".scripts",
+    Path("/root/.scripts"),
+    Path("/root/scripts"),
+)
+
+_SECRETS_SEARCH_DIRS = (
+    LOCAL_SECRETS_DIR,
+    REPO_ROOT / ".secrets",
+    REPO_ROOT / "secrets",
+    Path("/root/.secrets"),
+    Path("/root/secrets"),
+)
+
+LOCAL_SETUP_SCRIPT = _resolve_file("setup.sh", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_SETUP_SCRIPT = "/root/.scripts/setup.sh"
-LOCAL_AGYQ = LOCAL_SCRIPTS_DIR / "agyq"
+LOCAL_AGYQ = _resolve_file("agyq", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_AGYQ = "/usr/local/bin/agyq"
-LOCAL_GHLS = LOCAL_SCRIPTS_DIR / "ghls"
+LOCAL_GHLS = _resolve_file("ghls", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_GHLS = "/usr/local/bin/ghls"
-LOCAL_GHPR = LOCAL_SCRIPTS_DIR / "ghpr"
+LOCAL_GHPR = _resolve_file("ghpr", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_GHPR = "/usr/local/bin/ghpr"
-LOCAL_GHCLONE = LOCAL_SCRIPTS_DIR / "ghclone"
+LOCAL_GHCLONE = _resolve_file("ghclone", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_GHCLONE = "/usr/local/bin/ghclone"
-LOCAL_AGYPROFILE = LOCAL_SCRIPTS_DIR / "agyprofile"
+LOCAL_AGYPROFILE = _resolve_file("agyprofile", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
-LOCAL_DECRYPT_REPO_ENV = LOCAL_SCRIPTS_DIR / "decrypt_repo_env.py"
+LOCAL_DECRYPT_REPO_ENV = _resolve_file("decrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_DECRYPT_REPO_ENV = "/usr/local/bin/decrypt-repo-env"
-LOCAL_ENCRYPT_REPO_ENV = LOCAL_SCRIPTS_DIR / "encrypt_repo_env.py"
+LOCAL_ENCRYPT_REPO_ENV = _resolve_file("encrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_ENCRYPT_REPO_ENV = "/usr/local/bin/encrypt-repo-env"
-LOCAL_OPENCODE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "opencode.env"
+
+LOCAL_OPENCODE_SECRET = _resolve_file("opencode.env", *_SECRETS_SEARCH_DIRS)
 REMOTE_OPENCODE_SECRET = "/root/.secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
@@ -63,29 +112,19 @@ LOCAL_T3_WRAPPER = SHARED_DIR / "t3-wrapper.sh"
 REMOTE_T3_WRAPPER = "/usr/local/bin/t3"
 LOCAL_T3_USAGE_SYNC = SHARED_DIR / "t3_usage_sync.py"
 REMOTE_T3_USAGE_SYNC = "/usr/local/bin/t3-usage-sync"
-LOCAL_ANTIGRAVITY_SECRET = (
-    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token.json"
-)
+LOCAL_ANTIGRAVITY_SECRET = _resolve_file("antigravity-oauth-token.json", *_SECRETS_SEARCH_DIRS)
 REMOTE_ANTIGRAVITY_SECRET = "/root/.secrets/antigravity-oauth-token.json"
-LOCAL_ANTIGRAVITY_SECRET_MGH = (
-    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-mgh.json"
-)
+LOCAL_ANTIGRAVITY_SECRET_MGH = _resolve_file("antigravity-oauth-token-mgh.json", *_SECRETS_SEARCH_DIRS)
 REMOTE_ANTIGRAVITY_SECRET_MGH = "/root/.secrets/antigravity-oauth-token-mgh.json"
-LOCAL_ANTIGRAVITY_SECRET_ANV = (
-    Path(__file__).resolve().parent.parent / "secrets" / "antigravity-oauth-token-anv.json"
-)
+LOCAL_ANTIGRAVITY_SECRET_ANV = _resolve_file("antigravity-oauth-token-anv.json", *_SECRETS_SEARCH_DIRS)
 REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/.secrets/antigravity-oauth-token-anv.json"
-LOCAL_ANTIGRAVITY_ENV = (
-    Path(__file__).resolve().parent.parent / "secrets" / "antigravity.env"
-)
+LOCAL_ANTIGRAVITY_ENV = _resolve_file("antigravity.env", *_SECRETS_SEARCH_DIRS)
 REMOTE_ANTIGRAVITY_ENV = "/root/.secrets/antigravity.env"
-LOCAL_MODAL_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "modal.toml"
+LOCAL_MODAL_SECRET = _resolve_file("modal.toml", *_SECRETS_SEARCH_DIRS)
 REMOTE_MODAL_SECRET = "/root/.secrets/modal.toml"
-LOCAL_CLOUDFLARE_SECRET = Path(__file__).resolve().parent.parent / "secrets" / "cloudflare.env"
+LOCAL_CLOUDFLARE_SECRET = _resolve_file("cloudflare.env", *_SECRETS_SEARCH_DIRS)
 REMOTE_CLOUDFLARE_SECRET = "/root/.secrets/cloudflare.env"
-LOCAL_GITHUB_ORGS_SECRET = (
-    Path(__file__).resolve().parent.parent / "secrets" / "github-orgs.env"
-)
+LOCAL_GITHUB_ORGS_SECRET = _resolve_file("github-orgs.env", *_SECRETS_SEARCH_DIRS)
 REMOTE_GITHUB_ORGS_SECRET = "/root/.secrets/github-orgs.env"
 SHARED_SECRET_NAME = "share0"
 

@@ -338,6 +338,42 @@ grep -qxF "export PORT=${PORT:-3000}" ~/.bashrc 2>/dev/null || echo "export PORT
 # Ensure /usr/local/bin is present in PATH for all login and interactive shells
 grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
 
+# Developer CLI Tooling Precedence:
+# Workspace Repository ($TARGET_DIR/scripts) > Staged Dot Directory (/root/.scripts) > Pre-baked Image Binary (/usr/local/bin)
+
+# 1. Staged scripts in /root/.scripts or /root/scripts overwrite base image fallbacks
+for cmd in agyq ghls ghpr ghclone agyprofile decrypt-repo-env encrypt-repo-env; do
+    cmd_py="${cmd//-/_}.py"
+    if [ -f "/root/.scripts/$cmd" ] && [ ! -L "/root/.scripts/$cmd" ]; then
+        ln -sf "/root/.scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
+        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+    elif [ -f "/root/.scripts/$cmd_py" ] && [ ! -L "/root/.scripts/$cmd_py" ]; then
+        ln -sf "/root/.scripts/$cmd_py" "/usr/local/bin/$cmd" 2>/dev/null || true
+        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+    elif [ -f "/root/scripts/$cmd" ] && [ ! -L "/root/scripts/$cmd" ]; then
+        ln -sf "/root/scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
+        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+    elif [ -f "/root/scripts/$cmd_py" ] && [ ! -L "/root/scripts/$cmd_py" ]; then
+        ln -sf "/root/scripts/$cmd_py" "/usr/local/bin/$cmd" 2>/dev/null || true
+        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+    fi
+done
+
+# 2. Workspace repository scripts ($TARGET_DIR/scripts) take highest precedence
+if [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR/scripts" ]; then
+    echo "🔗 Linking developer tools from $TARGET_DIR/scripts to /usr/local/bin..."
+    for cmd in agyq ghls ghpr ghclone agyprofile decrypt-repo-env encrypt-repo-env; do
+        cmd_py="${cmd//-/_}.py"
+        if [ -f "$TARGET_DIR/scripts/$cmd" ]; then
+            ln -sf "$TARGET_DIR/scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
+            chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+        elif [ -f "$TARGET_DIR/scripts/$cmd_py" ]; then
+            ln -sf "$TARGET_DIR/scripts/$cmd_py" "/usr/local/bin/$cmd" 2>/dev/null || true
+            chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
+        fi
+    done
+fi
+
 # Ensure developer CLI tools in /usr/local/bin are executable and symlinked
 chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/decrypt-repo-env /usr/local/bin/encrypt-repo-env 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true
@@ -345,22 +381,16 @@ ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/nul
 ln -sf /usr/local/bin/decrypt-repo-env /usr/local/bin/decrypt_repo_env.py 2>/dev/null || true
 ln -sf /usr/local/bin/encrypt-repo-env /usr/local/bin/encrypt_repo_env.py 2>/dev/null || true
 
-# If staged in /root/.scripts, ensure symlinks in /usr/local/bin exist
-for cmd in agyq ghls ghpr ghclone agyprofile decrypt-repo-env encrypt-repo-env; do
-    if [ -f "/root/.scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
-        ln -sf "/root/.scripts/$cmd" "/usr/local/bin/$cmd"
-        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
-    elif [ -f "/root/scripts/$cmd" ] && [ ! -f "/usr/local/bin/$cmd" ]; then
-        ln -sf "/root/scripts/$cmd" "/usr/local/bin/$cmd"
-        chmod +x "/usr/local/bin/$cmd" 2>/dev/null || true
-    fi
-done
-
 # Ensure convenience symlinks in /root/.scripts point to /usr/local/bin
 mkdir -p /root/.scripts 2>/dev/null || true
 for cmd in agyq ghls ghpr ghclone agyprofile decrypt-repo-env encrypt-repo-env; do
-    if [ -f "/usr/local/bin/$cmd" ] && [ ! -e "/root/.scripts/$cmd" ]; then
-        ln -sf "/usr/local/bin/$cmd" "/root/.scripts/$cmd" 2>/dev/null || true
+    if [ -f "/usr/local/bin/$cmd" ]; then
+        if [ ! -e "/root/.scripts/$cmd" ] || [ -L "/root/.scripts/$cmd" ]; then
+            target_real=$(realpath "/usr/local/bin/$cmd" 2>/dev/null || true)
+            if [ "$target_real" != "/root/.scripts/$cmd" ]; then
+                ln -sf "/usr/local/bin/$cmd" "/root/.scripts/$cmd" 2>/dev/null || true
+            fi
+        fi
     fi
 done
 ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null || true

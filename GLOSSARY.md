@@ -167,3 +167,7 @@ _Avoid_: T3 volume, persistent disk, usage storage, transcript volume
 **T3 Usage Synchronization Daemon**:
 A bidirectional background synchronization service (`t3-usage-sync` in `shared/t3_usage_sync.py`) running inside T3 Code sandboxes that hydrates historical conversation databases and token accounting caches from `/root/.t3-storage` during container startup prior to `t3 serve`, and continuously flushes modified SQLite databases and caches atomically every 30 seconds and upon container exit traps (`SIGTERM`/`EXIT`).
 _Avoid_: T3 sync daemon, usage daemon, transcript sync, storage syncer
+
+**Developer CLI Tooling Precedence**:
+The hierarchical resolution order governing developer CLI utility binaries and symlinks (`agyq`, `ghls`, `ghpr`, `ghclone`, `agyprofile`, `decrypt-repo-env`, `encrypt-repo-env`) inside Modal sandboxes: Workspace Repository (`$TARGET_DIR/scripts`) takes highest precedence, followed by Staged Dot Directory (`/root/.scripts`), falling back to the Pre-baked Base Image Binary (`/usr/local/bin`).
+_Avoid_: Script priority, binary search path, cli override, tool priority
