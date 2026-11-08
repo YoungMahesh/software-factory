@@ -135,7 +135,8 @@
     <!-- TAB 1: SANDBOXES LIST -->
     <div x-show="currentTab === 'sandboxes'" class="space-y-4">
       <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-        <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
           <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <tr>
               <th scope="col" class="px-6 py-4">Status</th>
@@ -220,13 +221,15 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
 
     <!-- TAB 2: SNAPSHOTS LIST -->
     <div x-show="currentTab === 'snapshots'" class="space-y-4">
       <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-        <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
           <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <tr>
               <th scope="col" class="px-6 py-4">Snapshot Label</th>
@@ -308,6 +311,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
 

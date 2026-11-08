@@ -207,6 +207,7 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("Sandboxes", response.text)
         self.assertIn("Snapshots", response.text)
         self.assertIn("Workspace Profiles", response.text)
+        self.assertIn("overflow-x-auto", response.text)
 
 
 class TestWebAuth(unittest.TestCase):
