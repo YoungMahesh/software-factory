@@ -42,6 +42,7 @@ DEFAULT_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get(
 DEFAULT_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get(
     "GOOGLE_CLIENT_SECRET", "dummy-client-secret"
 )
+QUOTA_USER_AGENT = "antigravity/hub/2.9.1 linux/amd64"
 
 
 def resolve_account_token(profile_key: str):
@@ -62,7 +63,7 @@ def resolve_account_token(profile_key: str):
                 data = json.load(f)
             if data.get("refresh_token"):
                 return data, None
-        except Exception as e:
+        except Exception:
             pass
 
     # 2. Look in gemini profiles directory
@@ -101,6 +102,29 @@ def resolve_account_token(profile_key: str):
     return None, f"Credentials not found for profile '{profile_key}'"
 
 
+def fetch_quota_summary(access_token: str) -> dict | None:
+    """Fetch live grouped quota summary from Google Cloud Code partner APIs."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "User-Agent": QUOTA_USER_AGENT,
+    }
+    endpoints = [
+        "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+        "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+    ]
+    for url in endpoints:
+        try:
+            req = urllib.request.Request(url, data=b"{}", headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("groups"):
+                    return data
+        except Exception:
+            continue
+    return None
+
+
 def get_gemini_quota(token_dict: dict):
     client_id = token_dict.get("client_id") or DEFAULT_CLIENT_ID
     client_secret = token_dict.get("client_secret") or DEFAULT_CLIENT_SECRET
@@ -128,20 +152,58 @@ def get_gemini_quota(token_dict: dict):
     if not access_token:
         raise ValueError("Failed to retrieve access token from Google OAuth")
 
+    # 1. Prefer live retrieveUserQuotaSummary which contains measured real-time quota windows
+    summary = fetch_quota_summary(access_token)
+    if summary:
+        gemini_group = None
+        for g in summary.get("groups", []):
+            if "gemini" in g.get("displayName", "").lower():
+                gemini_group = g
+                break
+
+        if gemini_group:
+            h5_bucket = None
+            weekly_bucket = None
+            for b in gemini_group.get("buckets", []):
+                bid = b.get("bucketId", "")
+                win = b.get("window", "")
+                if bid == "gemini-5h" or win == "5h":
+                    h5_bucket = b
+                elif bid == "gemini-weekly" or win == "weekly":
+                    weekly_bucket = b
+
+            target_bucket = h5_bucket or weekly_bucket
+            if target_bucket:
+                rem_frac = float(target_bucket.get("remainingFraction", 0.0))
+                res = {
+                    "modelName": "Gemini Pool",
+                    "remainingPercent": rem_frac * 100.0,
+                    "usedPercent": (1.0 - rem_frac) * 100.0,
+                    "resetTime": target_bucket.get("resetTime"),
+                    "description": target_bucket.get("description"),
+                }
+                if weekly_bucket and weekly_bucket != target_bucket:
+                    w_rem = float(weekly_bucket.get("remainingFraction", 0.0))
+                    res["weeklyRemainingPercent"] = w_rem * 100.0
+                    res["weeklyUsedPercent"] = (1.0 - w_rem) * 100.0
+                    res["weeklyResetTime"] = weekly_bucket.get("resetTime")
+                    res["weeklyDescription"] = weekly_bucket.get("description")
+                return res
+
+    # 2. Fallback to model catalog fetchAvailableModels
     models_req = urllib.request.Request(
         "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
         data=b"{}",
         headers={
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "User-Agent": "antigravity/hub/1.0.0 (aidev_client; os_type=linux; arch=x64)",
+            "User-Agent": QUOTA_USER_AGENT,
         },
     )
     with urllib.request.urlopen(models_req, timeout=15) as resp:
         models_data = json.loads(resp.read().decode("utf-8"))
 
     models = models_data.get("models", {})
-    # Look for gemini-3.8-flash-tiered or any Google model with quotaInfo
     target_info = None
     target_model_name = "Gemini Flash Pool"
 
@@ -185,8 +247,11 @@ def format_time_remaining(reset_time_str: str) -> str:
         total_seconds = int(diff.total_seconds())
         if total_seconds <= 0:
             return "ready to reset"
-        hours, remainder = divmod(total_seconds, 3600)
+        days, remainder = divmod(total_seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
         minutes, _ = divmod(remainder, 60)
+        if days > 0:
+            return f"{days}d {hours}h"
         if hours > 0:
             return f"{hours}h {minutes:02d}m"
         return f"{minutes}m"
@@ -230,6 +295,9 @@ def print_single_account(profile_key: str, as_json: bool = False):
             print(f"Account:     {profile_key} ({cfg['displayName']})")
             print(f"Gemini Pool: {quota['remainingPercent']:.2f}% remaining ({quota['usedPercent']:.2f}% used)")
             print(f"Resets at:   {reset_formatted} (in {time_left})")
+            if "weeklyRemainingPercent" in quota:
+                w_time = format_time_remaining(quota.get("weeklyResetTime"))
+                print(f"Weekly Pool: {quota['weeklyRemainingPercent']:.2f}% remaining ({quota['weeklyUsedPercent']:.2f}% used, resets in {w_time})")
         return True
     except Exception as e:
         if as_json:
