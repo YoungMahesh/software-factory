@@ -654,7 +654,7 @@
         async refreshAll(silent = false) {
           if (!silent) this.loading = true;
           try {
-            const profileParam = this.selectedProfile !== 'all' ? `?profile=${encodeURIComponent(this.selectedProfile)}` : '';
+            const profileParam = this.selectedProfile ? `?profile=${encodeURIComponent(this.selectedProfile)}` : '';
             const [sbRes, snapRes] = await Promise.all([
               fetch(`/api/sandboxes${profileParam}`),
               fetch(`/api/snapshots${profileParam}`)
