@@ -206,6 +206,21 @@
                     SSH
                   </button>
 
+                  <!-- T3Code Button -->
+                  <template x-if="sb.t3_pair_url">
+                    <a :href="sb.t3_pair_url" target="_blank" rel="noopener noreferrer"
+                       class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition-colors">
+                      T3Code
+                    </a>
+                  </template>
+                  <template x-if="!sb.t3_pair_url">
+                    <button disabled
+                            class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 text-slate-500 border border-slate-700/50 text-xs font-medium cursor-not-allowed opacity-40"
+                            title="T3 Code server not running or tunnel unavailable">
+                      T3Code
+                    </button>
+                  </template>
+
                   <!-- Terminate Button -->
                   <button @click="confirmTerminate(sb)" :disabled="!sb.running"
                           class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -296,7 +311,7 @@
 
                   <!-- Delete Record Button -->
                   <button @click="deleteSnapshotRecord(snap)"
-                          class="inline-flex items-center px-2 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 border border-slate-700 text-xs transition-colors">
+                          class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 border border-slate-700 text-xs transition-colors">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
@@ -502,8 +517,8 @@
         <div class="space-y-1">
           <div class="text-xs text-slate-400 font-medium">SSH Connection</div>
           <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
-            <span x-text="'ssh ' + (launchResult?.sandbox_name || launchResult?.sandbox_id)"></span>
-            <button @click="copyText('ssh ' + (launchResult?.sandbox_name || launchResult?.sandbox_id), 'SSH command copied!')" class="text-slate-400 hover:text-white">
+            <span class="truncate mr-2" x-text="launchResult?.ssh_command || (launchResult?.ssh_info ? ('ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p ' + launchResult.ssh_info[1] + ' root@' + launchResult.ssh_info[0]) : ('modal shell ' + launchResult?.sandbox_id))"></span>
+            <button @click="copyText(launchResult?.ssh_command || (launchResult?.ssh_info ? ('ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p ' + launchResult.ssh_info[1] + ' root@' + launchResult.ssh_info[0]) : ('modal shell ' + launchResult?.sandbox_id)), 'SSH command copied!')" class="text-slate-400 hover:text-white flex-shrink-0">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
@@ -788,7 +803,7 @@
         },
 
         copySshCommand(sb) {
-          const cmd = sb.name ? `ssh ${sb.name}` : `modal shell ${sb.id}`;
+          const cmd = sb.ssh_command || (sb.name ? `ssh ${sb.name}` : `modal shell ${sb.id}`);
           this.copyText(cmd, `SSH command copied: ${cmd}`);
         },
 

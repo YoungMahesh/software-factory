@@ -30,8 +30,26 @@ class TestWebAPI(unittest.TestCase):
     @patch("sandbox.web.get_sandboxes")
     def test_list_sandboxes(self, mock_get_sandboxes):
         mock_get_sandboxes.return_value = [
-            {"id": "sb-1", "name": "inst-1", "running": True, "exit_code": None, "app_name": "app-1", "profile": "prof-1"},
-            {"id": "sb-2", "name": None, "running": False, "exit_code": 0, "app_name": "app-2", "profile": "prof-2"},
+            {
+                "id": "sb-1",
+                "name": "inst-1",
+                "running": True,
+                "exit_code": None,
+                "app_name": "app-1",
+                "profile": "prof-1",
+                "ssh_command": "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 36511 root@r479.modal.host",
+                "t3_pair_url": "https://ta-123-3775-xyz.w.modal.host/pair#token=LDF3EM8HZ4G8",
+            },
+            {
+                "id": "sb-2",
+                "name": None,
+                "running": False,
+                "exit_code": 0,
+                "app_name": "app-2",
+                "profile": "prof-2",
+                "ssh_command": None,
+                "t3_pair_url": None,
+            },
         ]
 
         response = self.client.get("/api/sandboxes?all_apps=true")
@@ -41,6 +59,14 @@ class TestWebAPI(unittest.TestCase):
         self.assertEqual(data[0]["id"], "sb-1")
         self.assertEqual(data[0]["profile"], "prof-1")
         self.assertTrue(data[0]["running"])
+        self.assertEqual(
+            data[0]["ssh_command"],
+            "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 36511 root@r479.modal.host",
+        )
+        self.assertEqual(
+            data[0]["t3_pair_url"],
+            "https://ta-123-3775-xyz.w.modal.host/pair#token=LDF3EM8HZ4G8",
+        )
         mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=True, profile=None)
 
     @patch("sandbox.web.get_sandboxes")
@@ -275,6 +301,14 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("this.launchForm.t3 = true;", html)
         self.assertIn("this.launchForm.memory = snap.is_vm ? 1 : null;", html)
         self.assertIn("replace(/[-_ ]*snapshot$/i, '')", html)
+
+    def test_index_page_contains_actions_section_elements(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("copySshCommand(sb)", html)
+        self.assertIn("sb.t3_pair_url", html)
+        self.assertIn("T3Code", html)
 
 
 class TestWebAuth(unittest.TestCase):

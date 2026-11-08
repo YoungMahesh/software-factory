@@ -16,6 +16,85 @@ from sandbox.profiles import get_active_profile_name, get_all_clients, get_clien
 
 logger = logging.getLogger(__name__)
 
+_SANDBOX_METADATA_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def record_sandbox_connection_info(
+    sandbox_id: str,
+    ssh_command: str | None = None,
+    t3_pair_url: str | None = None,
+    has_t3: bool = False,
+) -> None:
+    """Pre-populates or updates connection metadata in cache for a sandbox."""
+    _SANDBOX_METADATA_CACHE[sandbox_id] = {
+        "ssh_command": ssh_command or f"modal shell {sandbox_id}",
+        "t3_pair_url": t3_pair_url,
+        "has_t3": has_t3,
+    }
+
+
+def clear_sandbox_metadata_cache(sandbox_id: str | None = None) -> None:
+    """Clears cached connection metadata for a specific sandbox or entirely."""
+    if sandbox_id:
+        _SANDBOX_METADATA_CACHE.pop(sandbox_id, None)
+    else:
+        _SANDBOX_METADATA_CACHE.clear()
+
+
+def resolve_sandbox_connection_info(sb: modal.Sandbox) -> tuple[str | None, str | None]:
+    """Resolves ssh_command and t3_pair_url for an active sandbox container with in-memory caching."""
+    cached = _SANDBOX_METADATA_CACHE.get(sb.object_id)
+    if cached:
+        t3_pair = cached.get("t3_pair_url")
+        if t3_pair and "#token=" in t3_pair:
+            return cached.get("ssh_command"), t3_pair
+        if cached.get("ssh_command") and not cached.get("has_t3"):
+            return cached.get("ssh_command"), None
+
+    ssh_command = None
+    t3_pair_url = None
+    has_t3 = False
+
+    try:
+        tunnels = sb.tunnels(timeout=2) if hasattr(sb, "tunnels") else {}
+        if tunnels and 22 in tunnels:
+            tcp_sock = getattr(tunnels[22], "tcp_socket", None)
+            if tcp_sock:
+                ssh_host, ssh_port = tcp_sock
+                ssh_command = (
+                    f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_port} root@{ssh_host}"
+                )
+
+        if tunnels and 3775 in tunnels:
+            has_t3 = True
+            t3_tunnel_url = getattr(tunnels[3775], "url", None)
+            if t3_tunnel_url:
+                clean_url = t3_tunnel_url.rstrip("/")
+                if hasattr(sb, "exec"):
+                    try:
+                        proc = sb.exec("cat", "/tmp/t3-pairing.json")
+                        if proc.wait() == 0:
+                            data = json.loads(proc.stdout.read().strip())
+                            token = data.get("credential")
+                            if token:
+                                t3_pair_url = f"{clean_url}/pair#token={token}"
+                    except Exception:
+                        pass
+                if not t3_pair_url:
+                    t3_pair_url = clean_url
+    except Exception as exc:
+        logger.debug("Failed resolving tunnels for %s: %s", sb.object_id, exc)
+
+    if not ssh_command:
+        ssh_command = f"modal shell {sb.object_id}"
+
+    _SANDBOX_METADATA_CACHE[sb.object_id] = {
+        "ssh_command": ssh_command,
+        "t3_pair_url": t3_pair_url,
+        "has_t3": has_t3,
+    }
+    return ssh_command, t3_pair_url
+
 
 def resolve_instance_name(sb: modal.Sandbox) -> str | None:
     """Attempts to resolve the instance name configured inside the sandbox container."""
@@ -116,7 +195,15 @@ def _query_profile_sandboxes(
     for sb in sb_generator:
         poll_code = sb.poll()
         is_running = poll_code is None
-        name = resolve_instance_name(sb) if is_running else None
+        if is_running:
+            name = resolve_instance_name(sb)
+            ssh_command, t3_pair_url = resolve_sandbox_connection_info(sb)
+        else:
+            name = None
+            ssh_command = None
+            t3_pair_url = None
+            _SANDBOX_METADATA_CACHE.pop(sb.object_id, None)
+
         app_id_fallback = getattr(sb, "app_id", getattr(sb, "_app_id", None))
         app_label = target_app
         if all_apps or not app_label:
@@ -129,6 +216,8 @@ def _query_profile_sandboxes(
             "exit_code": poll_code,
             "app_name": app_label,
             "profile": profile_name,
+            "ssh_command": ssh_command,
+            "t3_pair_url": t3_pair_url,
         })
     return sandboxes
 
@@ -168,6 +257,7 @@ def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, 
             client = get_client_for_profile(profile)
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
             sb.terminate(wait=True)
+            clear_sandbox_metadata_cache(sandbox_id)
             return {
                 "id": sandbox_id,
                 "status": "terminated",
@@ -195,6 +285,7 @@ def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, 
             client = get_client_for_profile(active_profile)
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
             sb.terminate(wait=True)
+            clear_sandbox_metadata_cache(sandbox_id)
             return {
                 "id": sandbox_id,
                 "status": "terminated",
@@ -217,6 +308,7 @@ def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, 
         try:
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
             sb.terminate(wait=True)
+            clear_sandbox_metadata_cache(sandbox_id)
             return {
                 "id": sandbox_id,
                 "status": "terminated",

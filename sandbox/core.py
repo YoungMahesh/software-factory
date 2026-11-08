@@ -67,6 +67,7 @@ class LaunchResponse(BaseModel):
     app_name: str
     sandbox_name: str
     ssh_info: tuple[str, int] | None = None
+    ssh_command: str | None = None
     opencode_url: str | None = None
     opencode_port: int | None = None
     opencode_password: str | None = None
@@ -268,7 +269,7 @@ def launch_sandbox(
             env["T3_USAGE_VOLUME"] = req.t3_usage_volume
             env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
-    for flag, key in [\
+    for flag, key in [
         (req.agy, "ENABLE_ANTIGRAVITY"),
         (req.modal, "ENABLE_MODAL"),
         (req.sops, "ENABLE_SOPS"),
@@ -357,11 +358,30 @@ def launch_sandbox(
     if req.t3 and t3_url:
         t3_pair_url, t3_qr_code = _setup_t3(sandbox, t3_url, t3_ssh_alias)
 
+    ssh_cmd = (
+        f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_info[1]} root@{ssh_info[0]}"
+        if ssh_info
+        else f"modal shell {sandbox.object_id}"
+    )
+
+    try:
+        from sandbox.lifecycle import record_sandbox_connection_info
+
+        record_sandbox_connection_info(
+            sandbox.object_id,
+            ssh_command=ssh_cmd,
+            t3_pair_url=t3_pair_url,
+            has_t3=bool(req.t3),
+        )
+    except Exception:
+        pass
+
     response = LaunchResponse(
         sandbox_id=sandbox.object_id,
         app_name=app_name,
         sandbox_name=sandbox_name,
         ssh_info=ssh_info,
+        ssh_command=ssh_cmd,
         opencode_url=opencode_url,
         opencode_port=req.opencode_port if req.opencode else None,
         opencode_password=opencode_password,

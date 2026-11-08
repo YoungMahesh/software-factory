@@ -4,7 +4,11 @@ import json
 from unittest import TestCase, main
 from unittest.mock import MagicMock, patch
 
-from sandbox.lifecycle import resolve_app_name
+from sandbox.lifecycle import (
+    clear_sandbox_metadata_cache,
+    resolve_app_name,
+    resolve_sandbox_connection_info,
+)
 from scripts.manage_sandboxes import (
     get_sandboxes,
     resolve_instance_name,
@@ -13,6 +17,12 @@ from scripts.manage_sandboxes import (
 
 
 class TestManageSandboxes(TestCase):
+    def setUp(self):
+        clear_sandbox_metadata_cache()
+
+    def tearDown(self):
+        clear_sandbox_metadata_cache()
+
     def test_resolve_instance_name_from_tags(self):
         sb = MagicMock()
         sb.get_tags.return_value = {"instance_name": "software-factory-custom"}
@@ -126,6 +136,19 @@ class TestManageSandboxes(TestCase):
         sb_running.poll.return_value = None
         sb_running.get_tags.return_value = {"name": "sf-active"}
 
+        # Configure tunnels
+        mock_ssh_tunnel = MagicMock()
+        mock_ssh_tunnel.tcp_socket = ("r479.modal.host", 36511)
+        mock_t3_tunnel = MagicMock()
+        mock_t3_tunnel.url = "https://ta-01m6wzp5m0w6nvdxkf82b19hpv-3775-i9leqkuiv35e5ifa64rpynvkw.w.modal.host"
+        sb_running.tunnels.return_value = {22: mock_ssh_tunnel, 3775: mock_t3_tunnel}
+
+        # Mock pairing file exec
+        exec_proc = MagicMock()
+        exec_proc.wait.return_value = 0
+        exec_proc.stdout.read.return_value = json.dumps({"credential": "LDF3EM8HZ4G8"})
+        sb_running.exec.return_value = exec_proc
+
         sb_stopped = MagicMock()
         sb_stopped.object_id = "sb-stopped"
         sb_stopped.poll.return_value = 0
@@ -136,7 +159,17 @@ class TestManageSandboxes(TestCase):
         self.assertEqual(len(results), 2)
         self.assertTrue(results[0]["running"])
         self.assertEqual(results[0]["name"], "sf-active")
+        self.assertEqual(
+            results[0]["ssh_command"],
+            "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 36511 root@r479.modal.host",
+        )
+        self.assertEqual(
+            results[0]["t3_pair_url"],
+            "https://ta-01m6wzp5m0w6nvdxkf82b19hpv-3775-i9leqkuiv35e5ifa64rpynvkw.w.modal.host/pair#token=LDF3EM8HZ4G8",
+        )
         self.assertFalse(results[1]["running"])
+        self.assertIsNone(results[1]["ssh_command"])
+        self.assertIsNone(results[1]["t3_pair_url"])
 
     @patch("modal.Sandbox.list")
     def test_get_sandboxes_all_apps_includes_snapshots(self, mock_list):
@@ -158,6 +191,46 @@ class TestManageSandboxes(TestCase):
         self.assertEqual(results[0]["app_name"], "software-factory")
         self.assertEqual(results[1]["name"], "resumed-snapshot-abc")
         self.assertEqual(results[1]["app_name"], "resumed-snapshot")
+
+    def test_resolve_sandbox_connection_info_caching(self):
+        sb = MagicMock()
+        sb.object_id = "sb-cache-test"
+        mock_ssh_tunnel = MagicMock()
+        mock_ssh_tunnel.tcp_socket = ("r100.modal.host", 2222)
+        mock_t3_tunnel = MagicMock()
+        mock_t3_tunnel.url = "https://t3-cached.modal.host"
+        sb.tunnels.return_value = {22: mock_ssh_tunnel, 3775: mock_t3_tunnel}
+
+        exec_proc = MagicMock()
+        exec_proc.wait.return_value = 0
+        exec_proc.stdout.read.return_value = json.dumps({"credential": "TOKEN_CACHED"})
+        sb.exec.return_value = exec_proc
+
+        cmd1, url1 = resolve_sandbox_connection_info(sb)
+        self.assertEqual(cmd1, "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 2222 root@r100.modal.host")
+        self.assertEqual(url1, "https://t3-cached.modal.host/pair#token=TOKEN_CACHED")
+        self.assertEqual(sb.tunnels.call_count, 1)
+
+        # Second call hits cache; sb.tunnels is NOT called again
+        cmd2, url2 = resolve_sandbox_connection_info(sb)
+        self.assertEqual(cmd2, cmd1)
+        self.assertEqual(url2, url1)
+        self.assertEqual(sb.tunnels.call_count, 1)
+
+        # After clearing cache, sb.tunnels is called again
+        clear_sandbox_metadata_cache(sb.object_id)
+        cmd3, url3 = resolve_sandbox_connection_info(sb)
+        self.assertEqual(cmd3, cmd1)
+        self.assertEqual(sb.tunnels.call_count, 2)
+
+    def test_resolve_sandbox_connection_info_fallback(self):
+        sb = MagicMock()
+        sb.object_id = "sb-no-tunnels"
+        sb.tunnels.return_value = {}
+
+        cmd, url = resolve_sandbox_connection_info(sb)
+        self.assertEqual(cmd, "modal shell sb-no-tunnels")
+        self.assertIsNone(url)
 
 
 if __name__ == "__main__":
