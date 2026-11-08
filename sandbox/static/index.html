@@ -120,7 +120,7 @@
         </button>
       </nav>
 
-      <!-- Quick Filter -->
+      <!-- Quick Filter & Actions -->
       <div class="flex items-center space-x-3">
         <div class="relative w-full sm:w-64">
           <input type="text" x-model="searchQuery" placeholder="Filter by ID, name, profile..."
@@ -129,6 +129,15 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
+
+        <!-- Launch Fresh Sandbox Button -->
+        <button x-show="currentTab === 'sandboxes'" @click="openFreshLaunchModal()"
+                class="inline-flex items-center px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors shadow-md flex-shrink-0">
+          <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Launch Sandbox</span>
+        </button>
       </div>
     </div>
 
@@ -331,6 +340,154 @@
     </div>
 
   </main>
+
+  <!-- MODAL: LAUNCH FRESH SANDBOX -->
+  <div x-show="freshLaunchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div @click.away="freshLaunchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Launch Fresh Sandbox
+        </h3>
+        <button @click="freshLaunchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+      </div>
+
+      <!-- Mode Selector -->
+      <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
+        <button type="button" @click="freshLaunchForm.mode = 'repo'"
+                :class="freshLaunchForm.mode === 'repo' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                class="py-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span>Repository Sandbox</span>
+        </button>
+        <button type="button" @click="freshLaunchForm.mode = 'standalone'"
+                :class="freshLaunchForm.mode === 'standalone' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                class="py-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <span>Standalone Sandbox</span>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Target Profile Workspace -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Target Modal Profile Workspace</label>
+          <select x-model="freshLaunchForm.profile"
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
+            <template x-for="p in profiles" :key="p.name">
+              <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- REPO MODE FIELDS -->
+        <template x-if="freshLaunchForm.mode === 'repo'">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Target Repository (-r / --repo) <span class="text-rose-400">*</span></label>
+              <input type="text" x-model="freshLaunchForm.repo" placeholder="e.g. sFactory0/test-live-test1 or test-live-test1"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Git Branch</label>
+                <input type="text" x-model="freshLaunchForm.github_branch" placeholder="main"
+                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">App Name (optional)</label>
+                <input type="text" x-model="freshLaunchForm.name" placeholder="Derived from repo"
+                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              </div>
+            </div>
+
+            <div class="space-y-2 pt-1">
+              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" x-model="freshLaunchForm.testing" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
+                <span>Canonical test org (sFactory0 with test- prefix)</span>
+              </label>
+              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" x-model="freshLaunchForm.full_clone" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
+                <span>Full Git clone (bypass depth 50 limit)</span>
+              </label>
+            </div>
+          </div>
+        </template>
+
+        <!-- STANDALONE MODE FIELDS -->
+        <template x-if="freshLaunchForm.mode === 'standalone'">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Sandbox App Name (--name) <span class="text-rose-400">*</span></label>
+              <input type="text" x-model="freshLaunchForm.name" placeholder="e.g. dev-sandbox"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <div class="text-[11px] text-slate-500 mt-1">Initializes clean environment with empty git repository at /root/&lt;name&gt;</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Runtime Mode -->
+        <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+          <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer select-none">
+            <div>
+              <div class="font-medium">Linux VM Sandbox Mode</div>
+              <div class="text-slate-500 text-[11px]">Enables virtualized hardware and Docker daemon</div>
+            </div>
+            <input type="checkbox" x-model="freshLaunchForm.vm" @change="if (freshLaunchForm.vm && !freshLaunchForm.memory) freshLaunchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+          </label>
+          <div x-show="freshLaunchForm.vm" class="pt-2 border-t border-slate-800">
+            <label class="block text-[11px] font-medium text-slate-400 mb-1">RAM Memory (GB)</label>
+            <input type="number" min="1" max="16" x-model.number="freshLaunchForm.memory" placeholder="1"
+                   class="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+          </div>
+        </div>
+
+        <!-- Developer Tooling -->
+        <div class="space-y-2">
+          <label class="block text-xs font-medium text-slate-400">Integrated Tooling</label>
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="freshLaunchForm.t3" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>T3 Code Server</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="freshLaunchForm.opencode" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>OpenCode</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="freshLaunchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Antigravity</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="freshLaunchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Modal SDK</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+        <button @click="freshLaunchModalOpen = false"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+          Cancel
+        </button>
+        <button @click="executeFreshLaunch()" :disabled="freshLaunchSubmitting"
+                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+          <svg x-show="freshLaunchSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Launch Sandbox
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: CREATE SNAPSHOT -->
   <div x-show="snapshotModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -586,7 +743,7 @@
           terminate: false
         },
 
-        // Launch Modal State
+        // Snapshot Launch Modal State
         launchModalOpen: false,
         launchTarget: null,
         launchSubmitting: false,
@@ -595,6 +752,26 @@
           name: '',
           vm: false,
           memory: null,
+          opencode: false,
+          t3: true,
+          agy: false,
+          modal: false
+        },
+
+        // Fresh Launch Modal State
+        freshLaunchModalOpen: false,
+        freshLaunchSubmitting: false,
+        freshLaunchForm: {
+          mode: 'repo',
+          repo: '',
+          github_branch: 'main',
+          testing: false,
+          full_clone: false,
+          name: '',
+          profile: '',
+          vm: false,
+          memory: null,
+          no_cloudflare: false,
           opencode: false,
           t3: true,
           agy: false,
@@ -764,6 +941,56 @@
             alert('Error launching sandbox: ' + err.message);
           } finally {
             this.launchSubmitting = false;
+          }
+        },
+
+        openFreshLaunchModal() {
+          const activeProf = this.profiles.find(p => p.active)?.name || (this.profiles[0]?.name || '');
+          this.freshLaunchForm.profile = this.selectedProfile !== 'all' ? this.selectedProfile : activeProf;
+          this.freshLaunchForm.mode = 'repo';
+          this.freshLaunchForm.repo = '';
+          this.freshLaunchForm.github_branch = 'main';
+          this.freshLaunchForm.testing = false;
+          this.freshLaunchForm.full_clone = false;
+          this.freshLaunchForm.name = '';
+          this.freshLaunchForm.vm = false;
+          this.freshLaunchForm.memory = null;
+          this.freshLaunchForm.no_cloudflare = false;
+          this.freshLaunchForm.opencode = false;
+          this.freshLaunchForm.t3 = true;
+          this.freshLaunchForm.agy = false;
+          this.freshLaunchForm.modal = false;
+          this.freshLaunchModalOpen = true;
+        },
+
+        async executeFreshLaunch() {
+          if (this.freshLaunchForm.mode === 'repo' && (!this.freshLaunchForm.repo || !this.freshLaunchForm.repo.trim())) {
+            alert('Target repository is required in repository mode.');
+            return;
+          }
+          if (this.freshLaunchForm.mode === 'standalone' && (!this.freshLaunchForm.name || !this.freshLaunchForm.name.trim())) {
+            alert('Sandbox App Name is required in standalone mode.');
+            return;
+          }
+
+          this.freshLaunchSubmitting = true;
+          try {
+            const res = await fetch('/api/sandboxes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.freshLaunchForm)
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.detail || 'Fresh sandbox launch failed');
+            }
+            this.launchResult = await res.json();
+            this.freshLaunchModalOpen = false;
+            this.resultModalOpen = true;
+          } catch (err) {
+            alert('Error launching fresh sandbox: ' + err.message);
+          } finally {
+            this.freshLaunchSubmitting = false;
           }
         },
 

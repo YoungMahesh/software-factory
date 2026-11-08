@@ -17,6 +17,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import HTMLResponse
+import modal
 from pydantic import BaseModel
 
 from shared.image import DEFAULT_T3_USAGE_VOLUME
@@ -125,6 +126,29 @@ class SnapshotLaunchPayload(BaseModel):
     profile: str | None = None
 
 
+class FreshSandboxLaunchPayload(BaseModel):
+    mode: str = "repo"
+    repo: str | None = None
+    github_branch: str = "main"
+    testing: bool = False
+    full_clone: bool = False
+    name: str | None = None
+    profile: str | None = None
+    vm: bool = False
+    memory: int | None = None
+    no_cloudflare: bool = False
+    opencode: bool = False
+    t3: bool = True
+    t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
+    no_t3_persist: bool = False
+    agy: bool = False
+    herdr: bool = False
+    pi: bool = False
+    modal: bool = False
+    browser: bool = False
+    react_native: bool = False
+
+
 @router.get("/favicon.ico", include_in_schema=False)
 def favicon() -> Response:
     """Returns 204 No Content for favicon to prevent browser 404 logs."""
@@ -159,6 +183,84 @@ def api_list_sandboxes(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list sandboxes: {exc}",
+        ) from exc
+
+
+@router.post("/api/sandboxes", response_model=LaunchResponse)
+def api_launch_fresh_sandbox(payload: FreshSandboxLaunchPayload) -> LaunchResponse:
+    """Launches a fresh Modal sandbox (repository-backed or standalone)."""
+    if payload.mode == "repo":
+        if not payload.repo or not payload.repo.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Target repository is required when launching a repository sandbox.",
+            )
+    elif payload.mode == "standalone":
+        if not payload.name or not payload.name.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sandbox App Name is required when launching a standalone sandbox.",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid launch mode '{payload.mode}'; expected 'repo' or 'standalone'.",
+        )
+
+    req = LaunchRequest(
+        repo=payload.repo.strip() if payload.repo else None,
+        testing=payload.testing,
+        github_branch=payload.github_branch or "main",
+        full_clone=payload.full_clone,
+        name=payload.name.strip() if payload.name else None,
+        vm=payload.vm,
+        memory=payload.memory,
+        no_cloudflare=payload.no_cloudflare,
+        opencode=payload.opencode,
+        t3=payload.t3,
+        t3_usage_volume=payload.t3_usage_volume,
+        no_t3_persist=payload.no_t3_persist,
+        agy=payload.agy,
+        herdr=payload.herdr,
+        pi=payload.pi,
+        modal=payload.modal,
+        browser=payload.browser,
+        react_native=payload.react_native,
+    )
+
+    client = None
+    if payload.profile:
+        try:
+            client = get_client_for_profile(payload.profile)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid profile '{payload.profile}': {exc}",
+            ) from exc
+
+    try:
+        _, response = launch_sandbox(req, client=client)
+        return response
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except modal.exception.AlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Sandbox already exists: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.error("Failed to launch fresh sandbox: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Sandbox launch failed: {exc}",
         ) from exc
 
 

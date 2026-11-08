@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from sandbox.core import LaunchResponse, SnapshotResponse
-from sandbox.web import SnapshotLaunchPayload, app
+from sandbox.web import FreshSandboxLaunchPayload, SnapshotLaunchPayload, app
 
 
 class TestWebAPI(unittest.TestCase):
@@ -104,6 +104,8 @@ class TestWebAPI(unittest.TestCase):
 
         response = self.client.get("/api/sandboxes?app_name=custom-app")
         self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
         mock_get_sandboxes.assert_called_once_with(app_name="custom-app", all_apps=False, profile=None)
 
     @patch("sandbox.web.get_sandboxes")
@@ -284,6 +286,107 @@ class TestWebAPI(unittest.TestCase):
         self.assertFalse(req.vm)
         self.assertIsNone(req.memory)
 
+    @patch("sandbox.web.launch_sandbox")
+    def test_launch_fresh_sandbox_repo_mode(self, mock_launch):
+        mock_response = LaunchResponse(
+            sandbox_id="sb-fresh-repo",
+            app_name="test-repo",
+            sandbox_name="test-repo-1234",
+            ssh_info=("modal.internal", 2222),
+            is_vm=False,
+        )
+        mock_launch.return_value = (MagicMock(), mock_response)
+        payload = {
+            "mode": "repo",
+            "repo": "test-repo",
+            "github_branch": "feature-x",
+            "testing": True,
+            "full_clone": True,
+            "t3": True,
+            "opencode": False,
+        }
+        response = self.client.post("/api/sandboxes", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["sandbox_id"], "sb-fresh-repo")
+        self.assertEqual(data["app_name"], "test-repo")
+
+        mock_launch.assert_called_once()
+        req = mock_launch.call_args[0][0]
+        self.assertEqual(req.repo, "test-repo")
+        self.assertEqual(req.github_branch, "feature-x")
+        self.assertTrue(req.testing)
+        self.assertTrue(req.full_clone)
+        self.assertTrue(req.t3)
+
+    @patch("sandbox.web.launch_sandbox")
+    def test_launch_fresh_sandbox_standalone_mode(self, mock_launch):
+        mock_response = LaunchResponse(
+            sandbox_id="sb-fresh-standalone",
+            app_name="my-standalone-app",
+            sandbox_name="my-standalone-app-abcd",
+            ssh_info=("modal.internal", 2222),
+            is_vm=True,
+            memory_gb=2,
+        )
+        mock_launch.return_value = (MagicMock(), mock_response)
+        payload = {
+            "mode": "standalone",
+            "name": "my-standalone-app",
+            "vm": True,
+            "memory": 2,
+        }
+        response = self.client.post("/api/sandboxes", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["sandbox_id"], "sb-fresh-standalone")
+
+        mock_launch.assert_called_once()
+        req = mock_launch.call_args[0][0]
+        self.assertIsNone(req.repo)
+        self.assertEqual(req.name, "my-standalone-app")
+        self.assertTrue(req.vm)
+        self.assertEqual(req.memory, 2)
+
+    def test_launch_fresh_sandbox_validation(self):
+        # Repo mode missing repo
+        res_no_repo = self.client.post("/api/sandboxes", json={"mode": "repo", "repo": ""})
+        self.assertEqual(res_no_repo.status_code, 400)
+        self.assertIn("Target repository is required", res_no_repo.json()["detail"])
+
+        # Standalone mode missing name
+        res_no_name = self.client.post("/api/sandboxes", json={"mode": "standalone", "name": ""})
+        self.assertEqual(res_no_name.status_code, 400)
+        self.assertIn("Sandbox App Name is required", res_no_name.json()["detail"])
+
+        # Invalid mode
+        res_invalid_mode = self.client.post("/api/sandboxes", json={"mode": "unknown"})
+        self.assertEqual(res_invalid_mode.status_code, 400)
+        self.assertIn("Invalid launch mode", res_invalid_mode.json()["detail"])
+
+    @patch("sandbox.web.get_client_for_profile")
+    @patch("sandbox.web.launch_sandbox")
+    def test_launch_fresh_sandbox_with_profile(self, mock_launch, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_response = LaunchResponse(
+            sandbox_id="sb-profiled",
+            app_name="profiled-app",
+            sandbox_name="profiled-app-1234",
+            is_vm=False,
+        )
+        mock_launch.return_value = (MagicMock(), mock_response)
+        payload = {
+            "mode": "standalone",
+            "name": "profiled-app",
+            "profile": "custom-team",
+        }
+        response = self.client.post("/api/sandboxes", json=payload)
+        self.assertEqual(response.status_code, 200)
+        mock_get_client.assert_called_once_with("custom-team")
+        _, kwargs = mock_launch.call_args
+        self.assertEqual(kwargs.get("client"), mock_client)
+
     def test_index_page_returns_html(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
@@ -309,6 +412,15 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("copySshCommand(sb)", html)
         self.assertIn("sb.t3_pair_url", html)
         self.assertIn("T3Code", html)
+
+    def test_index_page_contains_fresh_launch_elements(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("openFreshLaunchModal()", html)
+        self.assertIn("Launch Fresh Sandbox", html)
+        self.assertIn("executeFreshLaunch()", html)
+        self.assertIn("freshLaunchForm.mode", html)
 
 
 class TestWebAuth(unittest.TestCase):
