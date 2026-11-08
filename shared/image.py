@@ -100,6 +100,33 @@ REMOTE_DECRYPT_REPO_ENV = "/usr/local/bin/decrypt-repo-env"
 LOCAL_ENCRYPT_REPO_ENV = _resolve_file("encrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_ENCRYPT_REPO_ENV = "/usr/local/bin/encrypt-repo-env"
 
+def resolve_secret_path(filename: str, repo_root: Path | None = None) -> Path | None:
+    """Resolves a secret file checking .secrets and secrets directories across root and home."""
+    search_dirs: list[Path] = []
+    if repo_root is not None:
+        search_dirs.extend([repo_root / ".secrets", repo_root / "secrets"])
+    search_dirs.extend([
+        Path("/root/.secrets"),
+        Path("/root/secrets"),
+        REPO_ROOT / ".secrets",
+        REPO_ROOT / "secrets",
+        Path.home() / ".secrets",
+        Path.home() / "secrets",
+    ])
+    seen: set[Path] = set()
+    for directory in search_dirs:
+        try:
+            resolved = directory.resolve()
+        except Exception:
+            resolved = directory
+        if resolved not in seen:
+            seen.add(resolved)
+            candidate = directory / filename
+            if candidate.is_file():
+                return candidate
+    return None
+
+
 LOCAL_OPENCODE_SECRET = _resolve_file("opencode.env", *_SECRETS_SEARCH_DIRS)
 REMOTE_OPENCODE_SECRET = "/root/.secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"

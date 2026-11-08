@@ -1,6 +1,7 @@
 """Modal cloud control plane function hosting the FastAPI sandbox management API."""
 
 import hmac
+import logging
 import os
 from pathlib import Path
 import sys
@@ -9,7 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 import modal
 
-from shared.image import SHARED_SECRET_NAME
+from shared.image import SHARED_SECRET_NAME, resolve_secret_path
 from sandbox.core import (
     LaunchRequest,
     LaunchResponse,
@@ -19,6 +20,8 @@ from sandbox.core import (
     launch_sandbox,
 )
 from sandbox.web import router as web_router
+
+logger = logging.getLogger(__name__)
 
 APP_NAME = "sandbox-control-plane"
 app = modal.App(APP_NAME)
@@ -81,6 +84,23 @@ def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None
     return credentials
 
 
+def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> bool:
+    """Validates organization credentials presence for repository sandbox provisioning."""
+    has_creds = (root / ".secrets" / "github-orgs.env").is_file() or (root / "secrets" / "github-orgs.env").is_file()
+    if not has_creds:
+        logger.warning(
+            "Organization credentials (github-orgs.env) not found in secrets/ or .secrets/. "
+            "Launching repository sandboxes will fail until secrets/github-orgs.env is provided."
+        )
+        if enforce or os.environ.get("MODAL_ENFORCE_AUTH") == "1":
+            raise RuntimeError(
+                "Missing required organization credentials file (github-orgs.env) in secrets/ or .secrets/. "
+                "Please configure secrets/github-orgs.env before deploying."
+            )
+        return False
+    return True
+
+
 image = (
     modal.Image.debian_slim()
     .pip_install(
@@ -101,10 +121,10 @@ if modal_toml.is_file():
 if (repo_root / "sandbox" / "static").is_dir():
     image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
 
+if (repo_root / "secrets").is_dir():
+    image = image.add_local_dir(str(repo_root / "secrets"), "/root/secrets")
 if (repo_root / ".secrets").is_dir():
     image = image.add_local_dir(str(repo_root / ".secrets"), "/root/.secrets")
-elif (repo_root / "secrets").is_dir():
-    image = image.add_local_dir(str(repo_root / "secrets"), "/root/.secrets")
 
 function_secrets: list[modal.Secret] = [modal.Secret.from_name(SHARED_SECRET_NAME)]
 
@@ -116,6 +136,8 @@ if auth_env:
             os.environ[k] = v
 elif (repo_root / ".env").is_file():
     function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
+
+validate_deployment_credentials(repo_root)
 
 web_app = FastAPI(
     title="Modal Sandbox Control Plane",
@@ -179,9 +201,16 @@ def launch(req: LaunchRequest) -> LaunchResponse:
             detail=str(exc),
         ) from exc
     except FileNotFoundError as exc:
+        err_msg = str(exc)
+        if "credentials" in err_msg.lower() or "github-orgs" in err_msg.lower():
+            logger.error("Control plane missing credentials: %s", err_msg)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Control plane missing credentials: {err_msg}. Ensure secrets/github-orgs.env is present and redeploy.",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            detail=err_msg,
         ) from exc
     except modal.exception.AlreadyExistsError as exc:
         raise HTTPException(
