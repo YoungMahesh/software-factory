@@ -213,7 +213,12 @@ def run_sandbox_launch(
     )
 
     try:
-        sandbox, result = launch_sandbox(req, repo_root=repo_root)
+        sandbox, result = launch_sandbox(
+            req,
+            repo_root=repo_root,
+            build_image_fn=build_sandbox_image,
+            load_pubkey_fn=load_ssh_pub_key,
+        )
     except (ValueError, FileNotFoundError) as exc:
         parser.error(str(exc))
     except modal.exception.AlreadyExistsError as exc:

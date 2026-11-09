@@ -1,39 +1,20 @@
 """Core sandbox lifecycle management, provisioning pipeline, and data schemas."""
 
-import json
-import os
+from __future__ import annotations
+
 from pathlib import Path
-import secrets
-import sys
-import time
 from typing import Callable
-import uuid
 
 import modal
 from pydantic import BaseModel
 
-from shared.image import (
-    DEFAULT_T3_USAGE_VOLUME,
-    REMOTE_STARTUP_SCRIPT,
-    SHARED_SECRET_NAME,
-    T3_STORAGE_MOUNT_PATH,
-    browser_enabled,
-    build_sandbox_image,
-    get_gradle_volumes,
-    get_t3_usage_volumes,
-    load_ssh_pub_key,
-    resolve_secret_path,
-)
 from sandbox.config import (
     DEFAULT_METRO_PORT,
     DEFAULT_OPENCODE_PORT,
-    DEFAULT_ORG,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
-    IDLE_TIMEOUT_SECS,
-    TIMEOUT_SECS,
 )
-from sandbox.t3 import setup_t3 as _setup_t3
+from shared.image import DEFAULT_T3_USAGE_VOLUME
 
 
 class LaunchRequest(BaseModel):
@@ -139,13 +120,6 @@ def validate_launch_request(req: LaunchRequest) -> None:
         used_ports[port] = flag
 
 
-def _resolve_fn(name: str, fallback: Callable) -> Callable:
-    main_mod = sys.modules.get("sandbox.main")
-    if main_mod and hasattr(main_mod, name):
-        return getattr(main_mod, name)
-    return fallback
-
-
 def launch_sandbox(
     req: LaunchRequest,
     repo_root: Path | None = None,
@@ -153,227 +127,26 @@ def launch_sandbox(
     load_pubkey_fn: Callable | None = None,
     client: modal.Client | None = None,
     log_cb: Callable[[str], None] | None = None,
-) -> tuple[modal.Sandbox, LaunchResponse]:
-    """Provisions a Modal sandbox and executes the post-launch setup pipeline.
+    register_ssh_config: bool = False,
+    append_ssh_fn: Callable | None = None,
+):
+    """Provisions a Modal sandbox via SandboxLauncher.
 
-    Returns the sandbox and its connection metadata. Progress messages are
-    printed and passed to log_cb when supplied; callback exceptions are ignored.
-    If tunnel lookup fails, connection metadata may be missing and the command
-    falls back to `modal shell` when SSH information is unavailable.
-
-    Raises ValueError for invalid launch options, FileNotFoundError for missing
-    repository credentials or the default SSH public key, and RuntimeError if
-    the initial sandbox poll reports a nonzero exit code. Errors from other
-    provisioning operations propagate to the caller.
+    Retained as a backward-compatible adapter delegating to SandboxLauncher.
+    Returns a RunningSandbox tuple-like object providing (sandbox, response).
     """
-    def emit_log(msg: str) -> None:
-        if log_cb:
-            try:
-                log_cb(msg)
-            except Exception:
-                pass
-        print(msg)
+    from sandbox.launcher import SandboxLauncher
 
-    emit_log("▶ Validating launch request...")
-    validate_launch_request(req)
-
-    if repo_root is None:
-        if (Path("/root/.secrets") / "github-orgs.env").is_file() or Path("/root/secrets/github-orgs.env").is_file():
-            repo_root = Path("/root")
-        else:
-            repo_root = Path(__file__).resolve().parent.parent
-
-    clean_repo = req.repo.strip().rstrip("/") if req.repo else None
-    target_repo, org_name, bare_repo = None, None, None
-    orgs_env_file = resolve_secret_path("github-orgs.env", repo_root=repo_root)
-
-    if clean_repo:
-        if not orgs_env_file or not orgs_env_file.is_file():
-            missing_path = repo_root / "secrets" / "github-orgs.env"
-            raise FileNotFoundError(f"Organization credentials file not found: {missing_path}.")
-        org_name, raw_repo = clean_repo.split("/", 1) if "/" in clean_repo else (DEFAULT_ORG, clean_repo)
-        bare_repo = raw_repo if (not req.testing or raw_repo.startswith("test-")) else f"test-{raw_repo}"
-        target_repo = f"{org_name}/{bare_repo}"
-
-    pubkey_resolver = load_pubkey_fn or _resolve_fn("load_ssh_pub_key", load_ssh_pub_key)
-    pubkey_content = pubkey_resolver()
-
-    random_id = uuid.uuid4().hex[:8]
-    app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
-    sandbox_name = f"{app_name}-{random_id}"
-    emit_log(f"🔑 Resolving App '{app_name}' and sandbox instance '{sandbox_name}'...")
-    app = modal.App.lookup(app_name, client=client, create_if_missing=True) if client else modal.App.lookup(app_name, create_if_missing=True)
-
-    browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy)
-
-    if req.from_snapshot:
-        emit_log(f"🏗️ Loading container image from snapshot {req.from_snapshot}...")
-        image = modal.Image.from_id(req.from_snapshot)
-    else:
-        emit_log("🏗️ Resolving container base image and tooling layers...")
-        img_builder = build_image_fn or _resolve_fn("build_sandbox_image", build_sandbox_image)
-        image = img_builder(
-            opencode=req.opencode, agy=req.agy, browser=browser_active,
-            modal_tooling=req.modal, react_native=req.react_native, t3=req.t3,
-            herdr=req.herdr, pi=req.pi,
-        )
-
-    if clean_repo and orgs_env_file and orgs_env_file.is_file():
-        image = image.add_local_file(orgs_env_file, "/root/.secrets/github-orgs.env", copy=True)
-
-    cloudflare_active = not req.no_cloudflare
-    encrypted_ports: list[int] = []
-    sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
-    env: dict[str, str | None] = {
-        "SSH_AUTHORIZED_KEY": pubkey_content, "PORT": str(DEFAULT_WEB_PORT),
-        "HOSTNAME": "0.0.0.0", "APP_NAME": sandbox_name,
-        "MODAL_APP_NAME": app_name, "SANDBOX_NAME": sandbox_name,
-    }
-
-    if req.from_snapshot: env["RESUME_SNAPSHOT"] = "1"
-    if clean_repo is None: env["NO_REPO"] = "1"
-    if target_repo: env["GH_REPO"] = target_repo
-    if org_name: env["GH_ORG"] = org_name
-    if req.full_clone: env["FULL_CLONE"] = "1"
-    if not cloudflare_active: env["ENABLE_CLOUDFLARE"] = "0"
-
-    memory_gb: int | None = None
-    if req.vm:
-        memory_gb = req.memory if req.memory is not None else None
-        env["SWAP_GB"] = str(memory_gb * 2 if memory_gb else 2)
-        env["ENABLE_DOCKER"] = "1"
-
-    opencode_password = None
-    if req.opencode:
-        encrypted_ports.append(req.opencode_port)
-        opencode_password = secrets.token_urlsafe(16)
-        sandbox_secrets.append(modal.Secret.from_dict({"OPENCODE_SERVER_PASSWORD": opencode_password}))
-        env["ENABLE_OPENCODE"] = "1"
-        env["OPENCODE_PORT"] = str(req.opencode_port)
-
-    t3_persist_enabled = req.t3 and not req.no_t3_persist
-    t3_ssh_alias = req.t3_ssh_host or sandbox_name
-    if req.t3:
-        encrypted_ports.append(req.t3_port)
-        env["ENABLE_T3"] = "1"
-        env["T3_PORT"] = str(req.t3_port)
-        env["FLAGS_enforce_kernel_ipv6_support"] = "false"
-        env["T3_SSH_HOST"] = t3_ssh_alias
-        if t3_persist_enabled:
-            env["ENABLE_T3_PERSISTENCE"] = "1"
-            env["T3_USAGE_VOLUME"] = req.t3_usage_volume
-            env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
-
-    for flag, key in [
-        (req.agy, "ENABLE_ANTIGRAVITY"), (req.modal, "ENABLE_MODAL"),
-        (req.sops, "ENABLE_SOPS"), (req.herdr, "ENABLE_HERDR"),
-        (req.pi, "ENABLE_PI"), (browser_active, "ENABLE_BROWSER"),
-    ]:
-        if flag:
-            env[key] = "1"
-
-    volumes = {}
-    if t3_persist_enabled:
-        volumes.update(get_t3_usage_volumes(req.t3_usage_volume))
-    if req.react_native:
-        encrypted_ports.append(req.metro_port)
-        env["ENABLE_REACT_NATIVE"] = "1"
-        env["METRO_PORT"] = str(req.metro_port)
-        volumes.update(get_gradle_volumes())
-
-    feature_flags = [
-        (not req.no_cloudflare, "Cloudflare Tunnel"), (req.full_clone, "Full Git Clone"),
-        (req.react_native, "React Native"), (req.agy, "Antigravity"),
-        (req.opencode, "OpenCode"), (req.t3, "T3 Code"),
-        (t3_persist_enabled, "T3 Usage Persistence"), (req.modal, "Modal"),
-        (req.sops, "SOPS"), (req.herdr, "Herdr"),
-        (req.pi, "Pi"), (browser_active, "Browser"),
-    ]
-    features = [label for active, label in feature_flags if active]
-    runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
-    features_suffix = f" & {' & '.join(features)}" if features else ""
-    from_suffix = f" from snapshot {req.from_snapshot}" if req.from_snapshot else ""
-    emit_log(
-        f"🏝️ Launching Modal {runtime_desc}{from_suffix} with SSH"
-        f"{features_suffix} (App: {app_name}, Sandbox: {sandbox_name})..."
+    return SandboxLauncher.run(
+        req=req,
+        repo_root=repo_root,
+        build_image_fn=build_image_fn,
+        load_pubkey_fn=load_pubkey_fn,
+        append_ssh_fn=append_ssh_fn,
+        client=client,
+        log_cb=log_cb,
+        register_ssh_config=register_ssh_config,
     )
-
-    sandbox_kwargs: dict = {
-        "timeout": TIMEOUT_SECS, "idle_timeout": IDLE_TIMEOUT_SECS, "image": image,
-        "app": app, "name": sandbox_name, "tags": {"instance_name": sandbox_name, "app_name": app_name},
-        "volumes": volumes, "unencrypted_ports": [22], "encrypted_ports": encrypted_ports,
-        "cpu": (0.125, 4.0), "env": env, "runtime": "vm" if req.vm else "gvisor",
-        "memory": (128, 16384),
-    }
-    if client is not None:
-        sandbox_kwargs["client"] = client
-
-    emit_log("🚀 Instantiating Modal Sandbox container...")
-    with modal.enable_output():
-        sandbox = modal.Sandbox.create(
-            "bash", REMOTE_STARTUP_SCRIPT, req.github_branch,
-            secrets=sandbox_secrets, **sandbox_kwargs,
-        )
-
-    emit_log(f"📦 Modal Sandbox container created: {sandbox.object_id}")
-    poll_val = sandbox.poll()
-    if isinstance(poll_val, int) and poll_val != 0:
-        err = ""
-        try:
-            err = (sandbox.stderr.read() or sandbox.stdout.read() or "").strip()
-        except Exception:
-            pass
-        msg = f"Container terminated with exit code {poll_val}: {err}"
-        emit_log(f"❌ {msg}")
-        raise RuntimeError(msg)
-
-    emit_log("🌐 Resolving network tunnels and connection endpoints...")
-    ssh_info, opencode_url, metro_url, t3_url = None, None, None, None
-    try:
-        tunnels = sandbox.tunnels()
-        if 22 in tunnels:
-            ssh_info = tunnels[22].tcp_socket
-        if req.opencode and req.opencode_port in tunnels:
-            opencode_url = tunnels[req.opencode_port].url
-        if req.react_native and req.metro_port in tunnels:
-            metro_url = tunnels[req.metro_port].url
-        if req.t3 and req.t3_port in tunnels:
-            t3_url = tunnels[req.t3_port].url
-    except Exception as exc:
-        emit_log(f"⚠️ Could not obtain tunnel metadata: {exc}")
-
-    t3_pair_url, t3_qr_code = None, None
-    if req.t3 and t3_url:
-        emit_log("⚡ Initializing T3 Code server and pairing credentials...")
-        t3_pair_url, t3_qr_code = _setup_t3(sandbox, t3_url, t3_ssh_alias)
-        if t3_pair_url:
-            emit_log(f"✓ T3 Code server ready: {t3_pair_url}")
-
-    ssh_cmd = (
-        f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_info[1]} root@{ssh_info[0]}"
-        if ssh_info else f"modal shell {sandbox.object_id}"
-    )
-
-    try:
-        from sandbox.lifecycle import record_sandbox_connection_info
-        record_sandbox_connection_info(sandbox.object_id, ssh_command=ssh_cmd, t3_pair_url=t3_pair_url, has_t3=bool(req.t3))
-    except Exception:
-        pass
-
-    emit_log(f"📡 SSH connection ready: {ssh_cmd}")
-    emit_log("✨ Sandbox launched successfully! All background services active.")
-
-    response = LaunchResponse(
-        sandbox_id=sandbox.object_id, app_name=app_name, sandbox_name=sandbox_name,
-        ssh_info=ssh_info, ssh_command=ssh_cmd, opencode_url=opencode_url,
-        opencode_port=req.opencode_port if req.opencode else None, opencode_password=opencode_password,
-        metro_url=metro_url, metro_port=req.metro_port if req.react_native else None,
-        t3_url=t3_url, t3_port=req.t3_port if req.t3 else None, t3_pair_url=t3_pair_url,
-        t3_qr_code=t3_qr_code, t3_ssh_host=t3_ssh_alias, t3_persist=t3_persist_enabled,
-        t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None, memory_gb=memory_gb,
-        agy_enabled=req.agy, cloudflare_enabled=cloudflare_active, sops_enabled=req.sops, is_vm=req.vm,
-    )
-    return sandbox, response
 
 
 def capture_snapshot_core(

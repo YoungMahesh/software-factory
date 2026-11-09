@@ -31,6 +31,10 @@ from sandbox.core import (
     LaunchResponse,
     SnapshotResponse,
     capture_snapshot_core,
+)
+from sandbox.launcher import (
+    RunningSandbox,
+    SandboxLauncher,
     launch_sandbox,
 )
 from sandbox.lifecycle import get_sandboxes, terminate_sandbox
