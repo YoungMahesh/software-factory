@@ -106,11 +106,8 @@ class SnapshotResponse(BaseModel):
 def validate_launch_request(req: LaunchRequest) -> None:
     """Validates configuration parameters and port assignments."""
     if req.memory is not None:
-        if not req.vm:
-            raise ValueError("--memory can only be used with --vm.")
-        if req.memory < 1:
-            raise ValueError("--memory must be a positive integer number of GB.")
-
+        if not req.vm or req.memory < 1:
+            raise ValueError("--memory must be positive GB and can only be used with --vm.")
     if req.t3_ssh_host and not req.t3:
         raise ValueError("--t3-ssh-host can only be used with --t3.")
     if req.no_t3_persist and not req.t3:
@@ -128,18 +125,12 @@ def validate_launch_request(req: LaunchRequest) -> None:
     if req.t3:
         ports.append(("--t3-port", req.t3_port))
 
-    for flag, port in ports:
-        if port == DEFAULT_WEB_PORT:
-            raise ValueError(
-                f"{flag} cannot be {DEFAULT_WEB_PORT}: port {DEFAULT_WEB_PORT} is reserved for web servers and Cloudflare Tunnel."
-            )
-
     used_ports: dict[int, str] = {}
     for flag, port in ports:
+        if port == DEFAULT_WEB_PORT:
+            raise ValueError(f"{flag} cannot be {DEFAULT_WEB_PORT}: reserved for Cloudflare Tunnel.")
         if port in used_ports:
-            raise ValueError(
-                f"{used_ports[port]} and {flag} must differ: a port can only be exposed once."
-            )
+            raise ValueError(f"{used_ports[port]} and {flag} must differ: port exposed multiple times.")
         used_ports[port] = flag
 
 
@@ -156,8 +147,18 @@ def launch_sandbox(
     build_image_fn: Callable | None = None,
     load_pubkey_fn: Callable | None = None,
     client: modal.Client | None = None,
+    log_cb: Callable[[str], None] | None = None,
 ) -> tuple[modal.Sandbox, LaunchResponse]:
     """Provisions a Modal sandbox and executes the post-launch setup pipeline."""
+    def emit_log(msg: str) -> None:
+        if log_cb:
+            try:
+                log_cb(msg)
+            except Exception:
+                pass
+        print(msg)
+
+    emit_log("▶ Validating launch request...")
     validate_launch_request(req)
 
     if repo_root is None:
@@ -173,15 +174,9 @@ def launch_sandbox(
     if clean_repo:
         if not orgs_env_file or not orgs_env_file.is_file():
             missing_path = repo_root / "secrets" / "github-orgs.env"
-            raise FileNotFoundError(
-                f"Organization credentials file not found: {missing_path} (expected .secrets/github-orgs.env or secrets/github-orgs.env)."
-            )
+            raise FileNotFoundError(f"Organization credentials file not found: {missing_path}.")
         org_name, raw_repo = clean_repo.split("/", 1) if "/" in clean_repo else (DEFAULT_ORG, clean_repo)
-        if req.testing:
-            org_name = DEFAULT_ORG
-            bare_repo = raw_repo if raw_repo.startswith("test-") else f"test-{raw_repo}"
-        else:
-            bare_repo = raw_repo
+        bare_repo = raw_repo if (not req.testing or raw_repo.startswith("test-")) else f"test-{raw_repo}"
         target_repo = f"{org_name}/{bare_repo}"
 
     pubkey_resolver = load_pubkey_fn or _resolve_fn("load_ssh_pub_key", load_ssh_pub_key)
@@ -190,26 +185,21 @@ def launch_sandbox(
     random_id = uuid.uuid4().hex[:8]
     app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
     sandbox_name = f"{app_name}-{random_id}"
-    if client is not None:
-        app = modal.App.lookup(app_name, client=client, create_if_missing=True)
-    else:
-        app = modal.App.lookup(app_name, create_if_missing=True)
+    emit_log(f"🔑 Resolving App '{app_name}' and sandbox instance '{sandbox_name}'...")
+    app = modal.App.lookup(app_name, client=client, create_if_missing=True) if client else modal.App.lookup(app_name, create_if_missing=True)
 
     browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy)
 
     if req.from_snapshot:
+        emit_log(f"🏗️ Loading container image from snapshot {req.from_snapshot}...")
         image = modal.Image.from_id(req.from_snapshot)
     else:
+        emit_log("🏗️ Resolving container base image and tooling layers...")
         img_builder = build_image_fn or _resolve_fn("build_sandbox_image", build_sandbox_image)
         image = img_builder(
-            opencode=req.opencode,
-            agy=req.agy,
-            browser=browser_active,
-            modal_tooling=req.modal,
-            react_native=req.react_native,
-            t3=req.t3,
-            herdr=req.herdr,
-            pi=req.pi,
+            opencode=req.opencode, agy=req.agy, browser=browser_active,
+            modal_tooling=req.modal, react_native=req.react_native, t3=req.t3,
+            herdr=req.herdr, pi=req.pi,
         )
 
     if clean_repo and orgs_env_file and orgs_env_file.is_file():
@@ -219,26 +209,17 @@ def launch_sandbox(
     encrypted_ports: list[int] = []
     sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
     env: dict[str, str | None] = {
-        "SSH_AUTHORIZED_KEY": pubkey_content,
-        "PORT": str(DEFAULT_WEB_PORT),
-        "HOSTNAME": "0.0.0.0",
-        "APP_NAME": sandbox_name,
-        "MODAL_APP_NAME": app_name,
-        "SANDBOX_NAME": sandbox_name,
+        "SSH_AUTHORIZED_KEY": pubkey_content, "PORT": str(DEFAULT_WEB_PORT),
+        "HOSTNAME": "0.0.0.0", "APP_NAME": sandbox_name,
+        "MODAL_APP_NAME": app_name, "SANDBOX_NAME": sandbox_name,
     }
 
-    if req.from_snapshot:
-        env["RESUME_SNAPSHOT"] = "1"
-    if clean_repo is None:
-        env["NO_REPO"] = "1"
-    if target_repo:
-        env["GH_REPO"] = target_repo
-    if org_name:
-        env["GH_ORG"] = org_name
-    if req.full_clone:
-        env["FULL_CLONE"] = "1"
-    if not cloudflare_active:
-        env["ENABLE_CLOUDFLARE"] = "0"
+    if req.from_snapshot: env["RESUME_SNAPSHOT"] = "1"
+    if clean_repo is None: env["NO_REPO"] = "1"
+    if target_repo: env["GH_REPO"] = target_repo
+    if org_name: env["GH_ORG"] = org_name
+    if req.full_clone: env["FULL_CLONE"] = "1"
+    if not cloudflare_active: env["ENABLE_CLOUDFLARE"] = "0"
 
     memory_gb: int | None = None
     if req.vm:
@@ -268,12 +249,9 @@ def launch_sandbox(
             env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
     for flag, key in [
-        (req.agy, "ENABLE_ANTIGRAVITY"),
-        (req.modal, "ENABLE_MODAL"),
-        (req.sops, "ENABLE_SOPS"),
-        (req.herdr, "ENABLE_HERDR"),
-        (req.pi, "ENABLE_PI"),
-        (browser_active, "ENABLE_BROWSER"),
+        (req.agy, "ENABLE_ANTIGRAVITY"), (req.modal, "ENABLE_MODAL"),
+        (req.sops, "ENABLE_SOPS"), (req.herdr, "ENABLE_HERDR"),
+        (req.pi, "ENABLE_PI"), (browser_active, "ENABLE_BROWSER"),
     ]:
         if flag:
             env[key] = "1"
@@ -288,56 +266,52 @@ def launch_sandbox(
         volumes.update(get_gradle_volumes())
 
     feature_flags = [
-        (not req.no_cloudflare, "Cloudflare Tunnel"),
-        (req.full_clone, "Full Git Clone"),
-        (req.react_native, "React Native"),
-        (req.agy, "Antigravity"),
-        (req.opencode, "OpenCode"),
-        (req.t3, "T3 Code"),
-        (t3_persist_enabled, "T3 Usage Persistence"),
-        (req.modal, "Modal"),
-        (req.sops, "SOPS"),
-        (req.herdr, "Herdr"),
-        (req.pi, "Pi"),
-        (browser_active, "Browser"),
+        (not req.no_cloudflare, "Cloudflare Tunnel"), (req.full_clone, "Full Git Clone"),
+        (req.react_native, "React Native"), (req.agy, "Antigravity"),
+        (req.opencode, "OpenCode"), (req.t3, "T3 Code"),
+        (t3_persist_enabled, "T3 Usage Persistence"), (req.modal, "Modal"),
+        (req.sops, "SOPS"), (req.herdr, "Herdr"),
+        (req.pi, "Pi"), (browser_active, "Browser"),
     ]
     features = [label for active, label in feature_flags if active]
-
     runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
     features_suffix = f" & {' & '.join(features)}" if features else ""
     from_suffix = f" from snapshot {req.from_snapshot}" if req.from_snapshot else ""
-    print(
-        f"🏝️  Launching Modal {runtime_desc}{from_suffix} with SSH"
+    emit_log(
+        f"🏝️ Launching Modal {runtime_desc}{from_suffix} with SSH"
         f"{features_suffix} (App: {app_name}, Sandbox: {sandbox_name})..."
     )
 
     sandbox_kwargs: dict = {
-        "timeout": TIMEOUT_SECS,
-        "idle_timeout": IDLE_TIMEOUT_SECS,
-        "image": image,
-        "app": app,
-        "name": sandbox_name,
-        "tags": {"instance_name": sandbox_name, "app_name": app_name},
-        "volumes": volumes,
-        "unencrypted_ports": [22],
-        "encrypted_ports": encrypted_ports,
-        "cpu": (0.125, 4.0),
-        "env": env,
-        "runtime": "vm" if req.vm else "gvisor",
+        "timeout": TIMEOUT_SECS, "idle_timeout": IDLE_TIMEOUT_SECS, "image": image,
+        "app": app, "name": sandbox_name, "tags": {"instance_name": sandbox_name, "app_name": app_name},
+        "volumes": volumes, "unencrypted_ports": [22], "encrypted_ports": encrypted_ports,
+        "cpu": (0.125, 4.0), "env": env, "runtime": "vm" if req.vm else "gvisor",
         "memory": (128, 16384),
     }
     if client is not None:
         sandbox_kwargs["client"] = client
 
+    emit_log("🚀 Instantiating Modal Sandbox container...")
     with modal.enable_output():
         sandbox = modal.Sandbox.create(
-            "bash",
-            REMOTE_STARTUP_SCRIPT,
-            req.github_branch,
-            secrets=sandbox_secrets,
-            **sandbox_kwargs,
+            "bash", REMOTE_STARTUP_SCRIPT, req.github_branch,
+            secrets=sandbox_secrets, **sandbox_kwargs,
         )
 
+    emit_log(f"📦 Modal Sandbox container created: {sandbox.object_id}")
+    poll_val = sandbox.poll()
+    if isinstance(poll_val, int) and poll_val != 0:
+        err = ""
+        try:
+            err = (sandbox.stderr.read() or sandbox.stdout.read() or "").strip()
+        except Exception:
+            pass
+        msg = f"Container terminated with exit code {poll_val}: {err}"
+        emit_log(f"❌ {msg}")
+        raise RuntimeError(msg)
+
+    emit_log("🌐 Resolving network tunnels and connection endpoints...")
     ssh_info, opencode_url, metro_url, t3_url = None, None, None, None
     try:
         tunnels = sandbox.tunnels()
@@ -350,53 +324,38 @@ def launch_sandbox(
         if req.t3 and req.t3_port in tunnels:
             t3_url = tunnels[req.t3_port].url
     except Exception as exc:
-        print(f"⚠️  Could not obtain tunnel metadata: {exc}", file=sys.stderr)
+        emit_log(f"⚠️ Could not obtain tunnel metadata: {exc}")
 
     t3_pair_url, t3_qr_code = None, None
     if req.t3 and t3_url:
+        emit_log("⚡ Initializing T3 Code server and pairing credentials...")
         t3_pair_url, t3_qr_code = _setup_t3(sandbox, t3_url, t3_ssh_alias)
+        if t3_pair_url:
+            emit_log(f"✓ T3 Code server ready: {t3_pair_url}")
 
     ssh_cmd = (
         f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_info[1]} root@{ssh_info[0]}"
-        if ssh_info
-        else f"modal shell {sandbox.object_id}"
+        if ssh_info else f"modal shell {sandbox.object_id}"
     )
 
     try:
         from sandbox.lifecycle import record_sandbox_connection_info
-
-        record_sandbox_connection_info(
-            sandbox.object_id,
-            ssh_command=ssh_cmd,
-            t3_pair_url=t3_pair_url,
-            has_t3=bool(req.t3),
-        )
+        record_sandbox_connection_info(sandbox.object_id, ssh_command=ssh_cmd, t3_pair_url=t3_pair_url, has_t3=bool(req.t3))
     except Exception:
         pass
 
+    emit_log(f"📡 SSH connection ready: {ssh_cmd}")
+    emit_log("✨ Sandbox launched successfully! All background services active.")
+
     response = LaunchResponse(
-        sandbox_id=sandbox.object_id,
-        app_name=app_name,
-        sandbox_name=sandbox_name,
-        ssh_info=ssh_info,
-        ssh_command=ssh_cmd,
-        opencode_url=opencode_url,
-        opencode_port=req.opencode_port if req.opencode else None,
-        opencode_password=opencode_password,
-        metro_url=metro_url,
-        metro_port=req.metro_port if req.react_native else None,
-        t3_url=t3_url,
-        t3_port=req.t3_port if req.t3 else None,
-        t3_pair_url=t3_pair_url,
-        t3_qr_code=t3_qr_code,
-        t3_ssh_host=t3_ssh_alias,
-        t3_persist=t3_persist_enabled,
-        t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None,
-        memory_gb=memory_gb,
-        agy_enabled=req.agy,
-        cloudflare_enabled=cloudflare_active,
-        sops_enabled=req.sops,
-        is_vm=req.vm,
+        sandbox_id=sandbox.object_id, app_name=app_name, sandbox_name=sandbox_name,
+        ssh_info=ssh_info, ssh_command=ssh_cmd, opencode_url=opencode_url,
+        opencode_port=req.opencode_port if req.opencode else None, opencode_password=opencode_password,
+        metro_url=metro_url, metro_port=req.metro_port if req.react_native else None,
+        t3_url=t3_url, t3_port=req.t3_port if req.t3 else None, t3_pair_url=t3_pair_url,
+        t3_qr_code=t3_qr_code, t3_ssh_host=t3_ssh_alias, t3_persist=t3_persist_enabled,
+        t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None, memory_gb=memory_gb,
+        agy_enabled=req.agy, cloudflare_enabled=cloudflare_active, sops_enabled=req.sops, is_vm=req.vm,
     )
     return sandbox, response
 
@@ -421,7 +380,6 @@ def capture_snapshot_core(
             except Exception:
                 target_client = None
         else:
-            # Discover which profile has access to sandbox_id
             for prof_name, cli in get_all_clients().items():
                 try:
                     sb_probe = modal.Sandbox.from_id(sandbox_id, client=cli)
@@ -434,11 +392,9 @@ def capture_snapshot_core(
 
     sandbox = (
         modal.Sandbox.from_id(sandbox_id, client=target_client)
-        if target_client
-        else modal.Sandbox.from_id(sandbox_id)
+        if target_client else modal.Sandbox.from_id(sandbox_id)
     )
-    sync_proc = sandbox.exec("sync")
-    sync_proc.wait()
+    sandbox.exec("sync").wait()
 
     is_vm = False
     try:
@@ -454,14 +410,9 @@ def capture_snapshot_core(
 
     try:
         from sandbox.snapshots import record_snapshot
-
         record_snapshot(
-            image_id=image_id,
-            sandbox_id=sandbox_id,
-            name=name,
-            ttl_days=ttl_days,
-            is_vm=is_vm,
-            profile=target_profile,
+            image_id=image_id, sandbox_id=sandbox_id, name=name,
+            ttl_days=ttl_days, is_vm=is_vm, profile=target_profile,
         )
     except Exception:
         pass
@@ -470,9 +421,6 @@ def capture_snapshot_core(
         sandbox.terminate()
 
     return SnapshotResponse(
-        sandbox_id=sandbox_id,
-        image_id=image_id,
-        ttl_days=ttl_days,
-        ttl_seconds=ttl_seconds,
-        terminated=terminate,
+        sandbox_id=sandbox_id, image_id=image_id, ttl_days=ttl_days,
+        ttl_seconds=ttl_seconds, terminated=terminate,
     )

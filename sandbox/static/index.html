@@ -343,7 +343,7 @@
 
   <!-- MODAL: LAUNCH FRESH SANDBOX -->
   <div x-show="freshLaunchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div @click.away="freshLaunchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+    <div @click.away="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
       <div class="flex items-center justify-between border-b border-slate-800 pb-4">
         <h3 class="text-base font-semibold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,7 +351,7 @@
           </svg>
           Launch Fresh Sandbox
         </h3>
-        <button @click="freshLaunchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+        <button @click="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
       </div>
 
       <!-- Mode Selector -->
@@ -391,7 +391,7 @@
           <div class="space-y-3">
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">Target Repository (-r / --repo) <span class="text-rose-400">*</span></label>
-              <input type="text" x-model="freshLaunchForm.repo" placeholder="e.g. sFactory0/test-live-test1 or test-live-test1"
+              <input type="text" x-model="freshLaunchForm.repo" placeholder="software-factory"
                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
             </div>
 
@@ -458,24 +458,43 @@
               <span>T3 Code Server</span>
             </label>
             <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="freshLaunchForm.opencode" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>OpenCode</span>
+              <input type="checkbox" x-model="freshLaunchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Modal SDK</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="freshLaunchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>SOPS</span>
             </label>
             <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="freshLaunchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>Antigravity</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="freshLaunchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>Modal SDK</span>
-            </label>
+          </div>
+        </div>
+
+        <!-- Launch Progress & Log Terminal -->
+        <div x-show="freshLaunchLogs.length > 0 || freshLaunchSubmitting" class="space-y-1.5 pt-1">
+          <div class="flex items-center justify-between text-xs text-slate-400">
+            <span class="flex items-center gap-1.5 font-medium">
+              <svg x-show="freshLaunchSubmitting" class="w-3.5 h-3.5 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Launch Progress & Logs</span>
+            </span>
+            <button x-show="freshLaunchLogs.length > 0" type="button" @click="copyText(freshLaunchLogs.join('\n'), 'Launch logs copied!')" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Copy Logs</button>
+          </div>
+          <div id="fresh-launch-log-box" class="bg-black/90 rounded-lg p-3 font-mono text-xs text-slate-300 h-36 overflow-y-auto border border-slate-800 space-y-1 select-text">
+            <template x-for="(log, idx) in freshLaunchLogs" :key="idx">
+              <div :class="log.includes('❌') || log.toLowerCase().includes('error') ? 'text-rose-400 font-semibold' : (log.includes('✓') || log.includes('✨') ? 'text-emerald-400' : 'text-slate-300')" x-text="log"></div>
+            </template>
+            <div x-show="freshLaunchSubmitting" class="text-indigo-400 animate-pulse text-[11px]">⏳ Provisioning sandbox in background...</div>
           </div>
         </div>
       </div>
 
       <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
-        <button @click="freshLaunchModalOpen = false"
-                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+        <button @click="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" :disabled="freshLaunchSubmitting"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 disabled:opacity-50">
           Cancel
         </button>
         <button @click="executeFreshLaunch()" :disabled="freshLaunchSubmitting"
@@ -483,7 +502,7 @@
           <svg x-show="freshLaunchSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          Launch Sandbox
+          <span>Launch Sandbox</span>
         </button>
       </div>
     </div>
@@ -610,20 +629,20 @@
           <label class="block text-xs font-medium text-slate-400">Integrated Tooling</label>
           <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
             <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="launchForm.opencode" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>OpenCode</span>
-            </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="launchForm.t3" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>T3 Code Server</span>
             </label>
             <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="launchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>Antigravity</span>
-            </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="launchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>Modal SDK</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>SOPS</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+              <input type="checkbox" x-model="launchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+              <span>Antigravity</span>
             </label>
           </div>
         </div>
@@ -699,6 +718,18 @@
             <a :href="launchResult?.t3_pair_url" target="_blank" class="text-indigo-400 underline" x-text="launchResult?.t3_pair_url"></a>
           </div>
         </div>
+
+        <!-- Launch Transcript Toggle in Result Modal -->
+        <div x-show="lastLaunchLogs.length > 0" class="pt-2 border-t border-slate-800" x-data="{ showLogs: false }">
+          <button @click="showLogs = !showLogs" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium">
+            <span x-text="showLogs ? '▾ Hide Launch Transcript' : '▸ View Launch Transcript'"></span>
+          </button>
+          <div x-show="showLogs" class="mt-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 max-h-40 overflow-y-auto space-y-0.5 select-text">
+            <template x-for="(line, i) in lastLaunchLogs" :key="i">
+              <div x-text="line"></div>
+            </template>
+          </div>
+        </div>
       </div>
 
       <div class="flex items-center justify-end pt-4 border-t border-slate-800">
@@ -753,17 +784,20 @@
           vm: false,
           memory: null,
           opencode: false,
+          sops: true,
           t3: true,
           agy: false,
-          modal: false
+          modal: true
         },
 
         // Fresh Launch Modal State
         freshLaunchModalOpen: false,
         freshLaunchSubmitting: false,
+        freshLaunchLogs: [],
+        lastLaunchLogs: [],
         freshLaunchForm: {
           mode: 'repo',
-          repo: '',
+          repo: 'software-factory',
           github_branch: 'main',
           testing: false,
           full_clone: false,
@@ -773,9 +807,10 @@
           memory: null,
           no_cloudflare: false,
           opencode: false,
+          sops: true,
           t3: true,
           agy: false,
-          modal: false
+          modal: true
         },
 
         // Result Modal State
@@ -851,9 +886,9 @@
             if (profileParam) sbParams.push(profileParam);
             const sbQuery = '?' + sbParams.join('&');
             const snapQuery = profileParam ? `?${profileParam}` : '';
-            const [sbRes, snapRes] = await Promise.all([
-              fetch(`/api/sandboxes${sbQuery}`),
-              fetch(`/api/snapshots${snapQuery}`)
+            const [sbRes, snapRes] = await Promise.all([\
+              fetch(`/api/sandboxes${sbQuery}`),\
+              fetch(`/api/snapshots${snapQuery}`)\
             ]);
             if (sbRes.ok) this.sandboxes = await sbRes.json();
             if (snapRes.ok) this.snapshots = await snapRes.json();
@@ -915,9 +950,10 @@
           this.launchForm.vm = !!snap.is_vm;
           this.launchForm.memory = snap.is_vm ? 1 : null;
           this.launchForm.opencode = false;
+          this.launchForm.sops = true;
           this.launchForm.t3 = true;
           this.launchForm.agy = false;
-          this.launchForm.modal = false;
+          this.launchForm.modal = true;
           this.launchModalOpen = true;
         },
 
@@ -948,7 +984,7 @@
           const activeProf = this.profiles.find(p => p.active)?.name || (this.profiles[0]?.name || '');
           this.freshLaunchForm.profile = this.selectedProfile !== 'all' ? this.selectedProfile : activeProf;
           this.freshLaunchForm.mode = 'repo';
-          this.freshLaunchForm.repo = '';
+          this.freshLaunchForm.repo = 'software-factory';
           this.freshLaunchForm.github_branch = 'main';
           this.freshLaunchForm.testing = false;
           this.freshLaunchForm.full_clone = false;
@@ -957,9 +993,11 @@
           this.freshLaunchForm.memory = null;
           this.freshLaunchForm.no_cloudflare = false;
           this.freshLaunchForm.opencode = false;
+          this.freshLaunchForm.sops = true;
           this.freshLaunchForm.t3 = true;
           this.freshLaunchForm.agy = false;
-          this.freshLaunchForm.modal = false;
+          this.freshLaunchForm.modal = true;
+          this.freshLaunchLogs = [];
           this.freshLaunchModalOpen = true;
         },
 
@@ -974,21 +1012,67 @@
           }
 
           this.freshLaunchSubmitting = true;
+          this.freshLaunchLogs = ['🚀 Initiating sandbox launch pipeline...'];
+          const scrollLog = () => {
+            const el = document.getElementById('fresh-launch-log-box');
+            if (el) el.scrollTop = el.scrollHeight;
+          };
+
           try {
-            const res = await fetch('/api/sandboxes', {
+            const res = await fetch('/api/sandboxes/stream', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(this.freshLaunchForm)
             });
+
             if (!res.ok) {
-              const err = await res.json();
-              throw new Error(err.detail || 'Fresh sandbox launch failed');
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
             }
-            this.launchResult = await res.json();
-            this.freshLaunchModalOpen = false;
-            this.resultModalOpen = true;
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let launchCompleted = false;
+
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n\n');
+              buffer = lines.pop();
+
+              for (const block of lines) {
+                const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                if (!dataLine) continue;
+                try {
+                  const evt = JSON.parse(dataLine.slice(6));
+                  if (evt.type === 'log') {
+                    this.freshLaunchLogs.push(evt.message);
+                    this.$nextTick(scrollLog);
+                  } else if (evt.type === 'done') {
+                    launchCompleted = true;
+                    this.launchResult = evt.response;
+                    this.lastLaunchLogs = [...this.freshLaunchLogs];
+                    this.freshLaunchModalOpen = false;
+                    this.resultModalOpen = true;
+                  } else if (evt.type === 'error') {
+                    throw new Error(evt.detail || 'Fresh sandbox launch failed');
+                  }
+                } catch (parseErr) {
+                  if (parseErr.message && !parseErr.message.includes('JSON')) {
+                    throw parseErr;
+                  }
+                }
+              }
+            }
+
+            if (!launchCompleted && !this.resultModalOpen) {
+              throw new Error('Connection closed before provisioning completed.');
+            }
           } catch (err) {
-            alert('Error launching fresh sandbox: ' + err.message);
+            this.freshLaunchLogs.push(`❌ ${err.message}`);
+            this.$nextTick(scrollLog);
           } finally {
             this.freshLaunchSubmitting = false;
           }
@@ -1049,7 +1133,7 @@
             return iso;
           }
         }
-      }
+      };
     }
   </script>
 </body>
