@@ -48,7 +48,13 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def check_authentication(request: Request) -> None:
-    """Enforces HTTP Basic authentication against WEB_UI_USERNAME and WEB_UI_PASSWORD."""
+    """Enforces HTTP Basic authentication against WEB_UI_USERNAME and WEB_UI_PASSWORD.
+
+    The favicon and health paths bypass authentication. Raises HTTPException
+    with status 500 if credentials are not configured, or 401 for missing,
+    malformed, or rejected authentication. Non-ASCII credentials can propagate
+    TypeError from the comparison.
+    """
     if request.url.path in ("/favicon.ico", "/health"):
         return
 
@@ -178,6 +184,11 @@ def api_list_sandboxes(
 
 
 def _build_fresh_launch_request(payload: FreshSandboxLaunchPayload) -> LaunchRequest:
+    """Builds a launch request, requiring a repository or name for the selected mode.
+
+    Raises HTTPException with status 400 for an unknown mode or a missing or
+    blank required field. Repository and name values are stripped of whitespace.
+    """
     if payload.mode == "repo":
         if not payload.repo or not payload.repo.strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target repository is required when launching a repository sandbox.")
@@ -212,7 +223,12 @@ def _build_fresh_launch_request(payload: FreshSandboxLaunchPayload) -> LaunchReq
 
 @router.post("/api/sandboxes", response_model=LaunchResponse)
 def api_launch_fresh_sandbox(payload: FreshSandboxLaunchPayload) -> LaunchResponse:
-    """Launches a fresh Modal sandbox (repository-backed or standalone)."""
+    """Launches a fresh Modal sandbox (repository-backed or standalone).
+
+    Raises HTTPException with status 400 for invalid launch options, mode,
+    required fields, or profile; 404 for a missing file; 409 for an existing
+    sandbox; or 500 for missing control plane credentials or other launch failures.
+    """
     req = _build_fresh_launch_request(payload)
     client = None
     if payload.profile:
@@ -244,7 +260,12 @@ def api_launch_fresh_sandbox(payload: FreshSandboxLaunchPayload) -> LaunchRespon
 
 @router.post("/api/sandboxes/stream")
 def api_launch_fresh_sandbox_stream(payload: FreshSandboxLaunchPayload) -> StreamingResponse:
-    """Launches a fresh sandbox while streaming live provisioning progress and startup logs via SSE."""
+    """Launches a fresh sandbox and streams provisioning progress via SSE.
+
+    JSON data events contain a `log` message, a `done` response, or an `error`
+    detail. Launch request validation and launch failures are sent as error
+    events after the stream starts.
+    """
     def event_stream():
         q: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
@@ -328,7 +349,10 @@ def api_list_snapshots(profile: str | None = Query(None, description="Filter sna
 
 @router.delete("/api/snapshots/{image_id}")
 def api_delete_snapshot(image_id: str) -> dict[str, Any]:
-    """Removes a snapshot record from the registry."""
+    """Removes a snapshot record from the registry.
+
+    Raises HTTPException with status 404 if the record is not found.
+    """
     if not delete_snapshot(image_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Snapshot {image_id} not found in registry")
     return {"image_id": image_id, "deleted": True}
@@ -336,7 +360,11 @@ def api_delete_snapshot(image_id: str) -> dict[str, Any]:
 
 @router.post("/api/snapshots/{image_id}/launch", response_model=LaunchResponse)
 def api_launch_from_snapshot(image_id: str, payload: SnapshotLaunchPayload) -> LaunchResponse:
-    """Launches a new sandbox instantiated directly from a snapshot image."""
+    """Launches a new sandbox instantiated directly from a snapshot image.
+
+    Raises HTTPException with status 400 for invalid launch options or profile,
+    404 for a missing file, or 500 for other launch failures.
+    """
     req = LaunchRequest(
         name=payload.name,
         from_snapshot=image_id,

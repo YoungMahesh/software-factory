@@ -104,7 +104,12 @@ class SnapshotResponse(BaseModel):
 
 
 def validate_launch_request(req: LaunchRequest) -> None:
-    """Validates configuration parameters and port assignments."""
+    """Validates configuration parameters and port assignments.
+
+    Raises ValueError for invalid VM memory, incompatible T3 options, or
+    enabled service ports that conflict with each other or the reserved web port.
+    Memory, when supplied, must be at least 1 GB and requires a VM.
+    """
     if req.memory is not None:
         if not req.vm or req.memory < 1:
             raise ValueError("--memory must be positive GB and can only be used with --vm.")
@@ -149,7 +154,18 @@ def launch_sandbox(
     client: modal.Client | None = None,
     log_cb: Callable[[str], None] | None = None,
 ) -> tuple[modal.Sandbox, LaunchResponse]:
-    """Provisions a Modal sandbox and executes the post-launch setup pipeline."""
+    """Provisions a Modal sandbox and executes the post-launch setup pipeline.
+
+    Returns the sandbox and its connection metadata. Progress messages are
+    printed and passed to log_cb when supplied; callback exceptions are ignored.
+    If tunnel lookup fails, connection metadata may be missing and the command
+    falls back to `modal shell` when SSH information is unavailable.
+
+    Raises ValueError for invalid launch options, FileNotFoundError for missing
+    repository credentials or the default SSH public key, and RuntimeError if
+    the initial sandbox poll reports a nonzero exit code. Errors from other
+    provisioning operations propagate to the caller.
+    """
     def emit_log(msg: str) -> None:
         if log_cb:
             try:
@@ -368,7 +384,12 @@ def capture_snapshot_core(
     profile: str | None = None,
     client: modal.Client | None = None,
 ) -> SnapshotResponse:
-    """Flushes buffers and captures a filesystem snapshot of an active sandbox."""
+    """Flushes buffers and captures a filesystem snapshot of an active sandbox.
+
+    ttl_days sets the snapshot lifetime in days. If terminate is true, the
+    sandbox is terminated after capture. Registry recording is best effort;
+    its errors are ignored, while capture and termination errors propagate.
+    """
     from sandbox.profiles import get_all_clients, get_client_for_profile
 
     target_client = client
