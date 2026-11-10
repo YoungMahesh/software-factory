@@ -214,8 +214,6 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_DECRYPT_REPO_ENV,
             LOCAL_ENCRYPT_REPO_ENV,
             REMOTE_ENCRYPT_REPO_ENV,
-            LOCAL_CLOUDFLARE_SECRET,
-            REMOTE_CLOUDFLARE_SECRET,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
         )
@@ -233,12 +231,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
             (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
             (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
-            (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
             (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
         self.assertEqual(REMOTE_SETUP_SCRIPT, "/root/.scripts/setup.sh")
-        self.assertEqual(REMOTE_CLOUDFLARE_SECRET, "/root/.secrets/cloudflare.env")
         self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
 
     def test_developer_commands_staged_and_symlinked_system_wide(self):
@@ -315,24 +311,16 @@ class TestSandboxImageStaging(unittest.TestCase):
             build_sandbox_image,
             LOCAL_OPENCODE_CONFIG,
             REMOTE_OPENCODE_CONFIG,
-            LOCAL_OPENCODE_SECRET,
-            REMOTE_OPENCODE_SECRET,
             LOCAL_ANTIGRAVITY_SETTINGS,
             REMOTE_ANTIGRAVITY_SETTINGS,
             LOCAL_ANTIGRAVITY_KEYBINDINGS,
             REMOTE_ANTIGRAVITY_KEYBINDINGS,
             LOCAL_ANTIGRAVITY_ONBOARDING,
             REMOTE_ANTIGRAVITY_ONBOARDING,
-            LOCAL_ANTIGRAVITY_SECRET,
-            REMOTE_ANTIGRAVITY_SECRET,
-            LOCAL_ANTIGRAVITY_SECRET_MGH,
-            REMOTE_ANTIGRAVITY_SECRET_MGH,
-            LOCAL_ANTIGRAVITY_SECRET_ANV,
-            REMOTE_ANTIGRAVITY_SECRET_ANV,
-            LOCAL_ANTIGRAVITY_ENV,
-            REMOTE_ANTIGRAVITY_ENV,
-            LOCAL_MODAL_SECRET,
-            REMOTE_MODAL_SECRET,
+            LOCAL_T3_KEYBINDINGS,
+            REMOTE_T3_KEYBINDINGS,
+            LOCAL_T3_WRAPPER,
+            REMOTE_T3_WRAPPER,
             LOCAL_PI_SETTINGS,
             REMOTE_PI_SETTINGS,
             LOCAL_PI_MODELS,
@@ -351,7 +339,6 @@ class TestSandboxImageStaging(unittest.TestCase):
                 mock_image,
                 [
                     (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
                 ],
             )
 
@@ -363,19 +350,16 @@ class TestSandboxImageStaging(unittest.TestCase):
                     (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
                     (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
                     (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
-                    (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
-                    (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
-                    (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
-                    (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
                 ],
             )
 
-            # Test Modal
-            build_sandbox_image(modal_tooling=True)
+            # Test T3
+            build_sandbox_image(t3=True)
             mock_add_files.assert_any_call(
                 mock_image,
                 [
-                    (LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET),
+                    (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
+                    (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
                 ],
             )
 
@@ -386,7 +370,6 @@ class TestSandboxImageStaging(unittest.TestCase):
                 [
                     (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
                     (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
-                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
                 ],
             )
 

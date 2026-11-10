@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from shared.image import (
     DEFAULT_T3_USAGE_VOLUME,
     REMOTE_STARTUP_SCRIPT,
-    SHARED_SECRET_NAME,
     browser_enabled,
     build_sandbox_image,
     get_gradle_volumes,

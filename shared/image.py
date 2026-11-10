@@ -60,27 +60,12 @@ LOCAL_SCRIPTS_DIR = _resolve_dir(
     Path("/root/scripts"),
 )
 
-LOCAL_SECRETS_DIR = _resolve_dir(
-    REPO_ROOT / ".secrets",
-    REPO_ROOT / "secrets",
-    Path("/root/.secrets"),
-    Path("/root/secrets"),
-)
-
 _SCRIPTS_SEARCH_DIRS = (
     LOCAL_SCRIPTS_DIR,
     REPO_ROOT / "scripts",
     REPO_ROOT / ".scripts",
     Path("/root/.scripts"),
     Path("/root/scripts"),
-)
-
-_SECRETS_SEARCH_DIRS = (
-    LOCAL_SECRETS_DIR,
-    REPO_ROOT / ".secrets",
-    REPO_ROOT / "secrets",
-    Path("/root/.secrets"),
-    Path("/root/secrets"),
 )
 
 LOCAL_SETUP_SCRIPT = _resolve_file("setup.sh", *_SCRIPTS_SEARCH_DIRS)
@@ -100,35 +85,6 @@ REMOTE_DECRYPT_REPO_ENV = "/usr/local/bin/decrypt-repo-env"
 LOCAL_ENCRYPT_REPO_ENV = _resolve_file("encrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_ENCRYPT_REPO_ENV = "/usr/local/bin/encrypt-repo-env"
 
-def resolve_secret_path(filename: str, repo_root: Path | None = None) -> Path | None:
-    """Resolves a secret file checking .secrets and secrets directories across root and home."""
-    search_dirs: list[Path] = []
-    if repo_root is not None:
-        search_dirs.extend([repo_root / ".secrets", repo_root / "secrets"])
-    search_dirs.extend([
-        Path("/root/.secrets"),
-        Path("/root/secrets"),
-        REPO_ROOT / ".secrets",
-        REPO_ROOT / "secrets",
-        Path.home() / ".secrets",
-        Path.home() / "secrets",
-    ])
-    seen: set[Path] = set()
-    for directory in search_dirs:
-        try:
-            resolved = directory.resolve()
-        except Exception:
-            resolved = directory
-        if resolved not in seen:
-            seen.add(resolved)
-            candidate = directory / filename
-            if candidate.is_file():
-                return candidate
-    return None
-
-
-LOCAL_OPENCODE_SECRET = _resolve_file("opencode.env", *_SECRETS_SEARCH_DIRS)
-REMOTE_OPENCODE_SECRET = "/root/.secrets/opencode.env"
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
 LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
@@ -139,21 +95,6 @@ LOCAL_T3_WRAPPER = SHARED_DIR / "t3-wrapper.sh"
 REMOTE_T3_WRAPPER = "/usr/local/bin/t3"
 LOCAL_T3_USAGE_SYNC = SHARED_DIR / "t3_usage_sync.py"
 REMOTE_T3_USAGE_SYNC = "/usr/local/bin/t3-usage-sync"
-LOCAL_ANTIGRAVITY_SECRET = _resolve_file("antigravity-oauth-token.json", *_SECRETS_SEARCH_DIRS)
-REMOTE_ANTIGRAVITY_SECRET = "/root/.secrets/antigravity-oauth-token.json"
-LOCAL_ANTIGRAVITY_SECRET_MGH = _resolve_file("antigravity-oauth-token-mgh.json", *_SECRETS_SEARCH_DIRS)
-REMOTE_ANTIGRAVITY_SECRET_MGH = "/root/.secrets/antigravity-oauth-token-mgh.json"
-LOCAL_ANTIGRAVITY_SECRET_ANV = _resolve_file("antigravity-oauth-token-anv.json", *_SECRETS_SEARCH_DIRS)
-REMOTE_ANTIGRAVITY_SECRET_ANV = "/root/.secrets/antigravity-oauth-token-anv.json"
-LOCAL_ANTIGRAVITY_ENV = _resolve_file("antigravity.env", *_SECRETS_SEARCH_DIRS)
-REMOTE_ANTIGRAVITY_ENV = "/root/.secrets/antigravity.env"
-LOCAL_MODAL_SECRET = _resolve_file("modal.toml", *_SECRETS_SEARCH_DIRS)
-REMOTE_MODAL_SECRET = "/root/.secrets/modal.toml"
-LOCAL_CLOUDFLARE_SECRET = _resolve_file("cloudflare.env", *_SECRETS_SEARCH_DIRS)
-REMOTE_CLOUDFLARE_SECRET = "/root/.secrets/cloudflare.env"
-LOCAL_GITHUB_ORGS_SECRET = _resolve_file("github-orgs.env", *_SECRETS_SEARCH_DIRS)
-REMOTE_GITHUB_ORGS_SECRET = "/root/.secrets/github-orgs.env"
-SHARED_SECRET_NAME = "share0"
 
 GRADLE_CACHE_PATH = "/root/.gradle/caches"
 GRADLE_WRAPPER_PATH = "/root/.gradle/wrapper"
@@ -208,7 +149,6 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
     (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
     (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
-    (LOCAL_CLOUDFLARE_SECRET, REMOTE_CLOUDFLARE_SECRET),
     (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
 ]
 
@@ -275,7 +215,7 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/decrypt-repo-env /usr/local/bin/decrypt_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/encrypt-repo-env /usr/local/bin/encrypt_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /usr/local/bin/t3_usage_sync 2>/dev/null || true",
-    "mkdir -p /root/.scripts /root/.secrets",
+    "mkdir -p /root/.scripts",
     "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghls /root/.scripts/ghls 2>/dev/null || true",
     "ln -sf /usr/local/bin/ghpr /root/.scripts/ghpr 2>/dev/null || true",
@@ -349,9 +289,50 @@ def build_sandbox_image(
     herdr: bool = False,
     pi: bool = False,
 ) -> modal.Image:
-    """Builds a sandbox image layered with only the requested tooling."""
+    """Builds a customized sandbox image layered on top of base_image."""
     image = base_image
     path_prefixes: list[str] = []
+
+    if react_native:
+        image = (
+            image.env(
+                {
+                    "DEBIAN_FRONTEND": "noninteractive",
+                    "ANDROID_HOME": "/opt/android-sdk",
+                    "ANDROID_SDK_ROOT": "/opt/android-sdk",
+                    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+                }
+            )
+            .apt_install(
+                "openjdk-17-jdk",
+                "watchman",
+            )
+            .run_commands(
+                "npm install -g --ignore-scripts @expo/ngrok",
+                "mkdir -p /opt/android-sdk/cmdline-tools",
+                (
+                    "curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip "
+                    "-o /tmp/cmdline-tools.zip"
+                ),
+                "unzip -q /tmp/cmdline-tools.zip -d /opt/android-sdk/cmdline-tools",
+                "mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest",
+                "rm -f /tmp/cmdline-tools.zip",
+                (
+                    "yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true"
+                ),
+                (
+                    "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "
+                    "'platform-tools' 'platforms;android-34' 'build-tools;34.0.0' 'cmake;3.22.1' 'ndk;26.1.10909125'"
+                ),
+                "mkdir -p /root/.gradle /run/user/0",
+            )
+        )
+        path_prefixes.extend(
+            [
+                "/opt/android-sdk/cmdline-tools/latest/bin",
+                "/opt/android-sdk/platform-tools",
+            ]
+        )
 
     if opencode or t3:
         image = image.run_commands(
@@ -362,7 +343,6 @@ def build_sandbox_image(
             image,
             [
                 (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
             ],
         )
 
@@ -378,10 +358,6 @@ def build_sandbox_image(
                 (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
                 (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
                 (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
-                (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
-                (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
-                (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
-                (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
             ],
         )
 
@@ -398,12 +374,6 @@ def build_sandbox_image(
             "mkdir -p /root/.modal",
         )
         path_prefixes.append("/opt/modal-env/bin")
-        image = add_local_files_if_present(
-            image,
-            [
-                (LOCAL_MODAL_SECRET, REMOTE_MODAL_SECRET),
-            ],
-        )
 
     if t3:
         image = image.run_commands(
@@ -429,16 +399,6 @@ def build_sandbox_image(
                 (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
             ],
         )
-        if not agy:
-            image = add_local_files_if_present(
-                image,
-                [
-                    (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
-                    (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
-                    (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
-                    (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
-                ],
-            )
 
     if herdr:
         image = image.run_commands(
@@ -454,7 +414,6 @@ def build_sandbox_image(
             [
                 (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
                 (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
-                (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
             ],
         )
 

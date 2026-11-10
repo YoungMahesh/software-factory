@@ -17,26 +17,8 @@ fi
 
 # Start Cloudflare Tunnel service and port watcher if enabled (default: enabled)
 if [ "${ENABLE_CLOUDFLARE:-1}" != "0" ]; then
-    if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-        echo "ERROR: Cloudflare Tunnel is enabled, but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY or launch with --no-cloudflare." >&2
-        exit 1
-    fi
-
-    CLOUDFLARE_SECRET_FILE="/root/.secrets/cloudflare.env"
-    if [ ! -f "$CLOUDFLARE_SECRET_FILE" ] && [ -f "/root/secrets/cloudflare.env" ]; then
-        CLOUDFLARE_SECRET_FILE="/root/secrets/cloudflare.env"
-    fi
-    if [ ! -f "$CLOUDFLARE_SECRET_FILE" ]; then
-        echo "ERROR: Cloudflare Tunnel secret file not found at $CLOUDFLARE_SECRET_FILE." >&2
-        exit 1
-    fi
-
-    echo "🚇 Decrypting Cloudflare Tunnel token from $CLOUDFLARE_SECRET_FILE..."
-    CF_TOKEN=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt --extract '["CF_TOKEN"]' "$CLOUDFLARE_SECRET_FILE" 2>/dev/null || true)
-    if [ -z "$CF_TOKEN" ]; then
-        echo "ERROR: Failed to decrypt CF_TOKEN from $CLOUDFLARE_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-        exit 1
-    fi
+    CF_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-${CF_TOKEN:-}}"
+    if [ -n "$CF_TOKEN" ]; then
 
     if [ ! -f /etc/init.d/cloudflared ]; then
         echo "🚇 Installing Cloudflare Tunnel service..."
@@ -87,6 +69,9 @@ EOF
     chmod +x /usr/local/bin/cloudflared-port-watcher
 
     nohup /usr/local/bin/cloudflared-port-watcher "${PORT:-3000}" > /var/log/cloudflared-watcher.log 2>&1 &
+    else
+        echo "⚠️  Cloudflare Tunnel enabled but CLOUDFLARE_TUNNEL_TOKEN is not set. Skipping tunnel initialization." >&2
+    fi
 fi
 
 # Start Docker daemon in background if enabled (VM Sandbox)
@@ -112,36 +97,6 @@ fi
 # 1. Decrypt repository fetch secret or organization token and clone repository
 if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
     echo "♻️  Resuming from filesystem snapshot..."
-
-    # Optional: Decrypt repository fetch secret or organization token if present
-    if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
-        ORGS_SECRET_FILE="/root/.secrets/github-orgs.env"
-        [ ! -f "$ORGS_SECRET_FILE" ] && [ -f "/root/secrets/github-orgs.env" ] && ORGS_SECRET_FILE="/root/secrets/github-orgs.env"
-        if [ -f "$ORGS_SECRET_FILE" ]; then
-            echo "🔐 Resolving organization credentials from $ORGS_SECRET_FILE..."
-            ORG_NAME="${GH_ORG:-}"
-            if [ -z "$ORG_NAME" ] && [[ "${GH_REPO:-}" =~ ^([^/]+)/ ]]; then
-                ORG_NAME="${BASH_REMATCH[1]}"
-            fi
-            ORG_NAME="${ORG_NAME:-sFactory0}"
-            ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
-            TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
-            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ORGS_SECRET_FILE" 2>/dev/null || true)
-            if [ -n "$DECRYPTED_ORGS" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-                if [ -z "$GH_TOKEN" ]; then
-                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-                fi
-                if [ -z "$GH_TOKEN" ]; then
-                    GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-                fi
-                [ -n "$GH_TOKEN" ] && export GH_TOKEN
-            fi
-            rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
-            export ORG_TOKEN="1"
-            export TRACKER="${TRACKER:-github}"
-        fi
-    fi
 
     # Discover target directory
     TARGET_DIR=""
@@ -192,54 +147,8 @@ EOF
         fi
         echo "📁 Workspace resolved to $TARGET_DIR"
     else
-        if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-            echo "ERROR: AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
-            exit 1
-        fi
-
-        ORGS_SECRET_FILE="/root/.secrets/github-orgs.env"
-        [ ! -f "$ORGS_SECRET_FILE" ] && [ -f "/root/secrets/github-orgs.env" ] && ORGS_SECRET_FILE="/root/secrets/github-orgs.env"
-        if [ -f "$ORGS_SECRET_FILE" ]; then
-            if [ -z "${GH_REPO:-}" ]; then
-                echo "ERROR: GH_REPO environment variable is required when using organization credentials." >&2
-                exit 1
-            fi
-            echo "🔐 Resolving organization credentials from $ORGS_SECRET_FILE..."
-            ORG_NAME="${GH_ORG:-}"
-            if [ -z "$ORG_NAME" ] && [[ "$GH_REPO" =~ ^([^/]+)/ ]]; then
-                ORG_NAME="${BASH_REMATCH[1]}"
-            fi
-            ORG_NAME="${ORG_NAME:-sFactory0}"
-            ORG_VAR=$(printf '%s' "$ORG_NAME" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
-            TOKEN_VAR="${ORG_VAR}_GH_TOKEN"
-
-            DECRYPTED_ORGS=$(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ORGS_SECRET_FILE" 2>/dev/null || true)
-            if [ -z "$DECRYPTED_ORGS" ]; then
-                echo "ERROR: Failed to decrypt $ORGS_SECRET_FILE using AGE_PRIVATE_KEY." >&2
-                rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
-                exit 1
-            fi
-
-            GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*${TOKEN_VAR}=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-            if [ -z "$GH_TOKEN" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-            fi
-            if [ -z "$GH_TOKEN" ]; then
-                GH_TOKEN=$(echo "$DECRYPTED_ORGS" | grep -E "^[[:space:]]*SFACTORY0_GH_TOKEN=" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r\n' || true)
-            fi
-
-            if [ -z "$GH_TOKEN" ]; then
-                echo "ERROR: Could not find $TOKEN_VAR in $ORGS_SECRET_FILE." >&2
-                rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
-                exit 1
-            fi
-
-            rm -f "$ORGS_SECRET_FILE" /root/secrets/github-orgs.env /root/.secrets/github-orgs.env
-            echo "🧹 Purged encrypted organization secrets file from disk."
-            export ORG_TOKEN="1"
-            export TRACKER="${TRACKER:-github}"
-        else
-            echo "ERROR: Organization credentials not found at /root/.secrets/github-orgs.env (or /root/secrets/github-orgs.env)." >&2
+        if [ -z "${GH_TOKEN:-}" ]; then
+            echo "ERROR: GH_TOKEN is not set in environment." >&2
             exit 1
         fi
 
@@ -248,13 +157,9 @@ EOF
             exit 1
         fi
 
+        DEFAULT_ORG="${GH_ORG_NAME:-sFactory0}"
         if [[ "$GH_REPO" != *"/"* ]]; then
-            GH_REPO="sFactory0/$GH_REPO"
-        fi
-
-        if [ -z "${GH_TOKEN:-}" ]; then
-            echo "ERROR: GH_TOKEN is not set." >&2
-            exit 1
+            GH_REPO="${DEFAULT_ORG}/$GH_REPO"
         fi
 
         REPO_NAME=$(basename "$GH_REPO")
@@ -293,6 +198,10 @@ if [ -f "$TARGET_DIR/.secrets/env.map" ]; then
 fi
 
 if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
+    if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
+        echo "ERROR: Target repository specifies .secrets/env.map, but AGE_PRIVATE_KEY is not set." >&2
+        exit 1
+    fi
     echo "📄 Decrypting repository environment secrets into $TARGET_DIR..."
     while IFS= read -r line || [ -n "$line" ]; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -323,11 +232,6 @@ if [ -n "$ENV_MAP_FILE" ] && [ -f "$ENV_MAP_FILE" ]; then
             echo "   • Decrypted $src_rel -> $dest_rel"
         fi
     done < "$ENV_MAP_FILE"
-fi
-
-if [ -f /root/.secrets/github-orgs.env ] || [ -f /root/secrets/github-orgs.env ]; then
-    rm -f /root/.secrets/github-orgs.env /root/secrets/github-orgs.env
-    echo "🧹 Purged organization secrets staging file."
 fi
 if [ -f /root/.bash_aliases ]; then
     grep -qxF "source /root/.bash_aliases" ~/.bashrc 2>/dev/null || echo "source /root/.bash_aliases" >> ~/.bashrc
@@ -574,7 +478,7 @@ echo "=== Process ===" && ps aux | grep [c]loudflared
 echo "=== Port Watcher Process ===" && ps aux | grep [c]loudflared-port-watcher
 echo "=== Port Watcher Log ===" && cat /var/log/cloudflared-watcher.log 2>/dev/null || true
 echo "=== Config / Token ===" && ls -la /etc/cloudflared/
-echo "=== Secret File ===" && (ls -la /root/.secrets/cloudflare.env 2>/dev/null || ls -la /root/secrets/cloudflare.env 2>/dev/null || true)
+echo "=== Tunnel Token Set ===" && ([ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ] && echo "Yes" || echo "No")
 EOF
     chmod +x /usr/local/bin/check-cloudflare 2>/dev/null || true
     ln -sf /usr/local/bin/check-cloudflare /usr/local/bin/check-cf
@@ -587,63 +491,38 @@ fi
 
 if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
     if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
-        if [ -z "${AGE_PRIVATE_KEY:-}" ]; then
-            if [ "${ENABLE_T3:-}" = "1" ] && [ "${ENABLE_ANTIGRAVITY:-0}" != "1" ] && [ "${ENABLE_MODAL:-0}" != "1" ] && [ "${ENABLE_OPENCODE:-0}" != "1" ] && [ "${ENABLE_SOPS:-0}" != "1" ] && [ "${ENABLE_PI:-0}" != "1" ]; then
-                echo "⚠️  Warning: AGE_PRIVATE_KEY not set in environment. Skipping OpenCode credentials decryption for T3 Code." >&2
-            else
-                echo "ERROR: Credentials decryption requested (--agy, --modal, --opencode, --pi, --sops, or --t3), but AGE_PRIVATE_KEY is not set in the environment. Ensure the Modal secret 'share0' is configured with AGE_PRIVATE_KEY." >&2
-                exit 1
-            fi
-        fi
-
         if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
             mkdir -p ~/.config/sops/age
             echo "$AGE_PRIVATE_KEY" > ~/.config/sops/age/keys.txt
             chmod 600 ~/.config/sops/age/keys.txt
+        fi
 
-            ANTIGRAVITY_ENV_FILE="/root/.secrets/antigravity.env"
-            [ ! -f "$ANTIGRAVITY_ENV_FILE" ] && [ -f "/root/secrets/antigravity.env" ] && ANTIGRAVITY_ENV_FILE="/root/secrets/antigravity.env"
-            if [ -f "$ANTIGRAVITY_ENV_FILE" ]; then
-                while IFS= read -r line || [ -n "$line" ]; do
-                    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-                    [[ -z "${line// }" ]] && continue
-                    export "$line"
-                done < <(SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops decrypt "$ANTIGRAVITY_ENV_FILE" 2>/dev/null || true)
-            fi
+        setup_args=()
+        if [ "${ENABLE_MODAL:-}" = "1" ]; then
+            setup_args+=("--modal")
+        fi
+        if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
+            setup_args+=("--agy")
+        fi
+        if [ "${ENABLE_T3:-}" = "1" ]; then
+            setup_args+=("--t3")
+        fi
+        if [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
+            setup_args+=("--opencode")
+        fi
+        if [ "${ENABLE_PI:-}" = "1" ]; then
+            setup_args+=("--pi")
+        fi
 
-            setup_args=()
-            if [ "${ENABLE_MODAL:-}" = "1" ]; then
-                setup_args+=("--modal")
-            fi
-            if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-                setup_args+=("--agy")
-            fi
-            if [ "${ENABLE_T3:-}" = "1" ]; then
-                setup_args+=("--t3")
-            fi
-            if [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
-                setup_args+=("--opencode")
-            fi
-            if [ "${ENABLE_PI:-}" = "1" ]; then
-                setup_args+=("--pi")
-            fi
-
-            setup_status=0
-            SETUP_SCRIPT="/root/.scripts/setup.sh"
-            [ ! -f "$SETUP_SCRIPT" ] && [ -f "/root/scripts/setup.sh" ] && SETUP_SCRIPT="/root/scripts/setup.sh"
-            if [ ${#setup_args[@]} -gt 0 ] && [ -f "$SETUP_SCRIPT" ]; then
-                echo "🔐 Decrypting tooling credentials with SOPS..."
-                bash "$SETUP_SCRIPT" "${setup_args[@]}" || setup_status=$?
-            fi
+        setup_status=0
+        SETUP_SCRIPT="/root/.scripts/setup.sh"
+        [ ! -f "$SETUP_SCRIPT" ] && [ -f "/root/scripts/setup.sh" ] && SETUP_SCRIPT="/root/scripts/setup.sh"
+        if [ ${#setup_args[@]} -gt 0 ] && [ -f "$SETUP_SCRIPT" ]; then
+            echo "⚙️  Configuring tooling credentials..."
+            bash "$SETUP_SCRIPT" "${setup_args[@]}" || setup_status=$?
         fi
     fi
 fi
-
-# Scrub staged encrypted tooling secrets immediately after decryption
-rm -f /root/.secrets/opencode.env /root/.secrets/antigravity-oauth-token*.json /root/.secrets/modal.toml /root/.secrets/antigravity.env \
-      /root/secrets/opencode.env /root/secrets/antigravity-oauth-token*.json /root/secrets/modal.toml /root/secrets/antigravity.env
-rmdir /root/.secrets 2>/dev/null || true
-rmdir /root/secrets 2>/dev/null || true
 
 if [ "${ENABLE_SOPS:-}" = "1" ]; then
     echo "🔐 SOPS credentials retained in sandbox (~/.config/sops/age/keys.txt)."
@@ -691,18 +570,11 @@ else
     fi
 fi
 
-# Manage repository credentials based on tooling requirements
-if [ "${ENABLE_T3:-0}" = "1" ] && [ -n "${GH_TOKEN:-}" ]; then
-    echo "🔐 T3 Code enabled: retaining GH_TOKEN in process environment for T3 Code."
+# Export GH_TOKEN to shell environment if present
+if [ -n "${GH_TOKEN:-}" ]; then
     export GH_TOKEN
-    grep -qxF "export GH_TOKEN="$GH_TOKEN"" ~/.bashrc 2>/dev/null || echo "export GH_TOKEN="$GH_TOKEN"" >> ~/.bashrc
-    grep -qxF "GH_TOKEN="$GH_TOKEN"" /etc/environment 2>/dev/null || echo "GH_TOKEN="$GH_TOKEN"" >> /etc/environment
-else
-    # Unconditionally scrub GH_TOKEN and ephemeral repository credentials from memory
-    grep -qxF "unset GH_TOKEN" ~/.bashrc 2>/dev/null || echo "unset GH_TOKEN" >> ~/.bashrc
-    grep -qxF "unset DOTENV_PRIVATE_KEY" ~/.bashrc 2>/dev/null || echo "unset DOTENV_PRIVATE_KEY" >> ~/.bashrc
-    unset GH_TOKEN 2>/dev/null || true
-    unset DOTENV_PRIVATE_KEY 2>/dev/null || true
+    grep -qxF "export GH_TOKEN=\"$GH_TOKEN\"" ~/.bashrc 2>/dev/null || echo "export GH_TOKEN=\"$GH_TOKEN\"" >> ~/.bashrc
+    grep -qxF "GH_TOKEN=\"$GH_TOKEN\"" /etc/environment 2>/dev/null || echo "GH_TOKEN=\"$GH_TOKEN\"" >> /etc/environment
 fi
 grep -qxF "unset GH_REPO" ~/.bashrc 2>/dev/null || echo "unset GH_REPO" >> ~/.bashrc
 unset GH_REPO 2>/dev/null || true
@@ -829,13 +701,31 @@ except Exception:
 
     # Pre-authenticate Antigravity and OpenCode providers in T3 Code
     python3 -c '
-import hashlib, json, os
+import hashlib, json, os, re
 
-accounts = [
-    ("antigravity", "Antigravity", os.path.expanduser("~/.gemini/antigravity-cli/profiles/m47"), True),
-    ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
-    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
-]
+tokens_raw = os.environ.get("ANTIGRAVITY_TOKENS", "[]")
+try:
+    parsed_tokens = json.loads(tokens_raw)
+except Exception:
+    parsed_tokens = []
+
+accounts = []
+if isinstance(parsed_tokens, list):
+    for idx, entry in enumerate(parsed_tokens):
+        if isinstance(entry, dict):
+            name = entry.get("name") or f"Account {idx+1}"
+            tok = entry.get("token") or entry.get("refresh_token") or ""
+        elif isinstance(entry, str):
+            name = f"Account {idx+1}"
+            tok = entry
+        else:
+            continue
+        if not tok:
+            continue
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "-", name.lower().strip()).strip("-") or f"acc{idx+1}"
+        instance_id = "antigravity" if idx == 0 else f"antigravity-{slug}"
+        is_primary = (idx == 0)
+        accounts.append((instance_id, name, slug, tok, is_primary))
 
 t3_settings_path = "/root/.t3/userdata/settings.json"
 os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
@@ -853,19 +743,8 @@ t3_cache_dir = "/root/.t3/caches"
 os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
 
 configured_antigravity = []
-for instance_id, display_name, token_path, is_primary in accounts:
-    if not os.path.exists(token_path) and is_primary:
-        token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
-
-    if not os.path.exists(token_path):
-        continue
-
+for instance_id, display_name, slug, refresh_token, is_primary in accounts:
     try:
-        with open(token_path, "r") as f:
-            data = json.load(f)
-        refresh_token = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
-        if not refresh_token:
-            continue
 
         acp_settings = {"auth": {"type": "oauth-personal"}}
         t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()

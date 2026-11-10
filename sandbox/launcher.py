@@ -8,6 +8,7 @@ compilation, tunnel negotiation, lifecycle registration, and SSH configuration.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import secrets
 from typing import Any, Callable
@@ -34,14 +35,12 @@ from sandbox.t3 import setup_t3 as _setup_t3
 from shared.image import (
     DEFAULT_T3_USAGE_VOLUME,
     REMOTE_STARTUP_SCRIPT,
-    SHARED_SECRET_NAME,
     T3_STORAGE_MOUNT_PATH,
     browser_enabled,
     build_sandbox_image,
     get_gradle_volumes,
     get_t3_usage_volumes,
     load_ssh_pub_key,
-    resolve_secret_path,
 )
 
 
@@ -143,7 +142,7 @@ class SandboxLauncher:
     def _resolve_repo_root(self) -> Path:
         if self.repo_root is not None:
             return self.repo_root
-        if (Path("/root/.secrets") / "github-orgs.env").is_file() or Path("/root/secrets/github-orgs.env").is_file():
+        if Path("/root/.env").is_file():
             return Path("/root")
         return Path(__file__).resolve().parent.parent
 
@@ -159,14 +158,37 @@ class SandboxLauncher:
         repo_root = self._resolve_repo_root()
         clean_repo = req.repo.strip().rstrip("/") if req.repo else None
         target_repo, org_name, bare_repo = None, None, None
-        orgs_env_file = resolve_secret_path("github-orgs.env", repo_root=repo_root)
+
+        has_gh_token = bool(os.environ.get("GH_TOKEN"))
+        dotenv_file = repo_root / ".env"
+        if not has_gh_token and dotenv_file.is_file():
+            try:
+                for line in dotenv_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("GH_TOKEN="):
+                        val = line.split("=", 1)[1].strip().strip("'\"")
+                        if val:
+                            has_gh_token = True
+                            os.environ["GH_TOKEN"] = val
+                            break
+            except Exception:
+                pass
 
         if clean_repo:
-            if not orgs_env_file or not orgs_env_file.is_file():
-                missing_path = repo_root / "secrets" / "github-orgs.env"
-                raise FileNotFoundError(f"Organization credentials file not found: {missing_path}.")
-            org_name, raw_repo = clean_repo.split("/", 1) if "/" in clean_repo else (DEFAULT_ORG, clean_repo)
-            bare_repo = raw_repo if (not req.testing or raw_repo.startswith("test-")) else f"test-{raw_repo}"
+            if not has_gh_token:
+                raise FileNotFoundError(
+                    f"GitHub credentials (GH_TOKEN) not found in environment or {repo_root / '.env'}."
+                )
+            org_name, raw_repo = (
+                clean_repo.split("/", 1)
+                if "/" in clean_repo
+                else (os.environ.get("GH_ORG_NAME", DEFAULT_ORG), clean_repo)
+            )
+            bare_repo = (
+                raw_repo
+                if (not req.testing or raw_repo.startswith("test-"))
+                else f"test-{raw_repo}"
+            )
             target_repo = f"{org_name}/{bare_repo}"
 
         pubkey_content = self.load_pubkey_fn()
@@ -193,12 +215,22 @@ class SandboxLauncher:
                 herdr=req.herdr, pi=req.pi,
             )
 
-        if clean_repo and orgs_env_file and orgs_env_file.is_file():
-            image = image.add_local_file(orgs_env_file, "/root/.secrets/github-orgs.env", copy=True)
-
         cloudflare_active = not req.no_cloudflare
         encrypted_ports: list[int] = []
-        sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
+        sandbox_secrets: list[modal.Secret] = []
+        if dotenv_file.is_file():
+            sandbox_secrets.append(modal.Secret.from_dotenv(dotenv_file))
+        else:
+            secret_keys = [
+                "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
+                "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET",
+                "ANTIGRAVITY_PROJECT_ID", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
+                "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN",
+                "WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN",
+            ]
+            env_dict = {k: os.environ[k] for k in secret_keys if k in os.environ and os.environ[k]}
+            if env_dict:
+                sandbox_secrets.append(modal.Secret.from_dict(env_dict))
         env: dict[str, str | None] = {
             "SSH_AUTHORIZED_KEY": pubkey_content, "PORT": str(DEFAULT_WEB_PORT),
             "HOSTNAME": "0.0.0.0", "APP_NAME": sandbox_name,

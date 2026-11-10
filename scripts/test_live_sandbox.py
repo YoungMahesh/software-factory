@@ -16,7 +16,6 @@ sys.path.insert(0, str(root_dir))
 
 from shared.image import (
     REMOTE_STARTUP_SCRIPT,
-    SHARED_SECRET_NAME,
     build_sandbox_image,
     load_ssh_pub_key,
 )
@@ -108,7 +107,12 @@ def main() -> None:
         env["SWAP_GB"] = "2"
         env["ENABLE_DOCKER"] = "1"
 
-    sandbox_secrets = [modal.Secret.from_name(SHARED_SECRET_NAME)]
+    dotenv_file = root_dir / ".env"
+    sandbox_secrets = (
+        [modal.Secret.from_dotenv(dotenv_file)]
+        if dotenv_file.is_file()
+        else [modal.Secret.from_dict({"GH_TOKEN": os.environ.get("GH_TOKEN", "")})]
+    )
 
     print(f"📦 Provisioning ephemeral Modal Sandbox for {DEFAULT_ORG}/{args.repo}...")
     sandbox = modal.Sandbox.create(

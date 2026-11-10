@@ -275,8 +275,6 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         import tempfile
 
         mock_image = MagicMock()
-        mock_staged_image = MagicMock()
-        mock_image.add_local_file.return_value = mock_staged_image
         mock_image_from_id.return_value = mock_image
 
         mock_sandbox = MagicMock()
@@ -285,9 +283,8 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmp_secrets:
-            secrets_file = Path(tmp_secrets) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmp_secrets) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["--from-snapshot", "im-snap-456", "-r", "my-repo"])
@@ -296,10 +293,10 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
 
         mock_build_image.assert_not_called()
         mock_image_from_id.assert_called_once_with("im-snap-456")
-        mock_image.add_local_file.assert_called_once_with(secrets_file, "/root/.secrets/github-orgs.env", copy=True)
+        mock_image.add_local_file.assert_not_called()
         mock_app_lookup.assert_called_once_with("my-repo", create_if_missing=True)
         call_kwargs = mock_sandbox_create.call_args.kwargs
-        self.assertEqual(call_kwargs["image"], mock_staged_image)
+        self.assertEqual(call_kwargs["image"], mock_image)
         self.assertEqual(call_kwargs["env"]["RESUME_SNAPSHOT"], "1")
         self.assertTrue(call_kwargs["name"].startswith("my-repo-"))
         self.assertEqual(call_kwargs["env"]["APP_NAME"], call_kwargs["name"])

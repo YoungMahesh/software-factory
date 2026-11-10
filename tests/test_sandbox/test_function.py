@@ -19,7 +19,6 @@ from sandbox.function import (
     web_app,
 )
 from sandbox.main import run_sandbox_launch
-from shared.image import resolve_secret_path
 
 
 class TestSandboxFunctionAPI(unittest.TestCase):
@@ -118,19 +117,19 @@ class TestSandboxFunctionAPI(unittest.TestCase):
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_credentials_error_returns_500(self, mock_launch):
         mock_launch.side_effect = FileNotFoundError(
-            "Organization credentials file not found: /root/secrets/github-orgs.env (expected .secrets/github-orgs.env or secrets/github-orgs.env)."
+            "GitHub credentials (GH_TOKEN) not found in environment or /root/.env."
         )
         headers = {"Authorization": "Bearer valid-token"}
         response = self.client.post("/launch", json={"repo": "my-repo"}, headers=headers)
         self.assertEqual(response.status_code, 500)
         self.assertIn("Control plane missing credentials", response.json()["detail"])
-        self.assertIn("Ensure secrets/github-orgs.env is present and redeploy", response.json()["detail"])
+        self.assertIn("Ensure GH_TOKEN is present in .env and redeploy", response.json()["detail"])
 
     @patch.dict("os.environ", {"WEB_UI_USERNAME": "admin", "WEB_UI_PASSWORD": "secretpassword"})
     @patch("sandbox.web.launch_sandbox")
     def test_api_launch_fresh_credentials_error_returns_500(self, mock_launch):
         mock_launch.side_effect = FileNotFoundError(
-            "Organization credentials file not found: /root/secrets/github-orgs.env (expected .secrets/github-orgs.env or secrets/github-orgs.env)."
+            "GitHub credentials (GH_TOKEN) not found in environment or /root/.env."
         )
         creds = base64.b64encode(b"admin:secretpassword").decode("utf-8")
         headers = {"Authorization": f"Basic {creds}"}
@@ -141,7 +140,7 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 500)
         self.assertIn("Control plane missing credentials", response.json()["detail"])
-        self.assertIn("Ensure secrets/github-orgs.env is present and redeploy", response.json()["detail"])
+        self.assertIn("Ensure GH_TOKEN is present in .env and redeploy", response.json()["detail"])
 
     @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
     @patch("sandbox.function.launch_sandbox")
@@ -224,39 +223,14 @@ class TestSandboxFunctionAPI(unittest.TestCase):
     def test_validate_deployment_credentials(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            self.assertFalse(validate_deployment_credentials(root, enforce=False))
-            with self.assertRaises(RuntimeError) as ctx:
-                validate_deployment_credentials(root, enforce=True)
-            self.assertIn("github-orgs.env", str(ctx.exception))
+            with patch.dict("os.environ", {}, clear=True):
+                self.assertFalse(validate_deployment_credentials(root, enforce=False))
+                with self.assertRaises(RuntimeError) as ctx:
+                    validate_deployment_credentials(root, enforce=True)
+                self.assertIn("GH_TOKEN", str(ctx.exception))
 
-            secrets_dir = root / "secrets"
-            secrets_dir.mkdir()
-            (secrets_dir / "github-orgs.env").write_text("SFACTORY0_GH_TOKEN=test")
-            self.assertTrue(validate_deployment_credentials(root, enforce=True))
-
-    def test_resolve_secret_path(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            self.assertIsNone(resolve_secret_path("custom.env", repo_root=root))
-
-            dot_secrets = root / ".secrets"
-            dot_secrets.mkdir()
-            (dot_secrets / "custom.env").write_text("TEST=1")
-            found = resolve_secret_path("custom.env", repo_root=root)
-            self.assertIsNotNone(found)
-            self.assertEqual(found, dot_secrets / "custom.env")
-
-    def test_control_plane_image_stages_both_secret_dirs(self):
-        mount_reprs = []
-        curr = control_plane_image
-        while curr and hasattr(curr, "_deps_"):
-            deps = curr._deps_()
-            for d in deps:
-                mount_reprs.append(repr(d))
-            curr = deps[0] if deps else None
-        mount_str = " ".join(mount_reprs)
-        self.assertIn("/root/secrets", mount_str)
-        self.assertIn("/root/.secrets", mount_str)
+                (root / ".env").write_text("GH_TOKEN=test-token\n")
+                self.assertTrue(validate_deployment_credentials(root, enforce=True))
 
 
 class TestSandboxCliRemoteIntegration(unittest.TestCase):

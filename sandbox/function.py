@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 import modal
 
-from shared.image import SHARED_SECRET_NAME, resolve_secret_path
+# (shared.image secrets imports retired)
 from sandbox.core import (
     LaunchRequest,
     LaunchResponse,
@@ -89,17 +89,30 @@ def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None
 
 
 def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> bool:
-    """Validates organization credentials presence for repository sandbox provisioning."""
-    has_creds = (root / ".secrets" / "github-orgs.env").is_file() or (root / "secrets" / "github-orgs.env").is_file()
+    """Validates GitHub access credentials presence for repository sandbox provisioning."""
+    has_creds = bool(os.environ.get("GH_TOKEN"))
+    dotenv_path = root / ".env"
+    if not has_creds and dotenv_path.is_file():
+        try:
+            for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("GH_TOKEN="):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+                    if val:
+                        has_creds = True
+                        break
+        except Exception:
+            pass
+
     if not has_creds:
         logger.warning(
-            "Organization credentials (github-orgs.env) not found in secrets/ or .secrets/. "
-            "Launching repository sandboxes will fail until secrets/github-orgs.env is provided."
+            "GitHub access credentials (GH_TOKEN) not found in environment or .env. "
+            "Launching repository sandboxes will fail until GH_TOKEN is provided."
         )
         if enforce or os.environ.get("MODAL_ENFORCE_AUTH") == "1":
             raise RuntimeError(
-                "Missing required organization credentials file (github-orgs.env) in secrets/ or .secrets/. "
-                "Please configure secrets/github-orgs.env before deploying."
+                "Missing required GitHub access credentials (GH_TOKEN) in environment or .env. "
+                "Please configure GH_TOKEN before deploying."
             )
         return False
     return True
@@ -125,12 +138,11 @@ if modal_toml.is_file():
 if (repo_root / "sandbox" / "static").is_dir():
     image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
 
-if (repo_root / "secrets").is_dir():
-    image = image.add_local_dir(str(repo_root / "secrets"), "/root/secrets")
-if (repo_root / ".secrets").is_dir():
-    image = image.add_local_dir(str(repo_root / ".secrets"), "/root/.secrets")
+# Secrets are injected via modal.Secret, not staged to filesystem
 
-function_secrets: list[modal.Secret] = [modal.Secret.from_name(SHARED_SECRET_NAME)]
+function_secrets: list[modal.Secret] = []
+if (repo_root / ".env").is_file():
+    function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
 
 auth_env = resolve_and_validate_web_credentials(repo_root)
 if auth_env:
@@ -138,8 +150,6 @@ if auth_env:
     for k, v in auth_env.items():
         if k not in os.environ:
             os.environ[k] = v
-elif (repo_root / ".env").is_file():
-    function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
 
 validate_deployment_credentials(repo_root)
 
@@ -206,11 +216,11 @@ def launch(req: LaunchRequest) -> LaunchResponse:
         ) from exc
     except FileNotFoundError as exc:
         err_msg = str(exc)
-        if "credentials" in err_msg.lower() or "github-orgs" in err_msg.lower():
+        if "credentials" in err_msg.lower() or "github-orgs" in err_msg.lower() or "gh_token" in err_msg.lower():
             logger.error("Control plane missing credentials: %s", err_msg)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Control plane missing credentials: {err_msg}. Ensure secrets/github-orgs.env is present and redeploy.",
+                detail=f"Control plane missing credentials: {err_msg}. Ensure GH_TOKEN is present in .env and redeploy.",
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

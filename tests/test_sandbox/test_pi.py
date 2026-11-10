@@ -46,10 +46,8 @@ class TestPiIntegration(unittest.TestCase):
 
     def test_build_sandbox_image_layers_pi(self):
         from shared.image import (
-            LOCAL_OPENCODE_SECRET,
             LOCAL_PI_MODELS,
             LOCAL_PI_SETTINGS,
-            REMOTE_OPENCODE_SECRET,
             REMOTE_PI_MODELS,
             REMOTE_PI_SETTINGS,
             build_sandbox_image,
@@ -72,7 +70,6 @@ class TestPiIntegration(unittest.TestCase):
                 [
                     (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
                     (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
-                    (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
                 ],
             )
             self.assertEqual(result, mock_img)
@@ -119,7 +116,7 @@ class TestPiIntegration(unittest.TestCase):
     def test_setup_script_supports_pi(self):
         content = self.setup_sh.read_text()
         self.assertIn("--pi)", content)
-        self.assertIn("DECRYPT_PI=true", content)
+        self.assertIn("SETUP_PI=true", content)
 
 
 if __name__ == "__main__":

@@ -252,7 +252,7 @@ def api_launch_fresh_sandbox(payload: FreshSandboxLaunchPayload) -> LaunchRespon
             logger.error("Control plane missing credentials: %s", err_msg)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Control plane missing credentials: {err_msg}. Ensure secrets/github-orgs.env is present and redeploy.",
+                detail=f"Control plane missing credentials: {err_msg}. Ensure GH_TOKEN is present in .env and redeploy.",
             ) from exc
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg) from exc
     except modal.exception.AlreadyExistsError as exc:
@@ -294,7 +294,7 @@ def api_launch_fresh_sandbox_stream(payload: FreshSandboxLaunchPayload) -> Strea
             except FileNotFoundError as exc:
                 err_msg = str(exc)
                 if "credentials" in err_msg.lower() or "github-orgs" in err_msg.lower():
-                    q.put({"type": "error", "detail": f"Control plane missing credentials: {err_msg}. Ensure secrets/github-orgs.env is present and redeploy."})
+                    q.put({"type": "error", "detail": f"Control plane missing credentials: {err_msg}. Ensure GH_TOKEN is present in .env and redeploy."})
                 else:
                     q.put({"type": "error", "detail": err_msg})
             except Exception as exc:

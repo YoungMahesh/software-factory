@@ -37,59 +37,31 @@ class TestT3CodeStartup(unittest.TestCase):
             self.assertIn("GOOGLE_CLIENT_ID", content)
             self.assertIn("providerInstances", content)
             self.assertIn("antigravity", content)
-            self.assertIn("antigravity-mgh", content)
-            self.assertIn("antigravity-anv", content)
-            self.assertIn("Antigravity (MGH)", content)
-            self.assertIn("Antigravity (ANV)", content)
-            self.assertIn("/root/.t3/caches", content)
+            self.assertIn("ANTIGRAVITY_TOKENS", content)
             self.assertIn("gemini-3.8-flash-high", content)
             self.assertNotIn("gemini-3.8-flash-medium", content)
             self.assertNotIn("Gemini 3.8 Flash (Low)", content)
-            self.assertIn("antigravity.env", content)
             self.assertIn("sourceControlWriterModelSelection", content)
             self.assertIn("textGenerationModelSelection", content)
             self.assertIn("gemini-3.8-flash-low", content)
             self.assertIn("existing_tok", content)
             self.assertIn("candidate_file", content)
 
-            anv_pos = content.find('"antigravity-anv"')
-            mgh_pos = content.find('"antigravity-mgh"')
-            self.assertLess(anv_pos, mgh_pos)
-
-    def test_setup_script_decrypts_antigravity_env(self):
+    def test_setup_script_configures_antigravity_from_env(self):
         setup_script = self.repo_root / "scripts" / "setup.sh"
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            secrets_dir = tmp_path / "secrets"
-            secrets_dir.mkdir()
             bin_dir = tmp_path / "bin"
             bin_dir.mkdir()
             home_dir = tmp_path / "home"
             home_dir.mkdir()
 
-            sops_mock = bin_dir / "sops"
-            sops_mock.write_text(
-                "#!/usr/bin/env bash\n"
-                'for arg in "$@"; do\n'
-                '  if [[ "$arg" == *"antigravity.env"* ]]; then\n'
-                '    echo "ANTIGRAVITY_CLIENT_ID=custom-client-id.apps.googleusercontent.com"\n'
-                '    echo "ANTIGRAVITY_CLIENT_SECRET=custom-client-secret"\n'
-                "    exit 0\n"
-                '  elif [[ "$arg" == *"antigravity-oauth-token.json"* ]]; then\n'
-                '    echo \'{"refresh_token": "mock-refresh-token"}\'\n'
-                "    exit 0\n"
-                "  fi\n"
-                "done\n"
-            )
-            sops_mock.chmod(0o755)
-
-            (secrets_dir / "antigravity.env").write_text("DUMMY_ENCRYPTED")
-            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY_ENCRYPTED")
-
             env = {
                 "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
                 "HOME": str(home_dir),
-                "SECRETS_DIR": str(secrets_dir),
+                "ANTIGRAVITY_CLIENT_ID": "custom-client-id.apps.googleusercontent.com",
+                "ANTIGRAVITY_CLIENT_SECRET": "custom-client-secret",
+                "ANTIGRAVITY_TOKENS": '[{"name": "Personal", "token": "mock-refresh-token"}]',
             }
             res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")
@@ -113,39 +85,19 @@ class TestT3CodeStartup(unittest.TestCase):
                 {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
             )
 
-    def test_setup_script_prioritizes_anv_antigravity_model_selection(self):
+    def test_setup_script_prioritizes_first_antigravity_token_profile(self):
         setup_script = self.repo_root / "scripts" / "setup.sh"
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            secrets_dir = tmp_path / "secrets"
-            secrets_dir.mkdir()
             bin_dir = tmp_path / "bin"
             bin_dir.mkdir()
             home_dir = tmp_path / "home"
             home_dir.mkdir()
 
-            sops_mock = bin_dir / "sops"
-            sops_mock.write_text(
-                "#!/usr/bin/env bash\n"
-                'for arg in "$@"; do\n'
-                '  if [[ "$arg" == *"antigravity-oauth-token-anv.json"* ]]; then\n'
-                '    echo \'{"refresh_token": "anv-token"}\'\n'
-                "    exit 0\n"
-                '  elif [[ "$arg" == *"antigravity-oauth-token.json"* ]]; then\n'
-                '    echo \'{"refresh_token": "m47-token"}\'\n'
-                "    exit 0\n"
-                "  fi\n"
-                "done\n"
-            )
-            sops_mock.chmod(0o755)
-
-            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY")
-            (secrets_dir / "antigravity-oauth-token-anv.json").write_text("DUMMY")
-
             env = {
                 "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
                 "HOME": str(home_dir),
-                "SECRETS_DIR": str(secrets_dir),
+                "ANTIGRAVITY_TOKENS": '[{"name": "ANV", "token": "anv-token"}, {"name": "MGH", "token": "mgh-token"}]',
             }
             res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")
@@ -155,12 +107,15 @@ class TestT3CodeStartup(unittest.TestCase):
             settings_data = json.loads(settings_path.read_text())
             self.assertEqual(
                 settings_data["sourceControlWriterModelSelection"],
-                {"instanceId": "antigravity-anv", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
             )
             self.assertEqual(
                 settings_data["textGenerationModelSelection"],
-                {"instanceId": "antigravity-anv", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
             )
+            self.assertIn("antigravity-mgh", settings_data["providerInstances"])
+            self.assertEqual(settings_data["providerInstances"]["antigravity"]["displayName"], "ANV")
+            self.assertEqual(settings_data["providerInstances"]["antigravity-mgh"]["displayName"], "MGH")
 
     def test_switch_agy_profile_offline_with_cached_profiles(self):
         agyprofile_script = self.repo_root / "scripts" / "agyprofile"
@@ -284,28 +239,10 @@ class TestT3CodeStartup(unittest.TestCase):
         setup_script = self.repo_root / "scripts" / "setup.sh"
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            secrets_dir = tmp_path / "secrets"
-            secrets_dir.mkdir()
             bin_dir = tmp_path / "bin"
             bin_dir.mkdir()
             home_dir = tmp_path / "home"
             home_dir.mkdir()
-
-            sops_mock = bin_dir / "sops"
-            mock_code = (
-                "#!/usr/bin/env bash\n"
-                "for arg in \"$@\"; do\n"
-                "  if [[ \"$arg\" == *\"antigravity-oauth-token.json\"* ]]; then\n"
-                "    echo '{\"refresh_token\": \"mock-refresh-token\"}'\n"
-                "    exit 0\n"
-                "  fi\n"
-                "done\n"
-                "exit 1\n"
-            )
-            sops_mock.write_text(mock_code)
-            sops_mock.chmod(0o755)
-
-            (secrets_dir / "antigravity-oauth-token.json").write_text("DUMMY")
 
             preseeded_dir = home_dir / ".gemini" / "antigravity-acp"
             preseeded_dir.mkdir(parents=True)
@@ -320,7 +257,7 @@ class TestT3CodeStartup(unittest.TestCase):
             env = {
                 "PATH": f"{bin_dir}:{os.environ.get('PATH', '/bin:/usr/bin')}",
                 "HOME": str(home_dir),
-                "SECRETS_DIR": str(secrets_dir),
+                "ANTIGRAVITY_TOKENS": '[{"name": "Default", "token": "mock-refresh-token"}]',
             }
             res = subprocess.run(["bash", str(setup_script), "--t3"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, f"setup.sh failed: {res.stderr}")

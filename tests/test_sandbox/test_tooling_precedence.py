@@ -18,7 +18,6 @@ from shared.image import (
     LOCAL_GHLS,
     LOCAL_GHPR,
     LOCAL_SCRIPTS_DIR,
-    LOCAL_SECRETS_DIR,
     _resolve_dir,
     _resolve_file,
 )

@@ -1,6 +1,3 @@
 creation_rules:
-  - path_regex: secrets/.*
-    age: age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj
-  
   - path_regex: \.secrets/.*
     age: age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj

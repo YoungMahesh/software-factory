@@ -40,24 +40,14 @@ class TestT3CodeImage(unittest.TestCase):
         self.assertIn(T3_CURRENT_MODELS_PATCH_TARGET, T3_PATCH_SCRIPT)
         self.assertIn(T3_MODELS_MANIFEST_PATCH_TARGET, T3_PATCH_SCRIPT)
 
-    def test_build_sandbox_image_stages_multiple_antigravity_accounts(self):
-        from shared.image import (
-            LOCAL_ANTIGRAVITY_SECRET,
-            LOCAL_ANTIGRAVITY_SECRET_MGH,
-            LOCAL_ANTIGRAVITY_SECRET_ANV,
-            LOCAL_ANTIGRAVITY_ENV,
-            REMOTE_ANTIGRAVITY_SECRET,
-            REMOTE_ANTIGRAVITY_SECRET_MGH,
-            REMOTE_ANTIGRAVITY_SECRET_ANV,
-            REMOTE_ANTIGRAVITY_ENV,
-        )
+    def test_build_sandbox_image_does_not_stage_secrets_into_image(self):
+        from shared import image
 
-        self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_MGH).endswith("antigravity-oauth-token-mgh.json"))
-        self.assertTrue(str(LOCAL_ANTIGRAVITY_SECRET_ANV).endswith("antigravity-oauth-token-anv.json"))
-        self.assertTrue(str(LOCAL_ANTIGRAVITY_ENV).endswith("antigravity.env"))
-        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_MGH, "/root/.secrets/antigravity-oauth-token-mgh.json")
-        self.assertEqual(REMOTE_ANTIGRAVITY_SECRET_ANV, "/root/.secrets/antigravity-oauth-token-anv.json")
-        self.assertEqual(REMOTE_ANTIGRAVITY_ENV, "/root/.secrets/antigravity.env")
+        # Verify no secret file path attributes exist in shared.image module
+        self.assertFalse(hasattr(image, "LOCAL_ANTIGRAVITY_SECRET"))
+        self.assertFalse(hasattr(image, "LOCAL_OPENCODE_SECRET"))
+        self.assertFalse(hasattr(image, "LOCAL_MODAL_SECRET"))
+        self.assertFalse(hasattr(image, "LOCAL_CLOUDFLARE_SECRET"))
 
     def test_build_sandbox_image_layers_t3(self):
         from shared.image import (
@@ -71,16 +61,6 @@ class TestT3CodeImage(unittest.TestCase):
             T3_ACTIVE_JSON,
             LOCAL_OPENCODE_CONFIG,
             REMOTE_OPENCODE_CONFIG,
-            LOCAL_OPENCODE_SECRET,
-            REMOTE_OPENCODE_SECRET,
-            LOCAL_ANTIGRAVITY_SECRET,
-            LOCAL_ANTIGRAVITY_SECRET_MGH,
-            LOCAL_ANTIGRAVITY_SECRET_ANV,
-            LOCAL_ANTIGRAVITY_ENV,
-            REMOTE_ANTIGRAVITY_SECRET,
-            REMOTE_ANTIGRAVITY_SECRET_MGH,
-            REMOTE_ANTIGRAVITY_SECRET_ANV,
-            REMOTE_ANTIGRAVITY_ENV,
             LOCAL_T3_KEYBINDINGS,
             REMOTE_T3_KEYBINDINGS,
             LOCAL_T3_WRAPPER,
@@ -109,7 +89,6 @@ class TestT3CodeImage(unittest.TestCase):
                         mock_img1,
                         [
                             (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                            (LOCAL_OPENCODE_SECRET, REMOTE_OPENCODE_SECRET),
                         ],
                     ),
                     call(
@@ -117,15 +96,6 @@ class TestT3CodeImage(unittest.TestCase):
                         [
                             (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
                             (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
-                        ],
-                    ),
-                    call(
-                        mock_img2,
-                        [
-                            (LOCAL_ANTIGRAVITY_SECRET, REMOTE_ANTIGRAVITY_SECRET),
-                            (LOCAL_ANTIGRAVITY_SECRET_MGH, REMOTE_ANTIGRAVITY_SECRET_MGH),
-                            (LOCAL_ANTIGRAVITY_SECRET_ANV, REMOTE_ANTIGRAVITY_SECRET_ANV),
-                            (LOCAL_ANTIGRAVITY_ENV, REMOTE_ANTIGRAVITY_ENV),
                         ],
                     ),
                 ]

@@ -65,11 +65,15 @@ A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Me
 _Avoid_: Metro proxy, bundler forward, mobile tunnel
 
 **Modal Development Tooling**:
-A runtime development environment within the sandbox combining a pre-baked Python 3 runtime, an automated virtual environment (`.venv`) pre-installed with the Modal SDK and project dependencies, and opt-in decrypted Modal Client Credentials (`~/.modal.toml`) for developing and running Modal workloads from within the sandbox.
+A runtime development environment within the sandbox combining a pre-baked Python 3 runtime, an automated virtual environment (`.venv`) pre-installed with the Modal SDK and project dependencies, and opt-in Modal Client Credentials (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` / `~/.modal.toml`) for developing and running Modal workloads from within the sandbox.
 _Avoid_: Python tooling, python runner, modal env
 
+**Factory Environment Configuration**:
+The unified, uncommitted environment file (`.env`) at the workspace root (templated by `.env.example`) providing all control plane authentication, database credentials, single-organization GitHub access tokens, ingress tokens, and AI tooling credentials, injected into Modal sandboxes and control plane functions as native process environment variables.
+_Avoid_: Config file, root env, secret bundle
+
 **Shared Workspace Secret**:
-The centralized Modal secret collection (`share0`) mounted into all sandboxes unconditionally, providing shared organizational secrets—specifically `AGE_PRIVATE_KEY` for SOPS bootstrap—used to decrypt Centralized Organization Credentials (`secrets/github-orgs.env`), the Cloudflare Tunnel token (`secrets/cloudflare.env`), In-Repo Secret Manifests, and opt-in agent/tooling credentials.
+An optional Modal secret collection (`share0`) or environment variable providing `AGE_PRIVATE_KEY` for SOPS bootstrap, strictly invoked when a cloned target repository provides an In-Repo Secret Manifest (`.secrets/env.map`).
 _Avoid_: Global secret, root secret, default secret
 
 **Test Organization**:
@@ -85,19 +89,19 @@ An automated, ephemeral integration test procedure that provisions a live Modal 
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that extracts `AGE_PRIVATE_KEY` from the Shared Workspace Secret (`share0`) to decrypt repository credentials and tooling configuration, purging encryption keys by default before user session handoff unless explicitly retained via `--sops`.
+A bootstrap mechanism during sandbox initialization that uses `AGE_PRIVATE_KEY` to decrypt repository credentials when an In-Repo Secret Manifest (`env.map`) is present in the cloned target repository.
 _Avoid_: Sops setup, age injection, secret script
 
 **Tooling Setup Script**:
-A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that decrypts opt-in tooling credentials (`--modal`, `--agy`, `--opencode`) from the secrets directory into user configuration directories, running identically on host workstations and inside sandboxes.
+A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that provisions opt-in tooling credentials (`--modal`, `--agy`, `--opencode`) from environment variables into user configuration directories, running identically on host workstations and inside sandboxes.
 _Avoid_: Repo setup script, secret decrypter, install script
 
 **Modal Sandbox SSH Key**:
-The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` and injected into the container's `/root/.ssh/authorized_keys`, while the private key is maintained out-of-band by developers at `~/.ssh/modal-sandbox` (mode 0600) and never tracked, stored, or decrypted in repository secrets or sandbox environments.
+The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` (or overridden via `SSH_AUTHORIZED_KEY` in `.env`) and injected into the container's `/root/.ssh/authorized_keys`, while the private key is maintained out-of-band by developers at `~/.ssh/modal-sandbox` (mode 0600) and never tracked or committed.
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
 **Antigravity OAuth Token**:
-The authenticated session credential for the Antigravity CLI, encrypted with SOPS at `secrets/antigravity-oauth-token.json` and decrypted inside the sandbox (or locally) to `~/.gemini/antigravity-cli/antigravity-oauth-token` (mode 0600) via `scripts/setup.sh --agy`.
+The authenticated session credential for the Antigravity CLI and T3 Code provider instances, configured via the `ANTIGRAVITY_TOKENS` JSON profile array in `.env` and provisioned dynamically to `~/.gemini/antigravity-cli/profiles/` and `~/.t3/userdata/providers/antigravity/` by `scripts/setup.sh --agy`.
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
@@ -113,11 +117,11 @@ Declarative global Git configuration and identity routing files tracked in `shar
 _Avoid_: Dynamic git config, inline git config, startup git config
 
 **Modal Client Credentials**:
-The authenticated client configuration and API token (`~/.modal.toml`) used by the Modal CLI and SDK to manage cloud resources. Decrypted with SOPS from `secrets/modal.toml` via `scripts/setup.sh --modal` (mode 0600), withheld from automated sandbox initialization by default to enforce credential isolation, and provisioned into sandboxes strictly when `--modal` is explicitly passed.
+The authenticated client credentials (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`) provided via `.env` or written to `~/.modal.toml` via `scripts/setup.sh --modal` (mode 0600), allowing the Modal CLI and SDK to manage cloud resources within the sandbox.
 _Avoid_: Modal token, modal config, modal credentials
 
 **OpenCode Credentials**:
-A set of API keys and remote service tokens (`OPENCODE_GO_API_KEY`, `EXA_API_KEY`, `CONTEXT7_API_KEY`) encrypted with SOPS at `secrets/opencode.env` and decrypted inside the sandbox to `~/.config/opencode/opencode.env` (mode 0600) via `scripts/setup.sh --opencode`.
+API keys and service tokens (`OPENCODE_GO_API_KEY`) provided via `.env` and written inside the sandbox to `~/.config/opencode/opencode.env` (mode 0600) via `scripts/setup.sh --opencode`.
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 **Shared Base Image**:
@@ -129,7 +133,7 @@ A pre-baked, headless Google Chrome instance installed by the `--browser` flag a
 _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
-A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CF_TOKEN` decrypted at boot from `secrets/cloudflare.env` using SOPS, securely routing external traffic from `https://3000.mahesh0.dev` directly to local port 3000 without requiring open inbound firewall ports.
+A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CLOUDFLARE_TUNNEL_TOKEN` provided by the Factory Environment Configuration (`.env`), securely routing external traffic directly to local web ports without requiring open inbound firewall ports.
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
 
 **Universal File Line Budget**:
@@ -137,7 +141,7 @@ A repository-wide size constraint requiring every production source file and exe
 _Avoid_: File size limit, code line limit, test budget, 500-line rule
 
 **Centralized Organization Credentials**:
-A single SOPS-encrypted file (`secrets/github-orgs.env`) containing GitHub Personal Access Tokens keyed by organization (e.g. `SFACTORY0_GH_TOKEN`), replacing legacy per-project secret folders and the deprecated `secrets_org/` directory.
+The single-organization GitHub access configuration defined via `GH_TOKEN` and `GH_ORG_NAME` in the Factory Environment Configuration (`.env`), replacing legacy multi-file secret bundles (`secrets/github-orgs.env`).
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
 **In-Repo Secret Manifest**:
@@ -171,7 +175,6 @@ _Avoid_: T3 sync daemon, usage daemon, transcript sync, storage syncer
 **Developer CLI Tooling Precedence**:
 The hierarchical resolution order governing developer CLI utility binaries and symlinks (`agyq`, `ghls`, `ghpr`, `ghclone`, `agyprofile`, `decrypt-repo-env`, `encrypt-repo-env`) inside Modal sandboxes: Workspace Repository (`$TARGET_DIR/scripts`) takes highest precedence, followed by Staged Dot Directory (`/root/.scripts`), falling back to the Pre-baked Base Image Binary (`/usr/local/bin`).
 _Avoid_: Script priority, binary search path, cli override, tool priority
-
 
 **Sandbox Launcher**:
 A deep module (`sandbox/launcher.py`) that consolidates container configuration, image resolution, credential staging, Modal sandbox provisioning, network tunnel extraction, and SSH configuration into a single execution seam.

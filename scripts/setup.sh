@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DECRYPT_MODAL=false
-DECRYPT_AGY=false
-DECRYPT_T3=false
-DECRYPT_OPENCODE=false
-DECRYPT_PI=false
+SETUP_MODAL=false
+SETUP_AGY=false
+SETUP_T3=false
+SETUP_OPENCODE=false
+SETUP_PI=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --modal)
-            DECRYPT_MODAL=true
+            SETUP_MODAL=true
             shift
             ;;
         --agy)
-            DECRYPT_AGY=true
+            SETUP_AGY=true
             shift
             ;;
         --t3)
-            DECRYPT_T3=true
+            SETUP_T3=true
             shift
             ;;
         --opencode)
-            DECRYPT_OPENCODE=true
+            SETUP_OPENCODE=true
             shift
             ;;
         --pi)
-            DECRYPT_PI=true
+            SETUP_PI=true
             shift
             ;;
         -h|--help)
@@ -41,59 +41,37 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -z "${SECRETS_DIR:-}" ]; then
-    if [ -d "$SCRIPT_DIR/../.secrets" ]; then
-        SECRETS_DIR="$SCRIPT_DIR/../.secrets"
-    elif [ -d "/root/.secrets" ]; then
-        SECRETS_DIR="/root/.secrets"
-    elif [ -d "$SCRIPT_DIR/../secrets" ]; then
-        SECRETS_DIR="$SCRIPT_DIR/../secrets"
-    elif [ -d "/root/secrets" ]; then
-        SECRETS_DIR="/root/secrets"
-    else
-        SECRETS_DIR="$SCRIPT_DIR/../secrets"
+if [ "$SETUP_MODAL" = true ]; then
+    if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
+        mkdir -p ~/.modal
+        cat << EOF > ~/.modal.toml
+[default]
+token_id = "$MODAL_TOKEN_ID"
+token_secret = "$MODAL_TOKEN_SECRET"
+EOF
+        chmod 600 ~/.modal.toml
     fi
 fi
 
-if [ "$DECRYPT_MODAL" = true ]; then
-    sops decrypt "$SECRETS_DIR/modal.toml" > ~/.modal.toml
-    chmod 600 ~/.modal.toml
+if [ "$SETUP_OPENCODE" = true ] || [ "$SETUP_PI" = true ]; then
+    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
+        mkdir -p ~/.config/opencode
+        cat << EOF > ~/.config/opencode/opencode.env
+OPENCODE_GO_API_KEY=$OPENCODE_GO_API_KEY
+EOF
+        chmod 600 ~/.config/opencode/opencode.env
+
+        if [ -w /etc/environment ]; then
+            grep -qxF "OPENCODE_GO_API_KEY=$OPENCODE_GO_API_KEY" /etc/environment 2>/dev/null || echo "OPENCODE_GO_API_KEY=$OPENCODE_GO_API_KEY" >> /etc/environment
+        fi
+        grep -qxF "export OPENCODE_GO_API_KEY=\"$OPENCODE_GO_API_KEY\"" ~/.bashrc 2>/dev/null || echo "export OPENCODE_GO_API_KEY=\"$OPENCODE_GO_API_KEY\"" >> ~/.bashrc
+    fi
 fi
 
-if [ "$DECRYPT_AGY" = true ] || [ "$DECRYPT_T3" = true ]; then
-    if [ -f "$SECRETS_DIR/antigravity.env" ]; then
-        while IFS= read -r line || [ -n "$line" ]; do
-            [[ "$line" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "${line// }" ]] && continue
-            export "$line"
-        done < <(sops decrypt "$SECRETS_DIR/antigravity.env" 2>/dev/null || true)
-    fi
-    mkdir -p ~/.gemini/antigravity-cli/profiles
-    if [ -f "$SECRETS_DIR/antigravity-oauth-token.json" ]; then
-        sops decrypt "$SECRETS_DIR/antigravity-oauth-token.json" > ~/.gemini/antigravity-cli/profiles/m47
-        cp -f ~/.gemini/antigravity-cli/profiles/m47 ~/.gemini/antigravity-cli/antigravity-oauth-token
-        chmod 600 ~/.gemini/antigravity-cli/profiles/m47 ~/.gemini/antigravity-cli/antigravity-oauth-token
-    fi
-    if [ -f "$SECRETS_DIR/antigravity-oauth-token-mgh.json" ]; then
-        sops decrypt "$SECRETS_DIR/antigravity-oauth-token-mgh.json" > ~/.gemini/antigravity-cli/profiles/mgh
-        chmod 600 ~/.gemini/antigravity-cli/profiles/mgh
-    fi
-    if [ -f "$SECRETS_DIR/antigravity-oauth-token-anv.json" ]; then
-        sops decrypt "$SECRETS_DIR/antigravity-oauth-token-anv.json" > ~/.gemini/antigravity-cli/profiles/anv
-        chmod 600 ~/.gemini/antigravity-cli/profiles/anv
-    fi
-
-    # Pre-populate Antigravity ACP credentials for T3 Code and fallback profile
+if [ "$SETUP_AGY" = true ] || [ "$SETUP_T3" = true ] || [ "$SETUP_OPENCODE" = true ]; then
     if command -v python3 >/dev/null 2>&1; then
         python3 -c '
-import hashlib, json, os
-
-accounts = [
-    ("antigravity", "Antigravity", os.path.expanduser("~/.gemini/antigravity-cli/profiles/m47"), True),
-    ("antigravity-anv", "Antigravity (ANV)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/anv"), False),
-    ("antigravity-mgh", "Antigravity (MGH)", os.path.expanduser("~/.gemini/antigravity-cli/profiles/mgh"), False),
-]
+import hashlib, json, os, re
 
 t3_settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
 os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
@@ -107,24 +85,50 @@ if os.path.exists(t3_settings_path):
 if "providerInstances" not in settings:
     settings["providerInstances"] = {}
 
-# Path to T3 caches directory (defaults to /root/.t3/caches in standard sandbox)
 t3_cache_dir = os.path.expanduser("~/.t3/caches")
 os.makedirs(t3_cache_dir, mode=0o755, exist_ok=True)
 
-configured_antigravity = []
-for instance_id, display_name, token_path, is_primary in accounts:
-    if not os.path.exists(token_path) and is_primary:
-        token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+# Parse ANTIGRAVITY_TOKENS JSON array of objects
+tokens_raw = os.environ.get("ANTIGRAVITY_TOKENS", "[]")
+try:
+    parsed_tokens = json.loads(tokens_raw)
+except Exception:
+    parsed_tokens = []
 
-    if not os.path.exists(token_path):
-        continue
-
-    try:
-        with open(token_path, "r") as f:
-            data = json.load(f)
-        refresh_token = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
-        if not refresh_token:
+accounts = []
+if isinstance(parsed_tokens, list):
+    for idx, entry in enumerate(parsed_tokens):
+        if isinstance(entry, dict):
+            name = entry.get("name") or f"Account {idx+1}"
+            tok = entry.get("token") or entry.get("refresh_token") or ""
+        elif isinstance(entry, str):
+            name = f"Account {idx+1}"
+            tok = entry
+        else:
             continue
+        if not tok:
+            continue
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "-", name.lower().strip()).strip("-") or f"acc{idx+1}"
+        instance_id = "antigravity" if idx == 0 else f"antigravity-{slug}"
+        is_primary = (idx == 0)
+        accounts.append((instance_id, name, slug, tok, is_primary))
+
+configured_antigravity = []
+for instance_id, display_name, slug, refresh_token, is_primary in accounts:
+    try:
+        profile_dir = os.path.expanduser("~/.gemini/antigravity-cli/profiles")
+        os.makedirs(profile_dir, mode=0o700, exist_ok=True)
+        profile_path = os.path.join(profile_dir, slug)
+        tok_data = {"token": {"refresh_token": refresh_token}}
+        with open(profile_path, "w") as pf:
+            json.dump(tok_data, pf, indent=2)
+        os.chmod(profile_path, 0o600)
+
+        if is_primary:
+            primary_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+            with open(primary_path, "w") as pf:
+                json.dump(tok_data, pf, indent=2)
+            os.chmod(primary_path, 0o600)
 
         acp_settings = {"auth": {"type": "oauth-personal"}}
         t3_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
@@ -145,8 +149,18 @@ for instance_id, display_name, token_path, is_primary in accounts:
                 except Exception:
                     pass
 
-        client_id = os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID") or existing_tok.get("client_id") or "dummy-client-id.apps.googleusercontent.com"
-        client_secret = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET") or existing_tok.get("client_secret") or "dummy-client-secret"
+        client_id = (
+            os.environ.get("ANTIGRAVITY_CLIENT_ID")
+            or os.environ.get("GOOGLE_CLIENT_ID")
+            or existing_tok.get("client_id")
+            or "dummy-client-id.apps.googleusercontent.com"
+        )
+        client_secret = (
+            os.environ.get("ANTIGRAVITY_CLIENT_SECRET")
+            or os.environ.get("GOOGLE_CLIENT_SECRET")
+            or existing_tok.get("client_secret")
+            or "dummy-client-secret"
+        )
 
         acp_token = {
             "client_id": client_id,
@@ -223,9 +237,9 @@ for instance_id, display_name, token_path, is_primary in accounts:
     except Exception as e:
         print(f"Warning: Failed to setup Antigravity ACP credentials for {instance_id}: {e}")
 
-# Also check if OpenCode credentials are ready and configure OpenCode in T3
-opencode_env_path = os.path.expanduser("~/.config/opencode/opencode.env")
+# OpenCode provider in T3
 has_opencode = bool(os.environ.get("OPENCODE_GO_API_KEY"))
+opencode_env_path = os.path.expanduser("~/.config/opencode/opencode.env")
 if not has_opencode and os.path.exists(opencode_env_path):
     try:
         with open(opencode_env_path, "r") as ef:
@@ -237,9 +251,9 @@ if not has_opencode and os.path.exists(opencode_env_path):
                         break
     except Exception:
         pass
+
 if has_opencode:
-    # Default binary path: /root/.opencode/bin/opencode
-    opencode_bin = os.path.expanduser("~/.opencode/bin/opencode")
+    opencode_bin = "/root/.opencode/bin/opencode" if os.path.exists("/root/.opencode/bin/opencode") else os.path.expanduser("~/.opencode/bin/opencode")
     if "opencode" not in settings["providerInstances"]:
         settings["providerInstances"]["opencode"] = {
             "driver": "opencode",
@@ -262,14 +276,7 @@ if "codex" not in settings["providerInstances"]:
         "enabled": False
     }
 
-default_agy_instance = None
-for candidate in ["antigravity-anv", "antigravity-mgh", "antigravity"]:
-    if candidate in configured_antigravity:
-        default_agy_instance = candidate
-        break
-if default_agy_instance is None and configured_antigravity:
-    default_agy_instance = configured_antigravity[0]
-
+default_agy_instance = configured_antigravity[0] if configured_antigravity else None
 if default_agy_instance:
     model_sel = {
         "instanceId": default_agy_instance,
@@ -287,54 +294,6 @@ os.chmod(t3_settings_path, 0o644)
     fi
 fi
 
-if [ "$DECRYPT_OPENCODE" = true ] || [ "$DECRYPT_PI" = true ]; then
-    mkdir -p ~/.config/opencode
-    sops decrypt "$SECRETS_DIR/opencode.env" > ~/.config/opencode/opencode.env
-    chmod 600 ~/.config/opencode/opencode.env
-
-    while IFS= read -r line || [ -n "$line" ]; do
-        [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "${line// }" ]] && continue
-        if [ -w /etc/environment ]; then
-            grep -qxF "$line" /etc/environment 2>/dev/null || echo "$line" >> /etc/environment
-        fi
-        grep -qxF "export $line" ~/.bashrc 2>/dev/null || echo "export $line" >> ~/.bashrc
-    done < ~/.config/opencode/opencode.env
-
-    if [ "$DECRYPT_OPENCODE" = true ] && command -v python3 >/dev/null 2>&1; then
-        python3 -c '
-import json, os
-t3_settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
-if os.path.exists(os.path.dirname(t3_settings_path)) or os.path.exists("/opt/t3"):
-    os.makedirs(os.path.dirname(t3_settings_path), mode=0o755, exist_ok=True)
-    settings = {}
-    if os.path.exists(t3_settings_path):
-        try:
-            with open(t3_settings_path, "r") as fp:
-                settings = json.load(fp)
-        except Exception:
-            settings = {}
-    if "providerInstances" not in settings:
-        settings["providerInstances"] = {}
-    # Default binary path: /root/.opencode/bin/opencode
-    opencode_bin = os.path.expanduser("~/.opencode/bin/opencode")
-    if "opencode" not in settings["providerInstances"]:
-        settings["providerInstances"]["opencode"] = {
-            "driver": "opencode",
-            "displayName": "OpenCode",
-            "enabled": True,
-            "binaryPath": opencode_bin
-        }
-    else:
-        settings["providerInstances"]["opencode"]["enabled"] = True
-        settings["providerInstances"]["opencode"]["binaryPath"] = opencode_bin
-    with open(t3_settings_path, "w") as fp:
-        json.dump(settings, fp, indent=2)
-    os.chmod(t3_settings_path, 0o644)
-' 2>/dev/null || true
-    fi
-fi
-
-if [ "$DECRYPT_PI" = true ]; then
+if [ "$SETUP_PI" = true ]; then
     mkdir -p ~/.pi/agent
 fi
