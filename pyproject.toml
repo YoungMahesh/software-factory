@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modal-sandboxes"
+version = "0.1.0"
+description = "Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal"
+readme = "readme.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Modal Sandboxes Contributors" }
+]
+keywords = ["modal", "sandbox", "cloud-development", "ai-agents", "developer-tooling"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+    "modal>=1.6.1",
+    "qrcode>=7.4.2",
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+modal-sandbox = "sandbox.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sandbox*", "shared*"]
+
+[tool.setuptools.package-data]
+shared = ["*"]
+sandbox = ["static/*"]

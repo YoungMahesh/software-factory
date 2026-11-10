@@ -15,3 +15,8 @@ node_modules
 *.db
 .env*
 !.env.example
+
+# Python packaging
+*.egg-info/
+dist/
+build/

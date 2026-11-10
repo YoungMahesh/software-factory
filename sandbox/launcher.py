@@ -276,7 +276,7 @@ class SandboxLauncher:
                 "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
                 "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET",
                 "ANTIGRAVITY_PROJECT_ID", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
-                "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN",
+                "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
                 "WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN",
             ]
             env_dict = {k: os.environ[k] for k in secret_keys if k in os.environ and os.environ[k]}

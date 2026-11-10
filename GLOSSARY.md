@@ -16,6 +16,14 @@ _Avoid_: Basic sandbox, container VM
 A Modal sandbox execution environment provisioned without a Target Repository (`-r/--repo`), launched under a constant Modal App named via `--name` with an empty Git repository and default `.gitignore` initialized under `/root/<sandbox-name>`, and configured to run without cloning a remote target repository.
 _Avoid_: Empty sandbox, blank runner, scratch container
 
+**Standalone Quickstart**:
+The minimal onboarding workflow that provisions an isolated cloud execution environment using only `modal-sandbox --name <name>` and standard Modal CLI authentication (`modal setup`), without requiring repository credentials, GitHub personal access tokens, or encryption keys.
+_Avoid_: Zero-secret start, basic setup, blank init
+
+**Modal Sandbox CLI**:
+The primary command-line interface executable (`modal-sandbox`) packaged via `pyproject.toml` and registered from `sandbox.main:main`, enabling developers to provision, inspect, snapshot, and resume Modal execution environments directly from any terminal.
+_Avoid_: Runner script, main.py, sandbox wrapper
+
 **Named Sandbox Runner**:
 A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository name or `--name`) while individual sandbox execution environments are uniquely named inside that App.
 _Avoid_: Static runner, single-app runner, constant container
