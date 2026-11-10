@@ -229,9 +229,8 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-project"])
@@ -263,9 +262,8 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "test1", "--testing"])
@@ -438,9 +436,8 @@ class TestSandboxCliArgs(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "full-repo", "--full-clone"])

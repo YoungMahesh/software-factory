@@ -156,5 +156,82 @@ class TestSandboxLauncher(unittest.TestCase):
         self.assertEqual(resp.sandbox_id, "sb-func-1")
 
 
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_injects_host_git_identity_into_container_env(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-git-id"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        mock_git_id = MagicMock(return_value={
+            "GIT_AUTHOR_NAME": "Test Author",
+            "GIT_AUTHOR_EMAIL": "author@test.com",
+            "GIT_COMMITTER_NAME": "Test Author",
+            "GIT_COMMITTER_EMAIL": "author@test.com",
+        })
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            resolve_git_identity_fn=mock_git_id,
+        )
+
+        req = LaunchRequest(name="git-env-app")
+        launcher.launch(req)
+
+        mock_git_id.assert_called_once()
+        call_env = mock_create.call_args.kwargs["env"]
+        self.assertEqual(call_env["GIT_AUTHOR_NAME"], "Test Author")
+        self.assertEqual(call_env["GIT_AUTHOR_EMAIL"], "author@test.com")
+        self.assertEqual(call_env["GIT_COMMITTER_NAME"], "Test Author")
+        self.assertEqual(call_env["GIT_COMMITTER_EMAIL"], "author@test.com")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_unqualified_repo_without_gh_org_name_raises_value_error(self, mock_lookup, mock_create):
+        import os
+        from unittest.mock import patch
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+        )
+        req = LaunchRequest(repo="bare-repo")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "dummy", "GH_ORG_NAME": ""}, clear=False):
+            with patch("sandbox.launcher.DEFAULT_ORG", ""):
+                with self.assertRaises(ValueError) as ctx:
+                    launcher.launch(req)
+                self.assertIn("has no owner prefix and GH_ORG_NAME is not set", str(ctx.exception))
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_unqualified_repo_with_gh_org_name_resolves_target_repo(self, mock_lookup, mock_create):
+        import os
+        from unittest.mock import patch
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-org-res"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+        )
+        req = LaunchRequest(repo="bare-repo")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "dummy", "GH_ORG_NAME": "custom-org"}, clear=False):
+            launcher.launch(req)
+            call_env = mock_create.call_args.kwargs["env"]
+            self.assertEqual(call_env["GH_REPO"], "custom-org/bare-repo")
+            self.assertEqual(call_env["GH_ORG"], "custom-org")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -139,10 +139,10 @@ __pycache__/
 *.pyc
 EOF
             git -C "$TARGET_DIR" add .gitignore
-            GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Mahesh}" \
-            GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-maheshghamand@gmail.com}" \
-            GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Mahesh}" \
-            GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-maheshghamand@gmail.com}" \
+            GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Modal Sandbox User}" \
+            GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-sandbox@modal.local}" \
+            GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Modal Sandbox User}" \
+            GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-sandbox@modal.local}" \
             git -C "$TARGET_DIR" commit -m "initial commit"
         fi
         echo "📁 Workspace resolved to $TARGET_DIR"
@@ -157,8 +157,12 @@ EOF
             exit 1
         fi
 
-        DEFAULT_ORG="${GH_ORG_NAME:-sFactory0}"
+        DEFAULT_ORG="${GH_ORG_NAME:-}"
         if [[ "$GH_REPO" != *"/"* ]]; then
+            if [ -z "$DEFAULT_ORG" ]; then
+                echo "ERROR: GH_REPO ('$GH_REPO') has no owner prefix and GH_ORG_NAME is not set." >&2
+                exit 1
+            fi
             GH_REPO="${DEFAULT_ORG}/$GH_REPO"
         fi
 
@@ -570,11 +574,34 @@ else
     fi
 fi
 
-# Export GH_TOKEN to shell environment if present
+# Export GH_TOKEN and GH_ORG_NAME to shell environment if present
 if [ -n "${GH_TOKEN:-}" ]; then
     export GH_TOKEN
     grep -qxF "export GH_TOKEN=\"$GH_TOKEN\"" ~/.bashrc 2>/dev/null || echo "export GH_TOKEN=\"$GH_TOKEN\"" >> ~/.bashrc
     grep -qxF "GH_TOKEN=\"$GH_TOKEN\"" /etc/environment 2>/dev/null || echo "GH_TOKEN=\"$GH_TOKEN\"" >> /etc/environment
+fi
+if [ -n "${GH_ORG_NAME:-}" ]; then
+    export GH_ORG_NAME
+    grep -qxF "export GH_ORG_NAME=\"$GH_ORG_NAME\"" ~/.bashrc 2>/dev/null || echo "export GH_ORG_NAME=\"$GH_ORG_NAME\"" >> ~/.bashrc
+    grep -qxF "GH_ORG_NAME=\"$GH_ORG_NAME\"" /etc/environment 2>/dev/null || echo "GH_ORG_NAME=\"$GH_ORG_NAME\"" >> /etc/environment
+fi
+
+# Export host Git identity if passed
+if [ -n "${GIT_AUTHOR_NAME:-}" ]; then
+    export GIT_AUTHOR_NAME
+    export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$GIT_AUTHOR_NAME}"
+    grep -qxF "export GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" ~/.bashrc 2>/dev/null || echo "export GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" >> ~/.bashrc
+    grep -qxF "export GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" ~/.bashrc 2>/dev/null || echo "export GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" >> ~/.bashrc
+    grep -qxF "GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" /etc/environment 2>/dev/null || echo "GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" >> /etc/environment
+    grep -qxF "GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" /etc/environment 2>/dev/null || echo "GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" >> /etc/environment
+fi
+if [ -n "${GIT_AUTHOR_EMAIL:-}" ]; then
+    export GIT_AUTHOR_EMAIL
+    export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$GIT_AUTHOR_EMAIL}"
+    grep -qxF "export GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" ~/.bashrc 2>/dev/null || echo "export GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" >> ~/.bashrc
+    grep -qxF "export GIT_COMMITTER_EMAIL=\"$GIT_COMMITTER_EMAIL\"" ~/.bashrc 2>/dev/null || echo "export GIT_COMMITTER_EMAIL=\"$GIT_COMMITTER_EMAIL\"" >> ~/.bashrc
+    grep -qxF "GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" /etc/environment 2>/dev/null || echo "GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" >> /etc/environment
+    grep -qxF "GIT_COMMITTER_EMAIL=\"$GIT_COMMITTER_EMAIL\"" /etc/environment 2>/dev/null || echo "GIT_COMMITTER_EMAIL=\"$GIT_COMMITTER_EMAIL\"" >> /etc/environment
 fi
 grep -qxF "unset GH_REPO" ~/.bashrc 2>/dev/null || echo "unset GH_REPO" >> ~/.bashrc
 unset GH_REPO 2>/dev/null || true

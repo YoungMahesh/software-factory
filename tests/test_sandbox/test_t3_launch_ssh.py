@@ -1,6 +1,7 @@
 """Launch orchestration and SSH access tests for T3 Code integration."""
 
 import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -46,6 +47,32 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         self.assertIn("Scan with T3 Code Mobile App (iOS / Android):", output)
         self.assertIn("█▀▀█", output)
 
+    def test_print_access_info_cloudflare_custom_domain(self):
+        from sandbox.main import print_access_info
+        mock_sb = MagicMock()
+        mock_sb.object_id = "sb-cf-custom"
+
+        stdout_buf = io.StringIO()
+        with patch.dict(os.environ, {"MODAL_SANDBOX_TUNNEL_DOMAIN": "preview.example.com"}):
+            with patch("sys.stdout", stdout_buf):
+                print_access_info(sandbox=mock_sb, app_name="my-app", cloudflare_enabled=True)
+
+        output = stdout_buf.getvalue()
+        self.assertIn("• Cloudflare: https://preview.example.com (port 3000)", output)
+
+    def test_print_access_info_cloudflare_unset_domain_fallback(self):
+        from sandbox.main import print_access_info
+        mock_sb = MagicMock()
+        mock_sb.object_id = "sb-cf-fallback"
+
+        stdout_buf = io.StringIO()
+        with patch.dict(os.environ, {"MODAL_SANDBOX_TUNNEL_DOMAIN": "", "CLOUDFLARE_TUNNEL_DOMAIN": ""}):
+            with patch("sys.stdout", stdout_buf):
+                print_access_info(sandbox=mock_sb, app_name="my-app", cloudflare_enabled=True)
+
+        output = stdout_buf.getvalue()
+        self.assertIn("• Cloudflare: Active on port 3000 (set MODAL_SANDBOX_TUNNEL_DOMAIN to display custom URL)", output)
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     @patch("sandbox.main.build_sandbox_image")
@@ -69,9 +96,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3"])
@@ -121,9 +147,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3", "--no-t3-persist"])
@@ -157,9 +182,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3", "--t3-usage-volume", "custom-usage-volume"])
@@ -202,9 +226,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3"])
@@ -250,9 +273,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3"])
@@ -297,9 +319,8 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_sandbox_create.return_value = mock_sandbox
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
+            dotenv_file = Path(tmpdir) / ".env"
+            dotenv_file.write_text("GH_TOKEN=dummy\nGH_ORG_NAME=sFactory0\n")
 
             parser = create_parser()
             args = parser.parse_args(["-r", "my-repo", "--t3", "--t3-ssh-host", "my-custom-box"])

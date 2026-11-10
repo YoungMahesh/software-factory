@@ -1,3 +1,4 @@
+import os
 """Terminal formatting, QR code generation, and SSH configuration helpers."""
 
 import io
@@ -111,7 +112,12 @@ def print_access_info(
     sb_id = sandbox_id or (sandbox.object_id if sandbox else "unknown")
     print(f"  • Shell:    modal shell {sb_id}")
     if cloudflare_enabled:
-        print(f"  • Cloudflare: https://{DEFAULT_WEB_PORT}.mahesh0.dev (port {DEFAULT_WEB_PORT})")
+        tunnel_domain = os.getenv("MODAL_SANDBOX_TUNNEL_DOMAIN") or os.getenv("CLOUDFLARE_TUNNEL_DOMAIN", "")
+        if tunnel_domain:
+            url = tunnel_domain if tunnel_domain.startswith(("http://", "https://")) else f"https://{tunnel_domain}"
+            print(f"  • Cloudflare: {url} (port {DEFAULT_WEB_PORT})")
+        else:
+            print(f"  • Cloudflare: Active on port {DEFAULT_WEB_PORT} (set MODAL_SANDBOX_TUNNEL_DOMAIN to display custom URL)")
     if memory_gb:
         print(f"  • Memory:   Burstable (128 MiB - 16 GiB) + {memory_gb * 2} GB swap")
     elif is_vm:

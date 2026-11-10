@@ -94,7 +94,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--repo",
         dest="repo",
         default=None,
-        help="Target GitHub repository name (e.g. sFactory0/software-factory or shorthand software-factory). When omitted, launches a Standalone Sandbox without repository fetch.",
+        help="Target GitHub repository name (e.g. owner/repo or shorthand repo). When omitted, launches a Standalone Sandbox without repository fetch.",
     )
 
     parser.add_argument(
@@ -102,7 +102,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--test",
         dest="testing",
         action="store_true",
-        help="Target repository under canonical organization sFactory0 using test- prefix (e.g. sFactory0/test-<repo>).",
+        help="Target repository with test- prefix in default organization (e.g. test-<repo>).",
     )
     parser.add_argument(
         "--opencode",
@@ -184,7 +184,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-cloudflare",
         action="store_true",
-        help="Disable the default Cloudflare Tunnel (3000.mahesh0.dev) for this sandbox.",
+        help="Disable the default Cloudflare Tunnel for this sandbox.",
     )
     parser.add_argument(
         "--no-ssh-config",

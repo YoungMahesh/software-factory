@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_ORG="sFactory0"
+DEFAULT_ORG="${GH_ORG_NAME:-}"
 
 show_help() {
   cat <<'EOF'
 Usage: ghclone <repo> [destination] [options] [gh repo clone / git clone flags...]
 
-Clone a repository from GitHub (defaults to sFactory0) into ~/ path in the sandbox
+Clone a repository from GitHub into ~/ path in the sandbox
 and decrypt repository environment secrets defined in .secrets/env.map.
 
 Arguments:
-  repo                  Repository name (e.g. 'my-repo', 'sFactory0/my-repo', or 'org/repo').
-                        If the owner prefix is omitted, it defaults to sFactory0.
+  repo                  Repository name (e.g. 'my-repo', 'owner/my-repo', or 'org/repo').
+                        If the owner prefix is omitted, GH_ORG_NAME is used.
   destination           Target directory (defaults to ~/<repo-name>).
                         Can be relative or absolute, and '~' is expanded to $HOME.
 
@@ -23,8 +23,8 @@ Options:
 Any other flags (or flags after '--') are passed directly to 'gh repo clone'.
 
 Examples:
-  ghclone my-repo                         # Clones sFactory0/my-repo to ~/my-repo and decrypts env
-  ghclone my-repo ~/custom-dir            # Clones sFactory0/my-repo to ~/custom-dir and decrypts env
+  ghclone my-repo                         # Clones $GH_ORG_NAME/my-repo to ~/my-repo and decrypts env
+  ghclone my-repo ~/custom-dir            # Clones $GH_ORG_NAME/my-repo to ~/custom-dir and decrypts env
   ghclone other-org/repo                  # Clones other-org/repo to ~/repo and decrypts env
   ghclone my-repo --no-decrypt            # Clones without decrypting environment secrets
   ghclone my-repo -- --depth 1            # Clones shallow with depth 1
@@ -64,6 +64,11 @@ shift
 if [[ "$RAW_REPO" == *"/"* ]]; then
   TARGET_REPO="$RAW_REPO"
 else
+  if [[ -z "$DEFAULT_ORG" ]]; then
+    echo "Error: Target repository '$RAW_REPO' has no owner prefix and GH_ORG_NAME is not set." >&2
+    echo "Specify owner/repo or export GH_ORG_NAME." >&2
+    exit 1
+  fi
   TARGET_REPO="${DEFAULT_ORG}/${RAW_REPO}"
 fi
 

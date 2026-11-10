@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import secrets
+import subprocess
 from typing import Any, Callable
 import uuid
 
@@ -112,6 +113,45 @@ class RunningSandbox:
         return iter((self.sandbox, self.response))
 
 
+def resolve_host_git_identity() -> dict[str, str]:
+    """Dynamically resolves host Git identity from environment or git configuration."""
+    git_env: dict[str, str] = {}
+    name = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("GIT_COMMITTER_NAME")
+    email = os.environ.get("GIT_AUTHOR_EMAIL") or os.environ.get("GIT_COMMITTER_EMAIL")
+    if not name:
+        try:
+            res = subprocess.run(
+                ["git", "config", "user.name"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                name = res.stdout.strip()
+        except Exception:
+            pass
+    if not email:
+        try:
+            res = subprocess.run(
+                ["git", "config", "user.email"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                email = res.stdout.strip()
+        except Exception:
+            pass
+
+    if name:
+        git_env["GIT_AUTHOR_NAME"] = name
+        git_env["GIT_COMMITTER_NAME"] = name
+    if email:
+        git_env["GIT_AUTHOR_EMAIL"] = email
+        git_env["GIT_COMMITTER_EMAIL"] = email
+    return git_env
+
+
 class SandboxLauncher:
     """Deep module for provisioning and configuring Modal sandboxes."""
 
@@ -121,6 +161,7 @@ class SandboxLauncher:
         build_image_fn: Callable[..., modal.Image] | None = None,
         load_pubkey_fn: Callable[[], str] | None = None,
         append_ssh_fn: Callable[..., bool] | None = None,
+        resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
         log_cb: Callable[[str], None] | None = None,
         repo_root: Path | None = None,
     ) -> None:
@@ -128,6 +169,7 @@ class SandboxLauncher:
         self.build_image_fn = build_image_fn or build_sandbox_image
         self.load_pubkey_fn = load_pubkey_fn or load_ssh_pub_key
         self.append_ssh_fn = append_ssh_fn or append_ssh_config
+        self.resolve_git_identity_fn = resolve_git_identity_fn or resolve_host_git_identity
         self.log_cb = log_cb
         self.repo_root = repo_root
 
@@ -161,16 +203,19 @@ class SandboxLauncher:
 
         has_gh_token = bool(os.environ.get("GH_TOKEN"))
         dotenv_file = repo_root / ".env"
-        if not has_gh_token and dotenv_file.is_file():
+        if dotenv_file.is_file():
             try:
                 for line in dotenv_file.read_text(encoding="utf-8").splitlines():
                     line = line.strip()
-                    if line.startswith("GH_TOKEN="):
+                    if not has_gh_token and line.startswith("GH_TOKEN="):
                         val = line.split("=", 1)[1].strip().strip("'\"")
                         if val:
                             has_gh_token = True
                             os.environ["GH_TOKEN"] = val
-                            break
+                    if not os.environ.get("GH_ORG_NAME") and line.startswith("GH_ORG_NAME="):
+                        val = line.split("=", 1)[1].strip().strip("'\"")
+                        if val:
+                            os.environ["GH_ORG_NAME"] = val
             except Exception:
                 pass
 
@@ -179,11 +224,17 @@ class SandboxLauncher:
                 raise FileNotFoundError(
                     f"GitHub credentials (GH_TOKEN) not found in environment or {repo_root / '.env'}."
                 )
-            org_name, raw_repo = (
-                clean_repo.split("/", 1)
-                if "/" in clean_repo
-                else (os.environ.get("GH_ORG_NAME", DEFAULT_ORG), clean_repo)
-            )
+            if "/" in clean_repo:
+                org_name, raw_repo = clean_repo.split("/", 1)
+            else:
+                default_org = os.environ.get("GH_ORG_NAME") or DEFAULT_ORG
+                if not default_org:
+                    raise ValueError(
+                        f"Target repository '{clean_repo}' has no owner prefix and GH_ORG_NAME is not set. "
+                        f"Specify owner/repo (e.g. owner/{clean_repo}) or set GH_ORG_NAME."
+                    )
+                org_name, raw_repo = default_org, clean_repo
+
             bare_repo = (
                 raw_repo
                 if (not req.testing or raw_repo.startswith("test-"))
@@ -236,6 +287,7 @@ class SandboxLauncher:
             "HOSTNAME": "0.0.0.0", "APP_NAME": sandbox_name,
             "MODAL_APP_NAME": app_name, "SANDBOX_NAME": sandbox_name,
         }
+        env.update(self.resolve_git_identity_fn())
 
         if req.from_snapshot: env["RESUME_SNAPSHOT"] = "1"
         if clean_repo is None: env["NO_REPO"] = "1"
@@ -402,6 +454,7 @@ class SandboxLauncher:
         build_image_fn: Callable | None = None,
         load_pubkey_fn: Callable | None = None,
         append_ssh_fn: Callable | None = None,
+        resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
         client: modal.Client | None = None,
         log_cb: Callable[[str], None] | None = None,
         register_ssh_config: bool = False,
@@ -409,7 +462,8 @@ class SandboxLauncher:
         """Instantiates a SandboxLauncher and launches the requested sandbox."""
         launcher = cls(
             client=client, build_image_fn=build_image_fn, load_pubkey_fn=load_pubkey_fn,
-            append_ssh_fn=append_ssh_fn, log_cb=log_cb, repo_root=repo_root,
+            append_ssh_fn=append_ssh_fn, resolve_git_identity_fn=resolve_git_identity_fn,
+            log_cb=log_cb, repo_root=repo_root,
         )
         return launcher.launch(req, register_ssh_config=register_ssh_config)
 
@@ -423,10 +477,12 @@ def launch_sandbox(
     log_cb: Callable[[str], None] | None = None,
     register_ssh_config: bool = False,
     append_ssh_fn: Callable | None = None,
+    resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
 ) -> RunningSandbox:
     """Convenience functional seam delegating to SandboxLauncher."""
     return SandboxLauncher.run(
         req=req, repo_root=repo_root, build_image_fn=build_image_fn,
         load_pubkey_fn=load_pubkey_fn, append_ssh_fn=append_ssh_fn,
+        resolve_git_identity_fn=resolve_git_identity_fn,
         client=client, log_cb=log_cb, register_ssh_config=register_ssh_config,
     )

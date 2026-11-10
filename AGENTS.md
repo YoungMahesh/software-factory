@@ -23,7 +23,7 @@ Single-context layout (`GLOSSARY.md` and `docs/adr/` at repo root). See [`docs/a
 ### Verification
 
 - **Automated tests**: Run `pytest` before finalizing changes. All tests and line budgets must pass cleanly.
-- **Sandbox live verification**: When running end-to-end tests against live Modal infrastructure, strictly target the test baseline (`sFactory0/test-live-test1` using `--testing` or `scripts/test_live_sandbox.py`) and ensure immediate termination of launched sandboxes.
+- **Sandbox live verification**: When running end-to-end tests against live Modal infrastructure, strictly target the test baseline (`test-live-test1` using `--testing` or `scripts/test_live_sandbox.py`) under the configured default organization (`GH_ORG_NAME`) and ensure immediate termination of launched sandboxes.
 
 ### Universal file line budget and ratchet
 

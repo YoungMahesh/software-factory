@@ -70,119 +70,51 @@ class TestSandboxGitConfig(unittest.TestCase):
             BASE_IMAGE_FILES,
             LOCAL_GITCONFIG,
             REMOTE_GITCONFIG,
-            LOCAL_GITCONFIG_MAHESH471978,
-            REMOTE_GITCONFIG_MAHESH471978,
         )
 
         self.assertEqual(LOCAL_GITCONFIG, self.gitconfig_path)
         self.assertEqual(REMOTE_GITCONFIG, "/root/.gitconfig")
-        self.assertEqual(LOCAL_GITCONFIG_MAHESH471978, self.gitconfig_mahesh_path)
-        self.assertEqual(REMOTE_GITCONFIG_MAHESH471978, "/root/.gitconfig-mahesh471978")
 
         self.assertIn((LOCAL_GITCONFIG, REMOTE_GITCONFIG), BASE_IMAGE_FILES)
-        self.assertIn(
-            (LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978),
-            BASE_IMAGE_FILES,
-        )
         self.assertTrue(LOCAL_GITCONFIG.exists())
-        self.assertTrue(LOCAL_GITCONFIG_MAHESH471978.exists())
+        self.assertFalse(self.gitconfig_mahesh_path.exists())
 
     def test_base_gitconfig_declares_github_credential_helpers(self):
         content = self.gitconfig_path.read_text()
         self.assertIn('[credential "https://github.com"]', content)
         self.assertIn('helper = !/usr/bin/gh auth git-credential', content)
         self.assertIn('[credential "https://gist.github.com"]', content)
+        self.assertIn("defaultBranch = main", content)
 
-    def test_base_gitconfig_declares_primary_identity_and_conditional_inclusion(self):
+    def test_base_gitconfig_has_no_hardcoded_identities_or_conditional_profiles(self):
         content = self.gitconfig_path.read_text()
-        self.assertIn("name = Mahesh", content)
-        self.assertIn("email = maheshghamand@gmail.com", content)
-        self.assertIn('[includeIf "gitdir:/root/intrifund/"]', content)
-        self.assertIn("path = ~/.gitconfig-mahesh471978", content)
+        self.assertNotIn("name = Mahesh", content)
+        self.assertNotIn("maheshghamand@gmail.com", content)
+        self.assertNotIn("includeIf", content)
+        self.assertNotIn("gitconfig-mahesh471978", content)
 
-    def test_secondary_gitconfig_is_pure_delta_override_without_redundant_name(self):
-        secondary_content = self.gitconfig_mahesh_path.read_text()
-        self.assertIn("email = mahesh471978@gmail.com", secondary_content)
-        self.assertNotIn(
-            "name",
-            secondary_content,
-            "Secondary profile should not redeclare name; it inherits from base gitconfig",
-        )
+    def test_startup_script_uses_generic_author_defaults(self):
+        startup_content = self.startup_sh_path.read_text()
+        self.assertIn('GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Modal Sandbox User}"', startup_content)
+        self.assertIn('GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-sandbox@modal.local}"', startup_content)
+        self.assertNotIn("maheshghamand@gmail.com", startup_content)
 
     def test_startup_script_does_not_mutate_git_config_inline(self):
         startup_content = self.startup_sh_path.read_text()
         self.assertNotIn("git config --global user.email", startup_content)
         self.assertNotIn("git config --global user.name", startup_content)
 
-    def test_offline_git_identity_resolution_cascades_name_and_overrides_email(self):
+    def test_host_git_identity_resolution(self):
+        from sandbox.launcher import resolve_host_git_identity
         import os
-        import tempfile
+        from unittest.mock import patch
 
-        with tempfile.TemporaryDirectory() as td:
-            temp_dir = Path(td)
-            # Replicate base and secondary configs, routing the simulated intrifund directory to the override profile
-            base_cfg_content = self.gitconfig_path.read_text().replace(
-                "/root/intrifund/", str(temp_dir / "intrifund") + "/"
-            )
-            override_cfg_content = self.gitconfig_mahesh_path.read_text()
-
-            home_dir = temp_dir / "home"
-            home_dir.mkdir()
-            (home_dir / ".gitconfig").write_text(base_cfg_content)
-            (home_dir / ".gitconfig-mahesh471978").write_text(override_cfg_content)
-
-            default_repo = temp_dir / "default_org" / "repo1"
-            default_repo.mkdir(parents=True)
-            subprocess.run(["git", "init"], cwd=default_repo, check=True, capture_output=True)
-
-            intrifund_repo = temp_dir / "intrifund" / "repo2"
-            intrifund_repo.mkdir(parents=True)
-            subprocess.run(["git", "init"], cwd=intrifund_repo, check=True, capture_output=True)
-
-            env = os.environ.copy()
-            env["HOME"] = str(home_dir)
-            env["GIT_CONFIG_GLOBAL"] = str(home_dir / ".gitconfig")
-            env["GIT_CONFIG_NOSYSTEM"] = "1"
-
-            # Default repo retains global name and global email
-            res_default_name = subprocess.run(
-                ["git", "config", "user.name"],
-                cwd=default_repo,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            res_default_email = subprocess.run(
-                ["git", "config", "user.email"],
-                cwd=default_repo,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            self.assertEqual(res_default_name, "Mahesh")
-            self.assertEqual(res_default_email, "maheshghamand@gmail.com")
-
-            # Intrifund repo cascades global name and overrides email from secondary profile
-            res_intrifund_name = subprocess.run(
-                ["git", "config", "user.name"],
-                cwd=intrifund_repo,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            res_intrifund_email = subprocess.run(
-                ["git", "config", "user.email"],
-                cwd=intrifund_repo,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            self.assertEqual(res_intrifund_name, "Mahesh")
-            self.assertEqual(res_intrifund_email, "mahesh471978@gmail.com")
+        with patch.dict(os.environ, {"GIT_AUTHOR_NAME": "Alice", "GIT_AUTHOR_EMAIL": "alice@example.com"}):
+            ident = resolve_host_git_identity()
+            self.assertEqual(ident.get("GIT_AUTHOR_NAME"), "Alice")
+            self.assertEqual(ident.get("GIT_COMMITTER_NAME"), "Alice")
+            self.assertEqual(ident.get("GIT_AUTHOR_EMAIL"), "alice@example.com")
+            self.assertEqual(ident.get("GIT_COMMITTER_EMAIL"), "alice@example.com")
 
 
 
@@ -196,8 +128,6 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_ALIASES_BASH,
             LOCAL_GITCONFIG,
             REMOTE_GITCONFIG,
-            LOCAL_GITCONFIG_MAHESH471978,
-            REMOTE_GITCONFIG_MAHESH471978,
             LOCAL_SETUP_SCRIPT,
             REMOTE_SETUP_SCRIPT,
             LOCAL_AGYQ,
@@ -222,7 +152,6 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT),
             (LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH),
             (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
-            (LOCAL_GITCONFIG_MAHESH471978, REMOTE_GITCONFIG_MAHESH471978),
             (LOCAL_SETUP_SCRIPT, REMOTE_SETUP_SCRIPT),
             (LOCAL_AGYQ, REMOTE_AGYQ),
             (LOCAL_GHLS, REMOTE_GHLS),

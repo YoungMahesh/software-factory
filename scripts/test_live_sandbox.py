@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Automated Live Verification for Modal Sandboxes (Standard & VM).
 
-Implements the Sandbox Live Verification standard against Test Repository Baseline
-(sFactory0/test-live-test1). Ephemeral execution with guaranteed teardown.
+Implements the Sandbox Live Verification standard against Test Repository Baseline.
+Ephemeral execution with guaranteed teardown.
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import time
@@ -20,7 +21,26 @@ from shared.image import (
     load_ssh_pub_key,
 )
 
-DEFAULT_ORG = "sFactory0"
+
+def resolve_default_org() -> str:
+    org = os.environ.get("GH_ORG_NAME", "")
+    if org:
+        return org
+    dotenv = root_dir / ".env"
+    if dotenv.is_file():
+        try:
+            for line in dotenv.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("GH_ORG_NAME="):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+                    if val:
+                        return val
+        except Exception:
+            pass
+    return ""
+
+
+DEFAULT_ORG = resolve_default_org()
 DEFAULT_TEST_REPO = "test-live-test1"
 
 
@@ -31,7 +51,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repo",
         default=DEFAULT_TEST_REPO,
-        help=f"Target repository name under {DEFAULT_ORG} (default: {DEFAULT_TEST_REPO})",
+        help=f"Target repository name (default: {DEFAULT_TEST_REPO})",
     )
     parser.add_argument(
         "--vm",
@@ -62,13 +82,26 @@ def main() -> None:
             f"Organization credentials not found at {orgs_env_file}. Ensure secrets/github-orgs.env exists."
         )
 
-    app_name = f"test-live-verifier-{args.repo}"
+    if "/" in args.repo:
+        target_org, repo_name = args.repo.split("/", 1)
+    else:
+        target_org = DEFAULT_ORG or resolve_default_org()
+        repo_name = args.repo
+
+    if not target_org:
+        raise ValueError(
+            "Target repository has no organization prefix and GH_ORG_NAME is not set. "
+            "Specify owner/repo or set GH_ORG_NAME."
+        )
+
+    target_repo = f"{target_org}/{repo_name}"
+    app_name = f"test-live-verifier-{repo_name}"
     app = modal.App.lookup(app_name, create_if_missing=True)
     pubkey = load_ssh_pub_key()
 
     print("================================================================")
     print("🚀 Sandbox Live Verification")
-    print(f"   Target: {DEFAULT_ORG}/{args.repo}")
+    print(f"   Target: {target_repo}")
     print(f"   Mode:   {'VM Sandbox' if args.vm else 'Standard Sandbox'}")
     print(f"   Snapshots Check: {'Yes' if args.snapshots else 'No'}")
     print("================================================================\n")
@@ -87,7 +120,7 @@ def main() -> None:
         "HOSTNAME": "0.0.0.0",
         "APP_NAME": app_name,
         "ENABLE_CLOUDFLARE": "0",
-        "GH_REPO": f"{DEFAULT_ORG}/{args.repo}",
+        "GH_REPO": target_repo,
     }
 
     sandbox_kwargs: dict = {
@@ -114,7 +147,7 @@ def main() -> None:
         else [modal.Secret.from_dict({"GH_TOKEN": os.environ.get("GH_TOKEN", "")})]
     )
 
-    print(f"📦 Provisioning ephemeral Modal Sandbox for {DEFAULT_ORG}/{args.repo}...")
+    print(f"📦 Provisioning ephemeral Modal Sandbox for {target_repo}...")
     sandbox = modal.Sandbox.create(
         "bash",
         REMOTE_STARTUP_SCRIPT,
@@ -128,7 +161,7 @@ def main() -> None:
         print(f"🏝️  Sandbox {sandbox.object_id} launched. Awaiting startup and git clone completion...")
 
         # 1. Wait for repo clone to complete
-        target_path = f"/root/{args.repo}"
+        target_path = f"/root/{repo_name}"
         ready = False
         for attempt in range(45):
             proc = sandbox.exec("bash", "-c", f"test -d {target_path} && echo READY || echo WAITING")
@@ -175,7 +208,7 @@ def main() -> None:
             print(f"✅ Filesystem Snapshot captured: {snapshot_image.object_id}")
 
             print("♻️  Testing restore from snapshot image...")
-            restore_app_name = f"test-restore-{args.repo}"
+            restore_app_name = f"test-restore-{repo_name}"
             restore_app = modal.App.lookup(restore_app_name, create_if_missing=True)
             restore_env = {
                 "SSH_AUTHORIZED_KEY": pubkey,

@@ -176,11 +176,16 @@ class TestSandboxFunctionAPI(unittest.TestCase):
     def test_missing_credentials_raises_error_when_enforced(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             empty_root = Path(tmpdir)
-            with self.assertRaises(RuntimeError) as ctx:
-                resolve_and_validate_web_credentials(empty_root, enforce=True)
-            self.assertIn("Missing required environment variable(s)", str(ctx.exception))
-            self.assertIn("WEB_UI_USERNAME", str(ctx.exception))
-            self.assertIn("WEB_UI_PASSWORD", str(ctx.exception))
+            with patch.dict(
+                "os.environ",
+                {"WEB_UI_USERNAME": "", "WEB_UI_PASSWORD": "", "MODAL_SANDBOX_AUTH_TOKEN": ""},
+                clear=False,
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    resolve_and_validate_web_credentials(empty_root, enforce=True)
+                self.assertIn("Missing required environment variable(s)", str(ctx.exception))
+                self.assertIn("WEB_UI_USERNAME", str(ctx.exception))
+                self.assertIn("WEB_UI_PASSWORD", str(ctx.exception))
 
     def test_credentials_resolved_from_environment(self):
         with tempfile.TemporaryDirectory() as tmpdir:

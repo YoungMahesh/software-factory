@@ -76,16 +76,16 @@ _Avoid_: Config file, root env, secret bundle
 An optional Modal secret collection (`share0`) or environment variable providing `AGE_PRIVATE_KEY` for SOPS bootstrap, strictly invoked when a cloned target repository provides an In-Repo Secret Manifest (`.secrets/env.map`).
 _Avoid_: Global secret, root secret, default secret
 
-**Test Organization**:
-The canonical GitHub organization (`sFactory0`) used with `test-` prefixed repositories configured with organization credentials used exclusively for automated pipeline verification and ephemeral integration testing.
+**Test Organization Scope**:
+The GitHub organization configured via `GH_ORG_NAME` in `.env`, within which `test-` prefixed repositories are targeted for automated pipeline verification and ephemeral integration testing without requiring a dedicated testing organization.
 _Avoid_: Test org, mock org, testing workspace
 
 **Test Repository Baseline**:
-The designated minimal test fixture repository (`sFactory0/test-live-test1`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
+The designated minimal test fixture repository (`test-live-test1` under the configured `GH_ORG_NAME`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
 _Avoid_: Default test repo, test mock, dummy repo
 
 **Sandbox Live Verification**:
-An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`sFactory0/test-live-test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
+An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`test-live-test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
 **SOPS Decryption**:
@@ -113,8 +113,12 @@ A curated collection of interactive shell shortcuts for Docker and Git operation
 _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
 
 **Sandbox Git Configuration**:
-Declarative global Git configuration and identity routing files tracked in `shared/gitconfig` and secondary identity profiles (e.g. `shared/gitconfig-mahesh471978`), staged into the Shared Base Image at `/root/.gitconfig` and `/root/.gitconfig-<identity>`, providing default authorship (`maheshghamand@gmail.com`) and conditional repository identity overrides (`includeIf`) without runtime shell mutation.
-_Avoid_: Dynamic git config, inline git config, startup git config
+Declarative global Git configuration tracked in `shared/gitconfig`, staged into the Shared Base Image at `/root/.gitconfig`, providing default branch initialization (`main`) and GitHub credential helpers (`gh auth git-credential`). Host user authorship (`GIT_AUTHOR_*` and `GIT_COMMITTER_*`) is dynamically resolved by `SandboxLauncher` during container provisioning and injected into the container environment with generic fallback defaults (`Modal Sandbox User <sandbox@modal.local>`).
+_Avoid_: Dynamic git config, inline git config, hardcoded git config
+
+**Cloudflare Tunnel Domain**:
+The public hostname routed by Cloudflare Tunnel to container port 3000, configured via `MODAL_SANDBOX_TUNNEL_DOMAIN` (or `CLOUDFLARE_TUNNEL_DOMAIN`), announced during sandbox readiness output or defaulting to a port readiness notice when unconfigured.
+_Avoid_: Static tunnel URL, hardcoded tunnel domain
 
 **Modal Client Credentials**:
 The authenticated client credentials (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`) provided via `.env` or written to `~/.modal.toml` via `scripts/setup.sh --modal` (mode 0600), allowing the Modal CLI and SDK to manage cloud resources within the sandbox.

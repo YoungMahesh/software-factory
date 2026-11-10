@@ -39,13 +39,13 @@ python sandbox/main.py -r <repo-name> --opencode --t3 --agy
 
 | Flag | Description | Default |
 | :--- | :--- | :--- |
-| `-r, --repo` | Target GitHub repository name (e.g. `sFactory0/<repo>` or `<repo>`) | None |
+| `-r, --repo` | Target GitHub repository name (e.g. `<owner>/<repo>` or shorthand `<repo>`) | None |
 | `--name` | Modal App name (required for standalone and snapshot resumes) | None |
 | `-b, --github-branch` | Git branch to checkout | `main` |
 | `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
 | `--vm` | Provision a Linux VM Sandbox with Docker daemon instead of container | `False` |
 | `--memory <GB>` | RAM allocation in GB (for VM sandboxes; allocates 2× swap) | `1` |
-| `--testing` | Target repository under canonical organization `sFactory0` using `test-` prefix | `False` |
+| `--testing` | Target repository with `test-` prefix in default organization | `False` |
 | `--opencode` | Launch OpenCode server on port 4096 with web tunnel | `False` |
 | `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
 | `--agy` | Enable Antigravity CLI and Antigravity Remote Control daemon | `False` |
@@ -84,7 +84,7 @@ python sandbox/main.py --from-snapshot <image-id> --name resumed-app [--vm]
   # Or via Modal CLI:
   modal shell <sandbox-id>
   ```
-- **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes `https://3000.mahesh0.dev` to container `localhost:3000`.
+- **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes external HTTPS traffic (customizable via `MODAL_SANDBOX_TUNNEL_DOMAIN`) to container `localhost:3000`.
 - **OpenCode (Port 4096)**: HTTPS tunnel URL and one-time password printed on launch when `--opencode` is passed.
 - **T3 Code Server**: Pairing URL and QR code printed on launch when `--t3` is passed.
 
@@ -132,7 +132,7 @@ pytest tests/test_sandbox tests/test_manage_sandboxes.py
 
 When verifying changes to `sandbox/main.py` against live Modal cloud infrastructure, all runs adhere to the **Sandbox Live Verification** standard:
 
-- **Target Repository**: Strictly uses the **Test Repository Baseline** (`sFactory0/test-live-test1`) via Organization credentials (`secrets/github-orgs.env`).
+- **Target Repository**: Strictly uses the **Test Repository Baseline** (`test-live-test1`) under the configured default organization (`GH_ORG_NAME`).
 - **Automated Verification**:
   ```bash
   python scripts/test_live_sandbox.py

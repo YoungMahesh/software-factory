@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_ORG="sFactory0"
+DEFAULT_ORG="${GH_ORG_NAME:-}"
 
 show_help() {
   cat <<'EOF'
 Usage: ghpr [repo] [gh pr list flags...]
 
-List pull requests for a repository in sFactory0 (or specified repo).
+List pull requests for a repository (or specified repo).
 
 Arguments:
-  repo                  Repository name (e.g. 'software-factory' or 'sFactory0/software-factory').
+  repo                  Repository name (e.g. 'my-repo' or 'owner/my-repo').
                         If omitted, inferred automatically from the current git repository.
 
 Options:
@@ -19,9 +19,9 @@ Options:
 Any other flags are passed directly to 'gh pr list'.
 
 Examples:
-  ghpr                                  # Open PRs in the current sFactory0 repository
-  ghpr software-factory                 # Open PRs in sFactory0/software-factory
-  ghpr software-factory --state all     # All PRs in sFactory0/software-factory
+  ghpr                                  # Open PRs in the current repository
+  ghpr my-repo                          # Open PRs in default org's my-repo
+  ghpr other-org/my-repo                # Open PRs in other-org/my-repo
   ghpr --state all                      # All PRs in the current repository
   ghpr --web                            # Open current repo's PR list in web browser
 EOF
@@ -77,6 +77,11 @@ else
   if [[ "$RAW_REPO" == *"/"* ]]; then
     TARGET_REPO="$RAW_REPO"
   else
+    if [[ -z "$DEFAULT_ORG" ]]; then
+      echo "Error: Target repository '$RAW_REPO' has no owner prefix and GH_ORG_NAME is not set." >&2
+      echo "Specify owner/repo or export GH_ORG_NAME." >&2
+      exit 1
+    fi
     TARGET_REPO="${DEFAULT_ORG}/${RAW_REPO}"
   fi
 fi

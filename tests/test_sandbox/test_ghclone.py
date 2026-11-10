@@ -24,7 +24,7 @@ class TestGhClone(unittest.TestCase):
             )
             self.assertEqual(res.returncode, 0)
             self.assertIn("Usage: ghclone", res.stdout)
-            self.assertIn("sFactory0", res.stdout)
+            self.assertIn("GH_ORG_NAME", res.stdout)
             self.assertIn("destination", res.stdout)
             self.assertIn("--no-decrypt", res.stdout)
             self.assertIn("decrypt", res.stdout)
@@ -47,6 +47,7 @@ class TestGhClone(unittest.TestCase):
         create_env_map=False,
         decrypt_exit_code=0,
         use_py_script_name=False,
+        extra_env=None,
     ):
         with tempfile.TemporaryDirectory() as td:
             temp_path = Path(td)
@@ -77,6 +78,9 @@ class TestGhClone(unittest.TestCase):
             mock_decrypt.chmod(mock_decrypt.stat().st_mode | stat.S_IXUSR)
 
             env = os.environ.copy()
+            env.setdefault("GH_ORG_NAME", "sFactory0")
+            if extra_env:
+                env.update(extra_env)
             orig_path = env.get("PATH", "")
             if use_py_script_name:
                 orig_path = ":".join(
@@ -107,12 +111,18 @@ class TestGhClone(unittest.TestCase):
         self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}")
         return gh_args
 
-    def test_clone_unqualified_repo_defaults_to_sfactory0_and_home_dir(self):
+    def test_clone_unqualified_repo_resolves_gh_org_name_and_home_dir(self):
         with tempfile.TemporaryDirectory() as home_td:
             args = self._run_with_mock_gh(["my-repo"], home_dir=home_td)
             self.assertEqual(
                 args, ["repo", "clone", "sFactory0/my-repo", f"{home_td}/my-repo"]
             )
+
+    def test_clone_unqualified_repo_without_gh_org_name_fails(self):
+        with tempfile.TemporaryDirectory() as home_td:
+            res, _, _ = self._run_with_mocks(["my-repo"], home_dir=home_td, extra_env={"GH_ORG_NAME": ""})
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("GH_ORG_NAME is not set", res.stderr)
 
     def test_clone_qualified_repo_preserves_owner_and_uses_home_dir(self):
         with tempfile.TemporaryDirectory() as home_td:
