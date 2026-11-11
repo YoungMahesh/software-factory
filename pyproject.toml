@@ -41,10 +41,12 @@ docs = [
 
 [project.scripts]
 modal-sandbox = "sandbox.main:main"
+push-repo-env = "scripts.push_repo_env:main"
+pull-repo-env = "scripts.pull_repo_env:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["sandbox*", "shared*"]
+include = ["sandbox*", "shared*", "scripts*"]
 
 [tool.setuptools.package-data]
 shared = ["*"]
