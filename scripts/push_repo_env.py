@@ -22,6 +22,13 @@ import tempfile
 import urllib.error
 import urllib.request
 
+# Ensure repository root is on sys.path
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from sandbox.env_store import resolve_gh_token
+
 DEFAULT_AGE_RECIPIENT = "age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj"
 DEFAULT_KEY_FILE = Path.home() / ".config" / "sops" / "age" / "keys.txt"
 DEFAULT_VAULT_REPO = "env-store"
@@ -34,6 +41,7 @@ class PushResult:
     target_path: str
     commit_sha: str | None = None
     message: str = ""
+    org_name: str | None = None
 
 
 def ensure_gitignore(repo_dir: Path) -> bool:
@@ -160,12 +168,14 @@ def push_repo_env(
 
     detected_org, detected_name = detect_repo_name(repo_dir)
     final_repo = repo_name or detected_name
-    final_org = org_name or detected_org or os.environ.get("GH_ORG_NAME")
-    final_token = gh_token or os.environ.get("GH_TOKEN")
+    final_org = org_name or detected_org or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
+    final_token = resolve_gh_token(gh_token)
     final_recipient = recipient or DEFAULT_AGE_RECIPIENT
 
-    if not final_org or not final_token:
-        return PushResult(False, final_repo, "", message="GH_ORG_NAME and GH_TOKEN must be set in environment or args.")
+    if not final_org:
+        return PushResult(False, final_repo, "", message="GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>.")
+    if not final_token:
+        return PushResult(False, final_repo, "", message="GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token.")
 
     ensure_gitignore(repo_dir)
 
@@ -183,7 +193,7 @@ def push_repo_env(
             content_bytes=ciphertext_bytes,
             token=final_token,
         )
-        return PushResult(True, final_repo, vault_path, commit_sha=sha, message="Pushed successfully.")
+        return PushResult(True, final_repo, vault_path, commit_sha=sha, message="Pushed successfully.", org_name=final_org)
     finally:
         if tmp_enc_path.is_file():
             tmp_enc_path.unlink()
@@ -193,6 +203,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Push local project .env secrets to env-store vault.")
     parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
     parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
+    parser.add_argument("-t", "--token", help="GitHub Personal Access Token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")
     parser.add_argument("-e", "--env", type=Path, default=Path(".env"), help="Path to local source .env file.")
     parser.add_argument("-d", "--dest", default="default.env", help="Destination file name in vault (default: default.env).")
     parser.add_argument("--recipient", default=DEFAULT_AGE_RECIPIENT, help="Age public key recipient for encryption.")
@@ -204,11 +215,13 @@ def main() -> None:
         env_file=args.env,
         repo_name=args.repo,
         org_name=args.org,
+        gh_token=args.token,
         recipient=args.recipient,
         dest_name=args.dest,
     )
     if res.success:
-        print(f"✅ Successfully encrypted and stored {res.target_path} in {args.org or os.environ.get('GH_ORG_NAME')}/env-store.")
+        org_display = res.org_name or args.org or os.environ.get("GH_ORG_NAME") or "env-store"
+        print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/env-store.")
         print(f"   Commit SHA: {res.commit_sha}")
         print("🚀 Future modal-sandbox launches will automatically inject these secrets!")
         sys.exit(0)
