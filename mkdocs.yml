@@ -171,6 +171,7 @@ nav:
     - '0094: Packaging, Developer Experience (DX), and Open-Source Governance': adr/0094-packaging-dx-and-open-source-governance.md
     - '0095: Multi-Modal Account Profiles in .env and Native Sandbox Provisioning': adr/0095-multi-modal-account-profiles-in-dotenv.md
     - '0096: Central Environment Store and Host-Side Secret Injection': adr/0096-central-env-store-and-host-side-secret-injection.md
+    - '0097: T3 Code Pairing Tunnel Wrapper and Unit Test Isolation Boundary': adr/0097-t3-code-pairing-tunnel-wrapper-and-test-isolation.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

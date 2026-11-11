@@ -130,13 +130,28 @@ class TestSandboxCliArgs(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_root = Path(tmpdir) / "root"
             fake_root.mkdir()
+            fake_bin = Path(tmpdir) / "bin"
+            fake_bin.mkdir()
 
             test_script = f"""
             export HOME="{fake_root}"
             export NO_REPO="1"
             export APP_NAME="my-standalone-app"
             export ENABLE_CLOUDFLARE="0"
-            sed -e 's|/root|{fake_root}|g' -e 's|/usr/sbin/sshd|true|g' -e 's|exec sleep infinity|exit 0|g' "{startup_sh}" > "{tmpdir}/run_startup.sh"
+            export ENABLE_T3="0"
+            export ENABLE_ANTIGRAVITY="0"
+            export ENABLE_OPENCODE="0"
+            export ENABLE_MODAL="0"
+            export ENABLE_SOPS="0"
+            export ENABLE_PI="0"
+            export ENABLE_REACT_NATIVE="0"
+            export ENABLE_HERDR="0"
+            export PATH="{fake_bin}:$PATH"
+            sed -e 's|/root|{fake_root}|g' \
+                -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/usr/sbin/sshd|true|g' \
+                -e 's|exec sleep infinity|exit 0|g' \
+                "{startup_sh}" > "{tmpdir}/run_startup.sh"
             bash "{tmpdir}/run_startup.sh"
             """
             res = subprocess.run(["bash", "-c", test_script], capture_output=True, text=True)

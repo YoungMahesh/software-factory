@@ -149,3 +149,44 @@ class TestT3PairWrapper(unittest.TestCase):
             self.assertEqual(res.returncode, 0)
             self.assertIn(f"MOCK_ARGS: pair --base-dir {custom_base}", res.stdout)
             self.assertNotIn(str(t3_root), res.stdout)
+
+    def test_wrapper_unsets_gh_repo(self):
+        content = self.wrapper_script.read_text()
+        self.assertIn("unset GH_REPO", content)
+
+    def test_startup_simulation_isolates_bin_and_does_not_mutate_system_t3(self):
+        real_t3_bin = Path("/usr/local/bin/t3")
+        if not real_t3_bin.exists():
+            self.skipTest("/usr/local/bin/t3 does not exist in test runner environment")
+        initial_stat = real_t3_bin.stat()
+        initial_mtime = initial_stat.st_mtime_ns
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_root = Path(tmpdir) / "root"
+            fake_root.mkdir()
+            fake_bin = Path(tmpdir) / "bin"
+            fake_bin.mkdir()
+
+            test_script = f"""
+            export HOME="{fake_root}"
+            export NO_REPO="1"
+            export APP_NAME="test-isolation"
+            export ENABLE_CLOUDFLARE="0"
+            export ENABLE_T3="0"
+            export PATH="{fake_bin}:$PATH"
+            sed -e 's|/root|{fake_root}|g' \
+                -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/usr/sbin/sshd|true|g' \
+                -e 's|exec sleep infinity|exit 0|g' \
+                "{self.startup_sh}" > "{tmpdir}/run_startup.sh"
+            bash "{tmpdir}/run_startup.sh"
+            """
+            res = subprocess.run(["bash", "-c", test_script], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"Simulated startup failed: {res.stderr}")
+
+        current_stat = real_t3_bin.stat()
+        self.assertEqual(
+            current_stat.st_mtime_ns,
+            initial_mtime,
+            "/usr/local/bin/t3 was unexpectedly mutated by startup simulation!",
+        )

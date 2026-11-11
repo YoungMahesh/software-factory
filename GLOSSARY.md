@@ -48,6 +48,10 @@ _Avoid_: OpenCode IDE, code server
 A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
 _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 
+**Pairing URL**:
+The public HTTPS URL emitted by T3 Code (`t3 pair` or sandbox launch metadata) containing the Modal application tunnel domain and a cryptographically generated pairing token (`https://<sandbox-tunnel>.modal.host/pair#token=...`), enabling external browser and desktop app pairing with the remote T3 Code Server.
+_Avoid_: Local pairing URL, private IP link, direct socket URL
+
 **Herdr Multiplexer**:
 An agent-aware terminal multiplexer and background session runtime (https://herdr.dev) pre-baked into `/usr/local/bin` via `--herdr`, enabling persistent agent workflows, process status tracking across panes, and remote attachment over SSH.
 _Avoid_: Terminal multiplexer, tmux clone, herdr daemon, herdr runner

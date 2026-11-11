@@ -345,8 +345,20 @@ class TestStartupScriptResume(unittest.TestCase):
             export HOME="{fake_root}"
             export RESUME_SNAPSHOT="1"
             export ENABLE_CLOUDFLARE="0"
+            export ENABLE_T3="0"
+            export ENABLE_ANTIGRAVITY="0"
+            export ENABLE_OPENCODE="0"
+            export ENABLE_MODAL="0"
+            export ENABLE_SOPS="0"
+            export ENABLE_PI="0"
+            export ENABLE_REACT_NATIVE="0"
+            export ENABLE_HERDR="0"
             export PATH="{fake_bin}:$PATH"
-            sed -e 's|/root|{fake_root}|g' -e 's|/usr/sbin/sshd|true|g' -e 's|exec sleep infinity|exit 0|g' "{self.startup_sh}" > "{tmpdir}/run_startup.sh"
+            sed -e 's|/root|{fake_root}|g' \
+                -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/usr/sbin/sshd|true|g' \
+                -e 's|exec sleep infinity|exit 0|g' \
+                "{self.startup_sh}" > "{tmpdir}/run_startup.sh"
             bash "{tmpdir}/run_startup.sh"
             """
             res = subprocess.run(["bash", "-c", test_script], capture_output=True, text=True)

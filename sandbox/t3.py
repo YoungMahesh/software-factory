@@ -63,7 +63,7 @@ def setup_t3(
         logger.debug("Failed running t3 auth pairing create: %s", exc)
 
     if not pair_url:
-        for _ in range(6):
+        for _ in range(25):
             try:
                 p = sandbox.exec("cat", "/tmp/t3-pairing.json")
                 if p.wait() == 0:
@@ -74,6 +74,6 @@ def setup_t3(
                         break
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(1.0)
 
     return pair_url or clean_url, qr_code
