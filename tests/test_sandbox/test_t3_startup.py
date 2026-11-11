@@ -281,5 +281,5 @@ class TestT3CodeStartup(unittest.TestCase):
             acp_data = json.loads(preseeded_token.read_text())
             self.assertEqual(acp_data["client_id"], "persisted-snapshot-client-id.apps.googleusercontent.com")
             self.assertEqual(acp_data["client_secret"], "persisted-snapshot-secret")
-            self.assertEqual(acp_data["project_id"], "aicode-consumers")
+            self.assertNotIn("project_id", acp_data)
             self.assertEqual(acp_data["refresh_token"], "mock-refresh-token")

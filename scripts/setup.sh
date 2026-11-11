@@ -223,10 +223,6 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
                 "https://www.googleapis.com/auth/aicode"
             ]
         }
-        if existing_tok.get("project_id"):
-            acp_token["project_id"] = existing_tok["project_id"]
-        elif os.environ.get("ANTIGRAVITY_PROJECT_ID"):
-            acp_token["project_id"] = os.environ.get("ANTIGRAVITY_PROJECT_ID")
 
         for d in target_dirs:
             os.makedirs(d, mode=0o700, exist_ok=True)
