@@ -1,6 +1,7 @@
 """CLI entrypoint for launching and managing Modal sandboxes (local or remote)."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -55,9 +56,28 @@ def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    auth_token = os.environ.get("MODAL_SANDBOX_AUTH_TOKEN")
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
+    user = os.environ.get("WEB_UI_USERNAME")
+    passwd = os.environ.get("WEB_UI_PASSWORD")
+    if not user or not passwd:
+        dotenv_path = Path(__file__).resolve().parent.parent / ".env"
+        if dotenv_path.is_file():
+            try:
+                for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("WEB_UI_USERNAME=") and not user:
+                        user = line.split("=", 1)[1].strip().strip("'\"")
+                    elif line.startswith("WEB_UI_PASSWORD=") and not passwd:
+                        passwd = line.split("=", 1)[1].strip().strip("'\"")
+            except Exception:
+                pass
+
+    if not user or not passwd:
+        raise ValueError(
+            "Remote control plane invocation requires WEB_UI_USERNAME and WEB_UI_PASSWORD to be set in environment or .env."
+        )
+
+    creds = base64.b64encode(f"{user}:{passwd}".encode("utf-8")).decode("utf-8")
+    headers["Authorization"] = f"Basic {creds}"
 
     req = urllib.request.Request(target_url, data=data, headers=headers, method="POST")
     try:

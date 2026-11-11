@@ -10,7 +10,6 @@ Set credentials in your local `.env`:
 ```env
 WEB_UI_USERNAME=admin
 WEB_UI_PASSWORD=secure-password-here
-MODAL_SANDBOX_AUTH_TOKEN=your-bearer-token
 ```
 
 ### 2. Deploy to Modal Cloud
@@ -48,8 +47,9 @@ Key Dashboard features:
 The control plane exposes programmatic REST endpoints for automation:
 
 ### Authentication
-- Endpoints under `/api/` accept HTTP Basic Authentication.
-- Headless automation endpoints (`/launch`, `/snapshot`) accept HTTP Bearer token authentication via header: `Authorization: Bearer <MODAL_SANDBOX_AUTH_TOKEN>`.
+- All control plane endpoints (both browser UI routes under `/`, `/api/` and headless automation endpoints `/launch`, `/snapshot`) use standard HTTP Basic Authentication with `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`:
+  `Authorization: Basic <base64(WEB_UI_USERNAME:WEB_UI_PASSWORD)>`
+- CLI commands running with `--remote` automatically authenticate using `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`.
 
 ### Key Endpoints
 
@@ -62,5 +62,5 @@ The control plane exposes programmatic REST endpoints for automation:
 | `POST` | `/api/sandboxes/{id}/terminate` | Basic | Terminate an active sandbox. |
 | `POST` | `/api/sandboxes/{id}/snapshot` | Basic | Capture a filesystem snapshot of a sandbox. |
 | `POST` | `/api/snapshots/{image_id}/launch` | Basic | Launch a fresh sandbox from a snapshot image. |
-| `POST` | `/launch` | Bearer | Headless sandbox provisioning endpoint. |
-| `POST` | `/snapshot` | Bearer | Headless snapshot capture endpoint. |
+| `POST` | `/launch` | Basic | Headless sandbox provisioning endpoint. |
+| `POST` | `/snapshot` | Basic | Headless snapshot capture endpoint. |

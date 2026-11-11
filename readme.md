@@ -185,7 +185,7 @@ modal serve sandbox/function.py
 
 - **Web Dashboard**: Access `GET /` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) to inspect active sandboxes across workspace profiles, launch fresh repository or standalone sandboxes, capture snapshots, and resume from snapshot images.
 - **Web REST API**: Authenticated via HTTP Basic Authentication (`POST /api/sandboxes`, `POST /api/snapshots/{image_id}/launch`, `POST /api/sandboxes/{sandbox_id}/terminate`, `POST /api/sandboxes/{sandbox_id}/snapshot`).
-- **Headless API**: Access `POST /launch` and `POST /snapshot` with Bearer token authentication (`MODAL_SANDBOX_AUTH_TOKEN`).
+- **Headless API**: Access `POST /launch` and `POST /snapshot` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`).
 
 ---
 
