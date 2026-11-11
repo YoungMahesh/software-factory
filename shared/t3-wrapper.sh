@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 REAL_T3="/opt/t3/t3"
 
+# Ensure GH_REPO is unset so T3 Code resolves repositories from git remotes
+unset GH_REPO
+
 if [ "${1:-}" = "pair" ]; then
     PUBLIC_URL="${T3_PUBLIC_URL:-}"
     if [ -z "$PUBLIC_URL" ] && [ -f "/root/.t3/public_url" ]; then
