@@ -38,6 +38,28 @@ def parse_env_text(raw_text: str) -> dict[str, str]:
     return env_dict
 
 
+def resolve_gh_token(explicit_token: str | None = None) -> str | None:
+    """Resolves GitHub token from explicit arg, env (GH_TOKEN/GITHUB_TOKEN), or gh CLI."""
+    if explicit_token and explicit_token.strip():
+        return explicit_token.strip()
+    from_env = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if from_env and from_env.strip():
+        return from_env.strip()
+    if shutil.which("gh"):
+        try:
+            res = subprocess.run(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+    return None
+
+
 def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | None:
     """Fetches a file from GitHub repository using the Contents REST API.
 
@@ -112,9 +134,9 @@ def fetch_vault_env(
     """
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
-    resolved_org = org_name or os.environ.get("GH_ORG_NAME")
-    resolved_token = gh_token or os.environ.get("GH_TOKEN")
-    resolved_age_key = age_key or os.environ.get("AGE_PRIVATE_KEY")
+    resolved_org = org_name or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
+    resolved_token = resolve_gh_token(gh_token)
+    resolved_age_key = age_key or os.environ.get("AGE_PRIVATE_KEY") or os.environ.get("SOPS_AGE_KEY")
 
     if not resolved_org or not resolved_token:
         return None
