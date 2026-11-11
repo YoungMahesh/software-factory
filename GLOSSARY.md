@@ -156,8 +156,16 @@ _Avoid_: File size limit, code line limit, test budget, 500-line rule
 The single-organization GitHub access configuration defined via `GH_TOKEN` and `GH_ORG_NAME` in the Factory Environment Configuration (`.env`), replacing legacy multi-file secret bundles (`secrets/github-orgs.env`).
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
-**In-Repo Secret Manifest**:
-A repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `app.env=.env`), decrypted during sandbox startup.
+**Central Environment Store**:
+A dedicated private GitHub repository (`env-store` under `${GH_ORG_NAME}`) that securely houses SOPS-encrypted environment files and directory mappings organized by target repository name, serving as the centralized secret vault for public and private workspaces without polluting open-source codebases.
+_Avoid_: Central secrets repo, github vault, secret bucket
+
+**Host-Side Secret Injection**:
+The provisioning seam in `SandboxLauncher` that retrieves encrypted environment secrets from the Central Environment Store (`env-store`), decrypts them in host or control-plane memory using `AGE_PRIVATE_KEY`, and mounts them directly as native process environment variables (`modal.Secret.from_dict()`) into the sandbox, guaranteeing master private keys and vault credentials never enter the container.
+_Avoid_: Container decryption, in-sandbox sops, startup decryption
+
+**In-Repo Secret Manifest (Legacy)**:
+The transitional repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `app.env=.env`), decrypted during sandbox startup, maintained for backward compatibility and superseded by the Central Environment Store (`env-store`).
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:

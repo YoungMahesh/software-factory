@@ -1,5 +1,6 @@
 """Unit tests for the deep SandboxLauncher module and RunningSandbox domain model."""
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -264,6 +265,35 @@ class TestSandboxLauncher(unittest.TestCase):
             call_env = mock_create.call_args.kwargs["env"]
             self.assertEqual(call_env["ENABLE_MODAL"], "1")
             self.assertEqual(call_env["MODAL_PROFILE"], "work")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_injects_env_store_secrets(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-vault-test"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        mock_vault_fetch = MagicMock(return_value={"API_KEY": "secret_abc", "DATABASE_URL": "postgres://localhost"})
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+            fetch_vault_env_fn=mock_vault_fetch,
+        )
+        req = LaunchRequest(repo="custom-org/my-target-app")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "dummy", "GH_ORG_NAME": "custom-org"}, clear=False):
+            launcher.launch(req)
+
+        mock_vault_fetch.assert_called_once_with("my-target-app", org_name="custom-org")
+        call_env = mock_create.call_args.kwargs["env"]
+        self.assertIn("VAULT_DOTENV_B64", call_env)
+        decoded = base64.b64decode(call_env["VAULT_DOTENV_B64"]).decode("utf-8")
+        self.assertIn("API_KEY=secret_abc", decoded)
+        self.assertIn("DATABASE_URL=postgres://localhost", decoded)
 
 
 if __name__ == "__main__":
