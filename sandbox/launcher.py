@@ -215,7 +215,7 @@ class SandboxLauncher:
             else modal.App.lookup(app_name, create_if_missing=True)
         )
 
-        browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy)
+        browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy, t3=req.t3)
 
         if req.from_snapshot:
             self._emit_log(f"🏗️ Loading container image from snapshot {req.from_snapshot}...")

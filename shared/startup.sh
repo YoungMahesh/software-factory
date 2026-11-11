@@ -326,6 +326,10 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
 fi
 if [ "${ENABLE_T3:-}" = "1" ]; then
     grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+    # Allow Chrome headless shell to run unsandboxed inside root container
+    export T3CODE_SERVER_BROWSER_SANDBOX=0
+    grep -qxF 'export T3CODE_SERVER_BROWSER_SANDBOX=0' /etc/environment 2>/dev/null || echo 'export T3CODE_SERVER_BROWSER_SANDBOX=0' >> /etc/environment
+    grep -qxF 'export T3CODE_SERVER_BROWSER_SANDBOX=0' ~/.bashrc 2>/dev/null || echo 'export T3CODE_SERVER_BROWSER_SANDBOX=0' >> ~/.bashrc
 fi
 if [ "${ENABLE_HERDR:-}" = "1" ]; then
     grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
@@ -478,6 +482,7 @@ echo "=== T3 Storage Volume Contents ===" && (ls -la /root/.t3-storage/ 2>/dev/n
 echo "=== T3 Usage Cache Files ===" && (ls -la /root/.t3/userdata/usage* 2>/dev/null || true)
 echo "=== T3 Antigravity Token ===" && ls -la /root/.t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json 2>/dev/null || true
 echo "=== T3 OpenCode Config ===" && ls -la /root/.config/opencode/opencode.json /root/.config/opencode/opencode.env 2>/dev/null || true
+echo "=== T3 Browser Sandbox Env ===" && echo "T3CODE_SERVER_BROWSER_SANDBOX=${T3CODE_SERVER_BROWSER_SANDBOX:-unset}"
 EOF
     chmod +x /usr/local/bin/check-t3 2>/dev/null || true
 fi

@@ -176,6 +176,29 @@ base_image = (
         "python3-pip",
         "python3-venv",
         "python-is-python3",
+        # System libraries and fonts required by headless Chromium/Chrome and T3 Code browser
+        # (libnspr4, libnss3, libatk, libatspi, libxcomposite, libxdamage, libxfixes,
+        #  libxrandr, libgbm, libxkbcommon, libasound, fontconfig, fonts-liberation).
+        # These satisfy dynamic linker requirements for T3 Code's chrome-headless-shell
+        # and Playwright/Puppeteer browser binaries without on-demand apt delays.
+        "libnss3",
+        "libatk1.0-0t64",
+        "libatk-bridge2.0-0t64",
+        "libatspi2.0-0t64",
+        "libdbus-1-3",
+        "libx11-6",
+        "libxcb1",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxext6",
+        "libxfixes3",
+        "libxrandr2",
+        "libxkbcommon0",
+        "libgbm1",
+        "libasound2t64",
+        "libexpat1",
+        "fontconfig",
+        "fonts-liberation",
     )
     .run_commands(
         # Install Node.js 24 and pnpm at image build time
@@ -239,15 +262,19 @@ def load_ssh_pub_key() -> str:
 
 
 def browser_enabled(
-    *, browser: bool = False, opencode: bool = False, agy: bool = False
+    *,
+    browser: bool = False,
+    opencode: bool = False,
+    agy: bool = False,
+    t3: bool = False,
 ) -> bool:
     """Resolves whether Browser Tooling should be provisioned.
 
     A standalone `--browser` launch is supported, but any agent surface that can
-    drive a browser implies it: `--opencode` and `--agy` enable it so their
-    browser MCP servers work out of the box.
+    drive a browser implies it: `--opencode`, `--agy`, and `--t3` enable it so
+    their browser MCP servers and built-in browser panels work out of the box.
     """
-    return browser or opencode or agy
+    return browser or opencode or agy or t3
 
 
 # T3 Code release configuration and binary patch target
@@ -358,7 +385,7 @@ def build_sandbox_image(
             ],
         )
 
-    if browser_enabled(browser=browser, opencode=opencode, agy=agy):
+    if browser_enabled(browser=browser, opencode=opencode, agy=agy, t3=t3):
         image = image.run_commands(
             "uvx playwright install --with-deps chromium",
             "chmod -R 777 /root/.cache/ms-playwright 2>/dev/null || true",
@@ -388,6 +415,7 @@ def build_sandbox_image(
             ),
             f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
             f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
+            "/opt/t3/t3 browser setup",
         )
         image = add_local_files_if_present(
             image,
