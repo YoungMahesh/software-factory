@@ -203,7 +203,24 @@ pytest
 
 ---
 
-## 8. Contributing & Community
+## 8. Documentation Website
+
+The documentation website is built with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/):
+
+```bash
+# Install documentation dependencies
+pip install -e .[docs]
+
+# Live development server with hot reloading
+mkdocs serve
+
+# Build static HTML site
+mkdocs build
+```
+
+---
+
+## 9. Contributing & Community
 
 We welcome contributions! Please review our community guides before submitting pull requests:
 

@@ -1,6 +1,6 @@
 # Hosted Sandbox Control Plane Function
 
-**Status**: Accepted (Amends [ADR 0011](0011-unified-base-image-for-standard-and-vm-sandboxes.md), [ADR 0051](0051-universal-500-line-file-budget-and-ratchet.md), [ADR 0065](0065-constant-modal-app-and-named-sandboxes.md), and [ADR 0078](0078-replace-secret-flag-with-repo-flag-in-sandbox-runner.md))
+**Status**: Accepted (Amends [ADR 0011](0011-unified-base-image-for-standard-and-vm-sandboxes.md), [ADR 0051](0051-production-file-line-budget-and-ratchet.md), [ADR 0065](0065-constant-modal-app-and-named-sandboxes.md), and [ADR 0078](0078-replace-secret-flag-with-repo-flag-in-sandbox-runner.md))
 
 ## Context
 

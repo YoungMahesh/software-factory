@@ -20,3 +20,6 @@ node_modules
 *.egg-info/
 dist/
 build/
+
+# Documentation build output
+site/

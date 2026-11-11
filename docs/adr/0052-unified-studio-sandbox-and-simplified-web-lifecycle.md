@@ -1,6 +1,6 @@
 # Unified Studio Sandbox and Simplified Web Lifecycle
 
-**Status**: Accepted (Amends [ADR 0034](0034-factory-studio-and-live-preview-workspace.md), [ADR 0038](0038-unified-studio-sandbox-for-live-preview-and-agent-execution.md), [ADR 0041](0041-pre-flight-guard-and-conversational-grilling.md), and [ADR 0050](0050-studio-turn-rollback-and-in-place-reversion.md))
+**Status**: Accepted (Amends [ADR 0034](0034-factory-studio-and-live-preview-workspace.md), [ADR 0038](0038-unified-studio-sandbox-for-live-preview-and-agent-execution.md), [ADR 0041](0043-factory-studio-grilling-codebase-grounding-and-error-resilience.md), and [ADR 0050](0050-studio-turn-rollback-and-in-place-reversion.md))
 
 To eliminate cognitive friction, false-positive prompt rejections, vestigial ingress complexity, and dual-container lifecycle divergence in Factory Studio and the Factory Testing Console, we decided to:
 1. Excise vestigial Cloudflare ingress logic (`cloudflared`, token decryption, port watcher loops) from the factory container entrypoint, relying solely on Modal Application Tunnels (`sandbox.tunnels()[3000].url`) for dev server preview exposure.

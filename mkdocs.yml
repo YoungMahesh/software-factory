@@ -1,0 +1,181 @@
+site_name: Modal Sandboxes
+site_description: Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal.
+site_author: Modal Sandboxes Contributors
+repo_name: software-factory
+repo_url: https://github.com/sFactory0/software-factory
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  palette:
+  - scheme: default
+    primary: indigo
+    accent: indigo
+    toggle:
+      icon: material/brightness-7
+      name: Switch to dark mode
+  - scheme: slate
+    primary: indigo
+    accent: indigo
+    toggle:
+      icon: material/brightness-4
+      name: Switch to light mode
+  features:
+  - navigation.instant
+  - navigation.tracking
+  - navigation.sections
+  - navigation.expand
+  - navigation.top
+  - search.suggest
+  - search.highlight
+  - content.code.copy
+  - content.code.annotate
+markdown_extensions:
+- admonition
+- pymdownx.details
+- pymdownx.superfences:
+    custom_fences:
+    - name: mermaid
+      class: mermaid
+      format: !!python/name:pymdownx.superfences.fence_code_format
+- pymdownx.highlight:
+    anchor_linenums: true
+    line_spans: __span
+    pygments_lang_class: true
+- pymdownx.inlinehilite
+- pymdownx.snippets
+- pymdownx.keys
+- pymdownx.tabbed:
+    alternate_style: true
+- attr_list
+- md_in_html
+- tables
+- toc:
+    permalink: true
+plugins:
+- search
+validation:
+  omitted_files: info
+  unrecognized_links: warn
+nav:
+- Home: index.md
+- Getting Started:
+  - Overview: getting-started/index.md
+  - Prerequisites & Setup: getting-started/prerequisites.md
+  - Quickstart: getting-started/quickstart.md
+- Core Architecture:
+  - Architecture Overview: architecture/overview.md
+  - Execution Runtimes: architecture/runtimes.md
+  - Ingress & Connectivity: architecture/ingress.md
+  - Filesystem Snapshots: architecture/snapshots.md
+  - Secrets & Security: architecture/secrets.md
+- User Guides:
+  - CLI Reference: guides/cli.md
+  - Hosted Control Plane: guides/control-plane.md
+  - AI Developer Tooling: guides/ai-tooling.md
+- Architecture Decisions (ADRs):
+  - ADR Index & Summary: adr/index.md
+  - All Decision Records:
+    - '0001: Pre-baked Android Toolchain in Standard Sandbox': adr/0001-prebaked-android-toolchain-in-standard-sandbox.md
+    - '0004: Shared Agent Configurations and In-Sandbox SOPS Antigravity Token': adr/0004-shared-agent-configs-and-sops-antigravity-token.md
+    - '0006: Externalize SSH Private Key Management and Decouple Sandbox Runners': adr/0006-externalize-ssh-private-key-and-decouple-runners.md
+    - '0007: Ephemeral SOPS Credentials and In-Sandbox Key Purging': adr/0007-ephemeral-sops-credentials-in-sandboxes.md
+    - '0008: Decouple Setup Script Flags and Retire Sandbox SOPS Flag': adr/0008-decouple-setup-flags-and-retire-sops-flag.md
+    - '0009: Opt-In Modal Development Tooling and Credential Provisioning in Sandboxes': adr/0009-opt-in-modal-development-tooling-in-sandboxes.md
+    - '0010: Automated OpenCode and MCP Credentials Provisioning via SOPS': adr/0010-automated-opencode-and-mcp-credentials-provisioning.md
+    - '0011: Unified Base Image for Standard and VM Sandboxes': adr/0011-unified-base-image-for-standard-and-vm-sandboxes.md
+    - '0012: Pre-baked Chrome for Browser MCP Tooling': adr/0012-prebaked-chrome-for-browser-mcp-tooling.md
+    - '0013: Antigravity Remote Control and Unattended Permissions': adr/0013-antigravity-remote-control-and-unattended-permissions.md
+    - '0014: Shared Workspace Secret (share0) for SOPS Age Key': adr/0014-shared-workspace-secret-share0-for-age-private-key.md
+    - '0015: Pre-baked Cloudflared and Default Tunnel Ingress': adr/0015-prebaked-cloudflared-and-default-tunnel-ingress.md
+    - '0016: Unified Sandbox Runner': adr/0016-unified-sandbox-runner.md
+    - '0017: SOPS-Decrypted Cloudflare Tunnel Token and Default share0 Mounting': adr/0017-sops-decrypted-cloudflare-tunnel-token.md
+    - '0018: Local SOPS-Encrypted Repository Secrets and Retirement of Modal Secret Collections': adr/0018-local-sops-encrypted-repository-secrets.md
+    - '0019: Repository Environment Secrets and In-Sandbox Mapping (`env.map`)': adr/0019-repository-environment-secrets-and-env-map.md
+    - '0020: In-Sandbox Tooling Secrets and Setup Script Staging': adr/0020-in-sandbox-tooling-secrets-and-setup-script-staging.md
+    - '0021: Retire Modal Web Port Tunnel in Favor of Cloudflare Ingress': adr/0021-retire-modal-web-port-tunnel-in-favor-of-cloudflare-ingress.md
+    - '0022: Pre-bake Docker Compose v2 in Shared Base Image': adr/0022-prebake-docker-compose-v2-in-shared-base-image.md
+    - '0023: Software Factory Assembly Line Architecture': adr/0023-software-factory-assembly-line-architecture.md
+    - '0024: Factory Hub and Ticket Lifecycle Architecture': adr/0024-factory-hub-and-ticket-lifecycle.md
+    - '0025: Pi Agent Harness and Stage Specialization': adr/0025-pi-agent-harness-and-stage-specialization.md
+    - '0026: OpenCode Go Provider and Target Project Prerequisite': adr/0026-opencode-go-provider-and-target-project-prerequisite.md
+    - '0027: Feature Branch Topology and Pre-Flight Guard': adr/0027-feature-branch-topology-and-preflight-guard.md
+    - '0028: Target Repo Ticket Co-location and In-Sandbox Batch Execution': adr/0028-target-repo-ticket-colocation-and-in-sandbox-batch-execution.md
+    - '0029: Isolated Test Repository Secrets and Testing Flag': adr/0029-isolated-test-repository-secrets-and-testing-flag.md
+    - '0030: Opt-In SOPS Credential Retention for Interactive Sandboxes': adr/0030-opt-in-sops-credential-retention.md
+    - '0031: Organization Credentials and Canonical Test Organization': adr/0031-organization-credentials-and-canonical-test-organization.md
+    - '0032: Factory Testing Console for Test Organization Verification': adr/0032-factory-testing-console.md
+    - '0033: GitHub Issues and Pull Requests for Feature Delivery': adr/0033-github-issues-and-pull-requests-for-feature-delivery.md
+    - '0034: Factory Studio for Interactive Frontend Application Generation': adr/0034-factory-studio-and-live-preview-workspace.md
+    - '0035: Agent Event Stream and Real-Time Reasoning Console': adr/0035-agent-event-stream-and-reasoning-console.md
+    - '0036: Compiled Vite SPA for Factory Studio and Testing Console': adr/0036-vite-spa-for-factory-studio.md
+    - '0037: Reintroduce Modal Application Tunnels for Concurrent Application Previews': adr/0037-reintroduce-modal-application-tunnels-for-preview.md
+    - '0038: Unified Studio Sandbox for Live Preview and In-Sandbox Agent Execution': adr/0038-unified-studio-sandbox-for-live-preview-and-agent-execution.md
+    - '0039: Frontend Testing Boundary and Test Suite Simplification': adr/0039-frontend-testing-boundary-and-test-suite-simplification.md
+    - '0040: Grill-with-Docs Conversational Protocol and Matt Pocock Skills in Factory Studio': adr/0040-grill-with-docs-and-matt-pocock-skills-in-factory-studio.md
+    - '0041: Factory Studio Database Persistence for Chat History and Agent Telemetry': adr/0041-factory-studio-database-persistence.md
+    - '0042: Factory Studio GitHub Issue Drawer and Unified Dispatch': adr/0042-factory-studio-github-issue-drawer-and-dispatch.md
+    - '0043: Factory Studio Grilling Codebase Grounding and Error Resilience': adr/0043-factory-studio-grilling-codebase-grounding-and-error-resilience.md
+    - '0044: Private-by-Default Repository Policy in Factory Studio': adr/0044-private-by-default-studio-repositories.md
+    - '0045: Filesystem Snapshots in Unified Sandbox Runner': adr/0045-filesystem-snapshots-in-unified-sandbox-runner.md
+    - '0046: T3 Code Server and Agent Control Surface': adr/0046-t3-code-server-and-agent-control-surface.md
+    - '0047: Factory Studio Pull Request Visibility and Merge Controls': adr/0047-factory-studio-pull-request-visibility-and-merge-controls.md
+    - '0048: Live Preview Branch Selector and In-Place Container Switching': adr/0048-live-preview-branch-selector-and-in-place-switching.md
+    - '0049: Live Preview Trunk Synchronization and In-Place Resync': adr/0049-live-preview-trunk-synchronization-and-in-place-resync.md
+    - '0050: Studio Turn Rollback and In-Place Reversion': adr/0050-studio-turn-rollback-and-in-place-reversion.md
+    - '0051: Production File Line Budget and Ratchet': adr/0051-production-file-line-budget-and-ratchet.md
+    - '0052: Unified Studio Sandbox and Simplified Web Lifecycle': adr/0052-unified-studio-sandbox-and-simplified-web-lifecycle.md
+    - '0053: Cohere Editorial Design System for Factory Studio and Testing Console': adr/0053-cohere-editorial-design-system-for-factory-studio.md
+    - '0054: 0054: Minimal Canonical Template and Bloatware Removal': adr/0054-minimal-canonical-template-and-bloatware-removal.md
+    - '0055: Deterministic Verifier Command Guardrails and Timeouts': adr/0055-deterministic-verifier-command-guardrails-and-timeouts.md
+    - '0056: Externalized Markdown Prompts for Studio and Assembly Line': adr/0056-externalized-markdown-prompts-for-studio-and-assembly-line.md
+    - '0057: Universal File Line Budget and Systematic Test Suite Decomposition': adr/0057-universal-file-line-budget-and-test-suite-decomposition.md
+    - '0058: Factory Studio Cloud Turso Database Persistence': adr/0058-factory-studio-turso-cloud-database-persistence.md
+    - '0059: Consolidate Testing Console into Factory Studio and Canonicalize API Routes': adr/0059-consolidate-testing-console-into-factory-studio-and-canonicalize-api-routes.md
+    - '0060: Factory Studio Command Failure Diagnostics': adr/0060-factory-studio-command-failure-diagnostics.md
+    - '0061: Agent Command Bottleneck Profiler and Telemetry Diagnostics': adr/0061-agent-command-bottleneck-profiler-and-telemetry-diagnostics.md
+    - '0062: 0062: Clean Canvas Invariant and Template Boilerplate Purge': adr/0062-clean-canvas-invariant-and-template-boilerplate-purge.md
+    - '0063: 0063: Web Search and Documentation Tools for Assembly Line Agents': adr/0063-web-search-and-documentation-tools-for-assembly-line-agents.md
+    - '0064: Optional Secret and Standalone Sandbox Launch': adr/0064-optional-secret-and-standalone-sandbox-launch.md
+    - '0065: Constant Modal App and Named Sandboxes': adr/0065-constant-modal-app-and-named-sandboxes.md
+    - '0066: Shallow Repository Clone Depth in Sandboxes': adr/0066-shallow-repository-clone-depth-in-sandboxes.md
+    - '0067: Migrate VM Runtime to Modal Stable Runtime and Unify Memory Bursting': adr/0067-migrate-vm-runtime-to-modal-stable-runtime.md
+    - '0068: Remove Working Directory Mutation From Sandbox Bashrc': adr/0068-remove-working-directory-mutation-from-bashrc.md
+    - '0069: In-Studio Code and Diff Viewer with In-Sandbox Interactive Terminal': adr/0069-in-studio-code-and-diff-viewer-with-in-sandbox-interactive-terminal.md
+    - '0070: React Native File Watcher and Expo Tunnel Tooling': adr/0070-react-native-file-watcher-and-expo-tunnel-tooling.md
+    - '0071: Factory Studio Redundancy Removal and Chrome Consolidation': adr/0071-factory-studio-redundancy-removal-and-chrome-consolidation.md
+    - '0072: Pi Coding Agent CLI Integration': adr/0072-pi-coding-agent-cli-integration.md
+    - '0073: Multi-Account Antigravity Provider Instances in T3 Code': adr/0073-multi-account-antigravity-provider-instances-in-t3-code.md
+    - '0074: Opt-In Full Git Repository Clone in Sandboxes': adr/0074-opt-in-full-git-repository-clone-in-sandboxes.md
+    - '0075: Git History Secret Sanitization and OAuth Parameterization': adr/0075-git-history-secret-sanitization-and-oauth-parameterization.md
+    - '0076: Retire Factory Studio and In-Container Assembly Line to Focus on Modal Sandboxes': adr/0076-retire-factory-studio-and-assembly-line-to-focus-on-modal-sandboxes.md
+    - '0077: Centralized Organization Credentials and In-Repo Secrets Architecture': adr/0077-centralized-org-credentials-and-in-repo-secrets.md
+    - '0078: Pre-bake GitHub CLI in Shared Base Image': adr/0078-prebake-github-cli-in-shared-base-image.md
+    - '0078: Replace --secret Flag with --repo and Retire Legacy Secret Staging in Sandbox Runner': adr/0078-replace-secret-flag-with-repo-flag-in-sandbox-runner.md
+    - '0079: Hosted Sandbox Control Plane Function': adr/0079-hosted-sandbox-control-plane-function.md
+    - '0080: Automatic SSH Config Registration for Modal Sandboxes': adr/0080-automatic-ssh-config-registration-for-sandboxes.md
+    - '0080: Default Antigravity Text Generation and Source Control Writer Model in T3 Code': adr/0080-default-antigravity-text-and-source-control-writer-model-in-t3-code.md
+    - '0081: Modal Tunnel Pairing URL and QR Code in T3 Code CLI': adr/0081-modal-tunnel-pairing-url-in-t3-code-cli.md
+    - '0082: Sandbox Dot Directories for Staged Secrets and Scripts': adr/0082-sandbox-dot-directories-for-secrets-and-scripts.md
+    - '0083: Persistent T3 Code Usage, Agent Transcripts, and Scan Caches via Modal Volume': adr/0083-t3-code-persistent-usage-and-transcripts-via-modal-volume.md
+    - '0084: Sandbox Web Dashboard, Snapshot Registry, and Multi-Profile Workspace Discovery': adr/0084-sandbox-runner-web-ui-and-snapshot-registry.md
+    - '0085: Retire Local Web UI and Enforce Strict HTTP Basic Authentication': adr/0085-retire-local-web-ui-and-enforce-basic-auth.md
+    - '0086: Cross-App Sandbox Discovery and Environment-Wide Listing in Control Plane Web UI': adr/0086-cross-app-sandbox-discovery-in-control-plane-web-ui.md
+    - '0087: Antigravity ACP Credential Preservation in Filesystem Snapshots': adr/0087-antigravity-acp-credential-preservation-in-filesystem-snapshots.md
+    - '0088: Launch Fresh Sandboxes from Control Plane Web UI': adr/0088-launch-fresh-sandboxes-from-web-control-plane.md
+    - '0089: Developer CLI Tooling Precedence and Dot-Directory Resolution': adr/0089-developer-cli-tooling-precedence-and-dot-directory-resolution.md
+    - '0090: Control Plane Secret Staging and Credential Validation': adr/0090-control-plane-secret-staging-and-credential-validation.md
+    - '0091: Collapse Sandbox Provisioning Seam': adr/0091-collapse-sandbox-provisioning-seam.md
+    - '0092: Consolidate Secrets to Single .env and Retire Legacy Staging': adr/0092-consolidate-secrets-to-single-dotenv-and-retire-legacy-staging.md
+    - '0093: Codebase De-Hardcoding and Parameterization': adr/0093-codebase-de-hardcoding-and-parameterization.md
+    - '0094: Packaging, Developer Experience (DX), and Open-Source Governance': adr/0094-packaging-dx-and-open-source-governance.md
+    - '0095: Multi-Modal Account Profiles in .env and Native Sandbox Provisioning': adr/0095-multi-modal-account-profiles-in-dotenv.md
+- Agent Guidelines:
+  - Domain Documentation: agents/domain.md
+  - Issue Tracker: agents/issue-tracker.md
+  - Triage Labels: agents/triage-labels.md
+- Reference:
+  - Glossary: reference/glossary.md
+  - Environment Variables: reference/environment.md
+  - Contributing Guide: reference/contributing.md
+  - Security Policy: reference/security.md
