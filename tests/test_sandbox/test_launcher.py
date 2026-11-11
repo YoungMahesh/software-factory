@@ -1,5 +1,7 @@
 """Unit tests for the deep SandboxLauncher module and RunningSandbox domain model."""
 
+import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
@@ -155,7 +157,6 @@ class TestSandboxLauncher(unittest.TestCase):
         self.assertEqual(sb.object_id, "sb-func-1")
         self.assertEqual(resp.sandbox_id, "sb-func-1")
 
-
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     def test_launcher_injects_host_git_identity_into_container_env(self, mock_lookup, mock_create):
@@ -191,9 +192,6 @@ class TestSandboxLauncher(unittest.TestCase):
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     def test_launcher_unqualified_repo_without_gh_org_name_raises_value_error(self, mock_lookup, mock_create):
-        import os
-        from unittest.mock import patch
-
         launcher = SandboxLauncher(
             build_image_fn=MagicMock(),
             load_pubkey_fn=MagicMock(return_value="key"),
@@ -210,9 +208,6 @@ class TestSandboxLauncher(unittest.TestCase):
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     def test_launcher_unqualified_repo_with_gh_org_name_resolves_target_repo(self, mock_lookup, mock_create):
-        import os
-        from unittest.mock import patch
-
         mock_sandbox = MagicMock()
         mock_sandbox.object_id = "sb-org-res"
         mock_sandbox.poll.return_value = None
@@ -231,6 +226,44 @@ class TestSandboxLauncher(unittest.TestCase):
             call_env = mock_create.call_args.kwargs["env"]
             self.assertEqual(call_env["GH_REPO"], "custom-org/bare-repo")
             self.assertEqual(call_env["GH_ORG"], "custom-org")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_modal_requires_modal_tokens(self, mock_lookup, mock_create):
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+        )
+        req = LaunchRequest(name="modal-app", modal=True)
+
+        with patch.dict(os.environ, {"MODAL_TOKENS": ""}, clear=False):
+            with self.assertRaises(ValueError) as ctx:
+                launcher.launch(req)
+            self.assertIn("Modal development tooling (--modal) requires valid MODAL_TOKENS", str(ctx.exception))
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_modal_with_valid_modal_tokens_injects_and_runs(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-modal-ok"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+        )
+        req = LaunchRequest(name="modal-app", modal=True, profile="work")
+        tokens = json.dumps([{"name": "work", "token_id": "ak-123", "token_secret": "as-456"}])
+
+        with patch.dict(os.environ, {"MODAL_TOKENS": tokens}, clear=False):
+            launcher.launch(req)
+            call_env = mock_create.call_args.kwargs["env"]
+            self.assertEqual(call_env["ENABLE_MODAL"], "1")
+            self.assertEqual(call_env["MODAL_PROFILE"], "work")
 
 
 if __name__ == "__main__":

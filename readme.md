@@ -89,7 +89,7 @@ Configure credentials via `.env` (copy from [`.env.example`](.env.example)) only
 | **Herdr Multiplexer** | `--herdr` | None | Terminal multiplexer and process coordinator pre-installed in `/usr/local/bin`. |
 | **React Native / Android** | `--react-native` | None | Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel (port 8081). |
 | **Headless Chrome** | `--browser` | None | Pre-baked Google Chrome for Playwright, Puppeteer, and Chrome DevTools MCP servers. |
-| **Modal Inside Sandbox** | `--modal` | Optional (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`) | Virtual environment pre-installed with Modal SDK for developing Modal apps inside sandboxes. |
+| **Modal Inside Sandbox** | `--modal` | `MODAL_TOKENS` | Virtual environment pre-installed with Modal SDK, configured with multi-account profiles (`~/.modal.toml`) from `.env`. |
 
 ---
 
@@ -132,7 +132,8 @@ modal-sandbox -r my-repo --t3 --agy --herdr --browser
 | `--herdr` | Install Herdr agent multiplexer | `False` |
 | `--browser` | Pre-bake headless Google Chrome for browser MCP tooling | `False` |
 | `--react-native` | Install Android SDK/NDK toolchain and Metro tunnel | `False` |
-| `--modal` | Provision Modal SDK and client credentials inside sandbox | `False` |
+| `--modal` | Provision Modal SDK and multi-account client credentials inside sandbox | `False` |
+| `--profile <name>` | Modal workspace profile to launch in and set as active in sandbox | None |
 | `--no-cloudflare` | Disable default Cloudflare Tunnel ingress on port 3000 | `False` |
 | `--no-ssh-config` | Do not automatically append SSH connection details to `~/.ssh/config` | `False` |
 | `--sops` | Retain Age private key in `~/.config/sops` for debugging | `False` |

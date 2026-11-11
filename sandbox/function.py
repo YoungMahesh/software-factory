@@ -131,10 +131,6 @@ image = (
     .add_local_dir(str(repo_root / "scripts"), "/root/.scripts")
 )
 
-modal_toml = Path.home() / ".modal.toml"
-if modal_toml.is_file():
-    image = image.add_local_file(str(modal_toml), "/root/.modal.toml")
-
 if (repo_root / "sandbox" / "static").is_dir():
     image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
 

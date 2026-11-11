@@ -1,5 +1,6 @@
 """Unit tests for Modal multi-profile discovery and client resolution."""
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -14,6 +15,8 @@ from sandbox.profiles import (
     get_client_for_profile,
     get_profile_credentials,
     load_profiles_config,
+    parse_modal_tokens_data,
+    parse_modal_tokens_env,
 )
 
 
@@ -163,3 +166,49 @@ token_secret = "as-2"
             self.assertIn("p1", all_clients)
             self.assertIn("p2", all_clients)
             self.assertEqual(mock_from_credentials.call_count, 2)
+
+    def test_parse_modal_tokens_data(self):
+        raw = json.dumps([
+            {"name": "Work Account", "token_id": "ak-work", "token_secret": "as-work", "environment": "main"},
+            {"name": "Personal", "token_id": "ak-pers", "token_secret": "as-pers", "active": True},
+            {"name": "Invalid", "token_id": "ak-inv"},  # missing token_secret
+            "not a dict",
+        ])
+        profiles = parse_modal_tokens_data(raw)
+        self.assertIn("work-account", profiles)
+        self.assertEqual(profiles["work-account"]["token_id"], "ak-work")
+        self.assertEqual(profiles["work-account"]["token_secret"], "as-work")
+        self.assertEqual(profiles["work-account"]["environment"], "main")
+
+        self.assertIn("personal", profiles)
+        self.assertEqual(profiles["personal"]["token_id"], "ak-pers")
+        self.assertEqual(profiles["personal"]["active"], True)
+
+        self.assertNotIn("invalid", profiles)
+        self.assertEqual(parse_modal_tokens_data(""), {})
+        self.assertEqual(parse_modal_tokens_data("invalid json {"), {})
+        self.assertEqual(parse_modal_tokens_data({"not": "a list"}), {})
+
+    def test_load_profiles_config_with_modal_tokens(self):
+        tokens_json = json.dumps([
+            {"name": "prod", "token_id": "ak-prod", "token_secret": "as-prod"},
+            {"name": "dev", "token_id": "ak-dev", "token_secret": "as-dev", "active": True},
+        ])
+        with patch.dict(os.environ, {"MODAL_TOKENS": tokens_json}):
+            profiles = load_profiles_config()
+            self.assertIn("prod", profiles)
+            self.assertIn("dev", profiles)
+            self.assertEqual(profiles["dev"]["active"], True)
+            self.assertEqual(get_active_profile_name(), "dev")
+
+            available = get_available_profiles()
+            self.assertEqual(len(available), 2)
+            names = [p["name"] for p in available]
+            self.assertIn("prod", names)
+            self.assertIn("dev", names)
+            dev_prof = next(p for p in available if p["name"] == "dev")
+            self.assertTrue(dev_prof["active"])
+            self.assertNotIn("token_id", dev_prof)
+
+            creds = get_profile_credentials("prod")
+            self.assertEqual(creds, {"token_id": "ak-prod", "token_secret": "as-prod"})

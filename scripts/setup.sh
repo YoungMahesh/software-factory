@@ -42,15 +42,65 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$SETUP_MODAL" = true ]; then
-    if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
-        mkdir -p ~/.modal
-        cat << EOF > ~/.modal.toml
-[default]
-token_id = "$MODAL_TOKEN_ID"
-token_secret = "$MODAL_TOKEN_SECRET"
-EOF
-        chmod 600 ~/.modal.toml
-    fi
+    python3 -c '
+import json, os, re
+
+tokens_raw = os.environ.get("MODAL_TOKENS", "[]")
+target_profile = os.environ.get("MODAL_PROFILE", "").strip()
+
+try:
+    parsed_tokens = json.loads(tokens_raw)
+except Exception:
+    parsed_tokens = []
+
+profiles = []
+if isinstance(parsed_tokens, list):
+    for idx, entry in enumerate(parsed_tokens):
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("profile") or f"profile-{idx+1}").strip()
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "-", name).strip("-") or f"profile-{idx+1}"
+        token_id = entry.get("token_id")
+        token_secret = entry.get("token_secret")
+        env_name = str(entry.get("environment", "main"))
+        is_active = bool(entry.get("active"))
+        if token_id and token_secret:
+            profiles.append({
+                "slug": slug,
+                "token_id": str(token_id),
+                "token_secret": str(token_secret),
+                "environment": env_name,
+                "active": is_active
+            })
+
+if profiles:
+    active_slug = None
+    if target_profile and any(p["slug"] == target_profile for p in profiles):
+        active_slug = target_profile
+    else:
+        for p in profiles:
+            if p["active"]:
+                active_slug = p["slug"]
+                break
+        if not active_slug:
+            active_slug = profiles[0]["slug"]
+
+    toml_path = os.path.expanduser("~/.modal.toml")
+    lines = []
+    for p in profiles:
+        lines.append(f"[{p[\"slug\"]}]")
+        lines.append(f"token_id = \"{p[\"token_id\"]}\"")
+        lines.append(f"token_secret = \"{p[\"token_secret\"]}\"")
+        if p["environment"]:
+            lines.append(f"environment = \"{p[\"environment\"]}\"")
+        if p["slug"] == active_slug:
+            lines.append("active = true")
+        lines.append("")
+
+    with open(toml_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    os.chmod(toml_path, 0o600)
+' 2>/dev/null || true
 fi
 
 if [ "$SETUP_OPENCODE" = true ] || [ "$SETUP_PI" = true ]; then

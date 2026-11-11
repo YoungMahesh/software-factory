@@ -209,15 +209,20 @@ class SandboxLauncher:
                     line = line.strip()
                     if not has_gh_token and line.startswith("GH_TOKEN="):
                         val = line.split("=", 1)[1].strip().strip("'\"")
-                        if val:
-                            has_gh_token = True
-                            os.environ["GH_TOKEN"] = val
+                        if val: has_gh_token = True; os.environ["GH_TOKEN"] = val
                     if not os.environ.get("GH_ORG_NAME") and line.startswith("GH_ORG_NAME="):
                         val = line.split("=", 1)[1].strip().strip("'\"")
-                        if val:
-                            os.environ["GH_ORG_NAME"] = val
+                        if val: os.environ["GH_ORG_NAME"] = val
+                    if not os.environ.get("MODAL_TOKENS") and line.startswith("MODAL_TOKENS="):
+                        val = line.split("=", 1)[1].strip().strip("'\"")
+                        if val: os.environ["MODAL_TOKENS"] = val
             except Exception:
                 pass
+
+        if req.modal:
+            from sandbox.profiles import parse_modal_tokens_env
+            if not parse_modal_tokens_env():
+                raise ValueError("Modal development tooling (--modal) requires valid MODAL_TOKENS in environment or .env.")
 
         if clean_repo:
             if not has_gh_token:
@@ -247,9 +252,14 @@ class SandboxLauncher:
         app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
         sandbox_name = f"{app_name}-{random_id}"
         self._emit_log(f"🔑 Resolving App '{app_name}' and sandbox instance '{sandbox_name}'...")
+        target_client = self.client
+        if target_client is None and req.profile:
+            from sandbox.profiles import get_client_for_profile
+            target_client = get_client_for_profile(req.profile)
+
         app = (
-            modal.App.lookup(app_name, client=self.client, create_if_missing=True)
-            if self.client
+            modal.App.lookup(app_name, client=target_client, create_if_missing=True)
+            if target_client
             else modal.App.lookup(app_name, create_if_missing=True)
         )
 
@@ -275,8 +285,7 @@ class SandboxLauncher:
             secret_keys = [
                 "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
                 "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET",
-                "ANTIGRAVITY_PROJECT_ID", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
-                "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
+                "ANTIGRAVITY_PROJECT_ID", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY", "MODAL_TOKENS",
                 "WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN",
             ]
             env_dict = {k: os.environ[k] for k in secret_keys if k in os.environ and os.environ[k]}
@@ -295,6 +304,8 @@ class SandboxLauncher:
         if org_name: env["GH_ORG"] = org_name
         if req.full_clone: env["FULL_CLONE"] = "1"
         if not cloudflare_active: env["ENABLE_CLOUDFLARE"] = "0"
+        if req.profile: env["MODAL_PROFILE"] = req.profile
+        elif os.environ.get("MODAL_PROFILE"): env["MODAL_PROFILE"] = os.environ["MODAL_PROFILE"]
 
         memory_gb: int | None = None
         if req.vm:
@@ -330,14 +341,16 @@ class SandboxLauncher:
         ]:
             if flag: env[key] = "1"
 
-        volumes = {}
-        if t3_persist_enabled:
-            volumes.update(get_t3_usage_volumes(req.t3_usage_volume))
         if req.react_native:
             encrypted_ports.append(req.metro_port)
             env["ENABLE_REACT_NATIVE"] = "1"
             env["METRO_PORT"] = str(req.metro_port)
+
+        volumes: dict[str, modal.Volume] = {}
+        if req.react_native:
             volumes.update(get_gradle_volumes())
+        if t3_persist_enabled:
+            volumes.update(get_t3_usage_volumes(name=req.t3_usage_volume))
 
         feature_flags = [
             (not req.no_cloudflare, "Cloudflare Tunnel"), (req.full_clone, "Full Git Clone"),
@@ -349,12 +362,7 @@ class SandboxLauncher:
         ]
         features = [label for active, label in feature_flags if active]
         runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
-        features_suffix = f" & {' & '.join(features)}" if features else ""
-        from_suffix = f" from snapshot {req.from_snapshot}" if req.from_snapshot else ""
-        self._emit_log(
-            f"🏝️ Launching Modal {runtime_desc}{from_suffix} with SSH"
-            f"{features_suffix} (App: {app_name}, Sandbox: {sandbox_name})..."
-        )
+        self._emit_log(f"📋 Configuration: {runtime_desc} | Features: {', '.join(features)}")
 
         sandbox_kwargs: dict[str, Any] = {
             "timeout": TIMEOUT_SECS, "idle_timeout": IDLE_TIMEOUT_SECS, "image": image,
@@ -363,8 +371,8 @@ class SandboxLauncher:
             "cpu": (0.125, 4.0), "env": env, "runtime": "vm" if req.vm else "gvisor",
             "memory": (128, 16384),
         }
-        if self.client is not None:
-            sandbox_kwargs["client"] = self.client
+        if target_client is not None:
+            sandbox_kwargs["client"] = target_client
 
         self._emit_log("🚀 Instantiating Modal Sandbox container...")
         with modal.enable_output():

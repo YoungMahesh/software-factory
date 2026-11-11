@@ -164,6 +164,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Also configure Python 3, virtual environment, Modal SDK, and decrypt Modal client credentials.",
     )
     parser.add_argument(
+        "--profile",
+        default=None,
+        help="Modal workspace profile to launch the sandbox in and set as active in the sandbox.",
+    )
+    parser.add_argument(
         "--metro-port",
         type=int,
         default=DEFAULT_METRO_PORT,
@@ -236,6 +241,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             args.opencode
             or args.react_native
             or args.modal
+            or getattr(args, "profile", None)
             or args.sops
             or args.browser
             or args.agy

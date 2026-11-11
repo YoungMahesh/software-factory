@@ -37,6 +37,7 @@ class LaunchRequest(BaseModel):
     react_native: bool = False
     metro_port: int = DEFAULT_METRO_PORT
     modal: bool = False
+    profile: str | None = None
     sops: bool = False
     browser: bool = False
     agy: bool = False

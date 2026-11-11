@@ -129,7 +129,7 @@ The public hostname routed by Cloudflare Tunnel to container port 3000, configur
 _Avoid_: Static tunnel URL, hardcoded tunnel domain
 
 **Modal Client Credentials**:
-The authenticated client credentials (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`) provided via `.env` or written to `~/.modal.toml` via `scripts/setup.sh --modal` (mode 0600), allowing the Modal CLI and SDK to manage cloud resources within the sandbox.
+The authenticated multi-account client credentials configured via `MODAL_TOKENS` in `.env` (a JSON array of profile objects) or written to `~/.modal.toml` via `scripts/setup.sh --modal` (mode 0600), allowing the Modal CLI and SDK to manage cloud resources across workspaces within the sandbox.
 _Avoid_: Modal token, modal config, modal credentials
 
 **OpenCode Credentials**:
@@ -173,7 +173,7 @@ A distributed catalog and metadata registry (`sandbox/snapshots.py`) tracking ca
 _Avoid_: Snapshot catalog, snapshot db, snapshot list, modal dict store
 
 **Multi-Profile Configuration**:
-A Modal workspace discovery and client management service (`sandbox/profiles.py`) that parses `~/.modal.toml` (or `MODAL_CONFIG_PATH`), discovers configured workspace profiles, and supplies profile-scoped authenticated `modal.Client` instances to discover, query, and manage sandboxes and snapshots across multiple Modal environments.
+A Modal workspace discovery and client management service (`sandbox/profiles.py`) that discovers configured workspace profiles from `MODAL_TOKENS` in `.env` or `~/.modal.toml`, and supplies profile-scoped authenticated `modal.Client` instances to discover, query, and manage sandboxes and snapshots across multiple Modal environments.
 _Avoid_: Modal profiles, multi-account setup, workspace selector
 
 **T3 Code Persistent Storage Volume**:

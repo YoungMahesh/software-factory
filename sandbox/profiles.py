@@ -1,14 +1,16 @@
 """Modal multi-profile configuration and client management.
 
-Parses ~/.modal.toml, discovers configured workspace profiles, and supplies
-authenticated modal.Client instances scoped to specific profiles.
+Discovers configured workspace profiles from MODAL_TOKENS in environment or ~/.modal.toml,
+and supplies authenticated modal.Client instances scoped to specific profiles.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
+import re
 import tomllib
 from typing import Any
 
@@ -31,8 +33,56 @@ def get_config_path(override_path: Path | str | None = None) -> Path:
     return DEFAULT_CONFIG_PATH.expanduser().resolve()
 
 
+def parse_modal_tokens_data(raw: str | Any) -> dict[str, dict[str, Any]]:
+    """Parses a JSON string or list structure into profile configurations."""
+    if not raw:
+        return {}
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except Exception as exc:
+            logger.warning("Failed to parse MODAL_TOKENS JSON: %s", exc)
+            return {}
+    elif isinstance(raw, list):
+        data = raw
+    else:
+        return {}
+
+    if not isinstance(data, list):
+        return {}
+
+    profiles: dict[str, dict[str, Any]] = {}
+    for idx, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("profile") or f"profile-{idx+1}").strip()
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "-", name.lower().strip()).strip("-") or f"profile-{idx+1}"
+        token_id = entry.get("token_id")
+        token_secret = entry.get("token_secret")
+        if token_id and token_secret:
+            prof: dict[str, Any] = {
+                "token_id": str(token_id),
+                "token_secret": str(token_secret),
+                "environment": str(entry.get("environment", "main")),
+            }
+            if entry.get("active") is True:
+                prof["active"] = True
+            profiles[slug] = prof
+    return profiles
+
+
+def parse_modal_tokens_env() -> dict[str, dict[str, Any]]:
+    """Parses MODAL_TOKENS environment variable containing a JSON array of profile objects."""
+    return parse_modal_tokens_data(os.environ.get("MODAL_TOKENS", ""))
+
+
 def load_profiles_config(config_path: Path | str | None = None) -> dict[str, dict[str, Any]]:
-    """Loads and parses profiles from the modal configuration file."""
+    """Loads and parses profiles from MODAL_TOKENS env or modal configuration file."""
+    if config_path is None:
+        env_profiles = parse_modal_tokens_env()
+        if env_profiles:
+            return env_profiles
+
     path = get_config_path(config_path)
     if not path.is_file():
         return {}
@@ -49,7 +99,7 @@ def load_profiles_config(config_path: Path | str | None = None) -> dict[str, dic
 
 
 def get_active_profile_name(config_path: Path | str | None = None) -> str | None:
-    """Determines the active profile name from environment or toml file."""
+    """Determines the active profile name from environment or loaded profiles."""
     env_profile = os.environ.get("MODAL_PROFILE")
     if env_profile:
         return env_profile
@@ -77,14 +127,6 @@ def get_available_profiles(config_path: Path | str | None = None) -> list[dict[s
             "name": name,
             "active": (name == active_name),
             "environment": data.get("environment", "main"),
-        })
-
-    # If no profiles in toml but environment credentials exist, represent default profile
-    if not result and (os.environ.get("MODAL_TOKEN_ID") or os.environ.get("MODAL_TOKEN_SECRET")):
-        result.append({
-            "name": "default",
-            "active": True,
-            "environment": os.environ.get("MODAL_ENVIRONMENT", "main"),
         })
 
     return result
