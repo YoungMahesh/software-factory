@@ -35,7 +35,7 @@
     "when": "terminalFocus"
   },
   {
-    "key": "mod+w",
+    "key": "mod+d",
     "command": "terminal.close",
     "when": "terminalFocus"
   },
