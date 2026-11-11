@@ -19,6 +19,10 @@ import base64
 import modal
 
 from sandbox.env_store import fetch_vault_env
+from sandbox.provenance import (
+    resolve_host_git_identity,
+    resolve_host_software_factory_provenance,
+)
 
 from sandbox.config import (
     DEFAULT_METRO_PORT, DEFAULT_OPENCODE_PORT, DEFAULT_ORG,
@@ -102,45 +106,6 @@ class RunningSandbox:
         return iter((self.sandbox, self.response))
 
 
-def resolve_host_git_identity() -> dict[str, str]:
-    """Dynamically resolves host Git identity from environment or git configuration."""
-    git_env: dict[str, str] = {}
-    name = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("GIT_COMMITTER_NAME")
-    email = os.environ.get("GIT_AUTHOR_EMAIL") or os.environ.get("GIT_COMMITTER_EMAIL")
-    if not name:
-        try:
-            res = subprocess.run(
-                ["git", "config", "user.name"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if res.returncode == 0 and res.stdout.strip():
-                name = res.stdout.strip()
-        except Exception:
-            pass
-    if not email:
-        try:
-            res = subprocess.run(
-                ["git", "config", "user.email"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if res.returncode == 0 and res.stdout.strip():
-                email = res.stdout.strip()
-        except Exception:
-            pass
-
-    if name:
-        git_env["GIT_AUTHOR_NAME"] = name
-        git_env["GIT_COMMITTER_NAME"] = name
-    if email:
-        git_env["GIT_AUTHOR_EMAIL"] = email
-        git_env["GIT_COMMITTER_EMAIL"] = email
-    return git_env
-
-
 class SandboxLauncher:
     """Deep module for provisioning and configuring Modal sandboxes."""
 
@@ -151,6 +116,7 @@ class SandboxLauncher:
         load_pubkey_fn: Callable[[], str] | None = None,
         append_ssh_fn: Callable[..., bool] | None = None,
         resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
+        resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable[..., dict[str, str] | None] | None = None,
         log_cb: Callable[[str], None] | None = None,
         repo_root: Path | None = None,
@@ -160,6 +126,7 @@ class SandboxLauncher:
         self.load_pubkey_fn = load_pubkey_fn or load_ssh_pub_key
         self.append_ssh_fn = append_ssh_fn or append_ssh_config
         self.resolve_git_identity_fn = resolve_git_identity_fn or resolve_host_git_identity
+        self.resolve_provenance_fn = resolve_provenance_fn or resolve_host_software_factory_provenance
         self.fetch_vault_env_fn = fetch_vault_env_fn or fetch_vault_env
         self.log_cb = log_cb
         self.repo_root = repo_root
@@ -270,8 +237,8 @@ class SandboxLauncher:
             secret_keys = [
                 "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
                 "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET",
-                "ANTIGRAVITY_PROJECT_ID", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY", "MODAL_TOKENS",
-                "WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN",
+                "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY", "MODAL_TOKENS",
+                "WEB_UI_USERNAME", "WEB_UI_PASSWORD",
             ]
             env_dict = {k: os.environ[k] for k in secret_keys if k in os.environ and os.environ[k]}
             if env_dict:
@@ -283,6 +250,8 @@ class SandboxLauncher:
             "MODAL_APP_NAME": app_name, "SANDBOX_NAME": sandbox_name,
         }
         env.update(self.resolve_git_identity_fn())
+        provenance = self.resolve_provenance_fn(repo_root)
+        env.update(provenance)
 
         if bare_repo:
             try:
@@ -361,9 +330,16 @@ class SandboxLauncher:
         runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
         self._emit_log(f"📋 Configuration: {runtime_desc} | Features: {', '.join(features)}")
 
+        tags: dict[str, str] = {
+            "instance_name": sandbox_name,
+            "app_name": app_name,
+            "software_factory_commit": provenance.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
+            "software_factory_dirty": provenance.get("SOFTWARE_FACTORY_DIRTY", "0"),
+        }
+
         sandbox_kwargs: dict[str, Any] = {
             "timeout": TIMEOUT_SECS, "idle_timeout": IDLE_TIMEOUT_SECS, "image": image,
-            "app": app, "name": sandbox_name, "tags": {"instance_name": sandbox_name, "app_name": app_name},
+            "app": app, "name": sandbox_name, "tags": tags,
             "volumes": volumes, "unencrypted_ports": [22], "encrypted_ports": encrypted_ports,
             "cpu": (0.125, 4.0), "env": env, "runtime": "vm" if req.vm else "gvisor",
             "memory": (128, 16384),
@@ -460,6 +436,7 @@ class SandboxLauncher:
         load_pubkey_fn: Callable | None = None,
         append_ssh_fn: Callable | None = None,
         resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
+        resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable | None = None,
         client: modal.Client | None = None,
         log_cb: Callable[[str], None] | None = None,
@@ -469,6 +446,7 @@ class SandboxLauncher:
         launcher = cls(
             client=client, build_image_fn=build_image_fn, load_pubkey_fn=load_pubkey_fn,
             append_ssh_fn=append_ssh_fn, resolve_git_identity_fn=resolve_git_identity_fn,
+            resolve_provenance_fn=resolve_provenance_fn,
             fetch_vault_env_fn=fetch_vault_env_fn, log_cb=log_cb, repo_root=repo_root,
         )
         return launcher.launch(req, register_ssh_config=register_ssh_config)
@@ -484,6 +462,7 @@ def launch_sandbox(
     register_ssh_config: bool = False,
     append_ssh_fn: Callable | None = None,
     resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
+    resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
     fetch_vault_env_fn: Callable | None = None,
 ) -> RunningSandbox:
     """Convenience functional seam delegating to SandboxLauncher."""
@@ -491,6 +470,7 @@ def launch_sandbox(
         req=req, repo_root=repo_root, build_image_fn=build_image_fn,
         load_pubkey_fn=load_pubkey_fn, append_ssh_fn=append_ssh_fn,
         resolve_git_identity_fn=resolve_git_identity_fn,
+        resolve_provenance_fn=resolve_provenance_fn,
         fetch_vault_env_fn=fetch_vault_env_fn,
         client=client, log_cb=log_cb, register_ssh_config=register_ssh_config,
     )

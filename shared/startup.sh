@@ -620,6 +620,105 @@ fi
 grep -qxF "unset GH_REPO" ~/.bashrc 2>/dev/null || echo "unset GH_REPO" >> ~/.bashrc
 unset GH_REPO 2>/dev/null || true
 
+# -------------------------------------------------------------
+# Software-Factory Provenance Tracking & Inspection Utility
+# -------------------------------------------------------------
+SF_COMMIT="${SOFTWARE_FACTORY_COMMIT:-unknown}"
+SF_COMMIT_SHORT="${SOFTWARE_FACTORY_COMMIT_SHORT:-${SF_COMMIT:0:7}}"
+SF_REF="${SOFTWARE_FACTORY_REF:-unknown}"
+SF_DIRTY="${SOFTWARE_FACTORY_DIRTY:-0}"
+
+export SOFTWARE_FACTORY_COMMIT="$SF_COMMIT"
+export SOFTWARE_FACTORY_COMMIT_SHORT="$SF_COMMIT_SHORT"
+export SOFTWARE_FACTORY_REF="$SF_REF"
+export SOFTWARE_FACTORY_DIRTY="$SF_DIRTY"
+
+for var in SOFTWARE_FACTORY_COMMIT SOFTWARE_FACTORY_COMMIT_SHORT SOFTWARE_FACTORY_REF SOFTWARE_FACTORY_DIRTY; do
+    val="${!var}"
+    grep -qxF "export $var=\"$val\"" ~/.bashrc 2>/dev/null || echo "export $var=\"$val\"" >> ~/.bashrc
+    grep -qxF "$var=\"$val\"" /etc/environment 2>/dev/null || echo "$var=\"$val\"" >> /etc/environment
+done
+
+VERSION_FILE="/etc/software-factory-version.json"
+NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
+
+python3 -c '
+import json, os, sys
+
+vfile = sys.argv[1]
+commit = sys.argv[2]
+commit_short = sys.argv[3]
+ref = sys.argv[4]
+dirty = sys.argv[5]
+now = sys.argv[6]
+is_snapshot = (sys.argv[7] == "1")
+
+data = {}
+if os.path.exists(vfile):
+    try:
+        with open(vfile, "r") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+
+if is_snapshot or data.get("commit"):
+    origin = data.get("origin_commit") or data.get("commit") or "unknown"
+    data["origin_commit"] = origin
+    data["resumed_commit"] = commit
+    data["resumed_commit_short"] = commit_short
+    data["resumed_ref"] = ref
+    data["resumed_dirty"] = dirty
+    data["resumed_at"] = now
+else:
+    data["commit"] = commit
+    data["commit_short"] = commit_short
+    data["ref"] = ref
+    data["dirty"] = dirty
+    data["launched_at"] = now
+
+try:
+    with open(vfile, "w") as f:
+        json.dump(data, f, indent=2)
+    os.chmod(vfile, 0o644)
+except Exception as e:
+    print(f"Warning: Failed to write {vfile}: {e}", file=sys.stderr)
+' "$VERSION_FILE" "$SF_COMMIT" "$SF_COMMIT_SHORT" "$SF_REF" "$SF_DIRTY" "$NOW_ISO" "${RESUME_SNAPSHOT:-0}" 2>/dev/null || true
+
+cat << 'EOF' > /usr/local/bin/check-software-factory
+#!/usr/bin/env bash
+ORG="${GH_ORG_NAME:-sFactory0}"
+REPO="software-factory"
+VFILE="/etc/software-factory-version.json"
+
+echo "=== Software-Factory Provenance ==="
+if [ -f "$VFILE" ]; then
+    cat "$VFILE"
+else
+    echo "Commit:       ${SOFTWARE_FACTORY_COMMIT:-unknown}"
+    echo "Short SHA:    ${SOFTWARE_FACTORY_COMMIT_SHORT:-unknown}"
+    echo "Ref:          ${SOFTWARE_FACTORY_REF:-unknown}"
+    echo "Dirty State:  ${SOFTWARE_FACTORY_DIRTY:-0}"
+fi
+
+COMMIT="${SOFTWARE_FACTORY_COMMIT:-}"
+if [ -z "$COMMIT" ] || [ "$COMMIT" = "unknown" ]; then
+    if [ -f "$VFILE" ]; then
+        COMMIT=$(python3 -c "import json; d=json.load(open('$VFILE')); print(d.get('resumed_commit') or d.get('commit') or '')" 2>/dev/null || true)
+    fi
+fi
+
+echo ""
+echo "=== GitHub Comparison URL ==="
+if [ -n "$COMMIT" ] && [ "$COMMIT" != "unknown" ]; then
+    echo "Diff against main:"
+    echo "https://github.com/${ORG}/${REPO}/compare/${COMMIT}...main"
+else
+    echo "Commit SHA unknown; comparison URL unavailable."
+fi
+EOF
+chmod +x /usr/local/bin/check-software-factory 2>/dev/null || true
+ln -sf /usr/local/bin/check-software-factory /usr/local/bin/check-sf 2>/dev/null || true
+
 if [ "${setup_status:-0}" -ne 0 ]; then
     echo "ERROR: ${SETUP_SCRIPT:-/root/.scripts/setup.sh} failed to execute (exit code: $setup_status)." >&2
     exit "$setup_status"
@@ -820,10 +919,6 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
                 "https://www.googleapis.com/auth/aicode"
             ]
         }
-        if existing_tok.get("project_id"):
-            acp_token["project_id"] = existing_tok["project_id"]
-        elif os.environ.get("ANTIGRAVITY_PROJECT_ID"):
-            acp_token["project_id"] = os.environ.get("ANTIGRAVITY_PROJECT_ID")
 
         for d in target_dirs:
             os.makedirs(d, mode=0o700, exist_ok=True)

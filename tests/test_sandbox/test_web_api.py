@@ -466,18 +466,17 @@ class TestWebAuth(unittest.TestCase):
             res_fav = self.client.get("/favicon.ico")
             self.assertEqual(res_fav.status_code, 204)
 
-    def test_modal_sandbox_auth_token_not_accepted_for_web_ui(self):
+    def test_bearer_token_not_accepted_for_web_ui(self):
         env = {
             "WEB_UI_USERNAME": "superadmin",
             "WEB_UI_PASSWORD": "secretpassword",
-            "MODAL_SANDBOX_AUTH_TOKEN": "token-xyz-123",
         }
         with patch.dict(os.environ, env, clear=True):
             # Bearer token is rejected on Web UI
             res_bearer = self.client.get("/", headers={"Authorization": "Bearer token-xyz-123"})
             self.assertEqual(res_bearer.status_code, 401)
 
-            # Basic Auth using token as password is rejected if it doesn't match WEB_UI_PASSWORD
-            basic_tok = base64.b64encode(b"superadmin:token-xyz-123").decode()
+            # Basic Auth using wrong password is rejected if it doesn't match WEB_UI_PASSWORD
+            basic_tok = base64.b64encode(b"superadmin:wrong-password").decode()
             res_basic = self.client.get("/", headers={"Authorization": f"Basic {basic_tok}"})
             self.assertEqual(res_basic.status_code, 401)

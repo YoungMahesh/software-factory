@@ -67,9 +67,21 @@ def record_snapshot(
     is_vm: bool = False,
     profile: str | None = None,
     store_name: str = SNAPSHOT_DICT_NAME,
+    software_factory_commit: str | None = None,
+    software_factory_dirty: str | None = None,
 ) -> dict[str, Any]:
     """Records metadata for a captured snapshot in the registry."""
     now_iso = datetime.now(timezone.utc).isoformat()
+    if software_factory_commit is None:
+        try:
+            from sandbox.launcher import resolve_host_software_factory_provenance
+            prov = resolve_host_software_factory_provenance()
+            software_factory_commit = prov.get("SOFTWARE_FACTORY_COMMIT_SHORT") or prov.get("SOFTWARE_FACTORY_COMMIT")
+            if software_factory_dirty is None:
+                software_factory_dirty = prov.get("SOFTWARE_FACTORY_DIRTY")
+        except Exception:
+            pass
+
     record: dict[str, Any] = {
         "image_id": image_id,
         "sandbox_id": sandbox_id,
@@ -79,6 +91,8 @@ def record_snapshot(
         "ttl_seconds": ttl_days * 86400,
         "is_vm": is_vm,
         "profile": profile,
+        "software_factory_commit": software_factory_commit,
+        "software_factory_dirty": software_factory_dirty or "0",
     }
 
     modal_dict = _get_modal_dict(store_name)

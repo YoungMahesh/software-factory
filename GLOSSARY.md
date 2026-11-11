@@ -173,7 +173,7 @@ The transitional repository-tracked directory (`.secrets/`) containing SOPS-encr
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
-A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving both a FastAPI REST API (`/launch`, `/snapshot`, `/health`) authenticated via Bearer tokens (`MODAL_SANDBOX_AUTH_TOKEN`) and the embedded Sandbox Web Dashboard SPA (`/` and `/api/*`) authenticated via HTTP Basic Auth (`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`), allowing external clients, the local CLI (`--remote`), and web browsers to inspect, provision, and manage sandboxes and snapshots across workspace profiles.
+A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving both a FastAPI REST API (`/launch`, `/snapshot`, `/health`) and the embedded Sandbox Web Dashboard SPA (`/` and `/api/*`) authenticated via unified HTTP Basic Auth (`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`), allowing external clients, the local CLI (`--remote`), and web browsers to inspect, provision, and manage sandboxes and snapshots across workspace profiles.
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:

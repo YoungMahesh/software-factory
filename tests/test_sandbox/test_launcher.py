@@ -8,7 +8,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from sandbox.core import LaunchRequest, LaunchResponse
-from sandbox.launcher import RunningSandbox, SandboxLauncher, launch_sandbox
+from sandbox.launcher import (
+    RunningSandbox,
+    SandboxLauncher,
+    launch_sandbox,
+    resolve_host_software_factory_provenance,
+)
 
 
 class TestRunningSandbox(unittest.TestCase):
@@ -192,6 +197,44 @@ class TestSandboxLauncher(unittest.TestCase):
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
+    def test_launcher_injects_software_factory_provenance_into_container_env_and_tags(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-prov-test"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        mock_prov = MagicMock(return_value={
+            "SOFTWARE_FACTORY_COMMIT": "e8a1f89c01234567890abcdef1234567890abcde",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "e8a1f89",
+            "SOFTWARE_FACTORY_REF": "main",
+            "SOFTWARE_FACTORY_DIRTY": "1",
+        })
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            resolve_provenance_fn=mock_prov,
+        )
+
+        req = LaunchRequest(name="prov-app")
+        launcher.launch(req)
+
+        mock_prov.assert_called_once()
+        call_kwargs = mock_create.call_args.kwargs
+        call_env = call_kwargs["env"]
+        call_tags = call_kwargs["tags"]
+
+        self.assertEqual(call_env["SOFTWARE_FACTORY_COMMIT"], "e8a1f89c01234567890abcdef1234567890abcde")
+        self.assertEqual(call_env["SOFTWARE_FACTORY_COMMIT_SHORT"], "e8a1f89")
+        self.assertEqual(call_env["SOFTWARE_FACTORY_REF"], "main")
+        self.assertEqual(call_env["SOFTWARE_FACTORY_DIRTY"], "1")
+
+        self.assertEqual(call_tags["software_factory_commit"], "e8a1f89")
+        self.assertEqual(call_tags["software_factory_dirty"], "1")
+
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
     def test_launcher_unqualified_repo_without_gh_org_name_raises_value_error(self, mock_lookup, mock_create):
         launcher = SandboxLauncher(
             build_image_fn=MagicMock(),
@@ -294,6 +337,103 @@ class TestSandboxLauncher(unittest.TestCase):
         decoded = base64.b64decode(call_env["VAULT_DOTENV_B64"]).decode("utf-8")
         self.assertIn("API_KEY=secret_abc", decoded)
         self.assertIn("DATABASE_URL=postgres://localhost", decoded)
+
+
+class TestSoftwareFactoryProvenanceResolution(unittest.TestCase):
+    def test_resolve_provenance_from_env(self):
+        env_dict = {
+            "SOFTWARE_FACTORY_COMMIT": "1111222233334444555566667777888899990000",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "1111222",
+            "SOFTWARE_FACTORY_REF": "release-v2",
+            "SOFTWARE_FACTORY_DIRTY": "1",
+        }
+        with patch.dict(os.environ, env_dict, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "1111222233334444555566667777888899990000")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "1111222")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "release-v2")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "1")
+
+    @patch("subprocess.run")
+    def test_resolve_provenance_from_git_clean(self, mock_run):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            res.returncode = 0
+            if cmd == ["git", "rev-parse", "HEAD"]:
+                res.stdout = "abcdef1234567890abcdef1234567890abcdef12\n"
+            elif cmd == ["git", "rev-parse", "--short", "HEAD"]:
+                res.stdout = "abcdef1\n"
+            elif cmd == ["git", "symbolic-ref", "--short", "HEAD"]:
+                res.stdout = "feat/sandbox-provenance\n"
+            elif cmd == ["git", "status", "--porcelain"]:
+                res.stdout = ""
+            else:
+                res.stdout = ""
+            return res
+
+        mock_run.side_effect = fake_run
+
+        empty_env = {
+            "SOFTWARE_FACTORY_COMMIT": "",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "",
+            "SOFTWARE_FACTORY_REF": "",
+            "SOFTWARE_FACTORY_DIRTY": "",
+        }
+        with patch.dict(os.environ, empty_env, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "abcdef1234567890abcdef1234567890abcdef12")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "abcdef1")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "feat/sandbox-provenance")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "0")
+
+    @patch("subprocess.run")
+    def test_resolve_provenance_from_git_dirty(self, mock_run):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            res.returncode = 0
+            if cmd == ["git", "rev-parse", "HEAD"]:
+                res.stdout = "9999999999999999999999999999999999999999\n"
+            elif cmd == ["git", "rev-parse", "--short", "HEAD"]:
+                res.stdout = "9999999\n"
+            elif cmd == ["git", "symbolic-ref", "--short", "HEAD"]:
+                res.stdout = "main\n"
+            elif cmd == ["git", "status", "--porcelain"]:
+                res.stdout = " M shared/startup.sh\n"
+            else:
+                res.stdout = ""
+            return res
+
+        mock_run.side_effect = fake_run
+
+        empty_env = {
+            "SOFTWARE_FACTORY_COMMIT": "",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "",
+            "SOFTWARE_FACTORY_REF": "",
+            "SOFTWARE_FACTORY_DIRTY": "",
+        }
+        with patch.dict(os.environ, empty_env, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "9999999999999999999999999999999999999999")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "9999999")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "main")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "1")
+
+    @patch("subprocess.run")
+    def test_resolve_provenance_fallback_on_git_failure(self, mock_run):
+        mock_run.side_effect = RuntimeError("git not found")
+
+        empty_env = {
+            "SOFTWARE_FACTORY_COMMIT": "",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "",
+            "SOFTWARE_FACTORY_REF": "",
+            "SOFTWARE_FACTORY_DIRTY": "",
+        }
+        with patch.dict(os.environ, empty_env, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "unknown")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "unknown")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "unknown")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "0")
 
 
 if __name__ == "__main__":

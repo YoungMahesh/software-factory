@@ -18,7 +18,15 @@ from sandbox.function import (
     validate_deployment_credentials,
     web_app,
 )
-from sandbox.main import run_sandbox_launch
+from sandbox.main import run_remote_request, run_sandbox_launch
+
+AUTH_ENV = {
+    "WEB_UI_USERNAME": "admin",
+    "WEB_UI_PASSWORD": "secretpassword",
+}
+BASIC_AUTH_HEADER = {
+    "Authorization": f"Basic {base64.b64encode(b'admin:secretpassword').decode('utf-8')}",
+}
 
 
 class TestSandboxFunctionAPI(unittest.TestCase):
@@ -32,48 +40,41 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         self.assertEqual(data.get("status"), "ok")
         self.assertEqual(data.get("app"), "sandbox-control-plane")
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "secret-test-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     def test_auth_enforcement_missing_header(self):
         response = self.client.post("/launch", json={})
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Missing Authorization header", response.json()["detail"])
+        self.assertIn("Authentication required", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "secret-test-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     def test_auth_enforcement_invalid_format(self):
         response = self.client.post(
             "/launch",
             json={},
-            headers={"Authorization": "Token secret-test-token"},
+            headers={"Authorization": "Bearer secret-test-token"},
         )
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Invalid Authorization header format", response.json()["detail"])
+        self.assertIn("Invalid authentication scheme; expected Basic authentication", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "secret-test-token"})
-    def test_auth_enforcement_invalid_token(self):
+    @patch.dict("os.environ", AUTH_ENV)
+    def test_auth_enforcement_invalid_credentials(self):
+        bad_creds = base64.b64encode(b"admin:wrongpassword").decode("utf-8")
         response = self.client.post(
             "/launch",
             json={},
-            headers={"Authorization": "Bearer wrong-token"},
+            headers={"Authorization": f"Basic {bad_creds}"},
         )
-        self.assertEqual(response.status_code, 403)
-        self.assertIn("Invalid bearer authentication token", response.json()["detail"])
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Incorrect authentication credentials", response.json()["detail"])
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("sandbox.function.launch_sandbox")
-    def test_auth_permissive_when_token_unset(self, mock_launch):
-        mock_sandbox = MagicMock()
-        mock_resp = LaunchResponse(
-            sandbox_id="sb-test-1",
-            app_name="test-app",
-            sandbox_name="test-app-12345678",
-        )
-        mock_launch.return_value = (mock_sandbox, mock_resp)
+    def test_auth_error_when_server_credentials_unset(self):
+        headers = {"Authorization": f"Basic {base64.b64encode(b'admin:secretpassword').decode('utf-8')}"}
+        response = self.client.post("/launch", json={"name": "test-app"}, headers=headers)
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("Server authentication misconfigured", response.json()["detail"])
 
-        response = self.client.post("/launch", json={"name": "test-app"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["sandbox_id"], "sb-test-1")
-
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_success(self, mock_launch):
         mock_sandbox = MagicMock()
@@ -87,71 +88,64 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         )
         mock_launch.return_value = (mock_sandbox, mock_resp)
 
-        headers = {"Authorization": "Bearer valid-token"}
-        response = self.client.post("/launch", json={"name": "my-app", "t3": True}, headers=headers)
+        response = self.client.post("/launch", json={"name": "my-app", "t3": True}, headers=BASIC_AUTH_HEADER)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["sandbox_id"], "sb-test-99")
         self.assertEqual(data["ssh_info"], ["ssh.modal.pub", 2222])
         self.assertEqual(data["t3_pair_url"], "https://test.modal.run/pair#token=abc")
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_value_error(self, mock_launch):
         mock_launch.side_effect = ValueError("--memory can only be used with --vm.")
-        headers = {"Authorization": "Bearer valid-token"}
-        response = self.client.post("/launch", json={"memory": 4}, headers=headers)
+        response = self.client.post("/launch", json={"memory": 4}, headers=BASIC_AUTH_HEADER)
         self.assertEqual(response.status_code, 400)
         self.assertIn("--memory can only be used with --vm", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_not_found_error(self, mock_launch):
         mock_launch.side_effect = FileNotFoundError("Snapshot custom-snap-id not found")
-        headers = {"Authorization": "Bearer valid-token"}
-        response = self.client.post("/launch", json={"repo": "my-repo"}, headers=headers)
+        response = self.client.post("/launch", json={"repo": "my-repo"}, headers=BASIC_AUTH_HEADER)
         self.assertEqual(response.status_code, 404)
         self.assertIn("Snapshot custom-snap-id not found", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_credentials_error_returns_500(self, mock_launch):
         mock_launch.side_effect = FileNotFoundError(
             "GitHub credentials (GH_TOKEN) not found in environment or /root/.env."
         )
-        headers = {"Authorization": "Bearer valid-token"}
-        response = self.client.post("/launch", json={"repo": "my-repo"}, headers=headers)
+        response = self.client.post("/launch", json={"repo": "my-repo"}, headers=BASIC_AUTH_HEADER)
         self.assertEqual(response.status_code, 500)
         self.assertIn("Control plane missing credentials", response.json()["detail"])
         self.assertIn("Ensure GH_TOKEN is present in .env and redeploy", response.json()["detail"])
 
-    @patch.dict("os.environ", {"WEB_UI_USERNAME": "admin", "WEB_UI_PASSWORD": "secretpassword"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.web.launch_sandbox")
     def test_api_launch_fresh_credentials_error_returns_500(self, mock_launch):
         mock_launch.side_effect = FileNotFoundError(
             "GitHub credentials (GH_TOKEN) not found in environment or /root/.env."
         )
-        creds = base64.b64encode(b"admin:secretpassword").decode("utf-8")
-        headers = {"Authorization": f"Basic {creds}"}
         response = self.client.post(
             "/api/sandboxes",
             json={"mode": "repo", "repo": "sFactory0/test-repo"},
-            headers=headers,
+            headers=BASIC_AUTH_HEADER,
         )
         self.assertEqual(response.status_code, 500)
         self.assertIn("Control plane missing credentials", response.json()["detail"])
         self.assertIn("Ensure GH_TOKEN is present in .env and redeploy", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.launch_sandbox")
     def test_launch_endpoint_already_exists_error(self, mock_launch):
         mock_launch.side_effect = modal.exception.AlreadyExistsError("sandbox active")
-        headers = {"Authorization": "Bearer valid-token"}
-        response = self.client.post("/launch", json={"name": "my-app"}, headers=headers)
+        response = self.client.post("/launch", json={"name": "my-app"}, headers=BASIC_AUTH_HEADER)
         self.assertEqual(response.status_code, 409)
         self.assertIn("Sandbox already exists", response.json()["detail"])
 
-    @patch.dict("os.environ", {"MODAL_SANDBOX_AUTH_TOKEN": "valid-token"})
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.function.capture_snapshot_core")
     def test_snapshot_endpoint_success(self, mock_snapshot):
         mock_snapshot.return_value = SnapshotResponse(
@@ -161,11 +155,10 @@ class TestSandboxFunctionAPI(unittest.TestCase):
             ttl_seconds=1296000,
             terminated=True,
         )
-        headers = {"Authorization": "Bearer valid-token"}
         response = self.client.post(
             "/snapshot",
             json={"sandbox_id": "sb-active-123", "ttl_days": 15, "terminate": True},
-            headers=headers,
+            headers=BASIC_AUTH_HEADER,
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -178,7 +171,7 @@ class TestSandboxFunctionAPI(unittest.TestCase):
             empty_root = Path(tmpdir)
             with patch.dict(
                 "os.environ",
-                {"WEB_UI_USERNAME": "", "WEB_UI_PASSWORD": "", "MODAL_SANDBOX_AUTH_TOKEN": ""},
+                {"WEB_UI_USERNAME": "", "WEB_UI_PASSWORD": ""},
                 clear=False,
             ):
                 with self.assertRaises(RuntimeError) as ctx:
@@ -193,7 +186,6 @@ class TestSandboxFunctionAPI(unittest.TestCase):
             env = {
                 "WEB_UI_USERNAME": "env_user",
                 "WEB_UI_PASSWORD": "env_password",
-                "MODAL_SANDBOX_AUTH_TOKEN": "env_tok",
             }
             with patch.dict("os.environ", env, clear=True):
                 creds = resolve_and_validate_web_credentials(empty_root)
@@ -205,25 +197,13 @@ class TestSandboxFunctionAPI(unittest.TestCase):
             tmp_root = Path(tmpdir)
             dotenv_file = tmp_root / ".env"
             dotenv_file.write_text(
-                "WEB_UI_USERNAME=file_user\nWEB_UI_PASSWORD=file_pass\nMODAL_SANDBOX_AUTH_TOKEN=file_tok\n",
+                "WEB_UI_USERNAME=file_user\nWEB_UI_PASSWORD=file_pass\n",
                 encoding="utf-8",
             )
             with patch.dict("os.environ", {}, clear=True):
                 creds = resolve_and_validate_web_credentials(tmp_root)
                 self.assertEqual(creds.get("WEB_UI_USERNAME"), "file_user")
                 self.assertEqual(creds.get("WEB_UI_PASSWORD"), "file_pass")
-                self.assertEqual(creds.get("MODAL_SANDBOX_AUTH_TOKEN"), "file_tok")
-
-    def test_no_modal_sandbox_auth_token_required(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            empty_root = Path(tmpdir)
-            env = {
-                "WEB_UI_USERNAME": "u",
-                "WEB_UI_PASSWORD": "p",
-            }
-            with patch.dict("os.environ", env, clear=True):
-                creds = resolve_and_validate_web_credentials(empty_root, enforce=True)
-                self.assertNotIn("MODAL_SANDBOX_AUTH_TOKEN", creds)
 
     def test_validate_deployment_credentials(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -259,6 +239,14 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run_sandbox_launch(args, parser=parser)
 
+    @patch.dict("os.environ", {}, clear=True)
+    def test_remote_without_credentials_errors(self):
+        with patch("sandbox.main.Path.is_file", return_value=False):
+            with self.assertRaises(ValueError) as ctx:
+                run_remote_request("https://custom.modal.run", "/launch", {})
+            self.assertIn("WEB_UI_USERNAME and WEB_UI_PASSWORD", str(ctx.exception))
+
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.main.print_access_info")
     @patch("sandbox.main.run_remote_request")
     def test_remote_launch_delegation(self, mock_request, mock_print):
@@ -285,6 +273,7 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
         mock_print.assert_called_once()
         self.assertEqual(mock_print.call_args.kwargs["sandbox_id"], "sb-remote-1")
 
+    @patch.dict("os.environ", AUTH_ENV)
     @patch("sandbox.main.print_snapshot_info")
     @patch("sandbox.main.run_remote_request")
     def test_remote_snapshot_delegation(self, mock_request, mock_print_snapshot):

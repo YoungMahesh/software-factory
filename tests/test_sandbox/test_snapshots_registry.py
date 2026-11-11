@@ -105,3 +105,22 @@ class TestSnapshotRegistry(unittest.TestCase):
             deleted = delete_snapshot("im-cloud")
             self.assertTrue(deleted)
             self.assertNotIn("im-cloud", mock_dict)
+
+    @patch("sandbox.snapshots._get_modal_dict", return_value=None)
+    def test_record_snapshot_captures_provenance(self, _mock_dict):
+        with patch("sandbox.snapshots.LOCAL_REGISTRY_FILE", self.registry_file):
+            rec = record_snapshot(
+                image_id="im-prov",
+                sandbox_id="sb-prov",
+                name="prov-snap",
+                software_factory_commit="c0ffee1",
+                software_factory_dirty="1",
+            )
+            self.assertEqual(rec["software_factory_commit"], "c0ffee1")
+            self.assertEqual(rec["software_factory_dirty"], "1")
+
+            fetched = get_snapshot("im-prov")
+            self.assertIsNotNone(fetched)
+            self.assertEqual(fetched["software_factory_commit"], "c0ffee1")
+            self.assertEqual(fetched["software_factory_dirty"], "1")
+

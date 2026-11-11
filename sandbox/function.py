@@ -1,13 +1,11 @@
 """Modal cloud control plane function hosting the FastAPI sandbox management API."""
 
-import hmac
 import logging
 import os
 from pathlib import Path
 import sys
-from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 import modal
 
 # (shared.image secrets imports retired)
@@ -23,7 +21,7 @@ from sandbox.launcher import (
     SandboxLauncher,
     launch_sandbox,
 )
-from sandbox.web import router as web_router
+from sandbox.web import check_authentication, router as web_router
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +39,7 @@ def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None
     Bypassed during test execution when running under pytest unless enforce=True.
     """
     credentials: dict[str, str] = {}
-    for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN"):
+    for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD"):
         val = os.environ.get(key)
         if val:
             credentials[key] = val
@@ -60,7 +58,7 @@ def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None
                         k, v = line.split("=", 1)
                         k = k.strip()
                         v = v.strip().strip("'\"")
-                        if k in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD", "MODAL_SANDBOX_AUTH_TOKEN") and k not in credentials:
+                        if k in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD") and k not in credentials:
                             credentials[k] = v
 
     if enforce is None:
@@ -157,38 +155,6 @@ web_app = FastAPI(
 web_app.include_router(web_router)
 
 
-def verify_bearer_token(
-    authorization: Annotated[str | None, Header()] = None,
-) -> None:
-    """Validates bearer token against MODAL_SANDBOX_AUTH_TOKEN environment variable."""
-    expected_token = os.environ.get("MODAL_SANDBOX_AUTH_TOKEN")
-    if not expected_token:
-        # Permissive access if auth token secret is not configured
-        return
-
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    parts = authorization.strip().split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header format; expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = parts[1]
-    if not hmac.compare_digest(token, expected_token):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid bearer authentication token",
-        )
-
-
 @web_app.get("/health")
 def health() -> dict[str, str]:
     """Endpoint liveness and readiness probe."""
@@ -198,7 +164,7 @@ def health() -> dict[str, str]:
 @web_app.post(
     "/launch",
     response_model=LaunchResponse,
-    dependencies=[Depends(verify_bearer_token)],
+    dependencies=[Depends(check_authentication)],
 )
 def launch(req: LaunchRequest) -> LaunchResponse:
     """Provisions a new sandbox synchronously and returns connection metadata."""
@@ -237,7 +203,7 @@ def launch(req: LaunchRequest) -> LaunchResponse:
 @web_app.post(
     "/snapshot",
     response_model=SnapshotResponse,
-    dependencies=[Depends(verify_bearer_token)],
+    dependencies=[Depends(check_authentication)],
 )
 def snapshot(req: SnapshotRequest) -> SnapshotResponse:
     """Captures a filesystem snapshot of a target running sandbox."""
