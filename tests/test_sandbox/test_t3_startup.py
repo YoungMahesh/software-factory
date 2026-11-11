@@ -18,6 +18,11 @@ class TestT3CodeStartup(unittest.TestCase):
         for token in ["ENABLE_T3", "check-t3", "t3 serve", "GitHub CLI", "--auto-bootstrap-project-from-cwd"]:
             self.assertIn(token, content)
 
+    def test_startup_script_contains_t3_browser_sandbox_env(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("T3CODE_SERVER_BROWSER_SANDBOX=0", content)
+        self.assertIn("export T3CODE_SERVER_BROWSER_SANDBOX=0", content)
+
     def test_startup_script_contains_t3_usage_persistence_logic(self):
         content = self.startup_sh.read_text()
         self.assertIn("ENABLE_T3_PERSISTENCE", content)

@@ -107,7 +107,7 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
         mock_build_image.assert_called_once_with(
             opencode=False,
             agy=False,
-            browser=False,
+            browser=True,
             modal_tooling=False,
             react_native=False,
             t3=True,

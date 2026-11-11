@@ -49,6 +49,16 @@ class TestT3CodeImage(unittest.TestCase):
         self.assertFalse(hasattr(image, "LOCAL_MODAL_SECRET"))
         self.assertFalse(hasattr(image, "LOCAL_CLOUDFLARE_SECRET"))
 
+    def test_browser_enabled_helper(self):
+        from shared.image import browser_enabled
+
+        self.assertFalse(browser_enabled())
+        self.assertTrue(browser_enabled(browser=True))
+        self.assertTrue(browser_enabled(opencode=True))
+        self.assertTrue(browser_enabled(agy=True))
+        self.assertTrue(browser_enabled(t3=True))
+        self.assertTrue(browser_enabled(browser=False, opencode=False, agy=False, t3=True))
+
     def test_build_sandbox_image_layers_t3(self):
         from shared.image import (
             build_sandbox_image,
@@ -73,10 +83,12 @@ class TestT3CodeImage(unittest.TestCase):
             mock_img1 = MagicMock()
             mock_img2 = MagicMock()
             mock_img3 = MagicMock()
+            mock_img4 = MagicMock()
             mock_base.run_commands.return_value = mock_img1
             mock_add_files.side_effect = lambda img, *args, **kwargs: img
             mock_img1.run_commands.return_value = mock_img2
-            mock_img2.env.return_value = mock_img3
+            mock_img2.run_commands.return_value = mock_img3
+            mock_img3.env.return_value = mock_img4
 
             result = build_sandbox_image(t3=True)
 
@@ -92,7 +104,7 @@ class TestT3CodeImage(unittest.TestCase):
                         ],
                     ),
                     call(
-                        mock_img2,
+                        mock_img3,
                         [
                             (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
                             (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
@@ -101,6 +113,10 @@ class TestT3CodeImage(unittest.TestCase):
                 ]
             )
             mock_img1.run_commands.assert_called_once_with(
+                "uvx playwright install --with-deps chromium",
+                "chmod -R 777 /root/.cache/ms-playwright 2>/dev/null || true",
+            )
+            mock_img2.run_commands.assert_called_once_with(
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",
@@ -115,8 +131,9 @@ class TestT3CodeImage(unittest.TestCase):
                 ),
                 f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
                 f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
+                "/opt/t3/t3 browser setup",
             )
-            mock_img2.env.assert_called_once_with(
+            mock_img3.env.assert_called_once_with(
                 {"PATH": "/root/.opencode/bin:${PATH}"}
             )
 
