@@ -168,6 +168,14 @@ _Avoid_: Central secrets repo, github vault, secret bucket
 The provisioning seam in `SandboxLauncher` that retrieves encrypted environment secrets from the Central Environment Store (`env-store`), decrypts them in host or control-plane memory using `AGE_PRIVATE_KEY`, and mounts them directly as native process environment variables (`modal.Secret.from_dict()`) into the sandbox, guaranteeing master private keys and vault credentials never enter the container.
 _Avoid_: Container decryption, in-sandbox sops, startup decryption
 
+**Modal Secret Injection**:
+The programmatic mechanism (`modal.Secret.from_dict()`) that securely serializes in-memory key-value pairs into encrypted cloud-managed secrets that are decrypted exclusively in container RAM (`/proc/1/environ`) by the worker supervisor, leaving zero secret artifacts on disk or in filesystem snapshots.
+_Avoid_: Secret mounting, file-based secrets, container secret staging, disk secrets
+
+**Host Environment Whitelist**:
+The strict, explicit set of recognized configuration keys sampled from the host's `os.environ` during secret collection, preventing unvetted host environment variables (such as shell history, AWS tokens, or unrelated API keys) from being bundled into Modal container environments.
+_Avoid_: Environment dump, full env export, host env pass-through
+
 **In-Repo Secret Manifest (Legacy)**:
 The transitional repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `app.env=.env`), decrypted during sandbox startup, maintained for backward compatibility and superseded by the Central Environment Store (`env-store`).
 _Avoid_: Secret mapping, repo env files, host secret mount
