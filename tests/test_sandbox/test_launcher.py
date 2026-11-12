@@ -338,6 +338,40 @@ class TestSandboxLauncher(unittest.TestCase):
         self.assertIn("API_KEY=secret_abc", decoded)
         self.assertIn("DATABASE_URL=postgres://localhost", decoded)
 
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_injects_env_store_secrets_raw_preserving_quotes(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-vault-test-raw"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        raw_env = (
+            "# My custom config\n"
+            "SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3... user@example'\n"
+            "PLAIN_VAR=plain\n"
+        )
+        mock_raw_fetch = MagicMock(return_value=raw_env)
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+            fetch_vault_env_raw_fn=mock_raw_fetch,
+        )
+        req = LaunchRequest(repo="custom-org/my-target-app")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "dummy", "GH_ORG_NAME": "custom-org"}, clear=False):
+            launcher.launch(req)
+
+        mock_raw_fetch.assert_called_once_with("my-target-app", org_name="custom-org")
+        call_env = mock_create.call_args.kwargs["env"]
+        self.assertIn("VAULT_DOTENV_B64", call_env)
+        decoded = base64.b64decode(call_env["VAULT_DOTENV_B64"]).decode("utf-8")
+        self.assertEqual(decoded, raw_env)
+        self.assertIn("SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3... user@example'", decoded)
+
 
 class TestSoftwareFactoryProvenanceResolution(unittest.TestCase):
     def test_resolve_provenance_from_env(self):

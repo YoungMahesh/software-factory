@@ -16,12 +16,15 @@ class TestPullRepoEnv(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    @patch("scripts.pull_repo_env.fetch_vault_env")
-    def test_pull_repo_env_success(self, mock_fetch):
-        mock_fetch.return_value = {
-            "SECRET_ONE": "value1",
-            "SECRET_TWO": "value2",
-        }
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_pull_repo_env_success_preserves_quotes_and_comments(self, mock_fetch_raw):
+        mock_raw_env = (
+            "# Project configuration\n"
+            "SECRET_ONE=value1\n"
+            "SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3NzaC1yc2EAAA... test@example'\n"
+            'OTHER_KEY="double quoted"\n'
+        )
+        mock_fetch_raw.return_value = mock_raw_env
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(
@@ -35,13 +38,14 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertTrue(success)
         self.assertTrue(dest_file.is_file())
         content = dest_file.read_text()
-        self.assertIn("SECRET_ONE=value1", content)
-        self.assertIn("SECRET_TWO=value2", content)
+        self.assertEqual(content, mock_raw_env)
+        self.assertIn("SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3NzaC1yc2EAAA... test@example'", content)
+        self.assertIn("# Project configuration", content)
         self.assertEqual(oct(dest_file.stat().st_mode)[-3:], "600")
 
-    @patch("scripts.pull_repo_env.fetch_vault_env")
-    def test_pull_repo_env_not_found(self, mock_fetch):
-        mock_fetch.return_value = None
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_pull_repo_env_not_found(self, mock_fetch_raw):
+        mock_fetch_raw.return_value = None
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(

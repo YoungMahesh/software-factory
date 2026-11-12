@@ -9,7 +9,9 @@ from sandbox.env_store import (
     decrypt_sops_payload,
     fetch_github_file,
     fetch_vault_env,
+    fetch_vault_env_raw,
     parse_env_text,
+    serialize_env_dict,
 )
 
 
@@ -29,6 +31,19 @@ class TestEnvStore(unittest.TestCase):
         self.assertEqual(parsed["KEY3"], "single quoted")
         self.assertEqual(parsed["EMPTY"], "")
         self.assertNotIn("# Comment line", parsed)
+
+    def test_serialize_env_dict(self):
+        env_dict = {
+            "SIMPLE": "value",
+            "SPACED": "value with space",
+            "SSH_KEY": "ssh-rsa AAAAB3NzaC1yc2EAAA... test@example",
+            "QUOTED": "with'quote",
+        }
+        serialized = serialize_env_dict(env_dict)
+        self.assertIn("SIMPLE=value", serialized)
+        self.assertIn("SPACED='value with space'", serialized)
+        self.assertIn("SSH_KEY='ssh-rsa AAAAB3NzaC1yc2EAAA... test@example'", serialized)
+        self.assertIn('QUOTED="with\'quote"', serialized)
 
     @patch("urllib.request.urlopen")
     def test_fetch_github_file_success_json_base64(self, mock_urlopen):
@@ -75,6 +90,28 @@ class TestEnvStore(unittest.TestCase):
         self.assertTrue(mock_run.called)
         cmd, kwargs = mock_run.call_args
         self.assertEqual(kwargs["env"].get("SOPS_AGE_KEY"), "AGE-SECRET-KEY-1XYZ")
+
+    @patch("sandbox.env_store.fetch_github_file")
+    @patch("sandbox.env_store.decrypt_sops_payload")
+    def test_fetch_vault_env_raw_success(self, mock_decrypt, mock_fetch):
+        mock_fetch.return_value = "CIPHERTEXT"
+        expected_raw = "# Header\nSSH_AUTHORIZED_KEY='ssh-rsa AAAAB3...'\nAPI_KEY=secret\n"
+        mock_decrypt.return_value = expected_raw
+
+        raw = fetch_vault_env_raw(
+            repo_name="my-cool-app",
+            org_name="sFactory0",
+            gh_token="ghp_123",
+            age_key="AGE-KEY-123",
+        )
+
+        self.assertEqual(raw, expected_raw)
+        mock_fetch.assert_called_once_with(
+            "sFactory0",
+            "env-store",
+            "my-cool-app/default.env",
+            token="ghp_123",
+        )
 
     @patch("sandbox.env_store.fetch_github_file")
     @patch("sandbox.env_store.decrypt_sops_payload")

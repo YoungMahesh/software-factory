@@ -17,7 +17,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sandbox.env_store import DEFAULT_VAULT_REPO, fetch_vault_env, resolve_gh_token
+from sandbox.env_store import DEFAULT_VAULT_REPO, fetch_vault_env_raw, resolve_gh_token
 from scripts.push_repo_env import detect_repo_name
 
 
@@ -51,7 +51,7 @@ def pull_repo_env(
         )
         return False
 
-    env_dict = fetch_vault_env(
+    raw_env = fetch_vault_env_raw(
         repo_name=final_repo,
         org_name=final_org,
         gh_token=token,
@@ -59,12 +59,13 @@ def pull_repo_env(
         env_repo_name=vault_repo,
     )
 
-    if not env_dict:
+    if raw_env is None:
         return False
 
     final_dest.parent.mkdir(parents=True, exist_ok=True)
-    lines = [f"{k}={v}\n" for k, v in env_dict.items()]
-    final_dest.write_text("".join(lines), encoding="utf-8")
+    if raw_env and not raw_env.endswith("\n"):
+        raw_env += "\n"
+    final_dest.write_text(raw_env, encoding="utf-8")
     final_dest.chmod(0o600)
     return True
 

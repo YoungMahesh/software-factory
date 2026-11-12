@@ -18,7 +18,9 @@ import uuid
 import base64
 import modal
 
-from sandbox.env_store import fetch_vault_env
+from sandbox.env_store import (
+    fetch_vault_env, fetch_vault_env_raw, parse_env_text, serialize_env_dict,
+)
 from sandbox.provenance import (
     resolve_host_git_identity,
     resolve_host_software_factory_provenance,
@@ -118,6 +120,7 @@ class SandboxLauncher:
         resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
         resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable[..., dict[str, str] | None] | None = None,
+        fetch_vault_env_raw_fn: Callable[..., str | None] | None = None,
         log_cb: Callable[[str], None] | None = None,
         repo_root: Path | None = None,
     ) -> None:
@@ -128,6 +131,9 @@ class SandboxLauncher:
         self.resolve_git_identity_fn = resolve_git_identity_fn or resolve_host_git_identity
         self.resolve_provenance_fn = resolve_provenance_fn or resolve_host_software_factory_provenance
         self.fetch_vault_env_fn = fetch_vault_env_fn or fetch_vault_env
+        self.fetch_vault_env_raw_fn = (
+            fetch_vault_env_raw_fn or (fetch_vault_env_raw if fetch_vault_env_fn is None else None)
+        )
         self.log_cb = log_cb
         self.repo_root = repo_root
 
@@ -255,12 +261,22 @@ class SandboxLauncher:
 
         if bare_repo:
             try:
-                vault_env = self.fetch_vault_env_fn(bare_repo, org_name=org_name)
+                raw_vault_env = None
+                vault_env = None
+                if self.fetch_vault_env_raw_fn:
+                    raw_vault_env = self.fetch_vault_env_raw_fn(bare_repo, org_name=org_name)
+                    if raw_vault_env is not None:
+                        vault_env = parse_env_text(raw_vault_env)
+                if vault_env is None and self.fetch_vault_env_fn:
+                    vault_env = self.fetch_vault_env_fn(bare_repo, org_name=org_name)
+                    if vault_env is not None:
+                        raw_vault_env = serialize_env_dict(vault_env)
+
                 if vault_env:
                     self._emit_log(f"🔐 Injected {len(vault_env)} secrets from env-store into {bare_repo}...")
                     sandbox_secrets.append(modal.Secret.from_dict(vault_env))
-                    lines = [f"{k}={v}" for k, v in vault_env.items()]
-                    env["VAULT_DOTENV_B64"] = base64.b64encode("\n".join(lines).encode("utf-8")).decode("ascii")
+                    if raw_vault_env is not None:
+                        env["VAULT_DOTENV_B64"] = base64.b64encode(raw_vault_env.encode("utf-8")).decode("ascii")
             except Exception as e:
                 self._emit_log(f"⚠️ env-store resolution skipped: {e}")
 
@@ -438,6 +454,7 @@ class SandboxLauncher:
         resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
         resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable | None = None,
+        fetch_vault_env_raw_fn: Callable | None = None,
         client: modal.Client | None = None,
         log_cb: Callable[[str], None] | None = None,
         register_ssh_config: bool = False,
@@ -447,7 +464,8 @@ class SandboxLauncher:
             client=client, build_image_fn=build_image_fn, load_pubkey_fn=load_pubkey_fn,
             append_ssh_fn=append_ssh_fn, resolve_git_identity_fn=resolve_git_identity_fn,
             resolve_provenance_fn=resolve_provenance_fn,
-            fetch_vault_env_fn=fetch_vault_env_fn, log_cb=log_cb, repo_root=repo_root,
+            fetch_vault_env_fn=fetch_vault_env_fn, fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
+            log_cb=log_cb, repo_root=repo_root,
         )
         return launcher.launch(req, register_ssh_config=register_ssh_config)
 
@@ -464,6 +482,7 @@ def launch_sandbox(
     resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
     resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
     fetch_vault_env_fn: Callable | None = None,
+    fetch_vault_env_raw_fn: Callable | None = None,
 ) -> RunningSandbox:
     """Convenience functional seam delegating to SandboxLauncher."""
     return SandboxLauncher.run(
@@ -472,5 +491,6 @@ def launch_sandbox(
         resolve_git_identity_fn=resolve_git_identity_fn,
         resolve_provenance_fn=resolve_provenance_fn,
         fetch_vault_env_fn=fetch_vault_env_fn,
+        fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
         client=client, log_cb=log_cb, register_ssh_config=register_ssh_config,
     )

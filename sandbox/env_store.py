@@ -38,6 +38,28 @@ def parse_env_text(raw_text: str) -> dict[str, str]:
     return env_dict
 
 
+def serialize_env_dict(env_dict: dict[str, str]) -> str:
+    """Serializes a dictionary of environment variables into a .env string.
+
+    Safely quotes values containing spaces, tabs, newlines, '#', or quotes
+    so the resulting file can be safely sourced by POSIX shells.
+    """
+    lines: list[str] = []
+    special_chars = (" ", "\t", "\n", "#", "'", '"')
+    for k, v in env_dict.items():
+        if any(c in v for c in special_chars):
+            if "'" not in v:
+                lines.append(f"{k}='{v}'")
+            elif '"' not in v:
+                lines.append(f'{k}="{v}"')
+            else:
+                escaped = v.replace("'", "'\\''")
+                lines.append(f"{k}='{escaped}'")
+        else:
+            lines.append(f"{k}={v}")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 def resolve_gh_token(explicit_token: str | None = None) -> str | None:
     """Resolves GitHub token from explicit arg, env (GH_TOKEN/GITHUB_TOKEN), or gh CLI."""
     if explicit_token and explicit_token.strip():
@@ -121,16 +143,16 @@ def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None) ->
             tmp_path.unlink()
 
 
-def fetch_vault_env(
+def fetch_vault_env_raw(
     repo_name: str,
     org_name: str | None = None,
     gh_token: str | None = None,
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
-) -> dict[str, str] | None:
-    """Fetches and decrypts environment variables for a target repository from env-store.
+) -> str | None:
+    """Fetches and decrypts environment file text for a target repository from env-store.
 
-    Returns the decrypted dictionary, or None if not found in the vault.
+    Returns the decrypted plaintext raw string, or None if not found in the vault.
     """
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
@@ -146,5 +168,27 @@ def fetch_vault_env(
     if not ciphertext:
         return None
 
-    plaintext = decrypt_sops_payload(ciphertext, age_private_key=resolved_age_key)
-    return parse_env_text(plaintext)
+    return decrypt_sops_payload(ciphertext, age_private_key=resolved_age_key)
+
+
+def fetch_vault_env(
+    repo_name: str,
+    org_name: str | None = None,
+    gh_token: str | None = None,
+    age_key: str | None = None,
+    env_repo_name: str = DEFAULT_VAULT_REPO,
+) -> dict[str, str] | None:
+    """Fetches and decrypts environment variables for a target repository from env-store.
+
+    Returns the decrypted dictionary, or None if not found in the vault.
+    """
+    raw_text = fetch_vault_env_raw(
+        repo_name=repo_name,
+        org_name=org_name,
+        gh_token=gh_token,
+        age_key=age_key,
+        env_repo_name=env_repo_name,
+    )
+    if raw_text is None:
+        return None
+    return parse_env_text(raw_text)
