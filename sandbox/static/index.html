@@ -750,6 +750,15 @@
 
   <!-- APPLICATION JAVASCRIPT -->
   <script>
+    // Guard relative API fetch against URLs with embedded basic auth credentials
+    const _nativeFetch = window.fetch;
+    window.fetch = function(input, init) {
+      if (typeof input === 'string' && input.startsWith('/')) {
+        input = new URL(input, window.location.origin).href;
+      }
+      return _nativeFetch.call(this, input, init);
+    };
+
     function sandboxApp() {
       return {
         currentTab: 'sandboxes',
@@ -886,9 +895,9 @@
             if (profileParam) sbParams.push(profileParam);
             const sbQuery = '?' + sbParams.join('&');
             const snapQuery = profileParam ? `?${profileParam}` : '';
-            const [sbRes, snapRes] = await Promise.all([\
-              fetch(`/api/sandboxes${sbQuery}`),\
-              fetch(`/api/snapshots${snapQuery}`)\
+            const [sbRes, snapRes] = await Promise.all([
+              fetch(`/api/sandboxes${sbQuery}`),
+              fetch(`/api/snapshots${snapQuery}`)
             ]);
             if (sbRes.ok) this.sandboxes = await sbRes.json();
             if (snapRes.ok) this.snapshots = await snapRes.json();

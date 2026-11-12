@@ -189,6 +189,15 @@ token_secret = "as-2"
         self.assertEqual(parse_modal_tokens_data("invalid json {"), {})
         self.assertEqual(parse_modal_tokens_data({"not": "a list"}), {})
 
+        # Test single-quoted JSON string (e.g. from .env file with shell quotes)
+        quoted_raw = f"'{raw}'"
+        quoted_profiles = parse_modal_tokens_data(quoted_raw)
+        self.assertIn("work-account", quoted_profiles)
+
+        # Test single dict structure
+        single_dict_profiles = parse_modal_tokens_data({"name": "solo", "token_id": "ak-solo", "token_secret": "as-solo"})
+        self.assertIn("solo", single_dict_profiles)
+
     def test_load_profiles_config_with_modal_tokens(self):
         tokens_json = json.dumps([
             {"name": "prod", "token_id": "ak-prod", "token_secret": "as-prod"},

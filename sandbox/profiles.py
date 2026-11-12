@@ -38,15 +38,24 @@ def parse_modal_tokens_data(raw: str | Any) -> dict[str, dict[str, Any]]:
     if not raw:
         return {}
     if isinstance(raw, str):
+        cleaned = raw.strip()
+        if (cleaned.startswith("'") and cleaned.endswith("'")) or (cleaned.startswith('"') and cleaned.endswith('"')):
+            if cleaned[1:].strip().startswith(("{", "[")):
+                cleaned = cleaned[1:-1].strip()
         try:
-            data = json.loads(raw)
+            data = json.loads(cleaned)
         except Exception as exc:
             logger.warning("Failed to parse MODAL_TOKENS JSON: %s", exc)
             return {}
     elif isinstance(raw, list):
         data = raw
+    elif isinstance(raw, dict):
+        data = [raw]
     else:
         return {}
+
+    if isinstance(data, dict):
+        data = [data]
 
     if not isinstance(data, list):
         return {}
