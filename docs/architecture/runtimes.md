@@ -35,7 +35,7 @@ modal-sandbox --name dev-box
 
 ## 2. Linux VM Sandbox (`--vm`)
 
-When `--vm` is specified, the launcher instructs Modal to boot a virtual machine with full kernel isolation (see [ADR 0067](../adr/0067-migrate-vm-runtime-to-modal-stable-runtime.md)).
+When `--vm` is specified, the launcher instructs Modal to boot a virtual machine with full kernel isolation (see [ADR 0023](../adr/0031-migrate-vm-runtime-to-modal-stable-runtime.md)).
 
 Key capabilities include:
 - **Docker Daemon**: The VM boots with an active Docker daemon. You can run `docker build`, `docker run`, and `docker compose up` directly inside the sandbox.

@@ -34,7 +34,7 @@ modal-sandbox -r my-repo --t3
 Passing `--agy` provisions Google's Antigravity developer agent environment:
 - Reads `ANTIGRAVITY_TOKENS` from `.env` and provisions user profiles.
 - Configures default writer models (`gemini-2.5-pro` / `gemini-2.5-flash`).
-- Starts the Antigravity Remote Control background daemon for unattended agent execution (see [ADR 0013](../adr/0013-antigravity-remote-control-and-unattended-permissions.md)).
+- Starts the Antigravity Remote Control background daemon for unattended agent execution (see [ADR 0002](../adr/0010-antigravity-remote-control-and-unattended-permissions.md)).
 
 ```bash
 modal-sandbox -r my-repo --agy
@@ -47,7 +47,7 @@ modal-sandbox -r my-repo --agy
 Passing `--opencode` installs and starts the OpenCode server:
 - Listens on port `4096`.
 - Connects through an HTTPS tunnel and prints a one-time login password on launch.
-- Automatically provisions MCP server credentials via `.secrets/env`.
+- Automatically provisions MCP server credentials via runtime secret injection.
 
 ```bash
 modal-sandbox -r my-repo --opencode
@@ -57,7 +57,7 @@ modal-sandbox -r my-repo --opencode
 
 ## 4. Headless Chrome & Browser MCP (`--browser`)
 
-Passing `--browser` pre-bakes a complete Google Chrome installation and required dependencies into the sandbox image layer (see [ADR 0012](../adr/0012-prebaked-chrome-for-browser-mcp-tooling.md)):
+Passing `--browser` pre-bakes a complete Google Chrome installation and required dependencies into the sandbox image layer (see [ADR 0003](../adr/0009-prebaked-chrome-for-browser-mcp-tooling.md)):
 - Compatible with Playwright, Puppeteer, and Chrome DevTools Protocol.
 - Enables browser automation tools and MCP servers for visual verification and testing.
 

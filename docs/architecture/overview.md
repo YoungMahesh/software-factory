@@ -13,9 +13,9 @@ flowchart TD
 
     subgraph CoreRunner["Execution Core"]
         Launcher["Unified Launcher<br/>(sandbox/launcher.py)"]
-        ImageBuilder["Image Factory<br/>(sandbox/image.py)"]
+        ImageBuilder["Image Factory<br/>(shared/image.py)"]
         ProfileManager["Profile Manager<br/>(sandbox/profiles.py)"]
-        ConfigStaging["Config & Staging<br/>(sandbox/config_and_staging.py)"]
+        EnvStore["Host-Side Secrets Decryption<br/>(sandbox/env_store.py)"]
     end
 
     subgraph CloudInfra["Modal Cloud Infrastructure"]
@@ -35,7 +35,7 @@ flowchart TD
     Dashboard --> Launcher
     Launcher --> ImageBuilder
     Launcher --> ProfileManager
-    Launcher --> ConfigStaging
+    Launcher --> EnvStore
     Launcher --> SandboxRuntime
     SandboxRuntime -.-> Volumes
     SandboxRuntime -.-> SnapshotStorage
@@ -49,11 +49,12 @@ flowchart TD
 
 ### 2. Execution Core
 - **`sandbox/launcher.py`**: The unified sandbox runner. Orchestrates sandbox creation for both standalone and repository-backed runs, whether targeting standard containers or Linux VMs.
-- **`sandbox/image.py`**: Composable image definitions using `modal.Image`. Prebakes dependencies, developer utilities, and optional toolchains.
-- **`sandbox/config_and_staging.py`**: Stages configuration files, environment variables, startup scripts, and credentials into sandbox directories (`.secrets/`, `.scripts/`).
+- **`shared/image.py`**: Composable image definitions using `modal.Image`. Prebakes dependencies, developer utilities, and optional toolchains.
+- **`sandbox/env_store.py`**: Retrieves and decrypts target repository secrets host-side from the centralized `env-store` repository before injecting them into sandboxes via `modal.Secret`.
+- **`sandbox/profiles.py`**: Multi-account profile management parsing Modal tokens and account workspaces.
 
 ### 3. In-Sandbox Bootstrap
-- **`startup.sh`**: Runs as the entrypoint inside the sandbox. Starts `sshd`, executes cloudflared ingress, provisions optional agent tools, clones target repositories, and scrubs sensitive bootstrapping keys.
+- **`startup.sh`**: Runs as the entrypoint inside the sandbox (`shared/startup.sh`). Starts `sshd`, executes cloudflared ingress, provisions optional agent tools, clones target repositories, and materializes local `.env` files.
 
 ### 4. Storage & Persistence
 - **Filesystem Snapshots**: Fast copy-on-write filesystem images leveraging `modal.Image.from_id()`.

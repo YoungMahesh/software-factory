@@ -42,7 +42,7 @@ ANTIGRAVITY_CLIENT_ID=
 ANTIGRAVITY_CLIENT_SECRET=
 ANTIGRAVITY_TOKENS='[]'
 
-# SOPS Decryption for Target Repository Secrets (ADR 0096)
+# SOPS Decryption for Target Repository Secrets (ADR 0027)
 AGE_PRIVATE_KEY=
 ```
 
@@ -161,7 +161,7 @@ Modal will output the permanent public URL of your control plane function (e.g.,
 Access `GET /` in any modern web browser. You will be prompted for HTTP Basic Authentication (`WEB_UI_USERNAME` and `WEB_UI_PASSWORD`).
 
 Key Dashboard features:
-- **Active Sandbox Discovery**: View all running and paused sandboxes across all registered Modal apps (see [ADR 0086](../adr/0086-cross-app-sandbox-discovery-in-control-plane-web-ui.md)).
+- **Active Sandbox Discovery**: View all running and paused sandboxes across all registered Modal apps (see [ADR 0047](../adr/0047-cross-app-sandbox-discovery-in-control-plane-web-ui.md)).
 - **One-Click Launch**: Launch fresh standalone sandboxes or clone target GitHub repositories directly from the web interface.
 - **Snapshot Registry**: Inspect captured filesystem snapshots and launch new sandboxes from existing snapshot images.
 - **Instance Management**: Terminate running sandboxes and view connection parameters.

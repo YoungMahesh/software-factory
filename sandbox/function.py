@@ -113,7 +113,7 @@ def collect_control_plane_secrets(root: Path) -> dict[str, str]:
         "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
         "MODAL_SANDBOX_TUNNEL_DOMAIN", "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID",
         "ANTIGRAVITY_CLIENT_SECRET", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
-        "MODAL_TOKENS", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN",
+        "MODAL_TOKENS",
     ):
         val = os.environ.get(key)
         if val and key not in secrets:

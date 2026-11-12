@@ -1,6 +1,6 @@
 # Filesystem Snapshots & Persistence
 
-Modal Sandboxes provides instant filesystem snapshotting and resumption powered by Modal's copy-on-write image infrastructure (see [ADR 0045](../adr/0045-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0084](../adr/0084-sandbox-runner-web-ui-and-snapshot-registry.md)).
+Modal Sandboxes provides instant filesystem snapshotting and resumption powered by Modal's copy-on-write image infrastructure (see [ADR 0024](../adr/0024-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0024](../adr/0045-sandbox-runner-web-ui-and-snapshot-registry.md)).
 
 ## How Snapshots Work
 

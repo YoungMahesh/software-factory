@@ -9,7 +9,7 @@ Each sandbox runs an OpenSSH server listening on internal port `2222`, tunnelled
 ### Key Management & Configuration
 - **Public Key**: The public key is tracked in [`shared/ssh-key.pub`](file:///root/.t3/worktrees/software-factory/t3-a5492fd9/shared/ssh-key.pub) and automatically authorized inside the sandbox `authorized_keys`. Developers can override this by defining `SSH_AUTHORIZED_KEY` in `.env`.
 - **Private Key**: The default private key is stored locally at `~/.ssh/modal-sandbox`.
-- **Automatic `~/.ssh/config` Injection**: Unless disabled via `--no-ssh-config`, the runner appends a Host entry to your local `~/.ssh/config` upon launch (see [ADR 0080](../adr/0080-automatic-ssh-config-registration-for-sandboxes.md)):
+- **Automatic `~/.ssh/config` Injection**: Unless disabled via `--no-ssh-config`, the runner appends a Host entry to your local `~/.ssh/config` upon launch (see [ADR 0041](../adr/0041-automatic-ssh-config-registration-for-sandboxes.md)):
 
 ```ssh-config
 Host dev-box

@@ -16,7 +16,7 @@ Modal Sandboxes enforces a defense-in-depth model for managing API keys, SSH cre
 
 ## 1. Modal Secret Injection & Runtime Decryption
 
-All runtime credentials are injected into Modal cloud containers using native Modal Secrets (`modal.Secret.from_dict()` or `modal.Secret.from_dotenv()`), eliminating plaintext files from container image filesystems (see [ADR 0092](../adr/0092-consolidate-secrets-to-single-dotenv-and-retire-legacy-staging.md)).
+All runtime credentials are injected into Modal cloud containers using native Modal Secrets (`modal.Secret.from_dict()` or `modal.Secret.from_dotenv()`), eliminating plaintext files from container image filesystems (see [ADR 0053](../adr/0053-consolidate-secrets-to-single-dotenv-and-retire-legacy-staging.md)).
 
 ```mermaid
 flowchart TD
@@ -62,7 +62,7 @@ The lifetime of secrets injected into Modal Cloud depends on the execution surfa
 
 ## 3. Filesystem Snapshot Security Guarantee
 
-Modal Sandboxes provides point-in-time filesystem snapshots via `sandbox.snapshot_filesystem()` (see [ADR 0045](../adr/0045-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0087](../adr/0087-antigravity-acp-credential-preservation-in-filesystem-snapshots.md)).
+Modal Sandboxes provides point-in-time filesystem snapshots via `sandbox.snapshot_filesystem()` (see [ADR 0024](../adr/0024-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0048](../adr/0048-antigravity-acp-credential-preservation-in-filesystem-snapshots.md)).
 
 ```mermaid
 flowchart LR
@@ -84,7 +84,7 @@ flowchart LR
 
 ## 4. Host-Side Vault Decryption (`env-store`)
 
-Target repositories often require application environment variables (database connection strings, third-party API keys). Under [ADR 0096](../adr/0096-central-env-store-and-host-side-secret-injection.md), Modal Sandboxes decouples application secrets from public git repositories:
+Target repositories often require application environment variables (database connection strings, third-party API keys). Under [ADR 0027](../adr/0057-central-env-store-and-host-side-secret-injection.md), Modal Sandboxes decouples application secrets from public git repositories:
 
 ```mermaid
 flowchart TD

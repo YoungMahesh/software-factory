@@ -45,7 +45,7 @@ Modal Sandboxes resolves environment variables through a deterministic cascade a
 
 When bundling secrets for Modal injection (`sandbox/function.py` and `sandbox/launcher.py`), the runner does **not** forward the host's entire `os.environ`. Instead, it samples only an explicit whitelist:
 
-`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `GH_TOKEN`, `GH_ORG_NAME`, `CLOUDFLARE_TUNNEL_TOKEN`, `MODAL_SANDBOX_TUNNEL_DOMAIN`, `SSH_AUTHORIZED_KEY`, `OPENCODE_GO_API_KEY`, `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `GH_TOKEN`, `GH_ORG_NAME`, `CLOUDFLARE_TUNNEL_TOKEN`, `MODAL_SANDBOX_TUNNEL_DOMAIN`, `SSH_AUTHORIZED_KEY`, `OPENCODE_GO_API_KEY`, `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`.
 
 > **Why a whitelist?** Sweeping the entire host environment would bundle sensitive host credentials (such as AWS keys, personal API tokens, SSH agent variables, or shell history) and leak them into remote container environments.
 

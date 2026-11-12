@@ -51,4 +51,4 @@ When `DOCS_CUSTOM_DOMAIN` is set, `sandbox/docs.py` automatically binds the doma
 - **Scale-to-Zero (`min_containers=0`)**: The documentation container shuts down when idle, incurring zero compute cost when there is no active traffic. It cold-starts on demand within 1–2 seconds.
 - **In-Process ASGI Server**: Powered by Starlette's `StaticFiles(html=True)`, directory routes (such as `/getting-started/`) automatically resolve to `index.html` with clean URLs and proper MIME types.
 
-For further architectural context and design rationale, see [ADR 0101](../adr/0101-publish-documentation-as-modal-web-function.md).
+For further architectural context and design rationale, see [ADR 0062](../adr/0062-publish-documentation-as-modal-web-function.md).

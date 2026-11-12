@@ -51,7 +51,7 @@ Configure the environment variables relevant to your workflow (e.g., `GH_TOKEN`,
 
 To maintain long-term maintainability and readability, every contributor and agent must uphold the following codebase standards:
 
-### Universal File Line Budget (ADR 0057 / AGENTS.md)
+### Universal File Line Budget (ADR 0027 / AGENTS.md)
 
 - **Strict Limit**: Every production Python file and automated test file (`.py`) must **not exceed 500 physical lines** (`wc -l`).
 - **Enforcement**: Validated automatically by `tests/test_standards.py`.
