@@ -86,6 +86,42 @@ def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None
     return credentials
 
 
+def collect_control_plane_secrets(root: Path) -> dict[str, str]:
+    """Collects control plane secrets from .env and environment for Modal secret injection."""
+    secrets: dict[str, str] = {}
+    dotenv_file = root / ".env"
+    if dotenv_file.is_file():
+        try:
+            from dotenv import dotenv_values
+            for k, v in dotenv_values(dotenv_file).items():
+                if v:
+                    secrets[k] = v
+        except ImportError:
+            for line in dotenv_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    val = v.strip().strip("'\"")
+                    if val:
+                        secrets[k.strip()] = val
+
+    auth_env = resolve_and_validate_web_credentials(root)
+    secrets.update(auth_env)
+
+    # Pass through standard environment secrets if set in the host environment
+    for key in (
+        "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
+        "MODAL_SANDBOX_TUNNEL_DOMAIN", "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID",
+        "ANTIGRAVITY_CLIENT_SECRET", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
+        "MODAL_TOKENS", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN",
+    ):
+        val = os.environ.get(key)
+        if val and key not in secrets:
+            secrets[key] = val
+
+    return secrets
+
+
 def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> bool:
     """Validates GitHub access credentials presence for repository sandbox provisioning."""
     has_creds = bool(os.environ.get("GH_TOKEN"))
@@ -133,19 +169,17 @@ if (repo_root / "sandbox" / "static").is_dir():
     image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
 
 # Secrets are injected via modal.Secret, not staged to filesystem
-
-function_secrets: list[modal.Secret] = []
-if (repo_root / ".env").is_file():
-    function_secrets.append(modal.Secret.from_dotenv(repo_root / ".env"))
-
 auth_env = resolve_and_validate_web_credentials(repo_root)
-if auth_env:
-    function_secrets.append(modal.Secret.from_dict(auth_env))
-    for k, v in auth_env.items():
-        if k not in os.environ:
-            os.environ[k] = v
+for k, v in auth_env.items():
+    if k not in os.environ:
+        os.environ[k] = v
 
 validate_deployment_credentials(repo_root)
+
+if modal.is_local():
+    function_secrets = [modal.Secret.from_dict(collect_control_plane_secrets(repo_root))]
+else:
+    function_secrets = [modal.Secret.from_dict({})]
 
 web_app = FastAPI(
     title="Modal Sandbox Control Plane",

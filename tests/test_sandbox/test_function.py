@@ -13,6 +13,7 @@ import modal
 from sandbox.cli import create_parser, validate_args
 from sandbox.core import LaunchResponse, SnapshotResponse
 from sandbox.function import (
+    collect_control_plane_secrets,
     image as control_plane_image,
     resolve_and_validate_web_credentials,
     validate_deployment_credentials,
@@ -204,6 +205,21 @@ class TestSandboxFunctionAPI(unittest.TestCase):
                 creds = resolve_and_validate_web_credentials(tmp_root)
                 self.assertEqual(creds.get("WEB_UI_USERNAME"), "file_user")
                 self.assertEqual(creds.get("WEB_UI_PASSWORD"), "file_pass")
+
+    def test_collect_control_plane_secrets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dotenv_file = tmp_root / ".env"
+            dotenv_file.write_text(
+                "WEB_UI_USERNAME=file_user\nWEB_UI_PASSWORD=file_pass\nGH_TOKEN=token123\n",
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {"MODAL_TOKENS": "[{}]"}, clear=True):
+                secrets = collect_control_plane_secrets(tmp_root)
+                self.assertEqual(secrets.get("WEB_UI_USERNAME"), "file_user")
+                self.assertEqual(secrets.get("WEB_UI_PASSWORD"), "file_pass")
+                self.assertEqual(secrets.get("GH_TOKEN"), "token123")
+                self.assertEqual(secrets.get("MODAL_TOKENS"), "[{}]")
 
     def test_validate_deployment_credentials(self):
         with tempfile.TemporaryDirectory() as tmpdir:
