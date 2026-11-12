@@ -73,6 +73,7 @@ nav:
   - CLI Reference: guides/cli.md
   - Hosted Control Plane: guides/control-plane.md
   - AI Developer Tooling: guides/ai-tooling.md
+  - Deploying Documentation: guides/deploying-documentation.md
 - Architecture Decisions (ADRs):
   - ADR Index & Summary: adr/index.md
   - All Decision Records:
@@ -174,6 +175,8 @@ nav:
     - '0097: T3 Code Pairing Tunnel Wrapper and Unit Test Isolation Boundary': adr/0097-t3-code-pairing-tunnel-wrapper-and-test-isolation.md
     - '0098: Sandbox Software-Factory Commit Provenance and Inspection Tooling': adr/0098-sandbox-software-factory-commit-provenance.md
     - '0099: Unify Control Plane Basic Authentication and Retire Antigravity Project ID': adr/0099-unify-control-plane-basic-auth-and-retire-antigravity-project-id.md
+    - '0100: T3 Code Browser Headless Shell and Sandbox Environment': adr/0100-t3-code-browser-headless-shell-and-sandbox-environment.md
+    - '0101: Publish Documentation as Modal Web Function': adr/0101-publish-documentation-as-modal-web-function.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

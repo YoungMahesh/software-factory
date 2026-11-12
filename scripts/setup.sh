@@ -88,12 +88,16 @@ if profiles:
     toml_path = os.path.expanduser("~/.modal.toml")
     lines = []
     for p in profiles:
-        lines.append(f"[{p[\"slug\"]}]")
-        lines.append(f"token_id = \"{p[\"token_id\"]}\"")
-        lines.append(f"token_secret = \"{p[\"token_secret\"]}\"")
-        if p["environment"]:
-            lines.append(f"environment = \"{p[\"environment\"]}\"")
-        if p["slug"] == active_slug:
+        slug = p["slug"]
+        tid = p["token_id"]
+        tsec = p["token_secret"]
+        env = p["environment"]
+        lines.append(f"[{slug}]")
+        lines.append(f"token_id = \"{tid}\"")
+        lines.append(f"token_secret = \"{tsec}\"")
+        if env:
+            lines.append(f"environment = \"{env}\"")
+        if slug == active_slug:
             lines.append("active = true")
         lines.append("")
 
