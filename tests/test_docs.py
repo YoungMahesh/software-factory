@@ -74,3 +74,12 @@ class TestDocsApp(unittest.TestCase):
             fastapi_instance = docs_web_app.local()
             self.assertIsNotNone(fastapi_instance)
             mock_create.assert_called_once_with("/root/site")
+
+    def test_mkdocs_emoji_extension_configured(self):
+        """Verify mkdocs.yml configures pymdownx.emoji for Material and Octicons rendering."""
+        mkdocs_path = Path(__file__).resolve().parent.parent / "mkdocs.yml"
+        self.assertTrue(mkdocs_path.is_file(), "mkdocs.yml must exist at repo root")
+        content = mkdocs_path.read_text(encoding="utf-8")
+        self.assertIn("pymdownx.emoji:", content)
+        self.assertIn("material.extensions.emoji.twemoji", content)
+        self.assertIn("material.extensions.emoji.to_svg", content)
