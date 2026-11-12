@@ -39,6 +39,8 @@ class TestWebAPI(unittest.TestCase):
                 "profile": "prof-1",
                 "ssh_command": "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 36511 root@r479.modal.host",
                 "t3_pair_url": "https://ta-123-3775-xyz.w.modal.host/pair#token=LDF3EM8HZ4G8",
+                "created_at": "2026-11-12T12:00:00Z",
+                "timeout_secs": 79200,
             },
             {
                 "id": "sb-2",
@@ -67,6 +69,8 @@ class TestWebAPI(unittest.TestCase):
             data[0]["t3_pair_url"],
             "https://ta-123-3775-xyz.w.modal.host/pair#token=LDF3EM8HZ4G8",
         )
+        self.assertEqual(data[0]["created_at"], "2026-11-12T12:00:00Z")
+        self.assertEqual(data[0]["timeout_secs"], 79200)
         mock_get_sandboxes.assert_called_once_with(app_name=None, all_apps=True, profile=None)
 
     @patch("sandbox.web.get_sandboxes")

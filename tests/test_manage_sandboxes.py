@@ -134,7 +134,11 @@ class TestManageSandboxes(TestCase):
         sb_running = MagicMock()
         sb_running.object_id = "sb-running"
         sb_running.poll.return_value = None
-        sb_running.get_tags.return_value = {"name": "sf-active"}
+        sb_running.get_tags.return_value = {
+            "name": "sf-active",
+            "created_at": "2026-11-12T12:00:00Z",
+            "timeout_secs": "79200",
+        }
 
         # Configure tunnels
         mock_ssh_tunnel = MagicMock()
@@ -167,6 +171,8 @@ class TestManageSandboxes(TestCase):
             results[0]["t3_pair_url"],
             "https://ta-01m6wzp5m0w6nvdxkf82b19hpv-3775-i9leqkuiv35e5ifa64rpynvkw.w.modal.host/pair#token=LDF3EM8HZ4G8",
         )
+        self.assertEqual(results[0]["created_at"], "2026-11-12T12:00:00Z")
+        self.assertEqual(results[0]["timeout_secs"], 79200)
         self.assertFalse(results[1]["running"])
         self.assertIsNone(results[1]["ssh_command"])
         self.assertIsNone(results[1]["t3_pair_url"])

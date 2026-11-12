@@ -24,12 +24,16 @@ def record_sandbox_connection_info(
     ssh_command: str | None = None,
     t3_pair_url: str | None = None,
     has_t3: bool = False,
+    created_at: str | None = None,
+    timeout_secs: int | None = None,
 ) -> None:
     """Pre-populates or updates connection metadata in cache for a sandbox."""
     _SANDBOX_METADATA_CACHE[sandbox_id] = {
         "ssh_command": ssh_command or f"modal shell {sandbox_id}",
         "t3_pair_url": t3_pair_url,
         "has_t3": has_t3,
+        "created_at": created_at,
+        "timeout_secs": timeout_secs,
     }
 
 
@@ -195,6 +199,29 @@ def _query_profile_sandboxes(
     for sb in sb_generator:
         poll_code = sb.poll()
         is_running = poll_code is None
+        tags = sb.get_tags() if hasattr(sb, "get_tags") else {}
+        cached = _SANDBOX_METADATA_CACHE.get(sb.object_id, {})
+        created_at = (
+            cached.get("created_at")
+            or (tags.get("created_at") if isinstance(tags, dict) else None)
+            or getattr(sb, "created_at", None)
+            or getattr(sb, "_created_at", None)
+        )
+        if isinstance(created_at, (int, float)):
+            from datetime import datetime, timezone
+            created_at = datetime.fromtimestamp(created_at, timezone.utc).isoformat()
+
+        raw_timeout = (
+            cached.get("timeout_secs")
+            or (tags.get("timeout_secs") if isinstance(tags, dict) else None)
+            or getattr(sb, "timeout_secs", None)
+            or getattr(sb, "_timeout_secs", None)
+        )
+        try:
+            timeout_secs = int(raw_timeout) if raw_timeout is not None else None
+        except (ValueError, TypeError):
+            timeout_secs = None
+
         if is_running:
             name = resolve_instance_name(sb)
             ssh_command, t3_pair_url = resolve_sandbox_connection_info(sb)
@@ -218,6 +245,8 @@ def _query_profile_sandboxes(
             "profile": profile_name,
             "ssh_command": ssh_command,
             "t3_pair_url": t3_pair_url,
+            "created_at": created_at,
+            "timeout_secs": timeout_secs,
         })
     return sandboxes
 

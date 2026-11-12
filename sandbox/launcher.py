@@ -15,6 +15,7 @@ import subprocess
 from typing import Any, Callable
 import uuid
 
+from datetime import datetime, timezone
 import base64
 import modal
 
@@ -48,40 +49,23 @@ class RunningSandbox:
     response: LaunchResponse
 
     @property
-    def sandbox_id(self) -> str:
-        return self.response.sandbox_id
-
+    def sandbox_id(self) -> str: return self.response.sandbox_id
     @property
-    def app_name(self) -> str:
-        return self.response.app_name
-
+    def app_name(self) -> str: return self.response.app_name
     @property
-    def sandbox_name(self) -> str:
-        return self.response.sandbox_name
-
+    def sandbox_name(self) -> str: return self.response.sandbox_name
     @property
-    def ssh_info(self) -> tuple[str, int] | None:
-        return self.response.ssh_info
-
+    def ssh_info(self) -> tuple[str, int] | None: return self.response.ssh_info
     @property
-    def ssh_command(self) -> str | None:
-        return self.response.ssh_command
-
+    def ssh_command(self) -> str | None: return self.response.ssh_command
     @property
-    def opencode_url(self) -> str | None:
-        return self.response.opencode_url
-
+    def opencode_url(self) -> str | None: return self.response.opencode_url
     @property
-    def metro_url(self) -> str | None:
-        return self.response.metro_url
-
+    def metro_url(self) -> str | None: return self.response.metro_url
     @property
-    def t3_url(self) -> str | None:
-        return self.response.t3_url
-
+    def t3_url(self) -> str | None: return self.response.t3_url
     @property
-    def t3_pair_url(self) -> str | None:
-        return self.response.t3_pair_url
+    def t3_pair_url(self) -> str | None: return self.response.t3_pair_url
 
     def to_response(self) -> LaunchResponse:
         """Returns the serializable Pydantic LaunchResponse."""
@@ -346,11 +330,14 @@ class SandboxLauncher:
         runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
         self._emit_log(f"📋 Configuration: {runtime_desc} | Features: {', '.join(features)}")
 
+        created_at_iso = datetime.now(timezone.utc).isoformat()
         tags: dict[str, str] = {
             "instance_name": sandbox_name,
             "app_name": app_name,
             "software_factory_commit": provenance.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
             "software_factory_dirty": provenance.get("SOFTWARE_FACTORY_DIRTY", "0"),
+            "created_at": created_at_iso,
+            "timeout_secs": str(TIMEOUT_SECS),
         }
 
         sandbox_kwargs: dict[str, Any] = {
@@ -410,6 +397,7 @@ class SandboxLauncher:
             record_sandbox_connection_info(
                 sandbox.object_id, ssh_command=ssh_cmd,
                 t3_pair_url=t3_pair_url, has_t3=bool(req.t3),
+                created_at=created_at_iso, timeout_secs=TIMEOUT_SECS,
             )
         except Exception:
             pass

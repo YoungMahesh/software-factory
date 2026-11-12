@@ -105,7 +105,7 @@
           </svg>
           <span>Sandboxes</span>
           <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
-                x-text="runningCount + ' / ' + sandboxes.length"></span>
+                x-text="runningCount"></span>
         </button>
 
         <button @click="currentTab = 'snapshots'"
@@ -152,6 +152,7 @@
               <th scope="col" class="px-6 py-4">Profile</th>
               <th scope="col" class="px-6 py-4">Instance / App Name</th>
               <th scope="col" class="px-6 py-4">Sandbox ID</th>
+              <th scope="col" class="px-6 py-4">Created / Timeout</th>
               <th scope="col" class="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -198,6 +199,12 @@
                   </div>
                 </td>
 
+                <!-- Created / Timeout -->
+                <td class="px-6 py-4 whitespace-nowrap font-sans text-xs text-slate-400">
+                  <div x-text="formatDate(sb.created_at)"></div>
+                  <div class="text-slate-500" x-text="formatTimeout(sb.timeout_secs)"></div>
+                </td>
+
                 <!-- Actions -->
                 <td class="px-6 py-4 whitespace-nowrap text-right font-sans space-x-2">
                   <!-- Snapshot Button -->
@@ -239,7 +246,7 @@
               </tr>
             </template>
             <tr x-show="filteredSandboxes.length === 0">
-              <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
+              <td colspan="6" class="px-6 py-12 text-center text-slate-500 font-sans">
                 No matching sandboxes found in selected workspace profile.
               </td>
             </tr>
@@ -867,8 +874,9 @@
 
         get filteredSandboxes() {
           const q = this.searchQuery.toLowerCase().trim();
-          if (!q) return this.sandboxes;
-          return this.sandboxes.filter(s =>
+          const active = this.sandboxes.filter(s => s.running);
+          if (!q) return active;
+          return active.filter(s =>
             (s.id && s.id.toLowerCase().includes(q)) ||
             (s.name && s.name.toLowerCase().includes(q)) ||
             (s.app_name && s.app_name.toLowerCase().includes(q)) ||
@@ -1137,10 +1145,43 @@
           if (!iso) return '—';
           try {
             const d = new Date(iso);
-            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (isNaN(d.getTime())) return '—';
+            const day = String(d.getDate()).padStart(2, '0');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[d.getMonth()];
+            const year = d.getFullYear();
+            let hours = d.getHours();
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const strHours = String(hours).padStart(2, '0');
+            return day + ' ' + month + ' ' + year + ' ' + strHours + ':' + minutes + ' ' + ampm;
           } catch (e) {
-            return iso;
+            return '—';
           }
+        },
+
+        formatTimeout(seconds) {
+          if (!seconds || typeof seconds !== 'number' || seconds <= 0) return '';
+          if (seconds % 86400 === 0) {
+            const days = seconds / 86400;
+            return days + (days === 1 ? ' day' : ' days') + ' timeout';
+          }
+          if (seconds % 3600 === 0) {
+            const hours = seconds / 3600;
+            return hours + (hours === 1 ? ' hour' : ' hours') + ' timeout';
+          }
+          if (seconds % 60 === 0) {
+            const minutes = seconds / 60;
+            return minutes + (minutes === 1 ? ' minute' : ' minutes') + ' timeout';
+          }
+          const hours = Math.round(seconds / 3600);
+          if (hours >= 1) {
+            return hours + (hours === 1 ? ' hour' : ' hours') + ' timeout';
+          }
+          const minutes = Math.round(seconds / 60);
+          return minutes + (minutes === 1 ? ' minute' : ' minutes') + ' timeout';
         }
       };
     }
