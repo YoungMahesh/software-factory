@@ -8,7 +8,7 @@ show_help() {
 Usage: ghclone <repo> [destination] [options] [gh repo clone / git clone flags...]
 
 Clone a repository from GitHub into ~/ path in the sandbox
-and decrypt repository environment secrets defined in .secrets/env.map.
+and decrypt repository environment secrets from the central environment store (env-store).
 
 Arguments:
   repo                  Repository name (e.g. 'my-repo', 'owner/my-repo', or 'org/repo').
@@ -23,9 +23,9 @@ Options:
 Any other flags (or flags after '--') are passed directly to 'gh repo clone'.
 
 Examples:
-  ghclone my-repo                         # Clones $GH_ORG_NAME/my-repo to ~/my-repo and decrypts env
-  ghclone my-repo ~/custom-dir            # Clones $GH_ORG_NAME/my-repo to ~/custom-dir and decrypts env
-  ghclone other-org/repo                  # Clones other-org/repo to ~/repo and decrypts env
+  ghclone my-repo                         # Clones $GH_ORG_NAME/my-repo to ~/my-repo and pulls env from env-store
+  ghclone my-repo ~/custom-dir            # Clones $GH_ORG_NAME/my-repo to ~/custom-dir and pulls env from env-store
+  ghclone other-org/repo                  # Clones other-org/repo to ~/repo and pulls env from env-store
   ghclone my-repo --no-decrypt            # Clones without decrypting environment secrets
   ghclone my-repo -- --depth 1            # Clones shallow with depth 1
 EOF
@@ -61,8 +61,10 @@ fi
 RAW_REPO="$1"
 shift
 
+TARGET_ORG=""
 if [[ "$RAW_REPO" == *"/"* ]]; then
   TARGET_REPO="$RAW_REPO"
+  TARGET_ORG="${RAW_REPO%%/*}"
 else
   if [[ -z "$DEFAULT_ORG" ]]; then
     echo "Error: Target repository '$RAW_REPO' has no owner prefix and GH_ORG_NAME is not set." >&2
@@ -70,6 +72,7 @@ else
     exit 1
   fi
   TARGET_REPO="${DEFAULT_ORG}/${RAW_REPO}"
+  TARGET_ORG="$DEFAULT_ORG"
 fi
 
 REPO_NAME="${TARGET_REPO##*/}"
@@ -92,30 +95,31 @@ fi
 
 gh repo clone "$TARGET_REPO" "$TARGET_DIR" "$@"
 
-if [[ "$NO_DECRYPT" -eq 0 && -f "${TARGET_DIR}/.secrets/env.map" ]]; then
-  decrypt_cmd=()
+if [[ "$NO_DECRYPT" -eq 0 ]]; then
+  pull_cmd=()
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-  if command -v decrypt-repo-env >/dev/null 2>&1; then
-    decrypt_cmd=("decrypt-repo-env")
-  elif command -v decrypt_repo_env.py >/dev/null 2>&1; then
-    decrypt_cmd=("decrypt_repo_env.py")
-  elif [[ -x "${script_dir}/decrypt-repo-env" ]]; then
-    decrypt_cmd=("${script_dir}/decrypt-repo-env")
-  elif [[ -x "${script_dir}/decrypt_repo_env.py" ]]; then
-    decrypt_cmd=("${script_dir}/decrypt_repo_env.py")
-  elif [[ -f "${script_dir}/decrypt_repo_env.py" ]]; then
-    decrypt_cmd=("python3" "${script_dir}/decrypt_repo_env.py")
-  elif [[ -x "/usr/local/bin/decrypt-repo-env" ]]; then
-    decrypt_cmd=("/usr/local/bin/decrypt-repo-env")
-  elif [[ -x "/root/.scripts/decrypt-repo-env" ]]; then
-    decrypt_cmd=("/root/.scripts/decrypt-repo-env")
+  if command -v pull-repo-env >/dev/null 2>&1; then
+    pull_cmd=("pull-repo-env")
+  elif command -v pull_repo_env.py >/dev/null 2>&1; then
+    pull_cmd=("pull_repo_env.py")
+  elif [[ -x "${script_dir}/pull-repo-env" ]]; then
+    pull_cmd=("${script_dir}/pull-repo-env")
+  elif [[ -x "${script_dir}/pull_repo_env.py" ]]; then
+    pull_cmd=("${script_dir}/pull_repo_env.py")
+  elif [[ -f "${script_dir}/pull_repo_env.py" ]]; then
+    pull_cmd=("python3" "${script_dir}/pull_repo_env.py")
+  elif [[ -x "/usr/local/bin/pull-repo-env" ]]; then
+    pull_cmd=("/usr/local/bin/pull-repo-env")
+  elif [[ -x "/root/.scripts/pull-repo-env" ]]; then
+    pull_cmd=("/root/.scripts/pull-repo-env")
   fi
 
-  if [[ ${#decrypt_cmd[@]} -eq 0 ]]; then
-    echo "Error: Repository has .secrets/env.map, but neither decrypt-repo-env nor decrypt_repo_env.py was found." >&2
-    exit 1
+  if [[ ${#pull_cmd[@]} -gt 0 ]]; then
+    pull_args=("--optional" "-r" "$REPO_NAME" "-d" "${TARGET_DIR}/.env")
+    if [[ -n "$TARGET_ORG" ]]; then
+      pull_args+=("-o" "$TARGET_ORG")
+    fi
+    "${pull_cmd[@]}" "${pull_args[@]}"
   fi
-
-  "${decrypt_cmd[@]}" "$TARGET_DIR"
 fi

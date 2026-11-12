@@ -205,7 +205,7 @@ A bidirectional background synchronization service (`t3-usage-sync` in `shared/t
 _Avoid_: T3 sync daemon, usage daemon, transcript sync, storage syncer
 
 **Developer CLI Tooling Precedence**:
-The hierarchical resolution order governing developer CLI utility binaries and symlinks (`agyq`, `ghls`, `ghpr`, `ghclone`, `agyprofile`, `decrypt-repo-env`, `encrypt-repo-env`) inside Modal sandboxes: Workspace Repository (`$TARGET_DIR/scripts`) takes highest precedence, followed by Staged Dot Directory (`/root/.scripts`), falling back to the Pre-baked Base Image Binary (`/usr/local/bin`).
+The hierarchical resolution order governing developer CLI utility binaries and symlinks (`agyq`, `ghls`, `ghpr`, `ghclone`, `agyprofile`, `push-repo-env`, `pull-repo-env`) inside Modal sandboxes: Workspace Repository (`$TARGET_DIR/scripts`) takes highest precedence, followed by Staged Dot Directory (`/root/.scripts`), falling back to the Pre-baked Base Image Binary (`/usr/local/bin`).
 _Avoid_: Script priority, binary search path, cli override, tool priority
 
 **Sandbox Launcher**:

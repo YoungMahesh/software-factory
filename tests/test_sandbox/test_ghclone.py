@@ -27,7 +27,7 @@ class TestGhClone(unittest.TestCase):
             self.assertIn("GH_ORG_NAME", res.stdout)
             self.assertIn("destination", res.stdout)
             self.assertIn("--no-decrypt", res.stdout)
-            self.assertIn("decrypt", res.stdout)
+            self.assertIn("env-store", res.stdout)
 
     def test_missing_repo_argument_exits_nonzero_with_error(self):
         res = subprocess.run(
@@ -44,7 +44,6 @@ class TestGhClone(unittest.TestCase):
         self,
         args,
         home_dir=None,
-        create_env_map=False,
         decrypt_exit_code=0,
         use_py_script_name=False,
         extra_env=None,
@@ -61,14 +60,10 @@ class TestGhClone(unittest.TestCase):
                 "#!/usr/bin/env bash",
                 f'printf "%s\\n" "$@" > "{gh_record_file}"',
             ]
-            if create_env_map:
-                mock_gh_lines.append('TARGET_DIR="$4"')
-                mock_gh_lines.append('mkdir -p "$TARGET_DIR/.secrets"')
-                mock_gh_lines.append('echo "app.env=.env" > "$TARGET_DIR/.secrets/env.map"')
             mock_gh.write_text("\n".join(mock_gh_lines) + "\n")
             mock_gh.chmod(mock_gh.stat().st_mode | stat.S_IXUSR)
 
-            decrypt_name = "decrypt_repo_env.py" if use_py_script_name else "decrypt-repo-env"
+            decrypt_name = "pull_repo_env.py" if use_py_script_name else "pull-repo-env"
             mock_decrypt = bin_dir / decrypt_name
             mock_decrypt.write_text(
                 "#!/usr/bin/env bash\n"
@@ -84,7 +79,7 @@ class TestGhClone(unittest.TestCase):
             orig_path = env.get("PATH", "")
             if use_py_script_name:
                 orig_path = ":".join(
-                    p for p in orig_path.split(":") if not (Path(p) / "decrypt-repo-env").exists()
+                    p for p in orig_path.split(":") if not (Path(p) / "pull-repo-env").exists()
                 )
             env["PATH"] = f"{bin_dir}:{orig_path}"
             if home_dir:
@@ -195,32 +190,24 @@ class TestGhClone(unittest.TestCase):
                 ],
             )
 
-    def test_clone_with_env_map_executes_decrypt(self):
+    def test_clone_executes_pull_repo_env_by_default(self):
         with tempfile.TemporaryDirectory() as home_td:
             res, gh_args, decrypt_args = self._run_with_mocks(
-                ["my-repo"], home_dir=home_td, create_env_map=True
+                ["my-repo"], home_dir=home_td
             )
             self.assertEqual(res.returncode, 0)
             self.assertEqual(
                 gh_args, ["repo", "clone", "sFactory0/my-repo", f"{home_td}/my-repo"]
             )
-            self.assertEqual(decrypt_args, [f"{home_td}/my-repo"])
-
-    def test_clone_without_env_map_skips_decrypt(self):
-        with tempfile.TemporaryDirectory() as home_td:
-            res, gh_args, decrypt_args = self._run_with_mocks(
-                ["my-repo"], home_dir=home_td, create_env_map=False
-            )
-            self.assertEqual(res.returncode, 0)
             self.assertEqual(
-                gh_args, ["repo", "clone", "sFactory0/my-repo", f"{home_td}/my-repo"]
+                decrypt_args,
+                ["--optional", "-r", "my-repo", "-d", f"{home_td}/my-repo/.env", "-o", "sFactory0"],
             )
-            self.assertIsNone(decrypt_args)
 
-    def test_clone_with_no_decrypt_flag_skips_decrypt(self):
+    def test_clone_with_no_decrypt_flag_skips_pull_repo_env(self):
         with tempfile.TemporaryDirectory() as home_td:
             res, gh_args, decrypt_args = self._run_with_mocks(
-                ["my-repo", "--no-decrypt"], home_dir=home_td, create_env_map=True
+                ["my-repo", "--no-decrypt"], home_dir=home_td
             )
             self.assertEqual(res.returncode, 0)
             self.assertEqual(
@@ -228,10 +215,10 @@ class TestGhClone(unittest.TestCase):
             )
             self.assertIsNone(decrypt_args)
 
-    def test_clone_with_skip_decrypt_flag_skips_decrypt(self):
+    def test_clone_with_skip_decrypt_flag_skips_pull_repo_env(self):
         with tempfile.TemporaryDirectory() as home_td:
             res, gh_args, decrypt_args = self._run_with_mocks(
-                ["--skip-decrypt", "my-repo"], home_dir=home_td, create_env_map=True
+                ["--skip-decrypt", "my-repo"], home_dir=home_td
             )
             self.assertEqual(res.returncode, 0)
             self.assertEqual(
@@ -239,24 +226,29 @@ class TestGhClone(unittest.TestCase):
             )
             self.assertIsNone(decrypt_args)
 
-    def test_clone_decrypt_failure_exits_nonzero(self):
+    def test_clone_pull_failure_exits_nonzero(self):
         with tempfile.TemporaryDirectory() as home_td:
             res, gh_args, decrypt_args = self._run_with_mocks(
-                ["my-repo"], home_dir=home_td, create_env_map=True, decrypt_exit_code=1
+                ["my-repo"], home_dir=home_td, decrypt_exit_code=1
             )
             self.assertNotEqual(res.returncode, 0)
-            self.assertEqual(decrypt_args, [f"{home_td}/my-repo"])
+            self.assertEqual(
+                decrypt_args,
+                ["--optional", "-r", "my-repo", "-d", f"{home_td}/my-repo/.env", "-o", "sFactory0"],
+            )
 
-    def test_clone_executes_decrypt_repo_env_py_fallback(self):
+    def test_clone_executes_pull_repo_env_py_fallback(self):
         with tempfile.TemporaryDirectory() as home_td:
             res, gh_args, decrypt_args = self._run_with_mocks(
                 ["my-repo"],
                 home_dir=home_td,
-                create_env_map=True,
                 use_py_script_name=True,
             )
             self.assertEqual(res.returncode, 0)
-            self.assertEqual(decrypt_args, [f"{home_td}/my-repo"])
+            self.assertEqual(
+                decrypt_args,
+                ["--optional", "-r", "my-repo", "-d", f"{home_td}/my-repo/.env", "-o", "sFactory0"],
+            )
 
 
 if __name__ == "__main__":

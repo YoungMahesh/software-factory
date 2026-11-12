@@ -140,10 +140,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
-            LOCAL_DECRYPT_REPO_ENV,
-            REMOTE_DECRYPT_REPO_ENV,
-            LOCAL_ENCRYPT_REPO_ENV,
-            REMOTE_ENCRYPT_REPO_ENV,
+            LOCAL_PUSH_REPO_ENV,
+            REMOTE_PUSH_REPO_ENV,
+            LOCAL_PULL_REPO_ENV,
+            REMOTE_PULL_REPO_ENV,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
         )
@@ -158,8 +158,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_GHPR, REMOTE_GHPR),
             (LOCAL_GHCLONE, REMOTE_GHCLONE),
             (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
-            (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
-            (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
+            (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
+            (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
             (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
@@ -179,10 +179,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_GHCLONE,
             LOCAL_AGYPROFILE,
             REMOTE_AGYPROFILE,
-            LOCAL_DECRYPT_REPO_ENV,
-            REMOTE_DECRYPT_REPO_ENV,
-            LOCAL_ENCRYPT_REPO_ENV,
-            REMOTE_ENCRYPT_REPO_ENV,
+            LOCAL_PUSH_REPO_ENV,
+            REMOTE_PUSH_REPO_ENV,
+            LOCAL_PULL_REPO_ENV,
+            REMOTE_PULL_REPO_ENV,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
         )
@@ -192,8 +192,8 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertEqual(REMOTE_GHPR, "/usr/local/bin/ghpr")
         self.assertEqual(REMOTE_GHCLONE, "/usr/local/bin/ghclone")
         self.assertEqual(REMOTE_AGYPROFILE, "/usr/local/bin/agyprofile")
-        self.assertEqual(REMOTE_DECRYPT_REPO_ENV, "/usr/local/bin/decrypt-repo-env")
-        self.assertEqual(REMOTE_ENCRYPT_REPO_ENV, "/usr/local/bin/encrypt-repo-env")
+        self.assertEqual(REMOTE_PUSH_REPO_ENV, "/usr/local/bin/push-repo-env")
+        self.assertEqual(REMOTE_PULL_REPO_ENV, "/usr/local/bin/pull-repo-env")
         self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
 
         self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
@@ -201,8 +201,8 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertTrue(LOCAL_GHPR.exists(), "scripts/ghpr must exist")
         self.assertTrue(LOCAL_GHCLONE.exists(), "scripts/ghclone must exist")
         self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
-        self.assertTrue(LOCAL_DECRYPT_REPO_ENV.exists(), "scripts/decrypt_repo_env.py must exist")
-        self.assertTrue(LOCAL_ENCRYPT_REPO_ENV.exists(), "scripts/encrypt_repo_env.py must exist")
+        self.assertTrue(LOCAL_PUSH_REPO_ENV.exists(), "scripts/push_repo_env.py must exist")
+        self.assertTrue(LOCAL_PULL_REPO_ENV.exists(), "scripts/pull_repo_env.py must exist")
         self.assertTrue(LOCAL_T3_USAGE_SYNC.exists(), "shared/t3_usage_sync.py must exist")
 
         startup_content = (repo_root / "shared" / "startup.sh").read_text()

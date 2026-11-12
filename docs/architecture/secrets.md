@@ -106,7 +106,7 @@ flowchart TD
 1. **Centralized Vault**: Encrypted files live in the organization's private `github.com/${GH_ORG_NAME}/env-store` repository.
 2. **Host-Side Decryption**: `SandboxLauncher` retrieves the encrypted file via the GitHub Contents API and decrypts it host-side in memory using `AGE_PRIVATE_KEY`.
 3. **Container Isolation**: `AGE_PRIVATE_KEY` and the GitHub API tokens used to access `env-store` **never enter the sandbox container**.
-4. **Optional SOPS Fallback**: If a target repository has not migrated to `env-store`, `SandboxLauncher` falls back to decrypting the legacy target repository `.secrets/env.map` manifest.
+4. **Developer Tooling & In-Sandbox Clones**: For manual or in-sandbox repository clones, `ghclone` automatically delegates to `pull-repo-env` to retrieve and decrypt secrets from `env-store` into `$TARGET_DIR/.env`. Legacy in-repo `.secrets/env.map` manifests are completely retired (see [ADR 0065](../adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md)).
 
 ---
 

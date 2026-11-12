@@ -12,8 +12,8 @@ import unittest
 from shared.image import (
     LOCAL_AGYPROFILE,
     LOCAL_AGYQ,
-    LOCAL_DECRYPT_REPO_ENV,
-    LOCAL_ENCRYPT_REPO_ENV,
+    LOCAL_PUSH_REPO_ENV,
+    LOCAL_PULL_REPO_ENV,
     LOCAL_GHCLONE,
     LOCAL_GHLS,
     LOCAL_GHPR,
@@ -34,8 +34,8 @@ class TestDynamicDotDirectoryResolution(unittest.TestCase):
             LOCAL_GHPR,
             LOCAL_GHCLONE,
             LOCAL_AGYPROFILE,
-            LOCAL_DECRYPT_REPO_ENV,
-            LOCAL_ENCRYPT_REPO_ENV,
+            LOCAL_PUSH_REPO_ENV,
+            LOCAL_PULL_REPO_ENV,
         ):
             self.assertTrue(tool_path.exists(), f"Tool path {tool_path} must exist")
 

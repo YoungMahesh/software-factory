@@ -1,11 +1,13 @@
 """Unit tests for the pull_repo_env script."""
 
+from io import StringIO
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from scripts.pull_repo_env import pull_repo_env
+from scripts.pull_repo_env import main as cli_main, pull_repo_env
 
 
 class TestPullRepoEnv(unittest.TestCase):
@@ -57,6 +59,56 @@ class TestPullRepoEnv(unittest.TestCase):
 
         self.assertFalse(success)
         self.assertFalse(dest_file.is_file())
+
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_pull_repo_env_optional_when_not_found(self, mock_fetch_raw):
+        mock_fetch_raw.return_value = None
+
+        dest_file = self.repo_dir / ".env"
+        success = pull_repo_env(
+            repo_name="missing-app",
+            org_name="sFactory0",
+            dest_file=dest_file,
+            gh_token="ghp_test",
+            optional=True,
+        )
+
+        self.assertFalse(success)
+        self.assertFalse(dest_file.is_file())
+
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_pull_repo_env_optional_on_decryption_error(self, mock_fetch_raw):
+        mock_fetch_raw.side_effect = RuntimeError("SOPS decryption failed: missing private key")
+
+        dest_file = self.repo_dir / ".env"
+        success = pull_repo_env(
+            repo_name="secure-app",
+            org_name="sFactory0",
+            dest_file=dest_file,
+            gh_token="ghp_test",
+            optional=True,
+        )
+
+        self.assertFalse(success)
+        self.assertFalse(dest_file.is_file())
+
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_cli_optional_flag_exits_zero_on_missing(self, mock_fetch_raw):
+        mock_fetch_raw.return_value = None
+        dest_file = self.repo_dir / ".env"
+
+        test_args = [
+            "pull_repo_env.py",
+            "-r", "missing-app",
+            "-o", "sFactory0",
+            "-t", "ghp_test",
+            "-d", str(dest_file),
+            "--optional",
+        ]
+        with patch.object(sys, "argv", test_args):
+            with self.assertRaises(SystemExit) as cm:
+                cli_main()
+            self.assertEqual(cm.exception.code, 0)
 
 
 if __name__ == "__main__":

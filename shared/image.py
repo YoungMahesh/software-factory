@@ -78,10 +78,10 @@ LOCAL_GHCLONE = _resolve_file("ghclone", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_GHCLONE = "/usr/local/bin/ghclone"
 LOCAL_AGYPROFILE = _resolve_file("agyprofile", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_AGYPROFILE = "/usr/local/bin/agyprofile"
-LOCAL_DECRYPT_REPO_ENV = _resolve_file("decrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
-REMOTE_DECRYPT_REPO_ENV = "/usr/local/bin/decrypt-repo-env"
-LOCAL_ENCRYPT_REPO_ENV = _resolve_file("encrypt_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
-REMOTE_ENCRYPT_REPO_ENV = "/usr/local/bin/encrypt-repo-env"
+LOCAL_PUSH_REPO_ENV = _resolve_file("push_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
+REMOTE_PUSH_REPO_ENV = "/usr/local/bin/push-repo-env"
+LOCAL_PULL_REPO_ENV = _resolve_file("pull_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
+REMOTE_PULL_REPO_ENV = "/usr/local/bin/pull-repo-env"
 
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
@@ -144,8 +144,8 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_GHPR, REMOTE_GHPR),
     (LOCAL_GHCLONE, REMOTE_GHCLONE),
     (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
-    (LOCAL_DECRYPT_REPO_ENV, REMOTE_DECRYPT_REPO_ENV),
-    (LOCAL_ENCRYPT_REPO_ENV, REMOTE_ENCRYPT_REPO_ENV),
+    (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
+    (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
     (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
 ]
 
@@ -229,11 +229,11 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/decrypt-repo-env /usr/local/bin/encrypt-repo-env /usr/local/bin/t3-usage-sync /root/.scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/t3-usage-sync /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
-    "ln -sf /usr/local/bin/decrypt-repo-env /usr/local/bin/decrypt_repo_env.py 2>/dev/null || true",
-    "ln -sf /usr/local/bin/encrypt-repo-env /usr/local/bin/encrypt_repo_env.py 2>/dev/null || true",
+    "ln -sf /usr/local/bin/push-repo-env /usr/local/bin/push_repo_env.py 2>/dev/null || true",
+    "ln -sf /usr/local/bin/pull-repo-env /usr/local/bin/pull_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /usr/local/bin/t3_usage_sync 2>/dev/null || true",
     "mkdir -p /root/.scripts",
     "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
@@ -243,8 +243,8 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/agyprofile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true",
-    "ln -sf /usr/local/bin/decrypt-repo-env /root/.scripts/decrypt-repo-env 2>/dev/null || true",
-    "ln -sf /usr/local/bin/encrypt-repo-env /root/.scripts/encrypt-repo-env 2>/dev/null || true",
+    "ln -sf /usr/local/bin/push-repo-env /root/.scripts/push-repo-env 2>/dev/null || true",
+    "ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /root/.scripts/t3-usage-sync 2>/dev/null || true",
 )
 
