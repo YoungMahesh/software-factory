@@ -30,7 +30,7 @@
     "when": "terminalFocus"
   },
   {
-    "key": "mod+n",
+    "key": "mod+shift+n",
     "command": "terminal.new",
     "when": "terminalFocus"
   },
