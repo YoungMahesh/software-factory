@@ -263,6 +263,8 @@ class SandboxLauncher:
                     if vault_env:
                         self._emit_log(f"🔐 Injected {len(vault_env)} secrets from env-store into {bare_repo}...")
                         sandbox_secrets.append(modal.Secret.from_dict(vault_env))
+                    else:
+                        self._emit_log(f"ℹ️ No secrets found for {bare_repo} in env-store.")
 
                 if raw_vault_env is not None:
                     env["VAULT_DOTENV_B64"] = base64.b64encode(raw_vault_env.encode("utf-8")).decode("ascii")

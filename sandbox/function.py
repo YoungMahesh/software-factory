@@ -8,7 +8,7 @@ import sys
 from fastapi import Depends, FastAPI, HTTPException, status
 import modal
 
-# (shared.image secrets imports retired)
+from shared.image import SOPS_INSTALL_COMMANDS
 from sandbox.core import (
     LaunchRequest,
     LaunchResponse,
@@ -123,18 +123,22 @@ def collect_control_plane_secrets(root: Path) -> dict[str, str]:
 
 
 def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> bool:
-    """Validates GitHub access credentials presence for repository sandbox provisioning."""
+    """Validates GitHub access credentials and Age decryption keys for repository sandbox provisioning."""
     has_creds = bool(os.environ.get("GH_TOKEN"))
+    has_age_key = bool(os.environ.get("AGE_PRIVATE_KEY") or os.environ.get("SOPS_AGE_KEY"))
     dotenv_path = root / ".env"
-    if not has_creds and dotenv_path.is_file():
+    if (not has_creds or not has_age_key) and dotenv_path.is_file():
         try:
             for line in dotenv_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
-                if line.startswith("GH_TOKEN="):
+                if not has_creds and line.startswith("GH_TOKEN="):
                     val = line.split("=", 1)[1].strip().strip("'\"")
                     if val:
                         has_creds = True
-                        break
+                if not has_age_key and (line.startswith("AGE_PRIVATE_KEY=") or line.startswith("SOPS_AGE_KEY=")):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+                    if val:
+                        has_age_key = True
         except Exception:
             pass
 
@@ -149,11 +153,20 @@ def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> 
                 "Please configure GH_TOKEN before deploying."
             )
         return False
+
+    if not has_age_key:
+        logger.warning(
+            "Age decryption key (AGE_PRIVATE_KEY / SOPS_AGE_KEY) not found in environment or .env. "
+            "Decrypting secrets from Central Environment Store (env-store) will be skipped."
+        )
+
     return True
 
 
 image = (
     modal.Image.debian_slim()
+    .apt_install("curl")
+    .run_commands(*SOPS_INSTALL_COMMANDS)
     .pip_install(
         "modal>=1.6.1",
         "fastapi>=0.100.0",
