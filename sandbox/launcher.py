@@ -32,7 +32,7 @@ from sandbox.config import (
     DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
 )
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
-from sandbox.formatting import append_ssh_config
+from sandbox.formatting import append_ssh_config, generate_ssh_config_snippet
 from sandbox.t3 import setup_t3 as _setup_t3
 from shared.image import (
     DEFAULT_T3_USAGE_VOLUME, REMOTE_STARTUP_SCRIPT, T3_STORAGE_MOUNT_PATH,
@@ -58,6 +58,8 @@ class RunningSandbox:
     def ssh_info(self) -> tuple[str, int] | None: return self.response.ssh_info
     @property
     def ssh_command(self) -> str | None: return self.response.ssh_command
+    @property
+    def ssh_config(self) -> str | None: return self.response.ssh_config
     @property
     def opencode_url(self) -> str | None: return self.response.opencode_url
     @property
@@ -392,10 +394,20 @@ class SandboxLauncher:
             if ssh_info else f"modal shell {sandbox.object_id}"
         )
 
+        instance_name = t3_ssh_alias or sandbox_name or app_name
+        ssh_config_snippet = None
+        if ssh_info:
+            ssh_config_snippet = generate_ssh_config_snippet(
+                instance_name=instance_name,
+                ssh_host=ssh_info[0],
+                ssh_port=ssh_info[1],
+            )
+
         try:
             from sandbox.lifecycle import record_sandbox_connection_info
             record_sandbox_connection_info(
                 sandbox.object_id, ssh_command=ssh_cmd,
+                ssh_config=ssh_config_snippet,
                 t3_pair_url=t3_pair_url, has_t3=bool(req.t3),
                 created_at=created_at_iso, timeout_secs=TIMEOUT_SECS,
             )
@@ -403,7 +415,6 @@ class SandboxLauncher:
             pass
 
         if register_ssh_config and ssh_info and not getattr(req, "no_ssh_config", False):
-            instance_name = t3_ssh_alias or sandbox_name or app_name
             try:
                 self.append_ssh_fn(
                     instance_name=instance_name,
@@ -418,7 +429,7 @@ class SandboxLauncher:
 
         response = LaunchResponse(
             sandbox_id=sandbox.object_id, app_name=app_name, sandbox_name=sandbox_name,
-            ssh_info=ssh_info, ssh_command=ssh_cmd, opencode_url=opencode_url,
+            ssh_info=ssh_info, ssh_command=ssh_cmd, ssh_config=ssh_config_snippet, opencode_url=opencode_url,
             opencode_port=req.opencode_port if req.opencode else None,
             opencode_password=opencode_password,
             metro_url=metro_url, metro_port=req.metro_port if req.react_native else None,

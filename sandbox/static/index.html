@@ -218,6 +218,7 @@
 
                   <!-- SSH Copy Button -->
                   <button @click="copySshCommand(sb)" :disabled="!sb.running"
+                          :title="sb.ssh_config ? 'Copy ~/.ssh/config snippet' : 'Copy SSH command'"
                           class="inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-40">
                     SSH
                   </button>
@@ -696,14 +697,49 @@
           </div>
         </div>
 
-        <!-- SSH Command Snippet -->
-        <div class="space-y-1">
-          <div class="text-xs text-slate-400 font-medium">SSH Connection</div>
-          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
-            <span class="truncate mr-2" x-text="launchResult?.ssh_command || (launchResult?.ssh_info ? ('ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p ' + launchResult.ssh_info[1] + ' root@' + launchResult.ssh_info[0]) : ('modal shell ' + launchResult?.sandbox_id))"></span>
-            <button @click="copyText(launchResult?.ssh_command || (launchResult?.ssh_info ? ('ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p ' + launchResult.ssh_info[1] + ' root@' + launchResult.ssh_info[0]) : ('modal shell ' + launchResult?.sandbox_id)), 'SSH command copied!')" class="text-slate-400 hover:text-white flex-shrink-0">
+        <!-- SSH Connection Snippet (Config block vs Command toggle) -->
+        <div class="space-y-1.5" x-data="{ sshMode: 'config' }">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-medium">SSH Connection</span>
+            <div class="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[11px]">
+              <button type="button" @click="sshMode = 'config'"
+                      :class="sshMode === 'config' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'"
+                      class="px-2 py-0.5 rounded transition-colors">
+                ~/.ssh/config
+              </button>
+              <button type="button" @click="sshMode = 'command'"
+                      :class="sshMode === 'command' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'"
+                      class="px-2 py-0.5 rounded transition-colors">
+                Direct Command
+              </button>
+            </div>
+          </div>
+
+          <!-- ~/.ssh/config View -->
+          <div x-show="sshMode === 'config'" class="space-y-1">
+            <div class="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/60 px-2.5 py-1 rounded border border-slate-800/80">
+              <span>Append to <code class="text-indigo-300">~/.ssh/config</code>, then connect:</span>
+              <span class="font-mono text-indigo-300" x-text="'ssh ' + (launchResult?.t3_ssh_host || launchResult?.sandbox_name || launchResult?.app_name || 'sandbox')"></span>
+            </div>
+            <div class="relative bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300">
+              <button @click="copyText(getLaunchSshConfig(), 'SSH config snippet copied! Append to ~/.ssh/config')"
+                      class="absolute top-2.5 right-2.5 p-1.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+                      title="Copy SSH config snippet">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Copy</span>
+              </button>
+              <pre class="overflow-x-auto whitespace-pre pr-16 select-all" x-text="getLaunchSshConfig()"></pre>
+            </div>
+          </div>
+
+          <!-- Direct Command View -->
+          <div x-show="sshMode === 'command'" class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
+            <span class="truncate mr-2 select-all" x-text="getLaunchSshCommand()"></span>
+            <button @click="copyText(getLaunchSshCommand(), 'SSH command copied!')" class="text-slate-400 hover:text-white flex-shrink-0" title="Copy SSH command">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
             </button>
           </div>
@@ -1130,7 +1166,35 @@
           this.showToast(msg);
         },
 
+        getLaunchSshCommand() {
+          return this.launchResult?.ssh_command || (this.launchResult?.ssh_info ? ('ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p ' + this.launchResult.ssh_info[1] + ' root@' + this.launchResult.ssh_info[0]) : ('modal shell ' + this.launchResult?.sandbox_id));
+        },
+
+        getLaunchSshConfig() {
+          if (this.launchResult?.ssh_config) {
+            return this.launchResult.ssh_config;
+          }
+          if (this.launchResult?.ssh_info) {
+            const host = this.launchResult.ssh_info[0];
+            const port = this.launchResult.ssh_info[1];
+            const name = this.launchResult.t3_ssh_host || this.launchResult.sandbox_name || this.launchResult.app_name || this.launchResult.sandbox_id;
+            return `Host ${name}
+  HostName ${host}
+  Port ${port}
+  User root
+  IdentityFile ~/.ssh/modal-sandbox
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+`;
+          }
+          return this.getLaunchSshCommand();
+        },
+
         copySshCommand(sb) {
+          if (sb.ssh_config) {
+            this.copyText(sb.ssh_config, 'SSH config snippet copied! Append to ~/.ssh/config');
+            return;
+          }
           const cmd = sb.ssh_command || (sb.name ? `ssh ${sb.name}` : `modal shell ${sb.id}`);
           this.copyText(cmd, `SSH command copied: ${cmd}`);
         },

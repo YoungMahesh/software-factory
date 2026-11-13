@@ -27,6 +27,7 @@ class TestRunningSandbox(unittest.TestCase):
             sandbox_name="test-app-abcdef",
             ssh_info=("ssh.host", 2222),
             ssh_command="ssh -p 2222 root@ssh.host",
+            ssh_config="Host test-app-abcdef\n  HostName ssh.host\n  Port 2222\n  User root\n  IdentityFile ~/.ssh/modal-sandbox\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n",
             opencode_url="https://opencode.modal.run",
             metro_url="https://metro.modal.run",
             t3_url="https://t3.modal.run",
@@ -40,6 +41,7 @@ class TestRunningSandbox(unittest.TestCase):
         self.assertEqual(self.running.sandbox_name, "test-app-abcdef")
         self.assertEqual(self.running.ssh_info, ("ssh.host", 2222))
         self.assertEqual(self.running.ssh_command, "ssh -p 2222 root@ssh.host")
+        self.assertIn("Host test-app-abcdef", self.running.ssh_config)
         self.assertEqual(self.running.opencode_url, "https://opencode.modal.run")
         self.assertEqual(self.running.metro_url, "https://metro.modal.run")
         self.assertEqual(self.running.t3_url, "https://t3.modal.run")
@@ -103,6 +105,9 @@ class TestSandboxLauncher(unittest.TestCase):
             ssh_port=2200,
         )
         self.assertEqual(running.sandbox_id, "sb-launcher-1")
+        self.assertIsNotNone(running.ssh_config)
+        self.assertIn(f"Host {running.sandbox_name}", running.ssh_config)
+        self.assertEqual(running.response.ssh_config, running.ssh_config)
 
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")

@@ -51,6 +51,7 @@ class LaunchResponse(BaseModel):
     sandbox_name: str
     ssh_info: tuple[str, int] | None = None
     ssh_command: str | None = None
+    ssh_config: str | None = None
     opencode_url: str | None = None
     opencode_port: int | None = None
     opencode_password: str | None = None

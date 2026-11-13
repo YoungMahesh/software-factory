@@ -22,6 +22,7 @@ _SANDBOX_METADATA_CACHE: dict[str, dict[str, Any]] = {}
 def record_sandbox_connection_info(
     sandbox_id: str,
     ssh_command: str | None = None,
+    ssh_config: str | None = None,
     t3_pair_url: str | None = None,
     has_t3: bool = False,
     created_at: str | None = None,
@@ -30,6 +31,7 @@ def record_sandbox_connection_info(
     """Pre-populates or updates connection metadata in cache for a sandbox."""
     _SANDBOX_METADATA_CACHE[sandbox_id] = {
         "ssh_command": ssh_command or f"modal shell {sandbox_id}",
+        "ssh_config": ssh_config,
         "t3_pair_url": t3_pair_url,
         "has_t3": has_t3,
         "created_at": created_at,
@@ -56,6 +58,8 @@ def resolve_sandbox_connection_info(sb: modal.Sandbox) -> tuple[str | None, str 
             return cached.get("ssh_command"), None
 
     ssh_command = None
+    ssh_host = None
+    ssh_port = None
     t3_pair_url = None
     has_t3 = False
 
@@ -94,6 +98,8 @@ def resolve_sandbox_connection_info(sb: modal.Sandbox) -> tuple[str | None, str 
 
     _SANDBOX_METADATA_CACHE[sb.object_id] = {
         "ssh_command": ssh_command,
+        "ssh_host": ssh_host,
+        "ssh_port": ssh_port,
         "t3_pair_url": t3_pair_url,
         "has_t3": has_t3,
     }
@@ -225,9 +231,20 @@ def _query_profile_sandboxes(
         if is_running:
             name = resolve_instance_name(sb)
             ssh_command, t3_pair_url = resolve_sandbox_connection_info(sb)
+            cached_meta = _SANDBOX_METADATA_CACHE.get(sb.object_id, {})
+            ssh_config = cached_meta.get("ssh_config")
+            if not ssh_config and cached_meta.get("ssh_host") and cached_meta.get("ssh_port"):
+                from sandbox.formatting import generate_ssh_config_snippet
+                ssh_config = generate_ssh_config_snippet(
+                    instance_name=name or sb.object_id,
+                    ssh_host=cached_meta["ssh_host"],
+                    ssh_port=cached_meta["ssh_port"],
+                )
+                cached_meta["ssh_config"] = ssh_config
         else:
             name = None
             ssh_command = None
+            ssh_config = None
             t3_pair_url = None
             _SANDBOX_METADATA_CACHE.pop(sb.object_id, None)
 
@@ -244,6 +261,7 @@ def _query_profile_sandboxes(
             "app_name": app_label,
             "profile": profile_name,
             "ssh_command": ssh_command,
+            "ssh_config": ssh_config,
             "t3_pair_url": t3_pair_url,
             "created_at": created_at,
             "timeout_secs": timeout_secs,

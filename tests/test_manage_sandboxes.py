@@ -168,6 +168,18 @@ class TestManageSandboxes(TestCase):
             "ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p 36511 root@r479.modal.host",
         )
         self.assertEqual(
+            results[0]["ssh_config"],
+            (
+                "Host sf-active\n"
+                "  HostName r479.modal.host\n"
+                "  Port 36511\n"
+                "  User root\n"
+                "  IdentityFile ~/.ssh/modal-sandbox\n"
+                "  StrictHostKeyChecking no\n"
+                "  UserKnownHostsFile /dev/null\n"
+            ),
+        )
+        self.assertEqual(
             results[0]["t3_pair_url"],
             "https://ta-01m6wzp5m0w6nvdxkf82b19hpv-3775-i9leqkuiv35e5ifa64rpynvkw.w.modal.host/pair#token=LDF3EM8HZ4G8",
         )
@@ -175,6 +187,7 @@ class TestManageSandboxes(TestCase):
         self.assertEqual(results[0]["timeout_secs"], 79200)
         self.assertFalse(results[1]["running"])
         self.assertIsNone(results[1]["ssh_command"])
+        self.assertIsNone(results[1]["ssh_config"])
         self.assertIsNone(results[1]["t3_pair_url"])
 
     @patch("modal.Sandbox.list")
