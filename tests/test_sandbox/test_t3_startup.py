@@ -288,3 +288,10 @@ class TestT3CodeStartup(unittest.TestCase):
             self.assertEqual(acp_data["client_secret"], "persisted-snapshot-secret")
             self.assertNotIn("project_id", acp_data)
             self.assertEqual(acp_data["refresh_token"], "mock-refresh-token")
+
+    def test_startup_script_contains_worktree_env_propagation_and_bundle_materialization(self):
+        content = self.startup_sh.read_text()
+        self.assertIn("VAULT_ENV_BUNDLE_B64", content)
+        self.assertIn("env-vault", content)
+        self.assertIn("git config --global core.hooksPath /root/.git-hooks", content)
+        self.assertIn("/root/.git-hooks/post-checkout", content)

@@ -148,6 +148,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_PULL_REPO_ENV,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
+            LOCAL_POST_CHECKOUT_HOOK,
+            REMOTE_POST_CHECKOUT_HOOK,
         )
 
         expected = [
@@ -163,10 +165,12 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
             (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
             (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
+            (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
         self.assertEqual(REMOTE_SETUP_SCRIPT, "/root/.scripts/setup.sh")
         self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
+        self.assertEqual(REMOTE_POST_CHECKOUT_HOOK, "/root/.git-hooks/post-checkout")
 
     def test_developer_commands_staged_and_symlinked_system_wide(self):
         repo_root = Path(__file__).resolve().parents[2]
@@ -187,6 +191,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_PULL_REPO_ENV,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
+            LOCAL_POST_CHECKOUT_HOOK,
+            REMOTE_POST_CHECKOUT_HOOK,
         )
 
         self.assertEqual(REMOTE_AGYQ, "/usr/local/bin/agyq")
@@ -197,6 +203,7 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertEqual(REMOTE_PUSH_REPO_ENV, "/usr/local/bin/push-repo-env")
         self.assertEqual(REMOTE_PULL_REPO_ENV, "/usr/local/bin/pull-repo-env")
         self.assertEqual(REMOTE_T3_USAGE_SYNC, "/usr/local/bin/t3-usage-sync")
+        self.assertEqual(REMOTE_POST_CHECKOUT_HOOK, "/root/.git-hooks/post-checkout")
 
         self.assertTrue(LOCAL_AGYQ.exists(), "scripts/agyq must exist")
         self.assertTrue(LOCAL_GHLS.exists(), "scripts/ghls must exist")

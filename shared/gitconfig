@@ -1,3 +1,6 @@
+[core]
+    hooksPath = /root/.git-hooks
+
 [advice]
     detachedHead = false
 

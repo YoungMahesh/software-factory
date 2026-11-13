@@ -82,6 +82,8 @@ LOCAL_PUSH_REPO_ENV = _resolve_file("push_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_PUSH_REPO_ENV = "/usr/local/bin/push-repo-env"
 LOCAL_PULL_REPO_ENV = _resolve_file("pull_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_PULL_REPO_ENV = "/usr/local/bin/pull-repo-env"
+LOCAL_POST_CHECKOUT_HOOK = SHARED_DIR / "git-hooks" / "post-checkout"
+REMOTE_POST_CHECKOUT_HOOK = "/root/.git-hooks/post-checkout"
 
 LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
 REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
@@ -147,6 +149,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
     (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
     (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
+    (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
 ]
 
 
@@ -246,6 +249,7 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/push-repo-env /root/.scripts/push-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /root/.scripts/t3-usage-sync 2>/dev/null || true",
+    "chmod +x /root/.git-hooks/post-checkout 2>/dev/null || true",
 )
 
 

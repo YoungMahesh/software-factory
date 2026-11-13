@@ -144,6 +144,9 @@ nav:
     - '0062: Publish Documentation as Modal Web Function': adr/0062-publish-documentation-as-modal-web-function.md
     - '0063: Replace --secret Flag with --repo and Retire Legacy Secret Staging in Sandbox Runner': adr/0063-replace-secret-flag-with-repo-flag-in-sandbox-runner.md
     - '0064: Default Antigravity Text Generation and Source Control Writer Model in T3 Code': adr/0064-default-antigravity-text-and-source-control-writer-model-in-t3-code.md
+    - '0065: Retire In-Repo env.map Fallback and Standardize ghclone on Central Environment Store': adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md
+    - '0066: Multi-Tier Git Identity and Env-Store Authorship Separation': adr/0066-multi-tier-git-identity-and-env-store-separation.md
+    - '0067: Git Worktree Environment Secret Propagation and Central env.map': adr/0067-git-worktree-environment-propagation-and-central-env-map.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

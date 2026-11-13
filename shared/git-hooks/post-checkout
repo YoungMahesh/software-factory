@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PREV_HEAD="${1:-}"
+NEW_HEAD="${2:-}"
+IS_BRANCH_CHECKOUT="${3:-0}"
+
+# Only run on branch checkouts (git checkout -b / git worktree add / git switch)
+if [ "$IS_BRANCH_CHECKOUT" != "1" ]; then
+    exit 0
+fi
+
+# Determine current worktree root
+WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+[ -z "$WT_ROOT" ] && exit 0
+
+COMMON_GIT_DIR=$(git rev-parse --git-common-dir 2>/dev/null || true)
+[ -z "$COMMON_GIT_DIR" ] && exit 0
+COMMON_GIT_DIR=$(cd "$COMMON_GIT_DIR" && pwd)
+
+VAULT_DIR="$COMMON_GIT_DIR/env-vault"
+MAIN_REPO_ROOT=$(dirname "$COMMON_GIT_DIR")
+
+# 1. Propagate environment secrets if env.map exists in vault
+if [ -f "$VAULT_DIR/env.map" ]; then
+    while IFS='=' read -r src dest || [ -n "$src" ]; do
+        src=$(echo "$src" | tr -d '\r' | xargs 2>/dev/null || true)
+        dest=$(echo "$dest" | tr -d '\r' | xargs 2>/dev/null || true)
+        [[ -z "$src" || "$src" =~ ^# ]] && continue
+        [ -z "$dest" ] && continue
+
+        src_file="$VAULT_DIR/$src"
+        dest_file="$WT_ROOT/$dest"
+
+        # Non-destructive: only copy if destination does not already exist
+        if [ -f "$src_file" ] && [ ! -e "$dest_file" ]; then
+            mkdir -p "$(dirname "$dest_file")"
+            cp "$src_file" "$dest_file"
+            chmod 600 "$dest_file" 2>/dev/null || true
+        fi
+    done < "$VAULT_DIR/env.map"
+elif [ -d "$MAIN_REPO_ROOT" ] && [ "$MAIN_REPO_ROOT" != "$WT_ROOT" ]; then
+    # 2. Zero-config fallback: copy root .env* files from main repository root
+    for f in "$MAIN_REPO_ROOT"/.env*; do
+        [ -f "$f" ] || continue
+        fname=$(basename "$f")
+        dest_file="$WT_ROOT/$fname"
+        if [ ! -e "$dest_file" ]; then
+            cp "$f" "$dest_file"
+            chmod 600 "$dest_file" 2>/dev/null || true
+        fi
+    done
+fi
+
+# 3. Chain-execute local repository hook if present
+SELF_REAL=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+LOCAL_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || true)
+if [ -n "$LOCAL_GIT_DIR" ]; then
+    LOCAL_GIT_DIR=$(cd "$LOCAL_GIT_DIR" && pwd)
+fi
+
+CANDIDATE_HOOK=""
+if [ -n "$LOCAL_GIT_DIR" ] && [ -x "$LOCAL_GIT_DIR/hooks/post-checkout" ]; then
+    CANDIDATE_HOOK="$LOCAL_GIT_DIR/hooks/post-checkout"
+elif [ -x "$COMMON_GIT_DIR/hooks/post-checkout" ]; then
+    CANDIDATE_HOOK="$COMMON_GIT_DIR/hooks/post-checkout"
+fi
+
+if [ -n "$CANDIDATE_HOOK" ]; then
+    CANDIDATE_REAL=$(realpath "$CANDIDATE_HOOK" 2>/dev/null || readlink -f "$CANDIDATE_HOOK" 2>/dev/null || echo "$CANDIDATE_HOOK")
+    if [ "$CANDIDATE_REAL" != "$SELF_REAL" ]; then
+        "$CANDIDATE_HOOK" "$@" || true
+    fi
+fi

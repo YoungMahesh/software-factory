@@ -164,6 +164,18 @@ _Avoid_: Org token file, github orgs secret, project fetch secret
 A dedicated private GitHub repository (`env-store` under `${GH_ORG_NAME}`) that securely houses SOPS-encrypted environment files and directory mappings organized by target repository name, serving as the centralized secret vault for public and private workspaces without polluting open-source codebases.
 _Avoid_: Central secrets repo, github vault, secret bucket
 
+**Environment Mapping Manifest (`env.map`)**:
+A plaintext configuration manifest located in `env-store/<repo>/env.map` (and cached locally in `.git/env-vault/env.map`) that maps source secret files to relative workspace destination paths (e.g. `web.env=apps/web/.env`, `api.env=packages/api/.env.local`) for monorepo architectures.
+_Avoid_: Secret manifest, env config, dotenv map
+
+**Repository Vault Cache (`.git/env-vault/`)**:
+The untracked directory located inside the parent repository's common Git directory (`$(git rev-parse --git-common-dir)/env-vault`) that securely caches decrypted runtime secrets (`default.env`, `web.env`) and destination mapping manifests (`env.map`) outside Git version control, accessible to all linked worktrees without requiring `.gitignore` entries.
+_Avoid_: In-repo secrets, git secret cache, worktree dot directory
+
+**Git Worktree Environment Propagation**:
+The automated mechanism powered by Git's global `post-checkout` hook (`core.hooksPath = /root/.git-hooks`) that detects newly checked out worktrees in T3 Code Web UI (`git worktree add`) and non-destructively copies decrypted environment files from `.git/env-vault/` into the worktree root or subproject paths with restricted `0600` permissions.
+_Avoid_: Worktree env copying, manual worktree env, worktree secret sync
+
 **Host-Side Secret Injection**:
 The provisioning seam in `SandboxLauncher` that retrieves encrypted environment secrets from the Central Environment Store (`env-store`), decrypts them in host or control-plane memory using `AGE_PRIVATE_KEY`, and mounts them directly as native process environment variables (`modal.Secret.from_dict()`) into the sandbox, guaranteeing master private keys and vault credentials never enter the container.
 _Avoid_: Container decryption, in-sandbox sops, startup decryption

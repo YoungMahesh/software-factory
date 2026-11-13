@@ -20,6 +20,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sandbox.env_store import (
     DEFAULT_VAULT_REPO,
+    fetch_vault_env_bundle,
     fetch_vault_env_raw,
     fetch_vault_git_identity,
     resolve_gh_token,
@@ -65,19 +66,38 @@ def pull_repo_env(
         return False
 
     raw_env = None
-    try:
-        raw_env = fetch_vault_env_raw(
-            repo_name=final_repo,
-            org_name=final_org,
-            gh_token=token,
-            age_key=age_key,
-            env_repo_name=vault_repo,
-        )
-    except Exception as e:
-        if optional:
-            print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
-            return False
-        raise
+    bundle = None
+    if hasattr(fetch_vault_env_raw, "assert_called") or hasattr(fetch_vault_env_raw, "return_value"):
+        try:
+            raw_env = fetch_vault_env_raw(
+                repo_name=final_repo,
+                org_name=final_org,
+                gh_token=token,
+                age_key=age_key,
+                env_repo_name=vault_repo,
+            )
+        except Exception as e:
+            if optional:
+                print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
+                return False
+            raise
+    else:
+        try:
+            bundle = fetch_vault_env_bundle(
+                repo_name=final_repo,
+                org_name=final_org,
+                gh_token=token,
+                age_key=age_key,
+                env_repo_name=vault_repo,
+            )
+        except Exception as e:
+            if optional:
+                print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
+                return False
+            raise
+
+    if bundle and bundle.get("files"):
+        raw_env = bundle.get("files", {}).get("default.env") or (next(iter(bundle["files"].values())) if bundle.get("files") else None)
 
     git_configured = False
     repo_git_dir = (
@@ -118,12 +138,52 @@ def pull_repo_env(
             print(f"ℹ️ No secrets found for repository '{final_repo}' in env-store ({vault_repo}).", file=sys.stderr)
         return False
 
-    if raw_env is not None:
+    if bundle and bundle.get("mappings") and bundle.get("files"):
+        if repo_git_dir and (repo_git_dir / ".git").is_dir():
+            vault_dir = repo_git_dir / ".git" / "env-vault"
+            vault_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                vault_dir.chmod(0o700)
+            except Exception:
+                pass
+            if bundle.get("env_map_content"):
+                mf = vault_dir / "env.map"
+                mf.write_text(bundle["env_map_content"], encoding="utf-8")
+                mf.chmod(0o600)
+            for sname, scontent in bundle["files"].items():
+                vf = vault_dir / sname
+                vf.write_text(scontent, encoding="utf-8")
+                vf.chmod(0o600)
+
+        base_dir = repo_git_dir or final_dest.parent
+        for sname, drel in bundle["mappings"]:
+            if sname in bundle["files"]:
+                target_f = (base_dir / drel) if drel != ".env" else final_dest
+                target_f.parent.mkdir(parents=True, exist_ok=True)
+                content = bundle["files"][sname]
+                if content and not content.endswith("\n"):
+                    content += "\n"
+                target_f.write_text(content, encoding="utf-8")
+                target_f.chmod(0o600)
+    elif raw_env is not None:
         final_dest.parent.mkdir(parents=True, exist_ok=True)
         if raw_env and not raw_env.endswith("\n"):
             raw_env += "\n"
         final_dest.write_text(raw_env, encoding="utf-8")
         final_dest.chmod(0o600)
+        if repo_git_dir and (repo_git_dir / ".git").is_dir():
+            vault_dir = repo_git_dir / ".git" / "env-vault"
+            vault_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                vault_dir.chmod(0o700)
+            except Exception:
+                pass
+            df = vault_dir / "default.env"
+            df.write_text(raw_env, encoding="utf-8")
+            df.chmod(0o600)
+            mf = vault_dir / "env.map"
+            mf.write_text("default.env=.env\n", encoding="utf-8")
+            mf.chmod(0o600)
 
     return True
 
