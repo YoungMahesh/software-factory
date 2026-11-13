@@ -145,6 +145,38 @@ class TestPullRepoEnv(unittest.TestCase):
         )
 
 
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_bundle_materialization_and_vault_staging(self, mock_fetch_bundle):
+        (self.repo_dir / ".git").mkdir()
+        bundle = {
+            "env_map_content": "web.env = apps/web/.env\napi.env = packages/api/.env.local\n",
+            "mappings": [("web.env", "apps/web/.env"), ("api.env", "packages/api/.env.local")],
+            "files": {"web.env": "PORT=3000\n", "api.env": "SECRET=xyz\n"},
+        }
+        mock_fetch_bundle.return_value = bundle
+
+        success = pull_repo_env(
+            repo_name="my-app",
+            org_name="sFactory0",
+            dest_file=self.repo_dir / ".env",
+            gh_token="ghp_test",
+        )
+
+        self.assertTrue(success)
+        web_env = self.repo_dir / "apps" / "web" / ".env"
+        api_env = self.repo_dir / "packages" / "api" / ".env.local"
+        self.assertTrue(web_env.is_file())
+        self.assertTrue(api_env.is_file())
+        self.assertEqual(web_env.read_text(), "PORT=3000\n")
+        self.assertEqual(api_env.read_text(), "SECRET=xyz\n")
+
+        vault_dir = self.repo_dir / ".git" / "env-vault"
+        self.assertTrue((vault_dir / "env.map").is_file())
+        self.assertTrue((vault_dir / "web.env").is_file())
+        self.assertTrue((vault_dir / "api.env").is_file())
+        self.assertEqual((vault_dir / "env.map").read_text(), bundle["env_map_content"])
+
+
 if __name__ == "__main__":
 
     unittest.main()

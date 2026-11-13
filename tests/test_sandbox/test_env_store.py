@@ -4,13 +4,16 @@ from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 import urllib.error
+import warnings
 
 from sandbox.env_store import (
-    fetch_vault_git_identity,
     decrypt_sops_payload,
     fetch_github_file,
     fetch_vault_env,
+    fetch_vault_env_bundle,
     fetch_vault_env_raw,
+    fetch_vault_git_identity,
+    parse_env_map,
     parse_env_text,
     serialize_env_dict,
 )
@@ -150,7 +153,6 @@ class TestEnvStore(unittest.TestCase):
 
         self.assertIsNone(env_dict)
 
-
     @patch("sandbox.env_store.fetch_vault_env")
     def test_fetch_vault_git_identity_found(self, mock_fetch):
         mock_fetch.return_value = {
@@ -173,6 +175,103 @@ class TestEnvStore(unittest.TestCase):
         mock_fetch.return_value = None
         res = fetch_vault_git_identity("missing-repo", org_name="test-org")
         self.assertIsNone(res)
+
+    def test_parse_env_map_valid(self):
+        map_content = """
+        # Monorepo mapping
+        web.env = apps/web/.env
+        api.env = packages/api/.env.local
+        worker.env = services/worker/.env
+        """
+        mappings = parse_env_map(map_content)
+        self.assertEqual(
+            mappings,
+            [
+                ("web.env", "apps/web/.env"),
+                ("api.env", "packages/api/.env.local"),
+                ("worker.env", "services/worker/.env"),
+            ],
+        )
+
+    def test_parse_env_map_encrypted_warns_and_ignores(self):
+        encrypted_map = """sops:
+            mac: ENC[AES256_GCM,data:abc]
+            version: 3.8.1
+        """
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            mappings = parse_env_map(encrypted_map)
+            self.assertEqual(mappings, [])
+            self.assertTrue(any("encrypted" in str(item.message).lower() for item in w))
+
+    @patch("sandbox.env_store.fetch_github_file")
+    @patch("sandbox.env_store.decrypt_sops_payload")
+    def test_fetch_vault_env_bundle_with_map(self, mock_decrypt, mock_fetch):
+        def fake_fetch(owner, repo, path, token):
+            if path == "my-app/env.map":
+                return "web.env = apps/web/.env\napi.env = packages/api/.env\n"
+            if path in ("my-app/web.env", "my-app/api.env"):
+                return f"ENC_{path}"
+            return None
+
+        def fake_decrypt(cipher, age_private_key=None):
+            if "web.env" in cipher:
+                return "WEB_PORT=3000\n"
+            if "api.env" in cipher:
+                return "API_KEY=xyz\n"
+            return ""
+
+        mock_fetch.side_effect = fake_fetch
+        mock_decrypt.side_effect = fake_decrypt
+
+        bundle = fetch_vault_env_bundle("my-app", org_name="sFactory0", gh_token="ghp_1", age_key="key")
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["env_map_content"], "web.env = apps/web/.env\napi.env = packages/api/.env\n")
+        self.assertEqual(
+            bundle["mappings"],
+            [("web.env", "apps/web/.env"), ("api.env", "packages/api/.env")],
+        )
+        self.assertEqual(bundle["files"]["web.env"], "WEB_PORT=3000\n")
+        self.assertEqual(bundle["files"]["api.env"], "API_KEY=xyz\n")
+
+    @patch("sandbox.env_store.fetch_github_file")
+    @patch("sandbox.env_store.decrypt_sops_payload")
+    def test_fetch_vault_env_bundle_fallback_default_env(self, mock_decrypt, mock_fetch):
+        def fake_fetch(owner, repo, path, token):
+            if path == "my-app/env.map":
+                return None
+            if path == "my-app/default.env":
+                return "ENC_DEFAULT"
+            return None
+
+        mock_fetch.side_effect = fake_fetch
+        mock_decrypt.return_value = "SECRET=123\n"
+
+        bundle = fetch_vault_env_bundle("my-app", org_name="sFactory0", gh_token="ghp_1", age_key="key")
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["mappings"], [("default.env", ".env")])
+        self.assertEqual(bundle["files"]["default.env"], "SECRET=123\n")
+        self.assertEqual(bundle["env_map_content"], "default.env=.env\n")
+
+    @patch("sandbox.env_store.fetch_github_file")
+    @patch("sandbox.env_store.decrypt_sops_payload")
+    def test_fetch_vault_env_bundle_missing_mapped_file_resilience(self, mock_decrypt, mock_fetch):
+        def fake_fetch(owner, repo, path, token):
+            if path == "my-app/env.map":
+                return "found.env = apps/web/.env\nmissing.env = apps/api/.env\n"
+            if path == "my-app/found.env":
+                return "ENC_FOUND"
+            return None  # missing.env is 404
+
+        mock_fetch.side_effect = fake_fetch
+        mock_decrypt.return_value = "FOUND=1\n"
+
+        bundle = fetch_vault_env_bundle("my-app", org_name="sFactory0", gh_token="ghp_1", age_key="key")
+        self.assertIsNotNone(bundle)
+        self.assertIn("found.env", bundle["files"])
+        self.assertNotIn("missing.env", bundle["files"])
+        self.assertEqual(bundle["files"]["found.env"], "FOUND=1\n")
+
 
 if __name__ == "__main__":
     unittest.main()

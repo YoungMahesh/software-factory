@@ -118,3 +118,32 @@ During sandbox bootstrapping in `shared/startup.sh`:
 1. Injected environment variables are materialized into `/root/<workspace-name>/.env`.
 2. File permissions are strictly clamped to `chmod 0600` (readable and writable only by the root container user).
 3. The root `.gitignore` is guarded to ensure local `.env` files can never be committed to Git.
+
+---
+
+## 6. Git Worktree Secret Propagation & Vault Cache (.git/env-vault/)
+
+When creating new chat sessions in isolated Git worktrees within T3 Code Web UI, Git worktrees do not check out untracked files like `.env`. Because `AGE_PRIVATE_KEY` is scrubbed from the sandbox environment after initial boot, worktrees cannot pull or decrypt secrets on the fly (see [ADR 0067](../adr/0067-git-worktree-environment-propagation-and-central-env-map.md)).
+
+```mermaid
+flowchart TD
+    subgraph StartupBoot ["Sandbox Startup (startup.sh)"]
+        Bundle["VAULT_ENV_BUNDLE_B64 / VAULT_DOTENV_B64"] --> WorkspaceFiles["Materialize into TARGET_DIR (.env, apps/web/.env)"]
+        Bundle --> VaultCache["Cache into TARGET_DIR/.git/env-vault/<br/>(env.map, default.env, web.env)"]
+    end
+
+    subgraph T3WorktreeCreation ["T3 Code Web UI (New Thread / Worktree)"]
+        T3UI["User creates chat in new worktree"] --> GitWorktreeAdd["git worktree add ..."]
+        GitWorktreeAdd --> PostCheckoutHook["Global post-checkout Hook<br/>(/root/.git-hooks/post-checkout)"]
+    end
+
+    subgraph WorktreePropagation ["Secret Propagation"]
+        PostCheckoutHook --> ReadVault["Read git common dir /env-vault/"]
+        ReadVault --> CopyFiles["Copy mapped files into new worktree (chmod 0600)"]
+    end
+```
+
+1. **Vault Cache Outside Git**: Decrypted secrets and mapping manifests are staged inside `$TARGET_DIR/.git/env-vault/`. Because Git never tracks files within `.git/`, these files require zero `.gitignore` maintenance and are co-located with the repository lifecycle.
+2. **Global Hook Registration**: `/root/.gitconfig` configures `[core] hooksPath = /root/.git-hooks`. Every `git worktree add` automatically triggers the propagation hook.
+3. **Non-Destructive Copies**: Files are physically copied into the new worktree with restricted `0600` permissions. Existing files in active worktrees are never overwritten.
+4. **Monorepo Mapping & Zero-Config Fallback**: `env-store/<repo>/env.map` defines source-to-destination mappings for monorepos (e.g. `web.env=apps/web/.env`). Repositories without `env.map` automatically default to `default.env=.env` or discover root `.env*` files.

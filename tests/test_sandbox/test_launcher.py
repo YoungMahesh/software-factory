@@ -408,5 +408,40 @@ class TestSandboxLauncher(unittest.TestCase):
         self.assertEqual(call_env.get("TARGET_GIT_AUTHOR_EMAIL"), "repo-dev@example.com")
 
 
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_injects_env_store_bundle(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-vault-bundle"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        bundle = {
+            "env_map_content": "web.env = apps/web/.env\napi.env = packages/api/.env\n",
+            "mappings": [("web.env", "apps/web/.env"), ("api.env", "packages/api/.env")],
+            "files": {"web.env": "WEB_PORT=3000\n", "api.env": "API_SECRET=abc\n"},
+        }
+        mock_bundle_fetch = MagicMock(return_value=bundle)
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+            fetch_vault_env_bundle_fn=mock_bundle_fetch,
+        )
+        req = LaunchRequest(repo="custom-org/my-target-app")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "dummy", "GH_ORG_NAME": "custom-org"}, clear=False):
+            launcher.launch(req)
+
+        mock_bundle_fetch.assert_called_once_with("my-target-app", org_name="custom-org")
+        call_env = mock_create.call_args.kwargs["env"]
+        self.assertIn("VAULT_ENV_BUNDLE_B64", call_env)
+        decoded_bundle = json.loads(base64.b64decode(call_env["VAULT_ENV_BUNDLE_B64"]).decode("utf-8"))
+        self.assertEqual(decoded_bundle["mappings"], [["web.env", "apps/web/.env"], ["api.env", "packages/api/.env"]])
+        self.assertEqual(decoded_bundle["files"]["web.env"], "WEB_PORT=3000\n")
+
+
 if __name__ == "__main__":
     unittest.main()

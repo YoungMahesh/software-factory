@@ -200,10 +200,67 @@ fi
 unset GH_REPO 2>/dev/null || true
 
 # Materialize environment secrets from Central Environment Store if provided
+if [ -n "${VAULT_ENV_BUNDLE_B64:-}" ]; then
+    echo "🔐 Materializing environment secrets bundle from env-store into $TARGET_DIR..."
+    python3 -c "
+import base64, json, os, sys
+
+bundle_b64 = os.environ.get('VAULT_ENV_BUNDLE_B64', '')
+target_dir = sys.argv[1]
+if bundle_b64:
+    try:
+        data = json.loads(base64.b64decode(bundle_b64).decode('utf-8'))
+        files = data.get('files', {})
+        env_map_content = data.get('env_map_content', '')
+        mappings = data.get('mappings', [])
+
+        git_dir = os.path.join(target_dir, '.git')
+        if os.path.isdir(git_dir):
+            vault_dir = os.path.join(git_dir, 'env-vault')
+            os.makedirs(vault_dir, exist_ok=True)
+            os.chmod(vault_dir, 0o700)
+            if env_map_content:
+                map_file = os.path.join(vault_dir, 'env.map')
+                with open(map_file, 'w', encoding='utf-8') as f:
+                    f.write(env_map_content)
+                os.chmod(map_file, 0o600)
+            for src_name, content in files.items():
+                vf = os.path.join(vault_dir, src_name)
+                with open(vf, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                os.chmod(vf, 0o600)
+
+        for src, dest in mappings:
+            if src in files:
+                dest_path = os.path.join(target_dir, dest)
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with open(dest_path, 'w', encoding='utf-8') as f:
+                    f.write(files[src])
+                os.chmod(dest_path, 0o600)
+    except Exception as e:
+        print(f'Warning: Failed to unpack env bundle: {e}', file=sys.stderr)
+" "$TARGET_DIR" 2>/dev/null || true
+    unset VAULT_ENV_BUNDLE_B64 2>/dev/null || true
+fi
+
 if [ -n "${VAULT_DOTENV_B64:-}" ]; then
-    echo "🔐 Materializing environment secrets from env-store into $TARGET_DIR/.env..."
-    echo "$VAULT_DOTENV_B64" | base64 -d > "$TARGET_DIR/.env"
-    chmod 600 "$TARGET_DIR/.env"
+    if [ ! -f "$TARGET_DIR/.env" ]; then
+        echo "🔐 Materializing environment secrets from env-store into $TARGET_DIR/.env..."
+        echo "$VAULT_DOTENV_B64" | base64 -d > "$TARGET_DIR/.env"
+        chmod 600 "$TARGET_DIR/.env"
+    fi
+    if [ -d "$TARGET_DIR/.git" ]; then
+        mkdir -p "$TARGET_DIR/.git/env-vault"
+        chmod 700 "$TARGET_DIR/.git/env-vault" 2>/dev/null || true
+        if [ ! -f "$TARGET_DIR/.git/env-vault/default.env" ]; then
+            echo "$VAULT_DOTENV_B64" | base64 -d > "$TARGET_DIR/.git/env-vault/default.env"
+            chmod 600 "$TARGET_DIR/.git/env-vault/default.env"
+        fi
+        if [ ! -f "$TARGET_DIR/.git/env-vault/env.map" ]; then
+            printf "default.env=.env\n" > "$TARGET_DIR/.git/env-vault/env.map"
+            chmod 600 "$TARGET_DIR/.git/env-vault/env.map"
+        fi
+    fi
     unset VAULT_DOTENV_B64 2>/dev/null || true
 fi
 
@@ -579,6 +636,13 @@ fi
 if [ -n "$GLOBAL_GIT_EMAIL" ]; then
     git config --global user.email "$GLOBAL_GIT_EMAIL"
 fi
+
+# Register global Git hooks for worktree environment propagation
+mkdir -p /root/.git-hooks 2>/dev/null || true
+if [ -f /root/.git-hooks/post-checkout ]; then
+    chmod +x /root/.git-hooks/post-checkout 2>/dev/null || true
+fi
+git config --global core.hooksPath /root/.git-hooks 2>/dev/null || true
 
 # Export host Git identity if passed
 if [ -n "${GIT_AUTHOR_NAME:-${DEFAULT_GIT_NAME:-}}" ]; then
