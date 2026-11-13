@@ -21,17 +21,20 @@ import urllib.request
 ACCOUNT_CONFIGS = {
     "m47": {
         "displayName": "Antigravity",
-        "instanceId": "antigravity",
+        "instanceId": "antigravity-m47",
+        "candidateInstanceIds": ["antigravity-m47", "antigravity"],
         "description": "Primary account (m47)",
     },
     "anv": {
         "displayName": "Antigravity (ANV)",
-        "instanceId": "antigravity-anv",
+        "instanceId": "antigravity",
+        "candidateInstanceIds": ["antigravity", "antigravity-anv"],
         "description": "Secondary account (anv)",
     },
     "mgh": {
         "displayName": "Antigravity (MGH)",
         "instanceId": "antigravity-mgh",
+        "candidateInstanceIds": ["antigravity-mgh"],
         "description": "Tertiary account (mgh)",
     },
 }
@@ -45,26 +48,100 @@ DEFAULT_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.enviro
 QUOTA_USER_AGENT = "antigravity/hub/2.9.1 linux/amd64"
 
 
-def resolve_account_token(profile_key: str):
+def get_default_oauth_credentials():
+    """Attempt to find valid Google OAuth client_id and client_secret."""
+    cid = os.environ.get("ANTIGRAVITY_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID")
+    csec = os.environ.get("ANTIGRAVITY_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET")
+    if cid and csec and cid != "dummy-client-id.apps.googleusercontent.com":
+        return cid, csec
+
+    t3_providers_root = os.path.expanduser("~/.t3/userdata/providers/antigravity")
+    if os.path.isdir(t3_providers_root):
+        try:
+            for hdir in os.listdir(t3_providers_root):
+                acp_file = os.path.join(t3_providers_root, hdir, "antigravity-acp", "acp_token.json")
+                if os.path.isfile(acp_file):
+                    try:
+                        with open(acp_file, "r", encoding="utf-8") as f:
+                            td = json.load(f)
+                        if td.get("client_id") and td.get("client_id") != "dummy-client-id.apps.googleusercontent.com":
+                            return td.get("client_id"), td.get("client_secret", DEFAULT_CLIENT_SECRET)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    return DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET
+
+
+def resolve_t3_instance_id(profile_key: str, settings_path: str | None = None) -> str | None:
+    """Find the T3 provider instance ID corresponding to a given profile key from settings.json."""
+    if settings_path is None:
+        settings_path = os.path.expanduser("~/.t3/userdata/settings.json")
+    if not os.path.exists(settings_path):
+        return None
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        provider_instances = settings.get("providerInstances", {})
+        if not isinstance(provider_instances, dict):
+            return None
+
+        profile_lower = profile_key.lower()
+
+        # 1. Match specific profile keywords in displayName (e.g. "ANV", "M47", "MGH", "Antigravity (ANV)")
+        for inst_id, cfg in provider_instances.items():
+            if cfg.get("driver") and cfg.get("driver") != "antigravity":
+                continue
+            disp = str(cfg.get("displayName", "")).strip().lower()
+            if disp == profile_lower or f"({profile_lower})" in disp or f" {profile_lower}" in disp:
+                return inst_id
+
+        # 2. Match instance ID suffix (e.g. antigravity-m47, antigravity-anv, antigravity-mgh)
+        target_slug = f"antigravity-{profile_lower}"
+        if target_slug in provider_instances:
+            return target_slug
+        if profile_lower in provider_instances:
+            return profile_lower
+
+        # 3. For m47, if "antigravity" instance exists and does NOT belong to anv/mgh
+        if profile_lower == "m47" and "antigravity" in provider_instances:
+            disp = str(provider_instances["antigravity"].get("displayName", "")).strip().lower()
+            if not any(k in disp for k in ["anv", "mgh"]):
+                return "antigravity"
+
+        return None
+    except Exception:
+        return None
+
+
+def resolve_account_token(profile_key: str, settings_path: str | None = None):
     cfg = ACCOUNT_CONFIGS.get(profile_key)
     if not cfg:
         return None, f"Unknown profile: {profile_key}"
 
-    instance_id = cfg["instanceId"]
-    inst_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+    # 1. Look in T3 ACP provider directory via dynamic settings.json or candidate instance IDs
+    t3_instance_id = resolve_t3_instance_id(profile_key, settings_path=settings_path)
+    candidate_ids = []
+    if t3_instance_id:
+        candidate_ids.append(t3_instance_id)
+    for cid in cfg.get("candidateInstanceIds", [cfg.get("instanceId")]):
+        if cid not in candidate_ids:
+            candidate_ids.append(cid)
 
-    # 1. Look in T3 ACP provider directory
-    t3_acp_path = os.path.expanduser(
-        f"~/.t3/userdata/providers/antigravity/{inst_hash}/antigravity-acp/acp_token.json"
-    )
-    if os.path.exists(t3_acp_path):
-        try:
-            with open(t3_acp_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("refresh_token"):
-                return data, None
-        except Exception:
-            pass
+    for instance_id in candidate_ids:
+        inst_hash = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+        t3_acp_path = os.path.expanduser(
+            f"~/.t3/userdata/providers/antigravity/{inst_hash}/antigravity-acp/acp_token.json"
+        )
+        if os.path.exists(t3_acp_path):
+            try:
+                with open(t3_acp_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("refresh_token"):
+                    return data, None
+            except Exception:
+                pass
 
     # 2. Look in gemini profiles directory
     profile_path = os.path.expanduser(f"~/.gemini/antigravity-cli/profiles/{profile_key}")
@@ -74,15 +151,16 @@ def resolve_account_token(profile_key: str):
                 data = json.load(f)
             rt = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
             if rt:
+                cid, csec = get_default_oauth_credentials()
                 return {
-                    "client_id": data.get("client_id") or DEFAULT_CLIENT_ID,
-                    "client_secret": data.get("client_secret") or DEFAULT_CLIENT_SECRET,
+                    "client_id": data.get("client_id") or cid,
+                    "client_secret": data.get("client_secret") or csec,
                     "refresh_token": rt,
                 }, None
         except Exception:
             pass
 
-    # 3. Fallback for m47: default token
+    # 3. Fallback for m47: default token (only if not conflicting with known secondary profiles)
     if profile_key == "m47":
         default_tok = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
         if os.path.exists(default_tok):
@@ -91,11 +169,26 @@ def resolve_account_token(profile_key: str):
                     data = json.load(f)
                 rt = data.get("token", {}).get("refresh_token") or data.get("refresh_token")
                 if rt:
-                    return {
-                        "client_id": data.get("client_id") or DEFAULT_CLIENT_ID,
-                        "client_secret": data.get("client_secret") or DEFAULT_CLIENT_SECRET,
-                        "refresh_token": rt,
-                    }, None
+                    is_other_profile = False
+                    for other_k in ["anv", "mgh"]:
+                        other_p = os.path.expanduser(f"~/.gemini/antigravity-cli/profiles/{other_k}")
+                        if os.path.exists(other_p):
+                            try:
+                                with open(other_p, "r", encoding="utf-8") as of:
+                                    odata = json.load(of)
+                                ort = odata.get("token", {}).get("refresh_token") or odata.get("refresh_token")
+                                if ort == rt:
+                                    is_other_profile = True
+                                    break
+                            except Exception:
+                                pass
+                    if not is_other_profile:
+                        cid, csec = get_default_oauth_credentials()
+                        return {
+                            "client_id": data.get("client_id") or cid,
+                            "client_secret": data.get("client_secret") or csec,
+                            "refresh_token": rt,
+                        }, None
             except Exception:
                 pass
 

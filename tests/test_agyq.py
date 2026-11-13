@@ -1,9 +1,13 @@
 """Unit tests for Antigravity Gemini Quota checker (scripts/agyq)."""
 
 import datetime
+import hashlib
 import importlib.machinery
 import importlib.util
+import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -78,7 +82,6 @@ class TestAgyqQuotaExtraction(unittest.TestCase):
                 }
             ]
         }
-        import json
         mock_summary_resp.read.return_value = json.dumps(mock_summary_data).encode("utf-8")
         mock_summary_resp.__enter__.return_value = mock_summary_resp
 
@@ -120,7 +123,6 @@ class TestAgyqQuotaExtraction(unittest.TestCase):
                 }
             }
         }
-        import json
         mock_models_resp.read.return_value = json.dumps(mock_models_data).encode("utf-8")
         mock_models_resp.__enter__.return_value = mock_models_resp
 
@@ -135,6 +137,127 @@ class TestAgyqQuotaExtraction(unittest.TestCase):
         self.assertEqual(res["modelName"], "Gemini 3.8 Flash Tiered")
         self.assertEqual(res["remainingPercent"], 100.0)
         self.assertEqual(res["usedPercent"], 0.0)
+
+
+class TestAgyqTokenResolution(unittest.TestCase):
+    def test_resolve_t3_instance_id_dynamic_settings(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as tf:
+            settings_data = {
+                "providerInstances": {
+                    "antigravity": {
+                        "driver": "antigravity",
+                        "displayName": "ANV",
+                        "enabled": True,
+                    },
+                    "antigravity-mgh": {
+                        "driver": "antigravity",
+                        "displayName": "MGH",
+                        "enabled": True,
+                    },
+                    "antigravity-m47": {
+                        "driver": "antigravity",
+                        "displayName": "M47",
+                        "enabled": True,
+                    },
+                }
+            }
+            json.dump(settings_data, tf)
+            tf.flush()
+            tmp_path = tf.name
+
+        try:
+            self.assertEqual(agyq.resolve_t3_instance_id("m47", settings_path=tmp_path), "antigravity-m47")
+            self.assertEqual(agyq.resolve_t3_instance_id("anv", settings_path=tmp_path), "antigravity")
+            self.assertEqual(agyq.resolve_t3_instance_id("mgh", settings_path=tmp_path), "antigravity-mgh")
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_resolve_t3_instance_id_classic_settings(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as tf:
+            settings_data = {
+                "providerInstances": {
+                    "antigravity": {
+                        "driver": "antigravity",
+                        "displayName": "Antigravity",
+                        "enabled": True,
+                    },
+                    "antigravity-anv": {
+                        "driver": "antigravity",
+                        "displayName": "Antigravity (ANV)",
+                        "enabled": True,
+                    },
+                    "antigravity-mgh": {
+                        "driver": "antigravity",
+                        "displayName": "Antigravity (MGH)",
+                        "enabled": True,
+                    },
+                }
+            }
+            json.dump(settings_data, tf)
+            tf.flush()
+            tmp_path = tf.name
+
+        try:
+            self.assertEqual(agyq.resolve_t3_instance_id("m47", settings_path=tmp_path), "antigravity")
+            self.assertEqual(agyq.resolve_t3_instance_id("anv", settings_path=tmp_path), "antigravity-anv")
+            self.assertEqual(agyq.resolve_t3_instance_id("mgh", settings_path=tmp_path), "antigravity-mgh")
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_resolve_account_token_distinct_profiles(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Create a mock T3 structure
+            settings_path = os.path.join(tmp_dir, "settings.json")
+            settings_data = {
+                "providerInstances": {
+                    "antigravity": {
+                        "driver": "antigravity",
+                        "displayName": "ANV",
+                        "enabled": True,
+                    },
+                    "antigravity-m47": {
+                        "driver": "antigravity",
+                        "displayName": "M47",
+                        "enabled": True,
+                    },
+                }
+            }
+            with open(settings_path, "w", encoding="utf-8") as f:
+                json.dump(settings_data, f)
+
+            # Instance hashes
+            anv_hash = hashlib.sha256(b"antigravity").hexdigest()
+            m47_hash = hashlib.sha256(b"antigravity-m47").hexdigest()
+
+            anv_dir = os.path.join(tmp_dir, anv_hash, "antigravity-acp")
+            m47_dir = os.path.join(tmp_dir, m47_hash, "antigravity-acp")
+            os.makedirs(anv_dir, exist_ok=True)
+            os.makedirs(m47_dir, exist_ok=True)
+
+            with open(os.path.join(anv_dir, "acp_token.json"), "w", encoding="utf-8") as f:
+                json.dump({"client_id": "cid-anv", "refresh_token": "rt-anv"}, f)
+
+            with open(os.path.join(m47_dir, "acp_token.json"), "w", encoding="utf-8") as f:
+                json.dump({"client_id": "cid-m47", "refresh_token": "rt-m47"}, f)
+
+            # Patch ~/.t3/userdata/providers/antigravity to point to tmp_dir
+            def mock_expanduser(path):
+                if "~/.t3/userdata/providers/antigravity" in path:
+                    sub = path.split("~/.t3/userdata/providers/antigravity/")[1]
+                    return os.path.join(tmp_dir, sub)
+                return os.path.expanduser(path)
+
+            with patch("os.path.expanduser", side_effect=mock_expanduser):
+                token_m47, err_m47 = agyq.resolve_account_token("m47", settings_path=settings_path)
+                token_anv, err_anv = agyq.resolve_account_token("anv", settings_path=settings_path)
+
+                self.assertIsNone(err_m47)
+                self.assertIsNone(err_anv)
+                self.assertEqual(token_m47["refresh_token"], "rt-m47")
+                self.assertEqual(token_anv["refresh_token"], "rt-anv")
+                self.assertNotEqual(token_m47["refresh_token"], token_anv["refresh_token"])
 
 
 if __name__ == "__main__":
