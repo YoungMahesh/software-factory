@@ -20,6 +20,7 @@ from sandbox.function import (
     web_app,
 )
 from sandbox.main import run_remote_request, run_sandbox_launch
+from shared.image import SOPS_INSTALL_COMMANDS, SOPS_VERSION
 
 AUTH_ENV = {
     "WEB_UI_USERNAME": "admin",
@@ -232,6 +233,36 @@ class TestSandboxFunctionAPI(unittest.TestCase):
 
                 (root / ".env").write_text("GH_TOKEN=test-token\n")
                 self.assertTrue(validate_deployment_credentials(root, enforce=True))
+
+    def test_validate_deployment_credentials_age_key_warning(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".env").write_text("GH_TOKEN=test-token\n")
+            with patch.dict("os.environ", {}, clear=True), patch("sandbox.function.logger.warning") as mock_warn:
+                self.assertTrue(validate_deployment_credentials(root, enforce=False))
+                mock_warn.assert_called_once()
+                self.assertIn("Age decryption key", mock_warn.call_args[0][0])
+
+            (root / ".env").write_text("GH_TOKEN=test-token\nAGE_PRIVATE_KEY=age1testkey\n")
+            with patch.dict("os.environ", {}, clear=True), patch("sandbox.function.logger.warning") as mock_warn:
+                self.assertTrue(validate_deployment_credentials(root, enforce=False))
+                mock_warn.assert_not_called()
+
+    def test_control_plane_image_includes_sops(self):
+        self.assertIn("v3.13.3", SOPS_VERSION)
+        self.assertTrue(any("sops" in cmd for cmd in SOPS_INSTALL_COMMANDS))
+
+        def get_all_deps(obj):
+            res = [obj]
+            if hasattr(obj, "_deps_"):
+                for dep in obj._deps_():
+                    res.extend(get_all_deps(dep))
+            return res
+
+        deps = get_all_deps(control_plane_image)
+        dep_reprs = [repr(d) for d in deps]
+        self.assertTrue(any("run_commands" in r for r in dep_reprs))
+        self.assertTrue(any("apt_install" in r for r in dep_reprs))
 
 
 class TestSandboxCliRemoteIntegration(unittest.TestCase):

@@ -1,8 +1,8 @@
 # Control Plane Secret Staging and Credential Validation
 
-**Status**: Accepted (Amends [ADR 0038](0038-centralized-org-credentials-and-in-repo-secrets.md), [ADR 0043](0043-sandbox-dot-directories-for-secrets-and-scripts.md), and [ADR 0049](0049-launch-fresh-sandboxes-from-web-control-plane.md))
+**Status**: Accepted (Amends [ADR 0038](0038-centralized-org-credentials-and-in-repo-secrets.md), [ADR 0043](0043-sandbox-dot-directories-for-secrets-and-scripts.md), and [ADR 0049](0049-launch-fresh-sandboxes-from-web-control-plane.md); Amended by Remediation 1 for SOPS Packaging)
 
-We formalize dual-directory secret staging in the Hosted Sandbox Control Plane container image, introduce a centralized secret path resolution helper, add deploy-time asset validation, and provide actionable remediation errors when credentials are missing during fresh sandbox launches.
+We formalize dual-directory secret staging in the Hosted Sandbox Control Plane container image, install `sops` tooling for Central Environment Store decryption, introduce a centralized secret path resolution helper, add deploy-time asset validation, and provide actionable remediation errors when credentials are missing during fresh sandbox launches.
 
 ## Context
 
@@ -23,10 +23,13 @@ FileNotFoundError: Organization credentials file not found: /root/secrets/github
 ```
 which the Web API caught and returned as a generic `HTTP 404 Not Found` without remediation guidance. Furthermore, deploy-time commands (`modal deploy` / `modal serve`) did not validate the presence of required organization credentials.
 
+Subsequently, when Host-Side Secret Injection was introduced under ADR 0057, the control plane container image lacked the `sops` executable, causing silent resolution skips when attempting to decrypt secrets from `env-store`.
+
 ## Decisions
 
-1. **Dual Directory Staging in Control Plane Container Image (`sandbox/function.py`)**:
+1. **Dual Directory Staging and SOPS Packaging in Control Plane Container Image (`sandbox/function.py`)**:
    - Unconditionally stage both `repo_root / "secrets"` to `/root/secrets` and `repo_root / ".secrets"` to `/root/.secrets` (if present) into the control plane image definition.
+   - Pre-install `sops` (pinned to `v3.13.3` via `shared.image.SOPS_INSTALL_COMMANDS`) and `curl` into the control plane image, ensuring `SandboxLauncher` has the necessary runtime binaries to decrypt environment secrets from `env-store` directly in control plane memory.
    - Maintains full repository layout parity inside the control plane container, ensuring all builder routines and secret references resolve cleanly.
 
 2. **Centralized Secret Path Resolution (`shared.image.resolve_secret_path`)**:
@@ -36,7 +39,8 @@ which the Web API caught and returned as a generic `HTTP 404 Not Found` without 
 
 3. **Deploy-Time Pre-flight Validation (`validate_deployment_credentials`)**:
    - Add pre-flight asset verification in `sandbox/function.py`.
-   - Log a visible warning during deployment if `github-orgs.env` is missing, warning operators that repository sandbox provisioning will fail until provided.
+   - Log a visible warning during deployment if `github-orgs.env` or `GH_TOKEN` is missing, warning operators that repository sandbox provisioning will fail until provided.
+   - Inspect Age decryption credentials (`AGE_PRIVATE_KEY` / `SOPS_AGE_KEY`), logging a clear warning if absent that Central Environment Store decryption will be skipped.
    - Enforce a strict `RuntimeError` if `MODAL_ENFORCE_AUTH=1` or explicit enforcement is requested.
 
 4. **Actionable Web API Error Responses (`sandbox/web.py` & `sandbox/function.py`)**:
@@ -45,11 +49,12 @@ which the Web API caught and returned as a generic `HTTP 404 Not Found` without 
 
 5. **Regression & Image Contract Tests (`tests/test_sandbox/test_function.py`)**:
    - Add contract tests verifying that the control plane image stages both `/root/secrets` and `/root/.secrets`.
-   - Add tests verifying `validate_deployment_credentials`, `resolve_secret_path`, and the 500 HTTP response mapping for missing credential files.
+   - Add tests verifying `validate_deployment_credentials`, `resolve_secret_path`, SOPS binary installation in `control_plane_image`, and the 500 HTTP response mapping for missing credential files.
 
 ## Consequences
 
 - Fresh repository sandboxes can be provisioned from the Hosted Control Plane Web UI without missing credential errors.
+- Target repository secrets stored in `env-store` are successfully decrypted host-side by the control plane and injected into child sandboxes.
 - Disparate secret lookup paths across `sandbox/core.py` and `shared/image.py` are unified into a single declarative resolver.
-- Missing credentials are caught early at deployment time and return explicit remediation guidance instead of ambiguous HTTP 404 responses.
+- Missing credentials and keys are caught early at deployment time and return explicit remediation guidance instead of ambiguous HTTP 404 responses.
 - All modified modules remain strictly within the universal <= 500 lines physical budget ratchet (ADR 0027 / AGENTS.md).

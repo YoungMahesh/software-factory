@@ -26,6 +26,7 @@ Under [ADR 0038](0038-centralized-org-credentials-and-in-repo-secrets.md), targe
      2. Decrypts the secret in host memory using `AGE_PRIVATE_KEY` via `sops decrypt`.
      3. Injects decrypted variables directly into `modal.Sandbox.create(..., secrets=[modal.Secret.from_dict(...)])`.
    - `AGE_PRIVATE_KEY` and `env-store` access tokens never enter the container filesystem or process environment.
+   - The Hosted Sandbox Control Plane image (`sandbox/function.py`) packages `sops` (via `shared.image.SOPS_INSTALL_COMMANDS`) to guarantee control-plane decryption functions identically to local developer CLI execution.
 
 3. **In-Container Filesystem Materialization**:
    - Because application toolchains (e.g., Next.js, Vite, Prisma, Docker Compose) explicitly read a physical `.env` file on disk, `shared/startup.sh` materializes the injected environment variables as a local file at `/root/<repo>/.env` (and any mapped subpaths) with restricted `0600` permissions.
@@ -47,5 +48,5 @@ Under [ADR 0038](0038-centralized-org-credentials-and-in-repo-secrets.md), targe
 - Public open-source repositories remain 100% clean, containing only standard `.env.example` templates and code.
 - Developers configure project secrets once via `push-repo-env`; all subsequent sandbox launches across any machine automatically pull and inject secrets.
 - `AGE_PRIVATE_KEY` is fully eliminated from the container sandbox environment, hardening container isolation.
-- `sops` can eventually be pruned from the Shared Base Image once all legacy in-repo repositories are migrated.
+- `sops` is packaged in the Hosted Sandbox Control Plane image for host-side decryption, and can eventually be pruned from the Shared Base Image once all legacy in-repo repositories are migrated.
 - All code modules remain strictly within the Universal File Line Budget (<= 500 physical lines).

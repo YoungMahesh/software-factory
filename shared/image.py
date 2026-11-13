@@ -101,6 +101,12 @@ T3_USAGE_VOLUME_NAME = "t3code-usage-v1"
 T3_STORAGE_MOUNT_PATH = "/root/.t3-storage"
 DEFAULT_T3_USAGE_VOLUME = T3_USAGE_VOLUME_NAME
 
+SOPS_VERSION = "v3.13.3"
+SOPS_INSTALL_COMMANDS = (
+    f"curl -fsSL https://github.com/getsops/sops/releases/download/{SOPS_VERSION}/sops-{SOPS_VERSION}.linux.amd64 -o /usr/local/bin/sops",
+    "chmod +x /usr/local/bin/sops",
+)
+
 
 def get_gradle_volumes() -> dict[str, modal.Volume]:
     """Returns the Gradle cache and wrapper volume mounts for React Native."""
@@ -207,8 +213,7 @@ base_image = (
         "corepack enable pnpm",
         "corepack prepare pnpm@10.31.0 --activate",
         # Install SOPS
-        "curl -fsSL https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 -o /usr/local/bin/sops",
-        "chmod +x /usr/local/bin/sops",
+        *SOPS_INSTALL_COMMANDS,
         # Install Cloudflared
         "curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared",
         "chmod +x /usr/local/bin/cloudflared",

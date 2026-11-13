@@ -250,6 +250,8 @@ class SandboxLauncher:
                     sandbox_secrets.append(modal.Secret.from_dict(vault_env))
                     if raw_vault_env is not None:
                         env["VAULT_DOTENV_B64"] = base64.b64encode(raw_vault_env.encode("utf-8")).decode("ascii")
+                else:
+                    self._emit_log(f"ℹ️ No secrets found for {bare_repo} in env-store.")
 
                 if self.fetch_vault_git_identity_fn:
                     vault_git = self.fetch_vault_git_identity_fn(bare_repo, org_name=org_name)
