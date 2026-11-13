@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 # Ensure repository root is on sys.path
@@ -17,7 +18,12 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sandbox.env_store import DEFAULT_VAULT_REPO, fetch_vault_env_raw, resolve_gh_token
+from sandbox.env_store import (
+    DEFAULT_VAULT_REPO,
+    fetch_vault_env_raw,
+    fetch_vault_git_identity,
+    resolve_gh_token,
+)
 from scripts.push_repo_env import detect_repo_name
 
 
@@ -30,7 +36,7 @@ def pull_repo_env(
     vault_repo: str = DEFAULT_VAULT_REPO,
     optional: bool = False,
 ) -> bool:
-    """Pulls and decrypts environment secrets from env-store into a local destination file."""
+    """Pulls and decrypts environment secrets and Git identity from env-store."""
     cwd = Path.cwd()
     detected_org, detected_name = detect_repo_name(cwd)
     final_repo = repo_name or detected_name
@@ -58,6 +64,7 @@ def pull_repo_env(
         )
         return False
 
+    raw_env = None
     try:
         raw_env = fetch_vault_env_raw(
             repo_name=final_repo,
@@ -72,16 +79,52 @@ def pull_repo_env(
             return False
         raise
 
-    if raw_env is None:
+    git_configured = False
+    repo_git_dir = (
+        final_dest.parent
+        if (final_dest.parent / ".git").is_dir()
+        else (cwd if (cwd / ".git").is_dir() else None)
+    )
+    if repo_git_dir:
+        try:
+            vault_git = fetch_vault_git_identity(
+                repo_name=final_repo,
+                org_name=final_org,
+                gh_token=token,
+                age_key=age_key,
+                env_repo_name=vault_repo,
+            )
+            if vault_git:
+                if vault_git.get("GIT_AUTHOR_NAME"):
+                    subprocess.run(
+                        ["git", "-C", str(repo_git_dir), "config", "--local", "user.name", vault_git["GIT_AUTHOR_NAME"]],
+                        check=False,
+                    )
+                if vault_git.get("GIT_AUTHOR_EMAIL"):
+                    subprocess.run(
+                        ["git", "-C", str(repo_git_dir), "config", "--local", "user.email", vault_git["GIT_AUTHOR_EMAIL"]],
+                        check=False,
+                    )
+                git_configured = True
+                print(
+                    f"👤 Configured repository git author for {final_repo}: "
+                    f"{vault_git.get('GIT_AUTHOR_NAME', '')} <{vault_git.get('GIT_AUTHOR_EMAIL', '')}>"
+                )
+        except Exception:
+            pass
+
+    if raw_env is None and not git_configured:
         if optional:
             print(f"ℹ️ No secrets found for repository '{final_repo}' in env-store ({vault_repo}).", file=sys.stderr)
         return False
 
-    final_dest.parent.mkdir(parents=True, exist_ok=True)
-    if raw_env and not raw_env.endswith("\n"):
-        raw_env += "\n"
-    final_dest.write_text(raw_env, encoding="utf-8")
-    final_dest.chmod(0o600)
+    if raw_env is not None:
+        final_dest.parent.mkdir(parents=True, exist_ok=True)
+        if raw_env and not raw_env.endswith("\n"):
+            raw_env += "\n"
+        final_dest.write_text(raw_env, encoding="utf-8")
+        final_dest.chmod(0o600)
+
     return True
 
 
@@ -114,7 +157,10 @@ def main() -> None:
         optional=args.optional,
     )
     if success:
-        print(f"✅ Successfully pulled and decrypted secrets into {args.dest.resolve()} (mode 0600).")
+        if args.dest.is_file():
+            print(f"✅ Successfully pulled and decrypted secrets into {args.dest.resolve()} (mode 0600).")
+        else:
+            print(f"✅ Successfully pulled repository settings for {target_repo}.")
         sys.exit(0)
     elif args.optional:
         sys.exit(0)

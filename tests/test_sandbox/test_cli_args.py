@@ -137,6 +137,8 @@ class TestSandboxCliArgs(unittest.TestCase):
             export HOME="{fake_root}"
             export NO_REPO="1"
             export APP_NAME="my-standalone-app"
+            export DEFAULT_GIT_NAME="Developer"
+            export DEFAULT_GIT_EMAIL="dev@example.com"
             export ENABLE_CLOUDFLARE="0"
             export ENABLE_T3="0"
             export ENABLE_ANTIGRAVITY="0"

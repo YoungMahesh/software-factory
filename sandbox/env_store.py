@@ -149,6 +149,7 @@ def fetch_vault_env_raw(
     gh_token: str | None = None,
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
+    target_filename: str = "default.env",
 ) -> str | None:
     """Fetches and decrypts environment file text for a target repository from env-store.
 
@@ -163,7 +164,7 @@ def fetch_vault_env_raw(
     if not resolved_org or not resolved_token:
         return None
 
-    file_path = f"{bare_repo}/default.env"
+    file_path = f"{bare_repo}/{target_filename}"
     ciphertext = fetch_github_file(resolved_org, env_repo_name, file_path, token=resolved_token)
     if not ciphertext:
         return None
@@ -177,6 +178,7 @@ def fetch_vault_env(
     gh_token: str | None = None,
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
+    target_filename: str = "default.env",
 ) -> dict[str, str] | None:
     """Fetches and decrypts environment variables for a target repository from env-store.
 
@@ -188,7 +190,30 @@ def fetch_vault_env(
         gh_token=gh_token,
         age_key=age_key,
         env_repo_name=env_repo_name,
+        target_filename=target_filename,
     )
     if raw_text is None:
         return None
     return parse_env_text(raw_text)
+
+
+def fetch_vault_git_identity(
+    repo_name: str,
+    org_name: str | None = None,
+    gh_token: str | None = None,
+    age_key: str | None = None,
+    env_repo_name: str = DEFAULT_VAULT_REPO,
+) -> dict[str, str] | None:
+    """Fetches and decrypts repository-specific git authorship from <repo>/git.env in env-store.
+
+    Returns a dictionary containing author keys (GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL),
+    or None if git.env is not configured in the vault.
+    """
+    return fetch_vault_env(
+        repo_name=repo_name,
+        org_name=org_name,
+        gh_token=gh_token,
+        age_key=age_key,
+        env_repo_name=env_repo_name,
+        target_filename="git.env",
+    )

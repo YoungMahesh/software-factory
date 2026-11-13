@@ -111,5 +111,40 @@ class TestPullRepoEnv(unittest.TestCase):
             self.assertEqual(cm.exception.code, 0)
 
 
+    @patch("subprocess.run")
+    @patch("scripts.pull_repo_env.fetch_vault_git_identity")
+    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    def test_pull_repo_env_configures_local_git_author_when_git_env_present(
+        self, mock_fetch_raw, mock_fetch_git, mock_run
+    ):
+        mock_fetch_raw.return_value = "API_KEY=123\n"
+        mock_fetch_git.return_value = {
+            "GIT_AUTHOR_NAME": "Repo User",
+            "GIT_AUTHOR_EMAIL": "repo@example.com",
+        }
+        (self.repo_dir / ".git").mkdir()
+        dest_file = self.repo_dir / ".env"
+
+        success = pull_repo_env(
+            repo_name="my-app",
+            org_name="sFactory0",
+            dest_file=dest_file,
+            gh_token="ghp_test",
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(dest_file.read_text(), "API_KEY=123\n")
+        self.assertNotIn("GIT_AUTHOR_NAME", dest_file.read_text())
+        mock_run.assert_any_call(
+            ["git", "-C", str(self.repo_dir), "config", "--local", "user.name", "Repo User"],
+            check=False,
+        )
+        mock_run.assert_any_call(
+            ["git", "-C", str(self.repo_dir), "config", "--local", "user.email", "repo@example.com"],
+            check=False,
+        )
+
+
 if __name__ == "__main__":
+
     unittest.main()

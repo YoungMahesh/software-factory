@@ -125,7 +125,7 @@ A curated collection of interactive shell shortcuts for Docker and Git operation
 _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
 
 **Sandbox Git Configuration**:
-Declarative global Git configuration tracked in `shared/gitconfig`, staged into the Shared Base Image at `/root/.gitconfig`, providing default branch initialization (`main`) and GitHub credential helpers (`gh auth git-credential`). Host user authorship (`GIT_AUTHOR_*` and `GIT_COMMITTER_*`) is dynamically resolved by `SandboxLauncher` during container provisioning and injected into the container environment with generic fallback defaults (`Modal Sandbox User <sandbox@modal.local>`).
+Declarative global Git configuration tracked in `shared/gitconfig`, staged into the Shared Base Image at `/root/.gitconfig`, providing default branch initialization (`main`) and GitHub credential helpers (`gh auth git-credential`). Multi-tier user authorship is resolved dynamically: `DEFAULT_GIT_NAME` and `DEFAULT_GIT_EMAIL` provide default identity fallback applied globally, while repository-specific overrides (`GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`) are stored decoupled in `<repo>/git.env` within the `env-store` vault and applied purely via `git config --local user.name` and `user.email`. Synthetic fallback identities are never injected.
 _Avoid_: Dynamic git config, inline git config, hardcoded git config
 
 **Cloudflare Tunnel Domain**:

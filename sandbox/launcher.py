@@ -20,7 +20,8 @@ import base64
 import modal
 
 from sandbox.env_store import (
-    fetch_vault_env, fetch_vault_env_raw, parse_env_text, serialize_env_dict,
+    fetch_vault_env, fetch_vault_env_raw, fetch_vault_git_identity,
+    parse_env_text, serialize_env_dict,
 )
 from sandbox.provenance import (
     resolve_host_git_identity,
@@ -58,40 +59,24 @@ class RunningSandbox:
     def ssh_info(self) -> tuple[str, int] | None: return self.response.ssh_info
     @property
     def ssh_command(self) -> str | None: return self.response.ssh_command
+
     @property
-    def ssh_config(self) -> str | None: return self.response.ssh_config
+    def stdout(self) -> Any: return self.sandbox.stdout
     @property
-    def opencode_url(self) -> str | None: return self.response.opencode_url
+    def stderr(self) -> Any: return self.sandbox.stderr
     @property
-    def metro_url(self) -> str | None: return self.response.metro_url
+    def stdin(self) -> Any: return self.sandbox.stdin
     @property
-    def t3_url(self) -> str | None: return self.response.t3_url
-    @property
-    def t3_pair_url(self) -> str | None: return self.response.t3_pair_url
+    def returncode(self) -> int | None: return self.sandbox.returncode
 
-    def to_response(self) -> LaunchResponse:
-        """Returns the serializable Pydantic LaunchResponse."""
-        return self.response
-
-    def poll(self) -> int | None:
-        """Polls the underlying sandbox status."""
-        return self.sandbox.poll()
-
-    def terminate(self) -> None:
-        """Terminates the underlying sandbox."""
-        self.sandbox.terminate()
-
-    def exec(self, *cmd: str, **kwargs: Any) -> Any:
-        """Executes a command inside the underlying sandbox."""
-        return self.sandbox.exec(*cmd, **kwargs)
-
-    def tunnels(self) -> dict[int, Any]:
-        """Returns active network tunnels for the sandbox."""
-        return self.sandbox.tunnels()
-
-    def __iter__(self):
-        """Allows unpacking as (sandbox, response) for backward compatibility."""
-        return iter((self.sandbox, self.response))
+    def to_response(self) -> LaunchResponse: return self.response
+    def poll(self) -> int | None: return self.sandbox.poll()
+    def wait(self, raise_on_error: bool = True) -> int: return self.sandbox.wait(raise_on_error=raise_on_error)
+    def terminate(self) -> None: self.sandbox.terminate()
+    def exec(self, *cmd: str, **kwargs: Any) -> Any: return self.sandbox.exec(*cmd, **kwargs)
+    def tunnels(self) -> dict[int, Any]: return self.sandbox.tunnels()
+    def __iter__(self): return iter((self.sandbox, self.response))
+    def __getattr__(self, name: str) -> Any: return getattr(self.response, name)
 
 
 class SandboxLauncher:
@@ -107,6 +92,7 @@ class SandboxLauncher:
         resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable[..., dict[str, str] | None] | None = None,
         fetch_vault_env_raw_fn: Callable[..., str | None] | None = None,
+        fetch_vault_git_identity_fn: Callable[..., dict[str, str] | None] | None = None,
         log_cb: Callable[[str], None] | None = None,
         repo_root: Path | None = None,
     ) -> None:
@@ -120,6 +106,7 @@ class SandboxLauncher:
         self.fetch_vault_env_raw_fn = (
             fetch_vault_env_raw_fn or (fetch_vault_env_raw if fetch_vault_env_fn is None else None)
         )
+        self.fetch_vault_git_identity_fn = fetch_vault_git_identity_fn or fetch_vault_git_identity
         self.log_cb = log_cb
         self.repo_root = repo_root
 
@@ -191,11 +178,12 @@ class SandboxLauncher:
             )
             target_repo = f"{org_name}/{bare_repo}"
 
-        pubkey_content = self.load_pubkey_fn()
         random_id = uuid.uuid4().hex[:8]
         app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
         sandbox_name = f"{app_name}-{random_id}"
         self._emit_log(f"🔑 Resolving App '{app_name}' and sandbox instance '{sandbox_name}'...")
+
+        pubkey_content = self.load_pubkey_fn()
         target_client = self.client
         if target_client is None and req.profile:
             from sandbox.profiles import get_client_for_profile
@@ -247,8 +235,7 @@ class SandboxLauncher:
 
         if bare_repo:
             try:
-                raw_vault_env = None
-                vault_env = None
+                raw_vault_env, vault_env = None, None
                 if self.fetch_vault_env_raw_fn:
                     raw_vault_env = self.fetch_vault_env_raw_fn(bare_repo, org_name=org_name)
                     if raw_vault_env is not None:
@@ -263,6 +250,15 @@ class SandboxLauncher:
                     sandbox_secrets.append(modal.Secret.from_dict(vault_env))
                     if raw_vault_env is not None:
                         env["VAULT_DOTENV_B64"] = base64.b64encode(raw_vault_env.encode("utf-8")).decode("ascii")
+
+                if self.fetch_vault_git_identity_fn:
+                    vault_git = self.fetch_vault_git_identity_fn(bare_repo, org_name=org_name)
+                    if vault_git:
+                        if "GIT_AUTHOR_NAME" in vault_git:
+                            env["TARGET_GIT_AUTHOR_NAME"] = vault_git["GIT_AUTHOR_NAME"]
+                        if "GIT_AUTHOR_EMAIL" in vault_git:
+                            env["TARGET_GIT_AUTHOR_EMAIL"] = vault_git["GIT_AUTHOR_EMAIL"]
+                        self._emit_log(f"👤 Resolved repo-specific Git identity from env-store for {bare_repo}...")
             except Exception as e:
                 self._emit_log(f"⚠️ env-store resolution skipped: {e}")
 
@@ -334,12 +330,10 @@ class SandboxLauncher:
 
         created_at_iso = datetime.now(timezone.utc).isoformat()
         tags: dict[str, str] = {
-            "instance_name": sandbox_name,
-            "app_name": app_name,
+            "instance_name": sandbox_name, "app_name": app_name,
             "software_factory_commit": provenance.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
             "software_factory_dirty": provenance.get("SOFTWARE_FACTORY_DIRTY", "0"),
-            "created_at": created_at_iso,
-            "timeout_secs": str(TIMEOUT_SECS),
+            "created_at": created_at_iso, "timeout_secs": str(TIMEOUT_SECS),
         }
 
         sandbox_kwargs: dict[str, Any] = {
@@ -380,7 +374,7 @@ class SandboxLauncher:
             if req.react_native and req.metro_port in tunnels: metro_url = tunnels[req.metro_port].url
             if req.t3 and req.t3_port in tunnels: t3_url = tunnels[req.t3_port].url
         except Exception as exc:
-            self._emit_log(f"⚠️ Could not obtain tunnel metadata: {exc}")
+            self._emit_log(f"⚠️ Failed resolving tunnel URLs: {exc}")
 
         t3_pair_url, t3_qr_code = None, None
         if req.t3 and t3_url:
@@ -389,25 +383,18 @@ class SandboxLauncher:
             if t3_pair_url:
                 self._emit_log(f"✓ T3 Code server ready: {t3_pair_url}")
 
-        ssh_cmd = (
-            f"ssh -i ~/.ssh/modal-sandbox -o StrictHostKeyChecking=no -p {ssh_info[1]} root@{ssh_info[0]}"
-            if ssh_info else f"modal shell {sandbox.object_id}"
-        )
-
-        instance_name = t3_ssh_alias or sandbox_name or app_name
-        ssh_config_snippet = None
+        ssh_cmd, ssh_config_snippet = None, None
+        instance_name = sandbox_name
         if ssh_info:
+            ssh_cmd = f"ssh -i ~/.ssh/modal_sandbox -o StrictHostKeyChecking=no -p {ssh_info[1]} root@{ssh_info[0]}"
             ssh_config_snippet = generate_ssh_config_snippet(
-                instance_name=instance_name,
-                ssh_host=ssh_info[0],
-                ssh_port=ssh_info[1],
+                instance_name=instance_name, ssh_host=ssh_info[0], ssh_port=ssh_info[1],
             )
 
         try:
             from sandbox.lifecycle import record_sandbox_connection_info
             record_sandbox_connection_info(
-                sandbox.object_id, ssh_command=ssh_cmd,
-                ssh_config=ssh_config_snippet,
+                sandbox.object_id, ssh_command=ssh_cmd, ssh_config=ssh_config_snippet,
                 t3_pair_url=t3_pair_url, has_t3=bool(req.t3),
                 created_at=created_at_iso, timeout_secs=TIMEOUT_SECS,
             )
@@ -417,9 +404,7 @@ class SandboxLauncher:
         if register_ssh_config and ssh_info and not getattr(req, "no_ssh_config", False):
             try:
                 self.append_ssh_fn(
-                    instance_name=instance_name,
-                    ssh_host=ssh_info[0],
-                    ssh_port=ssh_info[1],
+                    instance_name=instance_name, ssh_host=ssh_info[0], ssh_port=ssh_info[1],
                 )
             except Exception as exc:
                 self._emit_log(f"⚠️ Could not update SSH config: {exc}")
@@ -454,6 +439,7 @@ class SandboxLauncher:
         resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
         fetch_vault_env_fn: Callable | None = None,
         fetch_vault_env_raw_fn: Callable | None = None,
+        fetch_vault_git_identity_fn: Callable | None = None,
         client: modal.Client | None = None,
         log_cb: Callable[[str], None] | None = None,
         register_ssh_config: bool = False,
@@ -464,6 +450,7 @@ class SandboxLauncher:
             append_ssh_fn=append_ssh_fn, resolve_git_identity_fn=resolve_git_identity_fn,
             resolve_provenance_fn=resolve_provenance_fn,
             fetch_vault_env_fn=fetch_vault_env_fn, fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
+            fetch_vault_git_identity_fn=fetch_vault_git_identity_fn,
             log_cb=log_cb, repo_root=repo_root,
         )
         return launcher.launch(req, register_ssh_config=register_ssh_config)
@@ -482,6 +469,7 @@ def launch_sandbox(
     resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
     fetch_vault_env_fn: Callable | None = None,
     fetch_vault_env_raw_fn: Callable | None = None,
+    fetch_vault_git_identity_fn: Callable | None = None,
 ) -> RunningSandbox:
     """Convenience functional seam delegating to SandboxLauncher."""
     return SandboxLauncher.run(
@@ -491,5 +479,6 @@ def launch_sandbox(
         resolve_provenance_fn=resolve_provenance_fn,
         fetch_vault_env_fn=fetch_vault_env_fn,
         fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
+        fetch_vault_git_identity_fn=fetch_vault_git_identity_fn,
         client=client, log_cb=log_cb, register_ssh_config=register_ssh_config,
     )

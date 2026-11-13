@@ -199,34 +199,134 @@ def push_repo_env(
             tmp_enc_path.unlink()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Push local project .env secrets to env-store vault.")
-    parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
-    parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
-    parser.add_argument("-t", "--token", help="GitHub Personal Access Token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")
-    parser.add_argument("-e", "--env", type=Path, default=Path(".env"), help="Path to local source .env file.")
-    parser.add_argument("-d", "--dest", default="default.env", help="Destination file name in vault (default: default.env).")
-    parser.add_argument("--recipient", default=DEFAULT_AGE_RECIPIENT, help="Age public key recipient for encryption.")
-    args = parser.parse_args()
+def push_repo_git_identity(
+    repo_dir: Path,
+    name: str | None = None,
+    email: str | None = None,
+    repo_name: str | None = None,
+    org_name: str | None = None,
+    gh_token: str | None = None,
+    recipient: str | None = None,
+    vault_repo: str = DEFAULT_VAULT_REPO,
+) -> PushResult:
+    """Encrypts repository-specific Git authorship and commits to <repo>/git.env in env-store."""
+    detected_org, detected_name = detect_repo_name(repo_dir)
+    final_repo = repo_name or detected_name
+    final_org = org_name or detected_org or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
+    final_token = resolve_gh_token(gh_token)
+    final_recipient = recipient or DEFAULT_AGE_RECIPIENT
 
-    cwd = Path.cwd()
-    res = push_repo_env(
-        repo_dir=cwd,
-        env_file=args.env,
-        repo_name=args.repo,
-        org_name=args.org,
-        gh_token=args.token,
-        recipient=args.recipient,
-        dest_name=args.dest,
-    )
+    if not final_org:
+        return PushResult(False, final_repo, "", message="GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>.")
+    if not final_token:
+        return PushResult(False, final_repo, "", message="GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token.")
+
+    final_name = name or os.environ.get("GIT_AUTHOR_NAME")
+    final_email = email or os.environ.get("GIT_AUTHOR_EMAIL")
+
+    if not final_name or not final_email:
+        try:
+            if not final_name:
+                res_n = subprocess.run(["git", "-C", str(repo_dir), "config", "user.name"], capture_output=True, text=True, check=False)
+                if res_n.returncode == 0 and res_n.stdout.strip():
+                    final_name = res_n.stdout.strip()
+            if not final_email:
+                res_e = subprocess.run(["git", "-C", str(repo_dir), "config", "user.email"], capture_output=True, text=True, check=False)
+                if res_e.returncode == 0 and res_e.stdout.strip():
+                    final_email = res_e.stdout.strip()
+        except Exception:
+            pass
+
+    if not final_name or not final_email:
+        return PushResult(
+            False, final_repo, "",
+            message="Git author name and email are required. Provide --name and --email, or configure git user.name and user.email.",
+        )
+
+    lines = [f"GIT_AUTHOR_NAME='{final_name}'", f"GIT_AUTHOR_EMAIL='{final_email}'"]
+    raw_env_content = "\n".join(lines) + "\n"
+
+    with tempfile.NamedTemporaryFile("w+", suffix=".env", delete=False) as tmp_src:
+        tmp_src.write(raw_env_content)
+        tmp_src_path = Path(tmp_src.name)
+
+    with tempfile.NamedTemporaryFile("w+", suffix=".env", delete=False) as tmp_enc:
+        tmp_enc_path = Path(tmp_enc.name)
+
+    try:
+        run_sops_encrypt(tmp_src_path, tmp_enc_path, final_recipient)
+        ciphertext_bytes = tmp_enc_path.read_bytes()
+        vault_path = f"{final_repo}/git.env"
+        sha = commit_to_env_store(
+            owner=final_org,
+            env_repo=vault_repo,
+            path=vault_path,
+            content_bytes=ciphertext_bytes,
+            token=final_token,
+            commit_message=f"chore({final_repo}): update git.env authorship",
+        )
+        return PushResult(True, final_repo, vault_path, commit_sha=sha, message="Pushed git authorship successfully.", org_name=final_org)
+    finally:
+        if tmp_src_path.is_file():
+            tmp_src_path.unlink()
+        if tmp_enc_path.is_file():
+            tmp_enc_path.unlink()
+
+
+def main() -> None:
+    # If first argument is 'git', dispatch to git sub-command parser
+    is_git_subcommand = len(sys.argv) > 1 and sys.argv[1] == "git"
+
+    if is_git_subcommand:
+        git_parser = argparse.ArgumentParser(description="Push repository Git authorship (git.env) to env-store vault.")
+        git_parser.add_argument("subcommand", choices=["git"])
+        git_parser.add_argument("--name", help="Git author name (GIT_AUTHOR_NAME).")
+        git_parser.add_argument("--email", help="Git author email (GIT_AUTHOR_EMAIL).")
+        git_parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
+        git_parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
+        git_parser.add_argument("-t", "--token", help="GitHub Personal Access Token.")
+        git_parser.add_argument("--recipient", default=DEFAULT_AGE_RECIPIENT, help="Age public key recipient for encryption.")
+        args = git_parser.parse_args()
+
+        cwd = Path.cwd()
+        res = push_repo_git_identity(
+            repo_dir=cwd,
+            name=args.name,
+            email=args.email,
+            repo_name=args.repo,
+            org_name=args.org,
+            gh_token=args.token,
+            recipient=args.recipient,
+        )
+    else:
+        parser = argparse.ArgumentParser(description="Push local project .env secrets to env-store vault.")
+        parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
+        parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
+        parser.add_argument("-t", "--token", help="GitHub Personal Access Token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")
+        parser.add_argument("-e", "--env", type=Path, default=Path(".env"), help="Path to local source .env file.")
+        parser.add_argument("-d", "--dest", default="default.env", help="Destination file name in vault (default: default.env).")
+        parser.add_argument("--recipient", default=DEFAULT_AGE_RECIPIENT, help="Age public key recipient for encryption.")
+        args = parser.parse_args()
+
+        cwd = Path.cwd()
+        res = push_repo_env(
+            repo_dir=cwd,
+            env_file=args.env,
+            repo_name=args.repo,
+            org_name=args.org,
+            gh_token=args.token,
+            recipient=args.recipient,
+            dest_name=args.dest,
+        )
+
     if res.success:
-        org_display = res.org_name or args.org or os.environ.get("GH_ORG_NAME") or "env-store"
+        org_display = res.org_name or getattr(args, "org", None) or os.environ.get("GH_ORG_NAME") or "env-store"
         print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/env-store.")
         print(f"   Commit SHA: {res.commit_sha}")
-        print("🚀 Future modal-sandbox launches will automatically inject these secrets!")
+        print("🚀 Future modal-sandbox launches will automatically inject these settings!")
         sys.exit(0)
     else:
-        print(f"❌ Failed to push secrets: {res.message}", file=sys.stderr)
+        print(f"❌ Failed to push: {res.message}", file=sys.stderr)
         sys.exit(1)
 
 

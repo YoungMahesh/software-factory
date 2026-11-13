@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import urllib.error
 
 from sandbox.env_store import (
+    fetch_vault_git_identity,
     decrypt_sops_payload,
     fetch_github_file,
     fetch_vault_env,
@@ -149,6 +150,29 @@ class TestEnvStore(unittest.TestCase):
 
         self.assertIsNone(env_dict)
 
+
+    @patch("sandbox.env_store.fetch_vault_env")
+    def test_fetch_vault_git_identity_found(self, mock_fetch):
+        mock_fetch.return_value = {
+            "GIT_AUTHOR_NAME": "Vault Author",
+            "GIT_AUTHOR_EMAIL": "vault@example.com",
+        }
+        res = fetch_vault_git_identity("my-repo", org_name="test-org", gh_token="tok")
+        self.assertEqual(res, {"GIT_AUTHOR_NAME": "Vault Author", "GIT_AUTHOR_EMAIL": "vault@example.com"})
+        mock_fetch.assert_called_once_with(
+            repo_name="my-repo",
+            org_name="test-org",
+            gh_token="tok",
+            age_key=None,
+            env_repo_name="env-store",
+            target_filename="git.env",
+        )
+
+    @patch("sandbox.env_store.fetch_vault_env")
+    def test_fetch_vault_git_identity_not_found(self, mock_fetch):
+        mock_fetch.return_value = None
+        res = fetch_vault_git_identity("missing-repo", org_name="test-org")
+        self.assertIsNone(res)
 
 if __name__ == "__main__":
     unittest.main()

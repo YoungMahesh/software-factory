@@ -7,11 +7,43 @@ from pathlib import Path
 import subprocess
 
 
-def resolve_host_git_identity() -> dict[str, str]:
-    """Dynamically resolves host Git identity from environment or git configuration."""
+def resolve_host_git_identity(repo_root: Path | None = None) -> dict[str, str]:
+    """Dynamically resolves host Git identity from environment, .env file, or git configuration."""
     git_env: dict[str, str] = {}
-    name = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("GIT_COMMITTER_NAME")
-    email = os.environ.get("GIT_AUTHOR_EMAIL") or os.environ.get("GIT_COMMITTER_EMAIL")
+    name = (
+        os.environ.get("GIT_AUTHOR_NAME")
+        or os.environ.get("GIT_COMMITTER_NAME")
+        or os.environ.get("DEFAULT_GIT_NAME")
+    )
+    email = (
+        os.environ.get("GIT_AUTHOR_EMAIL")
+        or os.environ.get("GIT_COMMITTER_EMAIL")
+        or os.environ.get("DEFAULT_GIT_EMAIL")
+    )
+
+    if not name or not email:
+        dotenv_paths: list[Path] = []
+        if repo_root:
+            dotenv_paths.append(repo_root / ".env")
+        dotenv_paths.extend([Path("/root/.env"), Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"])
+        for p in dotenv_paths:
+            if p.is_file():
+                try:
+                    for line in p.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip("'\"")
+                        if not name and k in ("DEFAULT_GIT_NAME", "GIT_AUTHOR_NAME"):
+                            name = v
+                        if not email and k in ("DEFAULT_GIT_EMAIL", "GIT_AUTHOR_EMAIL"):
+                            email = v
+                except Exception:
+                    pass
+                if name and email:
+                    break
+
     if not name:
         try:
             res = subprocess.run(
@@ -40,9 +72,11 @@ def resolve_host_git_identity() -> dict[str, str]:
     if name:
         git_env["GIT_AUTHOR_NAME"] = name
         git_env["GIT_COMMITTER_NAME"] = name
+        git_env["DEFAULT_GIT_NAME"] = name
     if email:
         git_env["GIT_AUTHOR_EMAIL"] = email
         git_env["GIT_COMMITTER_EMAIL"] = email
+        git_env["DEFAULT_GIT_EMAIL"] = email
     return git_env
 
 
@@ -112,22 +146,13 @@ def resolve_host_software_factory_provenance(repo_root: Path | None = None) -> d
                     check=False,
                 )
                 if res.returncode == 0:
-                    dirty = "1" if bool(res.stdout.strip()) else "0"
+                    dirty = "1" if res.stdout.strip() else "0"
         except Exception:
             pass
 
-    if not commit:
-        commit = "unknown"
-    if not commit_short:
-        commit_short = commit[:7] if commit != "unknown" else "unknown"
-    if not ref:
-        ref = "unknown"
-    if not dirty:
-        dirty = "0"
-
     return {
-        "SOFTWARE_FACTORY_COMMIT": commit,
-        "SOFTWARE_FACTORY_COMMIT_SHORT": commit_short,
-        "SOFTWARE_FACTORY_REF": ref,
-        "SOFTWARE_FACTORY_DIRTY": dirty,
+        "SOFTWARE_FACTORY_COMMIT": commit or "unknown",
+        "SOFTWARE_FACTORY_COMMIT_SHORT": commit_short or (commit[:7] if commit and commit != "unknown" else "unknown"),
+        "SOFTWARE_FACTORY_REF": ref or "unknown",
+        "SOFTWARE_FACTORY_DIRTY": dirty or "0",
     }

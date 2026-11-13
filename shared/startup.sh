@@ -139,11 +139,17 @@ __pycache__/
 *.pyc
 EOF
             git -C "$TARGET_DIR" add .gitignore
-            GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Modal Sandbox User}" \
-            GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-sandbox@modal.local}" \
-            GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Modal Sandbox User}" \
-            GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-sandbox@modal.local}" \
-            git -C "$TARGET_DIR" commit -m "initial commit"
+            INIT_GIT_NAME="${TARGET_GIT_AUTHOR_NAME:-${DEFAULT_GIT_NAME:-${GIT_AUTHOR_NAME:-}}}"
+            INIT_GIT_EMAIL="${TARGET_GIT_AUTHOR_EMAIL:-${DEFAULT_GIT_EMAIL:-${GIT_AUTHOR_EMAIL:-}}}"
+            if [ -n "$INIT_GIT_NAME" ] && [ -n "$INIT_GIT_EMAIL" ]; then
+                GIT_AUTHOR_NAME="$INIT_GIT_NAME" \
+                GIT_AUTHOR_EMAIL="$INIT_GIT_EMAIL" \
+                GIT_COMMITTER_NAME="$INIT_GIT_NAME" \
+                GIT_COMMITTER_EMAIL="$INIT_GIT_EMAIL" \
+                git -C "$TARGET_DIR" commit -m "initial commit" || true
+            else
+                echo "ℹ️ Git identity not configured: skipped initial commit."
+            fi
         fi
         echo "📁 Workspace resolved to $TARGET_DIR"
     else
@@ -200,6 +206,15 @@ if [ -n "${VAULT_DOTENV_B64:-}" ]; then
     chmod 600 "$TARGET_DIR/.env"
     unset VAULT_DOTENV_B64 2>/dev/null || true
 fi
+
+# Configure repository-specific Git authorship from env-store if provided
+if [ -n "${TARGET_GIT_AUTHOR_NAME:-}" ]; then
+    git -C "$TARGET_DIR" config --local user.name "$TARGET_GIT_AUTHOR_NAME"
+fi
+if [ -n "${TARGET_GIT_AUTHOR_EMAIL:-}" ]; then
+    git -C "$TARGET_DIR" config --local user.email "$TARGET_GIT_AUTHOR_EMAIL"
+fi
+unset TARGET_GIT_AUTHOR_NAME TARGET_GIT_AUTHOR_EMAIL 2>/dev/null || true
 
 if [ -f /root/.bash_aliases ]; then
     grep -qxF "source /root/.bash_aliases" ~/.bashrc 2>/dev/null || echo "source /root/.bash_aliases" >> ~/.bashrc
@@ -555,8 +570,19 @@ if [ -n "${GH_ORG_NAME:-}" ]; then
     grep -qxF "GH_ORG_NAME=\"$GH_ORG_NAME\"" /etc/environment 2>/dev/null || echo "GH_ORG_NAME=\"$GH_ORG_NAME\"" >> /etc/environment
 fi
 
+# Configure global Git identity if default or host identity is passed
+GLOBAL_GIT_NAME="${DEFAULT_GIT_NAME:-${GIT_AUTHOR_NAME:-}}"
+GLOBAL_GIT_EMAIL="${DEFAULT_GIT_EMAIL:-${GIT_AUTHOR_EMAIL:-}}"
+if [ -n "$GLOBAL_GIT_NAME" ]; then
+    git config --global user.name "$GLOBAL_GIT_NAME"
+fi
+if [ -n "$GLOBAL_GIT_EMAIL" ]; then
+    git config --global user.email "$GLOBAL_GIT_EMAIL"
+fi
+
 # Export host Git identity if passed
-if [ -n "${GIT_AUTHOR_NAME:-}" ]; then
+if [ -n "${GIT_AUTHOR_NAME:-${DEFAULT_GIT_NAME:-}}" ]; then
+    GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-$DEFAULT_GIT_NAME}"
     export GIT_AUTHOR_NAME
     export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$GIT_AUTHOR_NAME}"
     grep -qxF "export GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" ~/.bashrc 2>/dev/null || echo "export GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" >> ~/.bashrc
@@ -564,7 +590,8 @@ if [ -n "${GIT_AUTHOR_NAME:-}" ]; then
     grep -qxF "GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" /etc/environment 2>/dev/null || echo "GIT_AUTHOR_NAME=\"$GIT_AUTHOR_NAME\"" >> /etc/environment
     grep -qxF "GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" /etc/environment 2>/dev/null || echo "GIT_COMMITTER_NAME=\"$GIT_COMMITTER_NAME\"" >> /etc/environment
 fi
-if [ -n "${GIT_AUTHOR_EMAIL:-}" ]; then
+if [ -n "${GIT_AUTHOR_EMAIL:-${DEFAULT_GIT_EMAIL:-}}" ]; then
+    GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-$DEFAULT_GIT_EMAIL}"
     export GIT_AUTHOR_EMAIL
     export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$GIT_AUTHOR_EMAIL}"
     grep -qxF "export GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" ~/.bashrc 2>/dev/null || echo "export GIT_AUTHOR_EMAIL=\"$GIT_AUTHOR_EMAIL\"" >> ~/.bashrc

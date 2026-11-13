@@ -35,6 +35,10 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `SOFTWARE_FACTORY_REF`: Git branch or tag name of the `software-factory` checkout (e.g. `main`).
 - `SOFTWARE_FACTORY_DIRTY`: Boolean indicator (`"1"` or `"0"`) signaling whether the host checkout had uncommitted modifications at the time of sandbox creation.
 
+### 8. Git Identity (Default Authorship Fallback)
+- `DEFAULT_GIT_NAME`: Default Git author and committer name applied globally across sandbox containers when repository-specific authorship is not specified.
+- `DEFAULT_GIT_EMAIL`: Default Git author and committer email address applied globally across sandbox containers when repository-specific authorship is not specified.
+
 ---
 
 ## Resolution Order & Precedence

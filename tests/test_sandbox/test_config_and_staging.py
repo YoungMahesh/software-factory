@@ -93,16 +93,18 @@ class TestSandboxGitConfig(unittest.TestCase):
         self.assertNotIn("includeIf", content)
         self.assertNotIn("gitconfig-mahesh471978", content)
 
-    def test_startup_script_uses_generic_author_defaults(self):
+    def test_startup_script_has_no_synthetic_or_hardcoded_identities(self):
         startup_content = self.startup_sh_path.read_text()
-        self.assertIn('GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Modal Sandbox User}"', startup_content)
-        self.assertIn('GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-sandbox@modal.local}"', startup_content)
+        self.assertNotIn("Modal Sandbox User", startup_content)
+        self.assertNotIn("sandbox@modal.local", startup_content)
         self.assertNotIn("maheshghamand@gmail.com", startup_content)
 
-    def test_startup_script_does_not_mutate_git_config_inline(self):
+    def test_startup_script_configures_git_identities_dynamically(self):
         startup_content = self.startup_sh_path.read_text()
-        self.assertNotIn("git config --global user.email", startup_content)
-        self.assertNotIn("git config --global user.name", startup_content)
+        self.assertIn('git config --global user.name "$GLOBAL_GIT_NAME"', startup_content)
+        self.assertIn('git config --global user.email "$GLOBAL_GIT_EMAIL"', startup_content)
+        self.assertIn('git -C "$TARGET_DIR" config --local user.name "$TARGET_GIT_AUTHOR_NAME"', startup_content)
+        self.assertIn('git -C "$TARGET_DIR" config --local user.email "$TARGET_GIT_AUTHOR_EMAIL"', startup_content)
 
     def test_host_git_identity_resolution(self):
         from sandbox.launcher import resolve_host_git_identity

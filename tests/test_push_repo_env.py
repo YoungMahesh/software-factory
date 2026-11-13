@@ -11,6 +11,7 @@ from scripts.push_repo_env import (
     detect_repo_name,
     ensure_gitignore,
     push_repo_env,
+    push_repo_git_identity,
 )
 
 
@@ -85,6 +86,45 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertEqual(res.commit_sha, "commit_sha_123")
         mock_encrypt.assert_called_once()
         mock_commit.assert_called_once()
+
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_git_identity_success(self, mock_encrypt, mock_commit):
+        mock_commit.return_value = "git_sha_456"
+
+        res = push_repo_git_identity(
+            repo_dir=self.repo_dir,
+            name="Alice Developer",
+            email="alice@example.com",
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            recipient="age1testkey",
+        )
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.commit_sha, "git_sha_456")
+        self.assertEqual(res.target_path, "my-app/git.env")
+        mock_encrypt.assert_called_once()
+        mock_commit.assert_called_once()
+        call_kwargs = mock_commit.call_args.kwargs
+        self.assertEqual(call_kwargs["path"], "my-app/git.env")
+
+    @patch("subprocess.run")
+    def test_push_repo_git_identity_missing_fails(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+        res = push_repo_git_identity(
+            repo_dir=self.repo_dir,
+            name=None,
+            email=None,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+        )
+
+        self.assertFalse(res.success)
+        self.assertIn("Git author name and email are required", res.message)
 
 
 if __name__ == "__main__":

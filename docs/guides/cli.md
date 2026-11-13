@@ -65,3 +65,33 @@ modal-sandbox --snapshot sb-abcdef123456 --terminate
 ```bash
 modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 ```
+
+---
+
+## Central Environment Store CLI Utilities
+
+### `push-repo-env`
+Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace.
+
+```bash
+# Push project application environment secrets to <repo>/default.env
+push-repo-env [-r <repo>] [-o <org>] [-e .env]
+
+# Push repository-specific Git authorship to <repo>/git.env
+push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <org>]
+```
+
+### `pull-repo-env`
+Pulls and decrypts environment secrets from the `env-store` vault into the local directory (mode `0600`) and applies repository Git authorship locally to `.git/config`.
+
+```bash
+# Pull application secrets into .env and configure local Git authorship
+pull-repo-env [-r <repo>] [-o <org>] [-d .env] [--optional]
+```
+
+### `ghclone`
+Clones a target repository and automatically pulls decrypted secrets and Git authorship into the cloned directory via `pull-repo-env`.
+
+```bash
+ghclone my-service
+```
