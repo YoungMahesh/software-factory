@@ -143,6 +143,38 @@ class TestSoftwareFactoryProvenanceResolution(unittest.TestCase):
             self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "1")
 
     @patch("subprocess.run")
+    def test_resolve_provenance_ignores_unknown_sentinel_in_env(self, mock_run):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            res.returncode = 0
+            if cmd == ["git", "rev-parse", "HEAD"]:
+                res.stdout = "aabbcc1234567890aabbcc1234567890aabbcc12\n"
+            elif cmd == ["git", "rev-parse", "--short", "HEAD"]:
+                res.stdout = "aabbcc1\n"
+            elif cmd == ["git", "symbolic-ref", "--short", "HEAD"]:
+                res.stdout = "main\n"
+            elif cmd == ["git", "status", "--porcelain"]:
+                res.stdout = ""
+            else:
+                res.stdout = ""
+            return res
+
+        mock_run.side_effect = fake_run
+
+        unknown_env = {
+            "SOFTWARE_FACTORY_COMMIT": "unknown",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "unknown",
+            "SOFTWARE_FACTORY_REF": "unknown",
+            "SOFTWARE_FACTORY_DIRTY": "0",
+        }
+        with patch.dict(os.environ, unknown_env, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "aabbcc1234567890aabbcc1234567890aabbcc12")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "aabbcc1")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "main")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "0")
+
+    @patch("subprocess.run")
     def test_resolve_provenance_fallback_on_git_failure(self, mock_run):
         mock_run.side_effect = RuntimeError("git not found")
 

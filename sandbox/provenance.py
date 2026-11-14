@@ -83,8 +83,14 @@ def resolve_host_git_identity(repo_root: Path | None = None) -> dict[str, str]:
 def resolve_host_software_factory_provenance(repo_root: Path | None = None) -> dict[str, str]:
     """Dynamically resolves software-factory Git provenance and dirty state."""
     commit = os.environ.get("SOFTWARE_FACTORY_COMMIT", "").strip()
+    if commit == "unknown":
+        commit = ""
     commit_short = os.environ.get("SOFTWARE_FACTORY_COMMIT_SHORT", "").strip()
+    if commit_short == "unknown":
+        commit_short = ""
     ref = os.environ.get("SOFTWARE_FACTORY_REF", "").strip()
+    if ref == "unknown":
+        ref = ""
     dirty = os.environ.get("SOFTWARE_FACTORY_DIRTY", "").strip()
 
     target_dir = repo_root or Path(__file__).resolve().parent.parent
