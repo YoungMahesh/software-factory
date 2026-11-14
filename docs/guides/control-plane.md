@@ -46,6 +46,14 @@ ANTIGRAVITY_TOKENS='[]'
 AGE_PRIVATE_KEY=
 ```
 
+#### D. Clean Working Tree Enforcement (ADR 0069)
+To prevent deploying uncommitted or inconsistent local modifications to production, `validate_clean_working_tree()` verifies that the host Git working tree has no uncommitted changes before deployment. If uncommitted changes exist, deployment halts immediately with a `RuntimeError`.
+
+To bypass this check during rapid local development:
+```bash
+ALLOW_DIRTY_DEPLOY=1 modal serve sandbox/function.py
+```
+
 ---
 
 ### 2. Secret Resolution & Injection Architecture
@@ -57,6 +65,7 @@ flowchart TD
     subgraph Host ["Local Workstation / CI/CD"]
         DotEnv[".env File"] --> Collector["collect_control_plane_secrets()"]
         HostEnv["Host os.environ"] --> Collector
+        GitProv["Host Git Provenance"] --> Collector
         Collector --> ModalSecret["modal.Secret.from_dict(...)"]
         CLI["modal serve / deploy sandbox/function.py"] --> ModalSecret
     end
@@ -68,6 +77,7 @@ flowchart TD
 
     subgraph ControlPlaneContainer ["Control Plane Container (FastAPI)"]
         ContainerEnv --> BasicAuth["check_authentication()<br/>WEB_UI_USERNAME / PASSWORD"]
+        ContainerEnv --> VersionRoute["api_get_version()<br/>SOFTWARE_FACTORY_COMMIT"]
         ContainerEnv --> Launcher["launch_sandbox()<br/>GH_TOKEN, AGE_PRIVATE_KEY, etc."]
     end
 
@@ -81,7 +91,8 @@ flowchart TD
 
 1. **Host-Side Collection (`modal.is_local() == True`)**:
    - `resolve_and_validate_web_credentials()` inspects `os.environ`, `.env`, `.secrets/.env`, and `secrets/.env`.
-   - `collect_control_plane_secrets()` parses `.env` and merges host environment overrides.
+   - `validate_clean_working_tree()` verifies that no uncommitted Git changes exist (unless `ALLOW_DIRTY_DEPLOY=1`).
+   - `collect_control_plane_secrets()` parses `.env`, captures Git provenance metadata via `resolve_host_software_factory_provenance()`, and merges host environment overrides.
    - Secrets are encapsulated into `modal.Secret.from_dict(...)`.
 2. **Modal Cloud Injection (`modal.is_local() == False`)**:
    - Modal decrypts the secret bundle and populates `os.environ` inside the container.
@@ -112,6 +123,10 @@ sequenceDiagram
         Script-->>Dev: Abort with RuntimeError (Missing credentials)
     end
     Script->>Script: validate_deployment_credentials() (GH_TOKEN warning/enforce)
+    Script->>Script: validate_clean_working_tree() (clean git tree check)
+    alt Uncommitted local edits detected
+        Script-->>Dev: Abort with RuntimeError (Clean tree required)
+    end
     Script->>Script: collect_control_plane_secrets()
     Script-->>CLI: modal.App(secrets=[modal.Secret.from_dict(...)])
     CLI->>Platform: Upload app definition, image build, and encrypted secrets
@@ -161,6 +176,7 @@ Modal will output the permanent public URL of your control plane function (e.g.,
 Access `GET /` in any modern web browser. You will be prompted for HTTP Basic Authentication (`WEB_UI_USERNAME` and `WEB_UI_PASSWORD`).
 
 Key Dashboard features:
+- **Deployment Git Provenance**: View the deployed Git commit hash in the top navigation header (`git: <short-hash>`) to instantly verify which codebase version is running in Modal Cloud (see [ADR 0069](../adr/0069-control-plane-deployment-provenance-and-clean-tree-enforcement.md)).
 - **Active Sandbox Discovery**: View all running and paused sandboxes across all registered Modal apps (see [ADR 0047](../adr/0047-cross-app-sandbox-discovery-in-control-plane-web-ui.md)).
 - **One-Click Launch**: Launch fresh standalone sandboxes or clone target GitHub repositories directly from the web interface.
 - **Snapshot Registry**: Inspect captured filesystem snapshots and launch new sandboxes from existing snapshot images.
@@ -183,6 +199,8 @@ The control plane exposes programmatic REST endpoints for automation:
 | :--- | :--- | :--- | :--- |
 | `GET` | `/` | Basic | Interactive web management dashboard. |
 | `GET` | `/health` | None | Service liveness probe. |
+| `GET` | `/api/version` | Basic | Get control plane deployment Git provenance metadata. |
+| `GET` | `/api/profiles` | Basic | List configured Modal workspace profiles. |
 | `GET` | `/api/sandboxes` | Basic | List active sandboxes across Modal applications. |
 | `POST` | `/api/sandboxes` | Basic | Launch a new sandbox with custom flags and repository targets. |
 | `POST` | `/api/sandboxes/{id}/terminate` | Basic | Terminate an active sandbox. |

@@ -465,6 +465,27 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("executeFreshLaunch()", html)
         self.assertIn("freshLaunchForm.mode", html)
 
+    def test_api_version_authenticated_and_unauth(self):
+        with patch("sandbox.web.resolve_host_software_factory_provenance") as mock_prov:
+            mock_prov.return_value = {
+                "SOFTWARE_FACTORY_COMMIT": "abc1234567890",
+                "SOFTWARE_FACTORY_COMMIT_SHORT": "abc1234",
+                "SOFTWARE_FACTORY_REF": "main",
+                "SOFTWARE_FACTORY_DIRTY": "0",
+            }
+            res = self.client.get("/api/version")
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json()["commit_short"], "abc1234")
+            self.assertFalse(res.json()["dirty"])
+
+        unauth_client = TestClient(app)
+        self.assertEqual(unauth_client.get("/api/version").status_code, 401)
+
+    def test_index_page_contains_version_badge(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("version.commit_short", response.text)
+
 
 
 if __name__ == "__main__":

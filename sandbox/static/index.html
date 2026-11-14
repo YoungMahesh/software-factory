@@ -26,6 +26,9 @@
           <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
             Modal Sandbox Runner
             <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">Control Plane</span>
+            <span x-show="version && version.commit_short && version.commit_short !== 'unknown'"
+                  class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono"
+                  x-text="'git: ' + (version ? version.commit_short : '')"></span>
           </h1>
         </div>
       </div>
@@ -812,6 +815,7 @@
 
         profiles: [],
         selectedProfile: 'all',
+        version: null,
 
         sandboxes: [],
         snapshots: [],
@@ -876,7 +880,7 @@
         },
 
         async init() {
-          await this.fetchProfiles();
+          await Promise.all([this.fetchProfiles(), this.fetchVersion()]);
           await this.refreshAll();
           this.$watch('autoRefresh', (val) => {
             if (val) {
@@ -886,6 +890,17 @@
               this.refreshTimer = null;
             }
           });
+        },
+
+        async fetchVersion() {
+          try {
+            const res = await fetch('/api/version');
+            if (res.ok) {
+              this.version = await res.json();
+            }
+          } catch (err) {
+            console.error('Failed fetching version:', err);
+          }
         },
 
         async fetchProfiles() {

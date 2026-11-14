@@ -16,6 +16,7 @@ from sandbox.function import (
     collect_control_plane_secrets,
     image as control_plane_image,
     resolve_and_validate_web_credentials,
+    validate_clean_working_tree,
     validate_deployment_credentials,
     web_app,
 )
@@ -346,6 +347,38 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
         self.assertEqual(payload["sandbox_id"], "sb-target-42")
         mock_print_snapshot.assert_called_once()
         self.assertEqual(mock_print_snapshot.call_args.kwargs["image_id"], "im-snap-42")
+
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_validate_clean_working_tree_clean(self, mock_prov):
+        mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "0"}
+        self.assertTrue(validate_clean_working_tree(Path("/tmp"), enforce=True))
+
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_validate_clean_working_tree_dirty_enforced(self, mock_prov):
+        mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "1"}
+        with self.assertRaises(RuntimeError) as ctx:
+            validate_clean_working_tree(Path("/tmp"), enforce=True)
+        self.assertIn("Cannot deploy sandbox control plane with uncommitted changes", str(ctx.exception))
+
+    @patch.dict("os.environ", {"ALLOW_DIRTY_DEPLOY": "1"})
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_validate_clean_working_tree_dirty_bypass(self, mock_prov):
+        mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "1"}
+        self.assertTrue(validate_clean_working_tree(Path("/tmp"), enforce=True))
+
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_collect_control_plane_secrets_includes_provenance(self, mock_prov):
+        mock_prov.return_value = {
+            "SOFTWARE_FACTORY_COMMIT": "deadbeef12345",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "deadbee",
+            "SOFTWARE_FACTORY_REF": "main",
+            "SOFTWARE_FACTORY_DIRTY": "0",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            secrets = collect_control_plane_secrets(Path(tmpdir))
+            self.assertEqual(secrets.get("SOFTWARE_FACTORY_COMMIT"), "deadbeef12345")
+            self.assertEqual(secrets.get("SOFTWARE_FACTORY_COMMIT_SHORT"), "deadbee")
+            self.assertEqual(secrets.get("SOFTWARE_FACTORY_DIRTY"), "0")
 
 
 if __name__ == "__main__":

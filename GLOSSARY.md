@@ -28,6 +28,10 @@ _Avoid_: Runner script, main.py, sandbox wrapper
 A sandbox provisioning model in `sandbox/main.py` where the Modal App name remains constant (derived from the repository name or `--name`) while individual sandbox execution environments are uniquely named inside that App.
 _Avoid_: Static runner, single-app runner, constant container
 
+**Control Plane Provenance**:
+The Git commit SHA, short hash, Git ref, and clean/dirty working tree status of the `software-factory` repository captured at deployment time (`modal deploy` or `modal serve`), injected into the Modal control plane function secrets, and displayed in the management Web UI header.
+_Avoid_: Function version, runner hash, app tag
+
 **Shallow Repository Clone**:
 A Git checkout optimization in development sandboxes that truncates commit history on the target branch to a fixed maximum depth of 50 commits, accelerating container boot latency and saving network transfer while maintaining sufficient recent history for active development.
 _Avoid_: Partial clone, shallow branch, depth clone, truncated repo

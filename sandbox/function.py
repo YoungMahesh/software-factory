@@ -21,6 +21,7 @@ from sandbox.launcher import (
     SandboxLauncher,
     launch_sandbox,
 )
+from sandbox.provenance import resolve_host_software_factory_provenance
 from sandbox.web import check_authentication, router as web_router
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,10 @@ def collect_control_plane_secrets(root: Path) -> dict[str, str]:
     auth_env = resolve_and_validate_web_credentials(root)
     secrets.update(auth_env)
 
+    # Pass through software-factory Git provenance metadata
+    prov = resolve_host_software_factory_provenance(root)
+    secrets.update(prov)
+
     # Pass through standard environment secrets if set in the host environment
     for key in (
         "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
@@ -163,6 +168,40 @@ def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> 
     return True
 
 
+def validate_clean_working_tree(root: Path, enforce: bool | None = None) -> bool:
+    """Validates that the host working tree has no uncommitted changes before deployment.
+
+    Raises RuntimeError if dirty working tree is detected during modal deploy or modal serve.
+    Can be bypassed via ALLOW_DIRTY_DEPLOY=1 environment variable or during pytest execution
+    unless enforce=True.
+    """
+    if os.environ.get("ALLOW_DIRTY_DEPLOY") == "1":
+        return True
+
+    if enforce is None:
+        is_testing = (
+            "pytest" in sys.modules
+            or "PYTEST_CURRENT_TEST" in os.environ
+            or any("pytest" in str(arg) for arg in sys.argv)
+        )
+        should_enforce = not is_testing
+    else:
+        should_enforce = enforce
+
+    if not should_enforce:
+        return True
+
+    prov = resolve_host_software_factory_provenance(root)
+    if prov.get("SOFTWARE_FACTORY_DIRTY") == "1":
+        raise RuntimeError(
+            "Cannot deploy sandbox control plane with uncommitted changes. "
+            "Please commit or stash your changes before running 'modal deploy' or 'modal serve', "
+            "or set ALLOW_DIRTY_DEPLOY=1 to bypass."
+        )
+
+    return True
+
+
 image = (
     modal.Image.debian_slim()
     .apt_install("curl")
@@ -188,6 +227,7 @@ for k, v in auth_env.items():
         os.environ[k] = v
 
 validate_deployment_credentials(repo_root)
+validate_clean_working_tree(repo_root)
 
 if modal.is_local():
     function_secrets = [modal.Secret.from_dict(collect_control_plane_secrets(repo_root))]

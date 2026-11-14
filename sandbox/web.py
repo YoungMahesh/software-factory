@@ -39,6 +39,7 @@ from sandbox.launcher import (
 )
 from sandbox.lifecycle import get_sandboxes, terminate_sandbox
 from sandbox.profiles import get_available_profiles, get_client_for_profile
+from sandbox.provenance import resolve_host_software_factory_provenance
 from sandbox.snapshots import (
     delete_snapshot,
     get_snapshot,
@@ -160,6 +161,18 @@ class FreshSandboxLaunchPayload(BaseModel):
 def favicon() -> Response:
     """Returns 204 No Content for favicon to prevent browser 404 logs."""
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/api/version", response_model=dict[str, Any])
+def api_get_version() -> dict[str, Any]:
+    """Returns software-factory Git deployment provenance and version metadata."""
+    prov = resolve_host_software_factory_provenance()
+    return {
+        "commit": prov.get("SOFTWARE_FACTORY_COMMIT", "unknown"),
+        "commit_short": prov.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
+        "ref": prov.get("SOFTWARE_FACTORY_REF", "unknown"),
+        "dirty": prov.get("SOFTWARE_FACTORY_DIRTY") == "1",
+    }
 
 
 @router.get("/api/profiles", response_model=list[dict[str, Any]])
