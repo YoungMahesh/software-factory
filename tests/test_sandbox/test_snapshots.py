@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import sys
 import unittest
 from unittest.mock import ANY, MagicMock, patch
 
@@ -13,13 +14,14 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_help_contains_snapshot_flags(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--help"],
+            [sys.executable, str(self.sandbox_main), "--help"],
             capture_output=True,
             text=True,
         )
         self.assertEqual(res.returncode, 0)
         self.assertIn("--snapshot", res.stdout)
         self.assertIn("--snapshot-ttl", res.stdout)
+        self.assertIn("--snapshot-timeout", res.stdout)
         self.assertIn("--terminate", res.stdout)
         self.assertIn("--from-snapshot", res.stdout)
         self.assertIn("--name", res.stdout)
@@ -49,7 +51,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_from_snapshot_without_secret_requires_name(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--from-snapshot", "im-12345"],
+            [sys.executable, str(self.sandbox_main), "--from-snapshot", "im-12345"],
             capture_output=True,
             text=True,
         )
@@ -58,7 +60,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_mutual_exclusion_with_from_snapshot(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--from-snapshot", "im-456"],
+            [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123", "--from-snapshot", "im-456"],
             capture_output=True,
             text=True,
         )
@@ -67,7 +69,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_mutual_exclusion_with_repo(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "-r", "dummy"],
+            [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
@@ -76,7 +78,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_mutual_exclusion_with_name(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--name", "my-app"],
+            [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123", "--name", "my-app"],
             capture_output=True,
             text=True,
         )
@@ -86,7 +88,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
     def test_snapshot_mutual_exclusion_with_launch_flags(self):
         for flag in [["--vm"], ["--memory", "2"], ["--no-cloudflare"], ["--github-branch", "feat"], ["--agy"]]:
             res = subprocess.run(
-                ["python3", str(self.sandbox_main), "--snapshot", "sb-123"] + flag,
+                [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123"] + flag,
                 capture_output=True,
                 text=True,
             )
@@ -95,7 +97,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_terminate_without_snapshot_fails(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--terminate", "-r", "dummy"],
+            [sys.executable, str(self.sandbox_main), "--terminate", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
@@ -104,7 +106,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_ttl_without_snapshot_fails(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot-ttl", "10", "-r", "dummy"],
+            [sys.executable, str(self.sandbox_main), "--snapshot-ttl", "10", "-r", "dummy"],
             capture_output=True,
             text=True,
         )
@@ -113,7 +115,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
 
     def test_snapshot_ttl_invalid_value_fails(self):
         res = subprocess.run(
-            ["python3", str(self.sandbox_main), "--snapshot", "sb-123", "--snapshot-ttl", "0"],
+            [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123", "--snapshot-ttl", "0"],
             capture_output=True,
             text=True,
         )
@@ -156,7 +158,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         mock_from_id.assert_called_once_with("sb-test-123")
         mock_sandbox.exec.assert_any_call("sync")
         mock_sync_proc.wait.assert_called_once()
-        mock_sandbox.snapshot_filesystem.assert_called_once_with(ttl=864000)
+        mock_sandbox.snapshot_filesystem.assert_called_once_with(timeout=180, ttl=864000)
         mock_sandbox.terminate.assert_not_called()
 
         output = buf.getvalue()

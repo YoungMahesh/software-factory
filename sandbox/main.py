@@ -26,6 +26,7 @@ from sandbox.config import (
     DEFAULT_METRO_PORT,
     DEFAULT_OPENCODE_PORT,
     DEFAULT_ORG,
+    DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
     IDLE_TIMEOUT_SECS,
@@ -110,6 +111,7 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
             "sandbox_id": args.snapshot,
             "ttl_days": args.snapshot_ttl,
             "terminate": args.terminate,
+            "timeout": getattr(args, "snapshot_timeout", DEFAULT_SNAPSHOT_TIMEOUT),
         }
         res = run_remote_request(endpoint_url, "/snapshot", payload)
         print_snapshot_info(
@@ -294,6 +296,7 @@ def main():
             sandbox_id=args.snapshot,
             ttl_days=args.snapshot_ttl,
             terminate=args.terminate,
+            timeout=getattr(args, "snapshot_timeout", DEFAULT_SNAPSHOT_TIMEOUT),
         )
         return
 

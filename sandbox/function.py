@@ -300,6 +300,7 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
             ttl_days=req.ttl_days,
             terminate=req.terminate,
             name=req.name,
+            timeout=req.timeout,
         )
     except Exception as exc:
         raise HTTPException(

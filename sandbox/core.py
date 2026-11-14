@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sandbox.config import (
     DEFAULT_METRO_PORT,
     DEFAULT_OPENCODE_PORT,
+    DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
 )
@@ -76,6 +77,7 @@ class SnapshotRequest(BaseModel):
     ttl_days: int = 30
     terminate: bool = False
     name: str = ""
+    timeout: int = DEFAULT_SNAPSHOT_TIMEOUT
 
 
 class SnapshotResponse(BaseModel):
@@ -158,6 +160,7 @@ def capture_snapshot_core(
     name: str = "",
     profile: str | None = None,
     client: modal.Client | None = None,
+    timeout: int = DEFAULT_SNAPSHOT_TIMEOUT,
 ) -> SnapshotResponse:
     """Flushes buffers and captures a filesystem snapshot of an active sandbox.
 
@@ -201,7 +204,7 @@ def capture_snapshot_core(
         is_vm = False
 
     ttl_seconds = ttl_days * 86400
-    snapshot_image = sandbox.snapshot_filesystem(ttl=ttl_seconds)
+    snapshot_image = sandbox.snapshot_filesystem(timeout=timeout, ttl=ttl_seconds)
     image_id = snapshot_image.object_id
 
     try:

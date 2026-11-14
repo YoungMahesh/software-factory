@@ -9,6 +9,7 @@ from shared.image import DEFAULT_T3_USAGE_VOLUME
 from .config import (
     DEFAULT_METRO_PORT,
     DEFAULT_OPENCODE_PORT,
+    DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
 )
 from .formatting import (
@@ -24,6 +25,12 @@ class SnapshotTTLAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values)
         setattr(namespace, "_snapshot_ttl_specified", True)
+
+
+class SnapshotTimeoutAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "_snapshot_timeout_specified", True)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -63,6 +70,14 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="DAYS",
         action=SnapshotTTLAction,
         help="Snapshot retention time in days (default: 30 days).",
+    )
+    parser.add_argument(
+        "--snapshot-timeout",
+        type=int,
+        default=DEFAULT_SNAPSHOT_TIMEOUT,
+        metavar="SECONDS",
+        action=SnapshotTimeoutAction,
+        help=f"Snapshot filesystem capture timeout in seconds (default: {DEFAULT_SNAPSHOT_TIMEOUT}s).",
     )
     parser.add_argument(
         "--terminate",
@@ -237,6 +252,8 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--snapshot cannot be used with --github-branch.")
         if args.snapshot_ttl <= 0:
             parser.error("--snapshot-ttl must be a positive integer.")
+        if getattr(args, "snapshot_timeout", DEFAULT_SNAPSHOT_TIMEOUT) <= 0:
+            parser.error("--snapshot-timeout must be a positive integer.")
         if (
             args.opencode
             or args.react_native
@@ -260,6 +277,8 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             parser.error("--terminate can only be used with --snapshot.")
         if getattr(args, "_snapshot_ttl_specified", False):
             parser.error("--snapshot-ttl can only be used with --snapshot.")
+        if getattr(args, "_snapshot_timeout_specified", False):
+            parser.error("--snapshot-timeout can only be used with --snapshot.")
         if args.repo and args.name:
             parser.error(
                 "--name cannot be used with -r/--repo: --name is strictly for standalone launches without -r/--repo."
@@ -290,6 +309,7 @@ def capture_snapshot(
     sandbox_id: str,
     ttl_days: int = 30,
     terminate: bool = False,
+    timeout: int = DEFAULT_SNAPSHOT_TIMEOUT,
 ) -> str:
     print(f"🔄 Flushing filesystem buffers inside sandbox {sandbox_id}...")
     sandbox = modal.Sandbox.from_id(sandbox_id)
@@ -311,8 +331,8 @@ def capture_snapshot(
         )
 
     ttl_seconds = ttl_days * 86400
-    print(f"📸 Capturing filesystem snapshot (retention: {ttl_days} days)...")
-    snapshot_image = sandbox.snapshot_filesystem(ttl=ttl_seconds)
+    print(f"📸 Capturing filesystem snapshot (retention: {ttl_days} days, timeout: {timeout}s)...")
+    snapshot_image = sandbox.snapshot_filesystem(timeout=timeout, ttl=ttl_seconds)
     image_id = snapshot_image.object_id
 
     vm_flag = " --vm" if is_vm else ""

@@ -24,6 +24,9 @@ import modal
 from pydantic import BaseModel
 
 from shared.image import DEFAULT_T3_USAGE_VOLUME
+from sandbox.config import (
+    DEFAULT_SNAPSHOT_TIMEOUT,
+)
 from sandbox.core import (
     DEFAULT_OPENCODE_PORT,
     DEFAULT_T3_PORT,
@@ -114,6 +117,7 @@ class SnapshotCreatePayload(BaseModel):
     ttl_days: int = 30
     terminate: bool = False
     profile: str | None = None
+    timeout: int = DEFAULT_SNAPSHOT_TIMEOUT
 
 
 class SnapshotLaunchPayload(BaseModel):
@@ -348,6 +352,7 @@ def api_create_snapshot(sandbox_id: str, payload: SnapshotCreatePayload) -> Snap
             terminate=payload.terminate,
             name=payload.name,
             profile=payload.profile,
+            timeout=payload.timeout,
         )
     except Exception as exc:
         logger.error("Failed to create snapshot for %s: %s", sandbox_id, exc)

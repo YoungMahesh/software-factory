@@ -552,10 +552,17 @@
                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
         </div>
 
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1">Retention TTL (Days)</label>
-          <input type="number" min="1" max="365" x-model.number="snapshotForm.ttl_days"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Retention TTL (Days)</label>
+            <input type="number" min="1" max="365" x-model.number="snapshotForm.ttl_days"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Timeout (Seconds)</label>
+            <input type="number" min="10" max="600" x-model.number="snapshotForm.timeout" placeholder="180"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+          </div>
         </div>
 
         <div class="pt-2">
@@ -789,9 +796,10 @@
 
   <!-- TOAST NOTIFICATION -->
   <div x-show="toast.visible" x-transition
-       class="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-700 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm">
-    <span class="text-indigo-400 font-bold">ℹ</span>
-    <span x-text="toast.message"></span>
+       class="fixed bottom-6 right-6 z-50 bg-slate-900 border px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm max-w-md"
+       :class="toast.type === 'error' ? 'border-red-500/50 text-red-200' : 'border-slate-700 text-slate-100'">
+    <span :class="toast.type === 'error' ? 'text-red-400 font-bold' : 'text-indigo-400 font-bold'" x-text="toast.type === 'error' ? '⚠️' : 'ℹ'"></span>
+    <span x-text="toast.message" class="break-words"></span>
   </div>
 
   <!-- APPLICATION JAVASCRIPT -->
@@ -827,7 +835,8 @@
         snapshotForm: {
           name: '',
           ttl_days: 30,
-          terminate: false
+          terminate: false,
+          timeout: 180
         },
 
         // Snapshot Launch Modal State
@@ -876,7 +885,8 @@
         // Toast State
         toast: {
           visible: false,
-          message: ''
+          message: '',
+          type: 'info'
         },
 
         async init() {
@@ -972,6 +982,7 @@
           this.snapshotForm.name = (sb.name || sb.id) + '-snapshot';
           this.snapshotForm.ttl_days = 30;
           this.snapshotForm.terminate = false;
+          this.snapshotForm.timeout = 180;
           this.snapshotModalOpen = true;
         },
 
@@ -989,15 +1000,15 @@
               body: JSON.stringify(payload)
             });
             if (!res.ok) {
-              const err = await res.json();
-              throw new Error(err.detail || 'Snapshot capture failed');
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
             }
             const data = await res.json();
             this.showToast(`Snapshot captured: ${data.image_id}`);
             this.snapshotModalOpen = false;
             await this.refreshAll();
           } catch (err) {
-            alert('Error: ' + err.message);
+            this.showToast('Snapshot failed: ' + err.message, 'error');
           } finally {
             this.snapshotSubmitting = false;
           }
@@ -1214,10 +1225,11 @@
           this.copyText(cmd, `SSH command copied: ${cmd}`);
         },
 
-        showToast(message) {
+        showToast(message, type = 'info') {
           this.toast.message = message;
+          this.toast.type = type;
           this.toast.visible = true;
-          setTimeout(() => { this.toast.visible = false; }, 3000);
+          setTimeout(() => { this.toast.visible = false; }, type === 'error' ? 6000 : 3000);
         },
 
         formatDate(iso) {

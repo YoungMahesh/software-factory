@@ -210,6 +210,7 @@ class TestWebAPI(unittest.TestCase):
             terminate=False,
             name="test-snap",
             profile="prof-x",
+            timeout=180,
         )
 
     @patch("sandbox.web.list_snapshots")
