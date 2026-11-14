@@ -1,4 +1,4 @@
-"""Modal Web Function application serving the compiled MkDocs documentation site."""
+"""Modal Web Function application serving the compiled documentation site."""
 
 import logging
 import os
@@ -15,19 +15,17 @@ app = modal.App(APP_NAME)
 
 repo_root = Path(__file__).resolve().parent.parent
 
-# Modal Image with MkDocs build dependencies and staged documentation sources
+# Modal Image with Zensical build dependencies and staged documentation sources
 # Note: copy=True is required on add_local_* when subsequent build commands (e.g. run_commands) are executed
 docs_image = (
     modal.Image.debian_slim()
     .pip_install(
-        "mkdocs>=1.6.0",
-        "mkdocs-material>=9.5.0",
-        "pymdown-extensions>=10.7.0",
+        "zensical>=0.1.1",
         "fastapi>=0.100.0",
     )
     .add_local_file(str(repo_root / "mkdocs.yml"), "/root/mkdocs.yml", copy=True)
     .add_local_dir(str(repo_root / "docs"), "/root/docs", copy=True)
-    .run_commands("mkdocs build -f /root/mkdocs.yml -d /root/site")
+    .run_commands("zensical build -f /root/mkdocs.yml")
 )
 
 

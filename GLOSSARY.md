@@ -229,5 +229,5 @@ An encapsulated domain model returned by the Sandbox Launcher wrapping the provi
 _Avoid_: Sandbox tuple, launch result, container handle
 
 **Documentation Web App**:
-A dedicated, standalone Modal App (`modal-sandboxes-docs` defined in `sandbox/docs.py`) serving the compiled MkDocs documentation site as a public, serverless ASGI web function via `@modal.asgi_app()`, decoupling documentation delivery from the Hosted Sandbox Control Plane.
+A dedicated, standalone Modal App (`modal-sandboxes-docs` defined in `sandbox/docs.py`) serving the compiled static documentation site (compiled with Zensical) as a public, serverless ASGI web function via `@modal.asgi_app()`, decoupling documentation delivery from the Hosted Sandbox Control Plane.
 _Avoid_: Docs server, control plane docs, mkdocs runner, documentation container

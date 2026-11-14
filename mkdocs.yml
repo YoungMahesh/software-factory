@@ -147,6 +147,7 @@ nav:
     - '0065: Retire In-Repo env.map Fallback and Standardize ghclone on Central Environment Store': adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md
     - '0066: Multi-Tier Git Identity and Env-Store Authorship Separation': adr/0066-multi-tier-git-identity-and-env-store-separation.md
     - '0067: Git Worktree Environment Secret Propagation and Central env.map': adr/0067-git-worktree-environment-propagation-and-central-env-map.md
+    - '0068: Migrate Documentation Generator to Zensical': adr/0068-migrate-documentation-generator-to-zensical.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

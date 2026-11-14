@@ -1,6 +1,6 @@
 # Deploying Documentation
 
-Modal Sandboxes includes a dedicated serverless documentation application implemented in `sandbox/docs.py`. It builds the MkDocs Material site at container image construction and serves the static files via an unauthenticated ASGI web function on Modal.
+Modal Sandboxes includes a dedicated serverless documentation application implemented in `sandbox/docs.py`. It builds the static documentation site using Zensical at container image construction and serves the compiled assets via an unauthenticated ASGI web function on Modal.
 
 ---
 
@@ -29,7 +29,13 @@ To develop and preview documentation changes locally in real time:
 modal serve sandbox/docs.py
 ```
 
-Modal provisions an ephemeral development container and watches your local filesystem. Any modifications to markdown files in `docs/` or configuration in `mkdocs.yml` automatically bust the image layer cache, re-running `mkdocs build` and updating your live preview URL.
+Modal provisions an ephemeral development container and watches your local filesystem. Any modifications to markdown files in `docs/` or configuration in `mkdocs.yml` automatically bust the image layer cache, re-running `zensical build` and updating your live preview URL.
+
+Alternatively, developers can run Zensical locally with instant hot differential reload:
+
+```bash
+zensical serve
+```
 
 ---
 
@@ -49,6 +55,7 @@ When `DOCS_CUSTOM_DOMAIN` is set, `sandbox/docs.py` automatically binds the doma
 
 - **Independent App**: Deployed under the dedicated Modal App name `modal-sandboxes-docs`, isolating documentation assets and dependencies from the `sandbox-control-plane` provisioning service.
 - **Scale-to-Zero (`min_containers=0`)**: The documentation container shuts down when idle, incurring zero compute cost when there is no active traffic. It cold-starts on demand within 1–2 seconds.
+- **High-Performance Rust Builder**: Uses `zensical build` during image construction, cutting documentation build times down to sub-second durations.
 - **In-Process ASGI Server**: Powered by Starlette's `StaticFiles(html=True)`, directory routes (such as `/getting-started/`) automatically resolve to `index.html` with clean URLs and proper MIME types.
 
-For further architectural context and design rationale, see [ADR 0062](../adr/0062-publish-documentation-as-modal-web-function.md).
+For further architectural context and design rationale, see [ADR 0062](../adr/0062-publish-documentation-as-modal-web-function.md) and [ADR 0068](../adr/0068-migrate-documentation-generator-to-zensical.md).

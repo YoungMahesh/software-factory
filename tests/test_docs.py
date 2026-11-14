@@ -1,6 +1,8 @@
 """Unit tests for the Modal Documentation Web App."""
 
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -83,3 +85,26 @@ class TestDocsApp(unittest.TestCase):
         self.assertIn("pymdownx.emoji:", content)
         self.assertIn("material.extensions.emoji.twemoji", content)
         self.assertIn("material.extensions.emoji.to_svg", content)
+
+    def test_zensical_build_clean(self):
+        """Verify zensical binary is available and builds documentation without warnings."""
+        zensical_bin = shutil.which("zensical")
+        if not zensical_bin:
+            self.skipTest("zensical binary not installed in test environment")
+
+        repo_root = Path(__file__).resolve().parent.parent
+        # Build to a temporary directory to verify strict clean build
+        with tempfile.TemporaryDirectory() as tmp_site:
+            res = subprocess.run(
+                [zensical_bin, "build", "--strict", "-f", str(repo_root / "mkdocs.yml")],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            # Remove site directory generated during test
+            site_dir = repo_root / "site"
+            if site_dir.exists():
+                shutil.rmtree(site_dir)
+
+            self.assertEqual(res.returncode, 0, f"zensical build --strict failed:\n{res.stderr}\n{res.stdout}")

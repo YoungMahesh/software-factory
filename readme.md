@@ -205,17 +205,17 @@ pytest
 
 ## 8. Documentation Website
 
-The documentation website is built with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/):
+The documentation website is built with [Zensical](https://zensical.org/) (the high-performance Rust successor to Material for MkDocs) with full backward compatibility for `mkdocs.yml`:
 
 ```bash
 # Install documentation dependencies
-pip install -e .[docs]
+pip install -e ".[docs]"
 
-# Live development server with hot reloading
-mkdocs serve
+# Live development server with instant differential reload
+zensical serve
 
 # Build static HTML site
-mkdocs build
+zensical build --strict
 ```
 
 ---

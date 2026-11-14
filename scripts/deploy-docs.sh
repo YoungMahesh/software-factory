@@ -32,19 +32,27 @@ fi
 echo "==> Building documentation..."
 cd "${ROOT_DIR}"
 
-# Locate python/mkdocs binary (prefer repo venv if present)
-if [[ -f "${ROOT_DIR}/.venv/bin/mkdocs" ]]; then
-    MKDOCS="${ROOT_DIR}/.venv/bin/mkdocs"
+# Locate docs runner binary (prefer zensical, fallback to mkdocs)
+DOCS_BUILDER=""
+if [[ -f "${ROOT_DIR}/.venv/bin/zensical" ]]; then
+    DOCS_BUILDER="${ROOT_DIR}/.venv/bin/zensical"
+elif [[ -f "/root/software-factory/.venv/bin/zensical" ]]; then
+    DOCS_BUILDER="/root/software-factory/.venv/bin/zensical"
+elif command -v zensical >/dev/null 2>&1; then
+    DOCS_BUILDER="$(command -v zensical)"
+elif [[ -f "${ROOT_DIR}/.venv/bin/mkdocs" ]]; then
+    DOCS_BUILDER="${ROOT_DIR}/.venv/bin/mkdocs"
 elif [[ -f "/root/software-factory/.venv/bin/mkdocs" ]]; then
-    MKDOCS="/root/software-factory/.venv/bin/mkdocs"
+    DOCS_BUILDER="/root/software-factory/.venv/bin/mkdocs"
 elif command -v mkdocs >/dev/null 2>&1; then
-    MKDOCS="$(command -v mkdocs)"
+    DOCS_BUILDER="$(command -v mkdocs)"
 else
-    echo "❌ Error: mkdocs not found. Please install docs dependencies with: pip install '.[docs]'" >&2
+    echo "❌ Error: Neither zensical nor mkdocs found. Please install docs dependencies with: pip install '.[docs]'" >&2
     exit 1
 fi
 
-"${MKDOCS}" build --strict
+echo "==> Using docs engine: ${DOCS_BUILDER}"
+"${DOCS_BUILDER}" build --strict
 
 if [[ ! -d "${ROOT_DIR}/site" ]]; then
     echo "❌ Error: Output directory 'site' was not generated." >&2
