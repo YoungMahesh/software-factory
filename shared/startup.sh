@@ -106,8 +106,34 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
             TARGET_DIR="/root/$REPO_NAME"
         fi
     fi
+    TARGET_MARKER="/root/.workspace-target-dir"
+    if [ ! -f "$TARGET_MARKER" ] && [ -f /etc/workspace-target-dir ]; then
+        TARGET_MARKER="/etc/workspace-target-dir"
+    fi
+    if [ -z "$TARGET_DIR" ] && [ -f "$TARGET_MARKER" ]; then
+        SAVED_DIR=$(cat "$TARGET_MARKER" 2>/dev/null || true)
+        if [ -n "$SAVED_DIR" ] && [ -d "$SAVED_DIR" ]; then
+            TARGET_DIR="$SAVED_DIR"
+        fi
+    fi
+    if [ -z "$TARGET_DIR" ] && [ -f /etc/software-factory-version.json ]; then
+        SAVED_DIR=$(python3 -c "import json; print(json.load(open('/etc/software-factory-version.json')).get('target_dir', ''))" 2>/dev/null || true)
+        if [ -n "$SAVED_DIR" ] && [ -d "$SAVED_DIR" ]; then
+            TARGET_DIR="$SAVED_DIR"
+        fi
+    fi
+    if [ -z "$TARGET_DIR" ] && [ -n "${VIRTUAL_ENV:-}" ]; then
+        VENV_PARENT=$(dirname "$VIRTUAL_ENV")
+        if [ -d "$VENV_PARENT/.git" ]; then
+            TARGET_DIR="$VENV_PARENT"
+        fi
+    fi
     if [ -z "$TARGET_DIR" ]; then
         for d in /root/*/; do
+            dirname_base=$(basename "$d")
+            case "$dirname_base" in
+                *backup*|*.bak|*copy*) continue ;;
+            esac
             if [ -d "${d}.git" ]; then
                 TARGET_DIR="${d%/}"
                 break
@@ -115,10 +141,12 @@ if [ "${RESUME_SNAPSHOT:-0}" = "1" ]; then
         done
     fi
     TARGET_DIR="${TARGET_DIR:-/root}"
+    echo "$TARGET_DIR" > /root/.workspace-target-dir 2>/dev/null || true
+    echo "$TARGET_DIR" > /etc/workspace-target-dir 2>/dev/null || true
     echo "📁 Workspace resolved to $TARGET_DIR"
     cd "$TARGET_DIR"
     if [ -d "$TARGET_DIR/.git" ] && git -C "$TARGET_DIR" remote get-url origin >/dev/null 2>&1; then
-        git -C "$TARGET_DIR" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+        git -C "$TARGET_DIR" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*" 2>/dev/null || true
     fi
 else
     if [ "${NO_REPO:-0}" = "1" ]; then
@@ -194,6 +222,11 @@ EOF
             exit 1
         fi
     fi
+fi
+
+if [ -n "$TARGET_DIR" ]; then
+    echo "$TARGET_DIR" > /root/.workspace-target-dir 2>/dev/null || true
+    echo "$TARGET_DIR" > /etc/workspace-target-dir 2>/dev/null || true
 fi
 
 # Scrub GH_REPO from environment so tooling and T3 Code dynamically detect git remotes
@@ -420,15 +453,19 @@ if [ "${ENABLE_MODAL:-}" = "1" ]; then
     grep -qxF "VIRTUAL_ENV=\"$VENV_DIR\"" /etc/environment 2>/dev/null || echo "VIRTUAL_ENV=\"$VENV_DIR\"" >> /etc/environment
 
     # Also persist to /etc/profile.d for system-wide login shell activation
-    cat << EOF > /etc/profile.d/python-venv.sh
+    if [[ "$VENV_DIR" != *tmp* ]] && [ -d /etc/profile.d ]; then
+        cat << EOF > /etc/profile.d/python-venv.sh
 if [ -f "$VENV_DIR/bin/activate" ]; then
     source "$VENV_DIR/bin/activate"
 fi
 EOF
-    chmod +x /etc/profile.d/python-venv.sh 2>/dev/null || true
+        chmod +x /etc/profile.d/python-venv.sh 2>/dev/null || true
+    fi
 
-    echo "⚡ Installing Modal client package into .venv..."
-    uv pip install --python "$VENV_DIR/bin/python" --quiet modal
+    if [ "${RESUME_SNAPSHOT:-0}" != "1" ] || [ ! -x "$VENV_DIR/bin/modal" ]; then
+        echo "⚡ Installing Modal client package into .venv..."
+        uv pip install --python "$VENV_DIR/bin/python" --quiet modal
+    fi
 
     # Quick verification banner
     PYTHON_VER=$("$VENV_DIR/bin/python3" --version 2>&1 | cut -d' ' -f2 || echo "Not found")
@@ -631,10 +668,10 @@ fi
 GLOBAL_GIT_NAME="${DEFAULT_GIT_NAME:-${GIT_AUTHOR_NAME:-}}"
 GLOBAL_GIT_EMAIL="${DEFAULT_GIT_EMAIL:-${GIT_AUTHOR_EMAIL:-}}"
 if [ -n "$GLOBAL_GIT_NAME" ]; then
-    git config --global user.name "$GLOBAL_GIT_NAME"
+    git config --global user.name "$GLOBAL_GIT_NAME" 2>/dev/null || true
 fi
 if [ -n "$GLOBAL_GIT_EMAIL" ]; then
-    git config --global user.email "$GLOBAL_GIT_EMAIL"
+    git config --global user.email "$GLOBAL_GIT_EMAIL" 2>/dev/null || true
 fi
 
 # Register global Git hooks for worktree environment propagation
@@ -698,6 +735,9 @@ ref = sys.argv[4]
 dirty = sys.argv[5]
 now = sys.argv[6]
 is_snapshot = (sys.argv[7] == "1")
+target_dir = sys.argv[8] if len(sys.argv) > 8 else ""
+if target_dir:
+    data["target_dir"] = target_dir
 
 data = {}
 if os.path.exists(vfile):
@@ -728,7 +768,7 @@ try:
     os.chmod(vfile, 0o644)
 except Exception as e:
     print(f"Warning: Failed to write {vfile}: {e}", file=sys.stderr)
-' "$VERSION_FILE" "$SF_COMMIT" "$SF_COMMIT_SHORT" "$SF_REF" "$SF_DIRTY" "$NOW_ISO" "${RESUME_SNAPSHOT:-0}" 2>/dev/null || true
+' "$VERSION_FILE" "$SF_COMMIT" "$SF_COMMIT_SHORT" "$SF_REF" "$SF_DIRTY" "$NOW_ISO" "${RESUME_SNAPSHOT:-0}" "$TARGET_DIR" 2>/dev/null || true
 
 cat << 'EOF' > /usr/local/bin/check-software-factory
 #!/usr/bin/env bash
