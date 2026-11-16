@@ -11,6 +11,7 @@ from .config import (
     DEFAULT_OPENCODE_PORT,
     DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
+    DEFAULT_XFCE_PORT,
 )
 from .formatting import (
     append_ssh_config,
@@ -226,6 +227,22 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also install Pi coding agent CLI (https://pi.dev) and configure OpenCode Go with DeepSeek V4.1 Flash in the sandbox.",
     )
+    parser.add_argument(
+        "--xfce",
+        action="store_true",
+        help="Also run an XFCE 4 desktop with TigerVNC, noVNC, and Google Chrome exposed over Cloudflare Tunnel (implies --vm).",
+    )
+    parser.add_argument(
+        "--xfce-port",
+        type=int,
+        default=DEFAULT_XFCE_PORT,
+        help=f"Port for the noVNC web server, only used with --xfce (default: {DEFAULT_XFCE_PORT})",
+    )
+    parser.add_argument(
+        "--xfce-password",
+        default=None,
+        help="Optional password for VNC / noVNC authentication (defaults to passwordless with auto-connect).",
+    )
     return parser
 
 
@@ -268,6 +285,7 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             or getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME) != DEFAULT_T3_USAGE_VOLUME
             or args.herdr
             or args.pi
+            or getattr(args, "xfce", False)
             or args.full_clone
             or getattr(args, "no_ssh_config", False)
         ):

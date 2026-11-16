@@ -566,6 +566,21 @@ EOF
     ln -sf /usr/local/bin/check-cloudflare /usr/local/bin/check-cf
 fi
 
+if [ "${ENABLE_XFCE:-}" = "1" ]; then
+    cat << 'EOF' > /usr/local/bin/check-xfce
+#!/usr/bin/env bash
+if [ -x /usr/local/bin/desktop-service ]; then
+    /usr/local/bin/desktop-service status
+else
+    echo "desktop-service not installed at /usr/local/bin/desktop-service"
+fi
+echo "=== Chrome Version ===" && (/opt/google/chrome/google-chrome --version 2>/dev/null || echo "Chrome not found")
+echo "=== Desktop Processes ===" && (ps aux | grep -E "(xfce|vnc|websockify)" | grep -v grep || true)
+EOF
+    chmod +x /usr/local/bin/check-xfce 2>/dev/null || true
+    ln -sf /usr/local/bin/check-xfce /usr/local/bin/check-desktop 2>/dev/null || true
+fi
+
 # 2. Decrypt / write environment keys if provided
 if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
@@ -840,6 +855,12 @@ fi
 # 4. Keep the sandbox alive for interaction via modal shell / ssh, or run the
 #    OpenCode server when requested.
 echo "🏝️  Sandbox Ready!"
+if [ "${ENABLE_XFCE:-}" = "1" ]; then
+    echo "🖥️  Starting XFCE Desktop service..."
+    if [ -x /usr/local/bin/desktop-service ]; then
+        /usr/local/bin/desktop-service start || echo "⚠️ Warning: desktop-service start failed"
+    fi
+fi
 if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
     INSTANCE_NAME="${APP_NAME:-$(basename "$TARGET_DIR")-sandbox}"
     export PATH="/root/.local/bin:$PATH"

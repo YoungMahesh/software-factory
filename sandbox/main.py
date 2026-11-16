@@ -29,6 +29,7 @@ from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
+    DEFAULT_XFCE_PORT,
     IDLE_TIMEOUT_SECS,
     TIMEOUT_SECS,
 )
@@ -150,6 +151,9 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         "agy": args.agy,
         "herdr": args.herdr,
         "pi": args.pi,
+        "xfce": getattr(args, "xfce", False),
+        "xfce_port": getattr(args, "xfce_port", DEFAULT_XFCE_PORT),
+        "xfce_password": getattr(args, "xfce_password", None),
     }
     data = run_remote_request(endpoint_url, "/launch", payload)
     ssh_info = tuple(data["ssh_info"]) if data.get("ssh_info") else None
@@ -171,6 +175,9 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         t3_ssh_host=data.get("t3_ssh_host"),
         t3_persist=data.get("t3_persist", False),
         t3_usage_volume=data.get("t3_usage_volume"),
+        xfce_url=data.get("xfce_url"),
+        xfce_port=data.get("xfce_port"),
+        xfce_password=data.get("xfce_password"),
         memory_gb=data.get("memory_gb"),
         agy_enabled=data.get("agy_enabled", False),
         cloudflare_enabled=data.get("cloudflare_enabled", True),
@@ -233,6 +240,9 @@ def run_sandbox_launch(
         agy=args.agy,
         herdr=args.herdr,
         pi=args.pi,
+        xfce=getattr(args, "xfce", False),
+        xfce_port=getattr(args, "xfce_port", DEFAULT_XFCE_PORT),
+        xfce_password=getattr(args, "xfce_password", None),
     )
 
     try:
@@ -269,6 +279,9 @@ def run_sandbox_launch(
         t3_ssh_host=result.t3_ssh_host,
         t3_persist=result.t3_persist,
         t3_usage_volume=result.t3_usage_volume,
+        xfce_url=result.xfce_url,
+        xfce_port=result.xfce_port,
+        xfce_password=result.xfce_password,
         memory_gb=result.memory_gb,
         agy_enabled=result.agy_enabled,
         cloudflare_enabled=result.cloudflare_enabled,

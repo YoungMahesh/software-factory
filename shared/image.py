@@ -32,6 +32,8 @@ REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json
 LOCAL_ANTIGRAVITY_ONBOARDING = SHARED_DIR / "antigravity-onboarding.json"
 REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
+LOCAL_DESKTOP_SERVICE = SHARED_DIR / "desktop-service"
+REMOTE_DESKTOP_SERVICE = "/usr/local/bin/desktop-service"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -156,6 +158,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [
     (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
     (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
     (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
+    (LOCAL_DESKTOP_SERVICE, REMOTE_DESKTOP_SERVICE),
 ]
 
 
@@ -186,10 +189,6 @@ base_image = (
         "python3-venv",
         "python-is-python3",
         # System libraries and fonts required by headless Chromium/Chrome and T3 Code browser
-        # (libnspr4, libnss3, libatk, libatspi, libxcomposite, libxdamage, libxfixes,
-        #  libxrandr, libgbm, libxkbcommon, libasound, fontconfig, fonts-liberation).
-        # These satisfy dynamic linker requirements for T3 Code's chrome-headless-shell
-        # and Playwright/Puppeteer browser binaries without on-demand apt delays.
         "libnss3",
         "libatk1.0-0t64",
         "libatk-bridge2.0-0t64",
@@ -237,7 +236,7 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/t3-usage-sync /root/.scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/t3-usage-sync /usr/local/bin/desktop-service /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/push-repo-env /usr/local/bin/push_repo_env.py 2>/dev/null || true",
@@ -261,8 +260,7 @@ base_image = base_image.run_commands(
 def load_ssh_pub_key() -> str:
     """Loads SSH public key content from shared/ssh-key.pub.
 
-    Raises FileNotFoundError if the shared public key is missing.
-    """
+    Raises FileNotFoundError if the shared public key is missing."""
     if not SHARED_SSH_PUB_KEY.exists():
         raise FileNotFoundError(
             f"SSH public key not found at {SHARED_SSH_PUB_KEY}."
@@ -281,8 +279,7 @@ def browser_enabled(
 
     A standalone `--browser` launch is supported, but any agent surface that can
     drive a browser implies it: `--opencode`, `--agy`, and `--t3` enable it so
-    their browser MCP servers and built-in browser panels work out of the box.
-    """
+    their browser MCP servers and built-in browser panels work out of the box."""
     return browser or opencode or agy or t3
 
 
@@ -321,6 +318,7 @@ def build_sandbox_image(
     t3: bool = False,
     herdr: bool = False,
     pi: bool = False,
+    xfce: bool = False,
 ) -> modal.Image:
     """Builds a customized sandbox image layered on top of base_image."""
     image = base_image
@@ -449,6 +447,22 @@ def build_sandbox_image(
                 (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
                 (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
             ],
+        )
+
+    if xfce:
+        image = (
+            image.apt_install(
+                "xfce4", "xfce4-terminal", "dbus-x11",
+                "tigervnc-standalone-server", "tigervnc-tools",
+                "novnc", "websockify", "xdotool", "scrot",
+            )
+            .run_commands(
+                "wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb",
+                "apt-get install -y /tmp/chrome.deb && rm -f /tmp/chrome.deb",
+                "sed -i 's/CLEANUP => 1/CLEANUP => 0/' /usr/share/perl5/TigerVNC/Wrapper.pm 2>/dev/null || true",
+                "sed -i 's|\"$HERE/chrome\"|\"$HERE/chrome\" --no-sandbox --disable-dev-shm-usage|' /opt/google/chrome/google-chrome 2>/dev/null || true",
+                "sed -i 's|Exec=/usr/bin/google-chrome-stable|Exec=/usr/bin/google-chrome-stable --no-sandbox --disable-dev-shm-usage|' /usr/share/applications/google-chrome.desktop 2>/dev/null || true",
+            )
         )
 
     if path_prefixes:

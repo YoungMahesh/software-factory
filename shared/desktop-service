@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -e
+
+DISPLAY_NUM=":1"
+RFB_PORT=5901
+WEB_PORT="${XFCE_PORT:-${PORT:-3000}}"
+VNC_DIR="/root/.vnc"
+PASSWD_FILE="$VNC_DIR/passwd"
+CONFIG_FILE="$VNC_DIR/config"
+XSTARTUP_FILE="$VNC_DIR/xstartup"
+PASSWD_TEXT_FILE="$VNC_DIR/current_password.txt"
+LOG_DIR="/var/log/desktop"
+WEBSOCKIFY_LOG="$LOG_DIR/websockify.log"
+VNC_LOG="$LOG_DIR/tigervnc.log"
+
+mkdir -p "$VNC_DIR" "$LOG_DIR"
+
+setup_files() {
+    # Ensure index.html in novnc redirects directly with autoconnect and remote resize
+    if [ -d /usr/share/novnc ]; then
+        cat << 'HTML' > /usr/share/novnc/index.html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=remote">
+    <title>XFCE Desktop</title>
+</head>
+<body>
+    <p>Connecting to XFCE Desktop... <a href="vnc.html?autoconnect=true&resize=remote">Click here if not redirected</a>.</p>
+</body>
+</html>
+HTML
+    fi
+
+    # Configure xstartup
+    cat << 'XSTARTUP' > "$XSTARTUP_FILE"
+#!/bin/bash
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=XFCE
+export DESKTOP_SESSION=xfce
+exec dbus-launch --exit-with-session startxfce4
+XSTARTUP
+    chmod +x "$XSTARTUP_FILE"
+
+    # Configure VNC authentication mode
+    if [ -n "${XFCE_PASSWORD:-}" ]; then
+        SEC_TYPES="VncAuth"
+        echo "$XFCE_PASSWORD" | vncpasswd -f > "$PASSWD_FILE"
+        chmod 600 "$PASSWD_FILE"
+        echo "$XFCE_PASSWORD" > "$PASSWD_TEXT_FILE"
+        chmod 600 "$PASSWD_TEXT_FILE"
+    else
+        SEC_TYPES="None"
+        rm -f "$PASSWD_FILE" "$PASSWD_TEXT_FILE" 2>/dev/null || true
+    fi
+
+    # Configure ~/.vnc/config
+    cat << CONFIG > "$CONFIG_FILE"
+geometry=1920x1080
+depth=24
+localhost=yes
+alwaysshared=yes
+SecurityTypes=$SEC_TYPES
+CONFIG
+    chmod 644 "$CONFIG_FILE"
+}
+
+start_desktop() {
+    setup_files
+    CURRENT_PASS=$(cat "$PASSWD_TEXT_FILE" 2>/dev/null || echo "None (Passwordless)")
+
+    echo "==> Starting TigerVNC on $DISPLAY_NUM (RFB port $RFB_PORT)..."
+    if ! pgrep -f "Xtigervnc $DISPLAY_NUM" >/dev/null 2>&1; then
+        rm -f "/tmp/.X11-unix/X1" "/tmp/.X1-lock" "$VNC_DIR/*:1.pid" 2>/dev/null || true
+    fi
+
+    tigervncserver -kill "$DISPLAY_NUM" >/dev/null 2>&1 || true
+    tigervncserver "$DISPLAY_NUM" -rfbport "$RFB_PORT" > "$VNC_LOG" 2>&1
+
+    sleep 1
+    if ! pgrep -f "Xtigervnc $DISPLAY_NUM" >/dev/null 2>&1; then
+        echo "ERROR: Failed to start TigerVNC. Logs:" >&2
+        cat "$VNC_LOG" >&2
+        exit 1
+    fi
+    echo "✔ TigerVNC started successfully on $DISPLAY_NUM."
+
+    echo "==> Starting noVNC websockify bridge on port $WEB_PORT..."
+    pkill -f "websockify.*$WEB_PORT" 2>/dev/null || true
+    /usr/bin/websockify -D --web=/usr/share/novnc/ "$WEB_PORT" "localhost:$RFB_PORT" > "$WEBSOCKIFY_LOG" 2>&1
+
+    sleep 1
+    if pgrep -f "websockify.*$WEB_PORT" >/dev/null 2>&1; then
+        echo "✔ websockify bridge listening on port $WEB_PORT."
+    else
+        echo "ERROR: websockify failed to start. Logs:" >&2
+        cat "$WEBSOCKIFY_LOG" >&2
+        exit 1
+    fi
+
+    echo "=========================================================="
+    echo "  🖥️  DESKTOP FRONTEND READY"
+    echo "  Web Port:       $WEB_PORT"
+    echo "  RFB Port:       $RFB_PORT"
+    echo "  Resolution:     1920x1080"
+    echo "  Auth Mode:      ${SEC_TYPES:-None}"
+    if [ -n "${XFCE_PASSWORD:-}" ]; then
+        echo "  VNC Password:   $XFCE_PASSWORD"
+    fi
+    echo "=========================================================="
+}
+
+stop_desktop() {
+    echo "==> Stopping desktop service..."
+    pkill -f "websockify.*$WEB_PORT" 2>/dev/null || true
+    tigervncserver -kill "$DISPLAY_NUM" 2>/dev/null || true
+    rm -f "/tmp/.X11-unix/X1" "/tmp/.X1-lock" "$VNC_DIR/*:1.pid" 2>/dev/null || true
+    echo "✔ Desktop service stopped."
+}
+
+status_desktop() {
+    echo "==> Checking desktop status..."
+    if pgrep -f "Xtigervnc $DISPLAY_NUM" >/dev/null 2>&1; then
+        echo "✔ TigerVNC is RUNNING on $DISPLAY_NUM."
+    else
+        echo "✖ TigerVNC is NOT running."
+    fi
+
+    if pgrep -f "websockify.*$WEB_PORT" >/dev/null 2>&1; then
+        echo "✔ websockify is RUNNING on port $WEB_PORT."
+    else
+        echo "✖ websockify is NOT running."
+    fi
+
+    if [ -f "$PASSWD_TEXT_FILE" ]; then
+        echo "🔑 Current VNC Password: $(cat "$PASSWD_TEXT_FILE")"
+    fi
+}
+
+case "$1" in
+    start)
+        start_desktop
+        ;;
+    stop)
+        stop_desktop
+        ;;
+    restart)
+        stop_desktop
+        sleep 1
+        start_desktop
+        ;;
+    status)
+        status_desktop
+        ;;
+    *)
+        echo "Usage: desktop-service {start|stop|restart|status}"
+        exit 1
+        ;;
+esac

@@ -14,6 +14,7 @@ from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
+    DEFAULT_XFCE_PORT,
 )
 from shared.image import DEFAULT_T3_USAGE_VOLUME
 
@@ -44,6 +45,9 @@ class LaunchRequest(BaseModel):
     agy: bool = False
     herdr: bool = False
     pi: bool = False
+    xfce: bool = False
+    xfce_port: int = DEFAULT_XFCE_PORT
+    xfce_password: str | None = None
 
 
 class LaunchResponse(BaseModel):
@@ -65,6 +69,9 @@ class LaunchResponse(BaseModel):
     t3_ssh_host: str | None = None
     t3_persist: bool = False
     t3_usage_volume: str | None = None
+    xfce_url: str | None = None
+    xfce_port: int | None = None
+    xfce_password: str | None = None
     memory_gb: int | None = None
     agy_enabled: bool = False
     cloudflare_enabled: bool = True
@@ -95,6 +102,8 @@ def validate_launch_request(req: LaunchRequest) -> None:
     enabled service ports that conflict with each other or the reserved web port.
     Memory, when supplied, must be at least 1 GB and requires a VM.
     """
+    if req.xfce:
+        req.vm = True
     if req.memory is not None:
         if not req.vm or req.memory < 1:
             raise ValueError("--memory must be positive GB and can only be used with --vm.")
@@ -114,6 +123,8 @@ def validate_launch_request(req: LaunchRequest) -> None:
         ports.append(("--metro-port", req.metro_port))
     if req.t3:
         ports.append(("--t3-port", req.t3_port))
+    if req.xfce and req.xfce_port != DEFAULT_WEB_PORT:
+        ports.append(("--xfce-port", req.xfce_port))
 
     used_ports: dict[int, str] = {}
     for flag, port in ports:

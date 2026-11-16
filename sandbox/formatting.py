@@ -1,13 +1,13 @@
-import os
 """Terminal formatting, QR code generation, and SSH configuration helpers."""
 
 import io
+import os
 from pathlib import Path
 import sys
 
 import modal
 
-from .config import DEFAULT_WEB_PORT
+from .config import DEFAULT_WEB_PORT, DEFAULT_XFCE_PORT
 
 
 def generate_ascii_qr(data: str) -> str | None:
@@ -97,6 +97,9 @@ def print_access_info(
     t3_ssh_host: str | None = None,
     t3_persist: bool = False,
     t3_usage_volume: str | None = None,
+    xfce_url: str | None = None,
+    xfce_port: int | None = None,
+    xfce_password: str | None = None,
     memory_gb: int | None = None,
     agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
@@ -134,6 +137,10 @@ def print_access_info(
                 f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
                 f"opencode --server {opencode_url}"
             )
+    if xfce_url:
+        print(f"  • XFCE Desktop: {xfce_url} (port {xfce_port or DEFAULT_XFCE_PORT})")
+        if xfce_password:
+            print(f"  • VNC Password: {xfce_password}")
     if t3_pair_url:
         print(f"  • T3 Code:  {t3_pair_url}")
     elif t3_url:

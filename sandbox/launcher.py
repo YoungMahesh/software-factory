@@ -210,7 +210,7 @@ class SandboxLauncher:
             image = self.build_image_fn(
                 opencode=req.opencode, agy=req.agy, browser=browser_active,
                 modal_tooling=req.modal, react_native=req.react_native, t3=req.t3,
-                herdr=req.herdr, pi=req.pi,
+                herdr=req.herdr, pi=req.pi, xfce=req.xfce,
             )
 
         cloudflare_active = not req.no_cloudflare
@@ -322,6 +322,14 @@ class SandboxLauncher:
         ]:
             if flag: env[key] = "1"
 
+        if req.xfce:
+            env["ENABLE_XFCE"] = "1"
+            env["XFCE_PORT"] = str(req.xfce_port)
+            if req.xfce_password:
+                env["XFCE_PASSWORD"] = req.xfce_password
+            if req.xfce_port != DEFAULT_WEB_PORT:
+                encrypted_ports.append(req.xfce_port)
+
         if req.react_native:
             encrypted_ports.append(req.metro_port)
             env["ENABLE_REACT_NATIVE"] = "1"
@@ -340,6 +348,7 @@ class SandboxLauncher:
             (t3_persist_enabled, "T3 Usage Persistence"), (req.modal, "Modal"),
             (req.sops, "SOPS"), (req.herdr, "Herdr"),
             (req.pi, "Pi"), (browser_active, "Browser"),
+            (req.xfce, "XFCE Desktop"),
         ]
         features = [label for active, label in feature_flags if active]
         runtime_desc = "VM Sandbox" if req.vm else "Sandbox"
@@ -383,13 +392,25 @@ class SandboxLauncher:
             raise RuntimeError(msg)
 
         self._emit_log("🌐 Resolving network tunnels and connection endpoints...")
-        ssh_info, opencode_url, metro_url, t3_url = None, None, None, None
+        ssh_info, opencode_url, metro_url, t3_url, xfce_url = None, None, None, None, None
         try:
             tunnels = sandbox.tunnels()
             if 22 in tunnels: ssh_info = tunnels[22].tcp_socket
             if req.opencode and req.opencode_port in tunnels: opencode_url = tunnels[req.opencode_port].url
             if req.react_native and req.metro_port in tunnels: metro_url = tunnels[req.metro_port].url
             if req.t3 and req.t3_port in tunnels: t3_url = tunnels[req.t3_port].url
+            if req.xfce:
+                if req.xfce_port != DEFAULT_WEB_PORT and req.xfce_port in tunnels:
+                    xfce_url = tunnels[req.xfce_port].url
+                elif cloudflare_active:
+                    tunnel_domain = os.getenv("MODAL_SANDBOX_TUNNEL_DOMAIN") or os.getenv("CLOUDFLARE_TUNNEL_DOMAIN", "")
+                    if tunnel_domain:
+                        domain_url = tunnel_domain if tunnel_domain.startswith(("http://", "https://")) else f"https://{tunnel_domain}"
+                        xfce_url = f"{domain_url}/vnc.html?autoconnect=true&resize=remote"
+                    else:
+                        xfce_url = f"http://localhost:{req.xfce_port}/vnc.html?autoconnect=true&resize=remote"
+                else:
+                    xfce_url = f"http://localhost:{req.xfce_port}/vnc.html?autoconnect=true&resize=remote"
         except Exception as exc:
             self._emit_log(f"⚠️ Failed resolving tunnel URLs: {exc}")
 
@@ -439,6 +460,8 @@ class SandboxLauncher:
             t3_pair_url=t3_pair_url, t3_qr_code=t3_qr_code, t3_ssh_host=t3_ssh_alias,
             t3_persist=t3_persist_enabled,
             t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None,
+            xfce_url=xfce_url, xfce_port=req.xfce_port if req.xfce else None,
+            xfce_password=req.xfce_password if req.xfce else None,
             memory_gb=memory_gb, agy_enabled=req.agy,
             cloudflare_enabled=cloudflare_active, sops_enabled=req.sops, is_vm=req.vm,
         )
@@ -446,49 +469,27 @@ class SandboxLauncher:
 
     @classmethod
     def run(
-        cls, req: LaunchRequest, repo_root: Path | None = None,
-        build_image_fn: Callable | None = None, load_pubkey_fn: Callable | None = None,
-        append_ssh_fn: Callable | None = None, client: modal.Client | None = None,
-        resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
-        resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
-        fetch_vault_env_fn: Callable | None = None, fetch_vault_env_raw_fn: Callable | None = None,
-        fetch_vault_git_identity_fn: Callable | None = None,
-        fetch_vault_env_bundle_fn: Callable | None = None,
-        log_cb: Callable[[str], None] | None = None, register_ssh_config: bool = False,
+        cls,
+        req: LaunchRequest,
+        repo_root: Path | None = None,
+        register_ssh_config: bool = False,
+        **kwargs: Any,
     ) -> RunningSandbox:
         """Instantiates a SandboxLauncher and launches the requested sandbox."""
-        launcher = cls(
-            client=client, build_image_fn=build_image_fn, load_pubkey_fn=load_pubkey_fn,
-            append_ssh_fn=append_ssh_fn, resolve_git_identity_fn=resolve_git_identity_fn,
-            resolve_provenance_fn=resolve_provenance_fn,
-            fetch_vault_env_fn=fetch_vault_env_fn, fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
-            fetch_vault_env_bundle_fn=fetch_vault_env_bundle_fn,
-            fetch_vault_git_identity_fn=fetch_vault_git_identity_fn,
-            log_cb=log_cb, repo_root=repo_root,
-        )
+        launcher = cls(repo_root=repo_root, **kwargs)
         return launcher.launch(req, register_ssh_config=register_ssh_config)
 
 
 def launch_sandbox(
-    req: LaunchRequest, repo_root: Path | None = None,
-    build_image_fn: Callable | None = None, load_pubkey_fn: Callable | None = None,
-    client: modal.Client | None = None, log_cb: Callable[[str], None] | None = None,
-    register_ssh_config: bool = False, append_ssh_fn: Callable | None = None,
-    resolve_git_identity_fn: Callable[[], dict[str, str]] | None = None,
-    resolve_provenance_fn: Callable[[Path | None], dict[str, str]] | None = None,
-    fetch_vault_env_fn: Callable | None = None, fetch_vault_env_raw_fn: Callable | None = None,
-    fetch_vault_env_bundle_fn: Callable | None = None,
-    fetch_vault_git_identity_fn: Callable | None = None,
+    req: LaunchRequest,
+    repo_root: Path | None = None,
+    register_ssh_config: bool = False,
+    **kwargs: Any,
 ) -> RunningSandbox:
     """Convenience functional seam delegating to SandboxLauncher."""
     return SandboxLauncher.run(
-        req=req, repo_root=repo_root, build_image_fn=build_image_fn,
-        load_pubkey_fn=load_pubkey_fn, append_ssh_fn=append_ssh_fn,
-        resolve_git_identity_fn=resolve_git_identity_fn,
-        resolve_provenance_fn=resolve_provenance_fn,
-        fetch_vault_env_fn=fetch_vault_env_fn,
-        fetch_vault_env_raw_fn=fetch_vault_env_raw_fn,
-        fetch_vault_env_bundle_fn=fetch_vault_env_bundle_fn,
-        fetch_vault_git_identity_fn=fetch_vault_git_identity_fn,
-        client=client, log_cb=log_cb, register_ssh_config=register_ssh_config,
+        req=req,
+        repo_root=repo_root,
+        register_ssh_config=register_ssh_config,
+        **kwargs,
     )
