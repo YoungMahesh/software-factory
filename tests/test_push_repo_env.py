@@ -1,5 +1,6 @@
 """Unit tests for the push_repo_env script."""
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -114,14 +115,15 @@ class TestPushRepoEnv(unittest.TestCase):
     def test_push_repo_git_identity_missing_fails(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="")
 
-        res = push_repo_git_identity(
-            repo_dir=self.repo_dir,
-            name=None,
-            email=None,
-            repo_name="my-app",
-            org_name="sFactory0",
-            gh_token="ghp_test",
-        )
+        with patch.dict(os.environ, {"GIT_AUTHOR_NAME": "", "GIT_AUTHOR_EMAIL": ""}, clear=False):
+            res = push_repo_git_identity(
+                repo_dir=self.repo_dir,
+                name=None,
+                email=None,
+                repo_name="my-app",
+                org_name="sFactory0",
+                gh_token="ghp_test",
+            )
 
         self.assertFalse(res.success)
         self.assertIn("Git author name and email are required", res.message)

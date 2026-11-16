@@ -34,7 +34,7 @@ ssh dev-box
 By default, every sandbox spins up a background [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) client (`cloudflared`) targeting container port `3000`.
 
 - **Quick Tunnels**: With no credentials configured, `cloudflared` registers a free temporary quick tunnel (`https://<random-id>.trycloudflare.com`).
-- **Custom Domains**: By providing `CLOUDFLARE_TUNNEL_TOKEN` and optional `MODAL_SANDBOX_TUNNEL_DOMAIN` in `.env`, the tunnel binds to your custom domain.
+- **Custom Domains**: By providing `CLOUDFLARE_TUNNEL_TOKEN` and optional `MODAL_SANDBOX_TUNNEL_DOMAIN` in `.env`, the tunnel binds to your custom domain (such as `https://3000.mahesh0.dev`).
 - **Opt-Out**: If you do not require web ingress, pass `--no-cloudflare` to save startup overhead.
 
 ```bash
@@ -44,13 +44,51 @@ modal-sandbox --name minimal-box --no-cloudflare
 
 ---
 
-## 3. Dedicated Agent & Bundler Ingress Ports
+## 3. noVNC Web Ingress & Desktop WebSocket Streaming
+
+When an interactive XFCE desktop is launched with `--xfce`, the sandbox routes the desktop display through `websockify` on port `3000` (or a custom port specified via `--xfce-port`).
+
+The ingress pipeline provides instant, zero-client browser access:
+1. **Root Redirection**: When a browser navigates to the public Cloudflare Tunnel URL, `/usr/share/novnc/index.html` immediately redirects to `vnc.html?autoconnect=true&resize=remote`.
+2. **WebSocket Upgrade**: The browser upgrades the HTTP connection to a secure WebSocket (`wss://`) carrying RFB (Remote Framebuffer) protocol traffic.
+3. **Bridge Translation**: `websockify` unmasks WebSocket frames and bridges raw TCP bytes to TigerVNC on `localhost:5901`.
+4. **Interactive Session**: Mouse movements, keypresses, and framebuffer damage rectangles stream bidirectionally with low latency.
+
+### Desktop Ingress Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Browser
+    participant CF as Cloudflare Ingress
+    participant WS as websockify (:3000)
+    participant VNC as TigerVNC (:5901)
+    participant X11 as XFCE & Google Chrome
+
+    User->>CF: GET https://3000.mahesh0.dev/
+    CF->>WS: Forward HTTP Request
+    WS-->>User: 302 Redirect to vnc.html?autoconnect=true&resize=remote
+    User->>CF: Upgrade to WebSocket (WSS)
+    CF->>WS: Bridge to ws://localhost:3000/websockify
+    WS->>VNC: Open RFB TCP Socket (:5901)
+    VNC-->>User: RFB Handshake (SecurityType: None / Password)
+    loop Interactive GUI Session
+        User->>VNC: Mouse / Keyboard input events
+        X11->>VNC: Render framebuffer updates
+        VNC-->>User: RFB screen damage rects over WebSocket
+    end
+```
+
+---
+
+## 4. Dedicated Agent & Bundler Ingress Ports
 
 When specialized tooling flags are enabled, additional secure tunnels or ingress endpoints are created:
 
 | Tooling Flag | Forwarded Port | Description |
 | :--- | :--- | :--- |
 | Default | `3000` | Application web servers (Vite, Next.js, FastAPI) |
+| `--xfce` | `3000` (or `--xfce-port`) | XFCE noVNC browser desktop & Google Chrome GUI |
 | `--opencode` | `4096` | OpenCode web IDE server |
 | `--t3` | `3775` | T3 Code server web pairing endpoint |
 | `--react-native` | `8081` | React Native Metro bundler tunnel |

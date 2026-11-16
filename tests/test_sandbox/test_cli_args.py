@@ -136,6 +136,7 @@ class TestSandboxCliArgs(unittest.TestCase):
             test_script = f"""
             export HOME="{fake_root}"
             export NO_REPO="1"
+            export RESUME_SNAPSHOT="0"
             export APP_NAME="my-standalone-app"
             export DEFAULT_GIT_NAME="Developer"
             export DEFAULT_GIT_EMAIL="dev@example.com"

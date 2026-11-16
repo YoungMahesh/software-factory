@@ -22,10 +22,10 @@ def resolve_host_git_identity(repo_root: Path | None = None) -> dict[str, str]:
     )
 
     if not name or not email:
-        dotenv_paths: list[Path] = []
         if repo_root:
-            dotenv_paths.append(repo_root / ".env")
-        dotenv_paths.extend([Path("/root/.env"), Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"])
+            dotenv_paths = [repo_root / ".env"]
+        else:
+            dotenv_paths = [Path("/root/.env"), Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"]
         for p in dotenv_paths:
             if p.is_file():
                 try:

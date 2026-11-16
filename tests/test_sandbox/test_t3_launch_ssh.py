@@ -113,6 +113,7 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
             t3=True,
             herdr=False,
             pi=False,
+            xfce=False,
         )
         call_kwargs = mock_sandbox_create.call_args.kwargs
         self.assertIn(3775, call_kwargs["encrypted_ports"])

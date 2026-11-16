@@ -235,6 +235,7 @@ _Avoid_: Sandbox tuple, launch result, container handle
 **Documentation Web App**:
 A dedicated, standalone Modal App (`modal-sandboxes-docs` defined in `sandbox/docs.py`) serving the compiled static documentation site (compiled with Zensical) as a public, serverless ASGI web function via `@modal.asgi_app()`, decoupling documentation delivery from the Hosted Sandbox Control Plane.
 _Avoid_: Docs server, control plane docs, mkdocs runner, documentation container
+
 **XFCE Desktop Sandbox**:
 A Modal sandbox execution environment configured with an XFCE 4 desktop environment, TigerVNC server, and Google Chrome (`--xfce`), automatically backed by a VM Sandbox with burstable RAM `(128, 16384)` MiB, `/dev/shm`, and full Linux kernel compatibility, managed via `desktop-service`.
 _Avoid_: GUI sandbox, VNC runner, X11 container

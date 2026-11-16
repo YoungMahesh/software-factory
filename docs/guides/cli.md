@@ -19,6 +19,9 @@ modal-sandbox [OPTIONS]
 | `-b, --github-branch` | string | `main` | Git branch to clone and checkout. |
 | `--full-clone` | flag | `False` | Perform a full Git clone (default is shallow clone with depth 50). |
 | `--vm` | flag | `False` | Provision a Linux VM Sandbox with Docker daemon instead of standard container. |
+| `--xfce` | flag | `False` | Provision an interactive XFCE 4 desktop and Google Chrome (automatically enforces `--vm`). |
+| `--xfce-port` | integer | `3000` | Port for the noVNC websockify desktop bridge. |
+| `--xfce-password` | string | `None` | Optional password for VNC session authentication (defaults to passwordless). |
 | `--testing` | flag | `False` | Automatically prepend `test-` prefix to repository name in test organization. |
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
 | `--agy` | flag | `False` | Enable Google Gemini Antigravity CLI and Remote Control background daemon. |
@@ -56,12 +59,21 @@ modal-sandbox -r my-service -b feature-auth --t3 --agy --browser
 modal-sandbox --name integration-box --vm
 ```
 
-### 4. Capture a Snapshot and Terminate
+### 4. Launch an Interactive Cloud Desktop with Google Chrome
+```bash
+# Automatically launches XFCE 4 desktop, noVNC on port 3000, and Google Chrome in VM mode
+modal-sandbox --name desktop-box --xfce
+
+# Optional: specify a password to protect the remote VNC session
+modal-sandbox --name secure-desktop --xfce --xfce-password "my-secret-pass"
+```
+
+### 5. Capture a Snapshot and Terminate
 ```bash
 modal-sandbox --snapshot sb-abcdef123456 --terminate
 ```
 
-### 5. Resume from Snapshot
+### 6. Resume from Snapshot
 ```bash
 modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 ```

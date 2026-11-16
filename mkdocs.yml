@@ -149,6 +149,7 @@ nav:
     - '0067: Git Worktree Environment Secret Propagation and Central env.map': adr/0067-git-worktree-environment-propagation-and-central-env-map.md
     - '0068: Migrate Documentation Generator to Zensical': adr/0068-migrate-documentation-generator-to-zensical.md
     - '0069: Snapshot Workspace Target Directory Persistence and Virtualenv Preservation': adr/0069-snapshot-workspace-target-persistence-and-venv-preservation.md
+    - '0070: XFCE Desktop Environment and Google Chrome in VM Sandboxes': adr/0070-xfce-desktop-and-chrome-in-vm-sandboxes.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

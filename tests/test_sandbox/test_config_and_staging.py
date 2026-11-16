@@ -150,6 +150,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_T3_USAGE_SYNC,
             LOCAL_POST_CHECKOUT_HOOK,
             REMOTE_POST_CHECKOUT_HOOK,
+            LOCAL_DESKTOP_SERVICE,
+            REMOTE_DESKTOP_SERVICE,
         )
 
         expected = [
@@ -166,6 +168,7 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
             (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
             (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
+            (LOCAL_DESKTOP_SERVICE, REMOTE_DESKTOP_SERVICE),
         ]
         self.assertEqual(BASE_IMAGE_FILES, expected)
         self.assertEqual(REMOTE_SETUP_SCRIPT, "/root/.scripts/setup.sh")
