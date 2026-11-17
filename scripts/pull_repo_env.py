@@ -25,7 +25,7 @@ from sandbox.env_store import (
     fetch_vault_git_identity,
     resolve_gh_token,
 )
-from scripts.push_repo_env import detect_repo_name
+from sandbox.env_store import detect_repo_name
 
 
 def pull_repo_env(

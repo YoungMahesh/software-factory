@@ -164,6 +164,10 @@ _Avoid_: File size limit, code line limit, test budget, 500-line rule
 The single-organization GitHub access configuration defined via `GH_TOKEN` and `GH_ORG_NAME` in the Factory Environment Configuration (`.env`), replacing legacy multi-file secret bundles (`secrets/github-orgs.env`).
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
+**Factory Environment Configuration**:
+The consolidated configuration domain model and parser (`sandbox/config.py`) that resolves, validates, and serializes organization secrets (`GH_TOKEN`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`), repository identifiers, and service flags into child sandbox containers.
+_Avoid_: Runner env, container config, sandbox dotenv
+
 **Central Environment Store**:
 A dedicated private GitHub repository (`env-store` under `${GH_ORG_NAME}`) that securely houses SOPS-encrypted environment files and directory mappings organized by target repository name, serving as the centralized secret vault for public and private workspaces without polluting open-source codebases.
 _Avoid_: Central secrets repo, github vault, secret bucket
@@ -207,6 +211,10 @@ _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
 **Snapshot Registry**:
 A distributed catalog and metadata registry (`sandbox/snapshots.py`) tracking captured filesystem snapshots (including image ID, sandbox provenance, size, tags, and timestamps) backed by a named `modal.Dict` (`sandbox-snapshots`) with an automatic local JSON filesystem fallback (`~/.modal/sandbox-snapshots.json`).
 _Avoid_: Snapshot catalog, snapshot db, snapshot list, modal dict store
+
+**Snapshot Lifecycle**:
+The unified operational sequence managed by `sandbox/snapshots.py` that synchronizes filesystem buffers (`sync`), detects virtual machine runtime capabilities, captures copy-on-write root filesystem images, records metadata in the Snapshot Registry, and optionally terminates the source sandbox container.
+_Avoid_: Snapshot process, snapshot pipeline, snapshot flow
 
 **Multi-Profile Configuration**:
 A Modal workspace discovery and client management service (`sandbox/profiles.py`) that discovers configured workspace profiles from `MODAL_TOKENS` in `.env` or `~/.modal.toml`, and supplies profile-scoped authenticated `modal.Client` instances to discover, query, and manage sandboxes and snapshots across multiple Modal environments.

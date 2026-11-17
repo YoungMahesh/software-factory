@@ -352,3 +352,37 @@ class TestSandboxImageStaging(unittest.TestCase):
             mock_base.run_commands.assert_called_with(
                 "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
             )
+
+
+class TestConfigModule(unittest.TestCase):
+    def test_parse_env_file_text(self):
+        from sandbox.config import parse_env_file
+
+        raw = '''
+        # Comment line
+        FOO=bar
+        export BAZ="qux"
+        SPACED='hello world'
+        EMPTY=
+        '''
+        env = parse_env_file(raw)
+        self.assertEqual(env["FOO"], "bar")
+        self.assertEqual(env["BAZ"], "qux")
+        self.assertEqual(env["SPACED"], "hello world")
+        self.assertEqual(env["EMPTY"], "")
+
+    def test_resolve_factory_credentials(self):
+        from sandbox.config import resolve_factory_credentials
+
+        test_env = {
+            "GH_TOKEN": "ghp_test123",
+            "GH_ORG_NAME": "org_test",
+            "AGE_PRIVATE_KEY": "AGE-SECRET-KEY-1",
+            "MODAL_TOKENS": '[{"name": "p1"}]',
+        }
+        creds = resolve_factory_credentials(env=test_env, mutate_environ=False)
+        self.assertEqual(creds.gh_token, "ghp_test123")
+        self.assertEqual(creds.gh_org_name, "org_test")
+        self.assertEqual(creds.age_private_key, "AGE-SECRET-KEY-1")
+        self.assertEqual(creds.modal_tokens, '[{"name": "p1"}]')
+

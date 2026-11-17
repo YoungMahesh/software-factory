@@ -135,35 +135,6 @@ def validate_launch_request(req: LaunchRequest) -> None:
         used_ports[port] = flag
 
 
-def launch_sandbox(
-    req: LaunchRequest,
-    repo_root: Path | None = None,
-    build_image_fn: Callable | None = None,
-    load_pubkey_fn: Callable | None = None,
-    client: modal.Client | None = None,
-    log_cb: Callable[[str], None] | None = None,
-    register_ssh_config: bool = False,
-    append_ssh_fn: Callable | None = None,
-):
-    """Provisions a Modal sandbox via SandboxLauncher.
-
-    Retained as a backward-compatible adapter delegating to SandboxLauncher.
-    Returns a RunningSandbox tuple-like object providing (sandbox, response).
-    """
-    from sandbox.launcher import SandboxLauncher
-
-    return SandboxLauncher.run(
-        req=req,
-        repo_root=repo_root,
-        build_image_fn=build_image_fn,
-        load_pubkey_fn=load_pubkey_fn,
-        append_ssh_fn=append_ssh_fn,
-        client=client,
-        log_cb=log_cb,
-        register_ssh_config=register_ssh_config,
-    )
-
-
 def capture_snapshot_core(
     sandbox_id: str,
     ttl_days: int = 30,
@@ -175,62 +146,25 @@ def capture_snapshot_core(
 ) -> SnapshotResponse:
     """Flushes buffers and captures a filesystem snapshot of an active sandbox.
 
-    ttl_days sets the snapshot lifetime in days. If terminate is true, the
-    sandbox is terminated after capture. Registry recording is best effort;
-    its errors are ignored, while capture and termination errors propagate.
+    Deprecated adapter delegating to sandbox.snapshots.capture_sandbox_snapshot.
     """
-    from sandbox.profiles import get_all_clients, get_client_for_profile
+    import warnings
 
-    target_client = client
-    target_profile = profile
-    if target_client is None:
-        if target_profile:
-            try:
-                target_client = get_client_for_profile(target_profile)
-            except Exception:
-                target_client = None
-        else:
-            for prof_name, cli in get_all_clients().items():
-                try:
-                    sb_probe = modal.Sandbox.from_id(sandbox_id, client=cli)
-                    sb_probe.poll()
-                    target_client = cli
-                    target_profile = prof_name
-                    break
-                except Exception:
-                    pass
-
-    sandbox = (
-        modal.Sandbox.from_id(sandbox_id, client=target_client)
-        if target_client else modal.Sandbox.from_id(sandbox_id)
+    warnings.warn(
+        "capture_snapshot_core is deprecated; use sandbox.snapshots.capture_sandbox_snapshot",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    sandbox.exec("sync").wait()
+    from sandbox.snapshots import capture_sandbox_snapshot
 
-    is_vm = False
-    try:
-        vm_proc = sandbox.exec("sh", "-c", "[ -S /var/run/docker.sock ] || [ -f /swapfile ]")
-        if vm_proc.wait() == 0:
-            is_vm = True
-    except Exception:
-        is_vm = False
-
-    ttl_seconds = ttl_days * 86400
-    snapshot_image = sandbox.snapshot_filesystem(timeout=timeout, ttl=ttl_seconds)
-    image_id = snapshot_image.object_id
-
-    try:
-        from sandbox.snapshots import record_snapshot
-        record_snapshot(
-            image_id=image_id, sandbox_id=sandbox_id, name=name,
-            ttl_days=ttl_days, is_vm=is_vm, profile=target_profile,
-        )
-    except Exception:
-        pass
-
-    if terminate:
-        sandbox.terminate()
-
-    return SnapshotResponse(
-        sandbox_id=sandbox_id, image_id=image_id, ttl_days=ttl_days,
-        ttl_seconds=ttl_seconds, terminated=terminate,
+    result = capture_sandbox_snapshot(
+        sandbox_id=sandbox_id,
+        ttl_days=ttl_days,
+        terminate=terminate,
+        name=name,
+        profile=profile,
+        client=client,
+        timeout=timeout,
+        echo=False,
     )
+    return result.to_response()

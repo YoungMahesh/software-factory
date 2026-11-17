@@ -329,44 +329,13 @@ def capture_snapshot(
     terminate: bool = False,
     timeout: int = DEFAULT_SNAPSHOT_TIMEOUT,
 ) -> str:
-    print(f"🔄 Flushing filesystem buffers inside sandbox {sandbox_id}...")
-    sandbox = modal.Sandbox.from_id(sandbox_id)
-    sync_proc = sandbox.exec("sync")
-    sync_proc.wait()
+    from sandbox.snapshots import capture_sandbox_snapshot
 
-    is_vm = False
-    try:
-        vm_proc = sandbox.exec("sh", "-c", "[ -S /var/run/docker.sock ] || [ -f /swapfile ]")
-        if vm_proc.wait() == 0:
-            is_vm = True
-    except Exception:
-        is_vm = False
-
-    if is_vm:
-        print(
-            "⚠️  Notice: VM Sandbox detected. Mounted volumes and Docker daemon storage "
-            "(/var/lib/docker) are ephemeral and not persisted in root filesystem snapshots."
-        )
-
-    ttl_seconds = ttl_days * 86400
-    print(f"📸 Capturing filesystem snapshot (retention: {ttl_days} days, timeout: {timeout}s)...")
-    snapshot_image = sandbox.snapshot_filesystem(timeout=timeout, ttl=ttl_seconds)
-    image_id = snapshot_image.object_id
-
-    vm_flag = " --vm" if is_vm else ""
-    print("\n" + "=" * 60)
-    print("📸  Filesystem Snapshot Captured!")
-    print(f"  • Sandbox ID:  {sandbox_id}")
-    print(f"  • Image ID:    {image_id}")
-    print(f"  • Retention:   {ttl_days} days ({ttl_seconds}s)")
-    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
-    print("=" * 60 + "\n")
-
-    if terminate:
-        print(f"🧹 Terminating sandbox {sandbox_id}...")
-        sandbox.terminate()
-        print(f"✅ Sandbox {sandbox_id} terminated.")
-    else:
-        print(f"ℹ️  Sandbox {sandbox_id} remains running (non-destructive snapshot).")
-
-    return image_id
+    result = capture_sandbox_snapshot(
+        sandbox_id=sandbox_id,
+        ttl_days=ttl_days,
+        terminate=terminate,
+        timeout=timeout,
+        echo=True,
+    )
+    return result.image_id

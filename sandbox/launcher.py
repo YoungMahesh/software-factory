@@ -32,6 +32,7 @@ from sandbox.provenance import (
 from sandbox.config import (
     DEFAULT_METRO_PORT, DEFAULT_OPENCODE_PORT, DEFAULT_ORG,
     DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
+    resolve_factory_credentials,
 )
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
 from sandbox.formatting import append_ssh_config, generate_ssh_config_snippet
@@ -140,20 +141,12 @@ class SandboxLauncher:
         validate_launch_request(req)
 
         repo_root = self._resolve_repo_root()
+        dotenv_file = repo_root / ".env"
         clean_repo = req.repo.strip().rstrip("/") if req.repo else None
         target_repo, org_name, bare_repo = None, None, None
 
-        dotenv_file = repo_root / ".env"
-        if dotenv_file.is_file():
-            try:
-                for line in dotenv_file.read_text(encoding="utf-8").splitlines():
-                    k, _, v = line.partition("=")
-                    k, v = k.strip(), v.strip().strip("'\"")
-                    if k in ("GH_TOKEN", "GH_ORG_NAME", "MODAL_TOKENS") and v and not os.environ.get(k):
-                        os.environ[k] = v
-            except Exception:
-                pass
-        has_gh_token = bool(os.environ.get("GH_TOKEN"))
+        creds = resolve_factory_credentials(repo_root=repo_root, mutate_environ=True)
+        has_gh_token = bool(creds.gh_token or os.environ.get("GH_TOKEN"))
 
         if req.modal:
             from sandbox.profiles import parse_modal_tokens_env

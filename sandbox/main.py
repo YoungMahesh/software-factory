@@ -46,8 +46,8 @@ from sandbox.cli import (
 )
 from sandbox.core import (
     LaunchRequest,
-    launch_sandbox,
 )
+from sandbox.launcher import launch_sandbox
 
 
 def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:

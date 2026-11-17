@@ -220,6 +220,32 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         self.assertIn("Docker daemon storage", output)
         self.assertIn("--vm", output)
 
+    @patch("sandbox.snapshots.record_snapshot")
+    @patch("modal.Sandbox.from_id")
+    def test_capture_snapshot_records_in_registry(self, mock_from_id, mock_record):
+        from unittest.mock import MagicMock
+        from sandbox.snapshots import capture_sandbox_snapshot
+
+        mock_sb = MagicMock()
+        mock_from_id.return_value = mock_sb
+        mock_sync, mock_vm = MagicMock(wait=MagicMock(return_value=0)), MagicMock(wait=MagicMock(return_value=1))
+        mock_sb.exec.side_effect = lambda *a, **kw: mock_sync if a and a[0] == "sync" else mock_vm
+        mock_sb.snapshot_filesystem.return_value = MagicMock(object_id="im-catalog-123")
+        mock_record.return_value = {"image_id": "im-catalog-123", "name": "custom-name"}
+
+        res = capture_sandbox_snapshot("sb-999", ttl_days=15, name="custom-name", profile="test-prof")
+        self.assertEqual(res.image_id, "im-catalog-123")
+        self.assertEqual(res.name, "custom-name")
+        mock_record.assert_called_once_with(
+            image_id="im-catalog-123",
+            sandbox_id="sb-999",
+            name="custom-name",
+            ttl_days=15,
+            is_vm=False,
+            profile="test-prof",
+            store_name="sandbox-snapshots",
+        )
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     @patch("modal.Image.from_id")
