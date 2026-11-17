@@ -29,7 +29,7 @@ A sandbox provisioning model in `sandbox/main.py` where the Modal App name remai
 _Avoid_: Static runner, single-app runner, constant container
 
 **Control Plane Provenance**:
-The Git commit SHA, short hash, Git ref, and clean/dirty working tree status of the `software-factory` repository captured at deployment time (`modal deploy` or `modal serve`), injected into the Modal control plane function secrets, and displayed in the management Web UI header.
+The Git commit SHA, short hash, Git ref, and clean/dirty working tree status of the `software-factory` repository captured directly from the local Git repository at deployment time (`modal deploy` or `modal serve`), injected into the Modal control plane function secrets, and displayed in the management Web UI header.
 _Avoid_: Function version, runner hash, app tag
 
 **Shallow Repository Clone**:

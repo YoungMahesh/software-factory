@@ -731,11 +731,22 @@ export SOFTWARE_FACTORY_COMMIT_SHORT="$SF_COMMIT_SHORT"
 export SOFTWARE_FACTORY_REF="$SF_REF"
 export SOFTWARE_FACTORY_DIRTY="$SF_DIRTY"
 
-for var in SOFTWARE_FACTORY_COMMIT SOFTWARE_FACTORY_COMMIT_SHORT SOFTWARE_FACTORY_REF SOFTWARE_FACTORY_DIRTY; do
-    val="${!var}"
-    grep -qxF "export $var=\"$val\"" ~/.bashrc 2>/dev/null || echo "export $var=\"$val\"" >> ~/.bashrc
-    grep -qxF "$var=\"$val\"" /etc/environment 2>/dev/null || echo "$var=\"$val\"" >> /etc/environment
-done
+# Only persist static exports to ~/.bashrc and /etc/environment if TARGET_DIR is NOT a software-factory checkout
+IS_SOFTWARE_FACTORY_WORKSPACE=0
+if [ -n "${TARGET_DIR:-}" ] && [ -e "$TARGET_DIR/.git" ]; then
+    TARGET_REPO_NAME=$(basename "$TARGET_DIR" 2>/dev/null || true)
+    if [ "$TARGET_REPO_NAME" = "software-factory" ] || [ -f "$TARGET_DIR/sandbox/provenance.py" ]; then
+        IS_SOFTWARE_FACTORY_WORKSPACE=1
+    fi
+fi
+
+if [ "$IS_SOFTWARE_FACTORY_WORKSPACE" -eq 0 ]; then
+    for var in SOFTWARE_FACTORY_COMMIT SOFTWARE_FACTORY_COMMIT_SHORT SOFTWARE_FACTORY_REF SOFTWARE_FACTORY_DIRTY; do
+        val="${!var}"
+        grep -qxF "export $var=\"$val\"" ~/.bashrc 2>/dev/null || echo "export $var=\"$val\"" >> ~/.bashrc
+        grep -qxF "$var=\"$val\"" /etc/environment 2>/dev/null || echo "$var=\"$val\"" >> /etc/environment
+    done
+fi
 
 VERSION_FILE="/etc/software-factory-version.json"
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)

@@ -64,19 +64,68 @@ class TestHostGitIdentityResolution(unittest.TestCase):
 
 
 class TestSoftwareFactoryProvenanceResolution(unittest.TestCase):
-    def test_resolve_provenance_from_env(self):
+    def test_resolve_provenance_from_env_when_no_git(self):
+        with tempfile.TemporaryDirectory() as td:
+            non_git_root = Path(td)
+            env_dict = {
+                "SOFTWARE_FACTORY_COMMIT": "1111222233334444555566667777888899990000",
+                "SOFTWARE_FACTORY_COMMIT_SHORT": "1111222",
+                "SOFTWARE_FACTORY_REF": "release-v2",
+                "SOFTWARE_FACTORY_DIRTY": "1",
+            }
+            with patch.dict(os.environ, env_dict, clear=False):
+                prov = resolve_host_software_factory_provenance(repo_root=non_git_root)
+                self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "1111222233334444555566667777888899990000")
+                self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "1111222")
+                self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "release-v2")
+                self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "1")
+
+    def test_resolve_provenance_force_env_overrides_git(self):
         env_dict = {
-            "SOFTWARE_FACTORY_COMMIT": "1111222233334444555566667777888899990000",
-            "SOFTWARE_FACTORY_COMMIT_SHORT": "1111222",
-            "SOFTWARE_FACTORY_REF": "release-v2",
+            "SOFTWARE_FACTORY_FORCE_ENV": "1",
+            "SOFTWARE_FACTORY_COMMIT": "force1111222233334444555566667777888899990000",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "force11",
+            "SOFTWARE_FACTORY_REF": "release-forced",
             "SOFTWARE_FACTORY_DIRTY": "1",
         }
         with patch.dict(os.environ, env_dict, clear=False):
             prov = resolve_host_software_factory_provenance()
-            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "1111222233334444555566667777888899990000")
-            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "1111222")
-            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "release-v2")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "force1111222233334444555566667777888899990000")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "force11")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "release-forced")
             self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "1")
+
+    @patch("subprocess.run")
+    def test_resolve_provenance_git_takes_precedence_over_ambient_env(self, mock_run):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            res.returncode = 0
+            if cmd == ["git", "rev-parse", "HEAD"]:
+                res.stdout = "241b6d39b4002b420dd1636bc2e884c1ead26c41\n"
+            elif cmd == ["git", "rev-parse", "--short", "HEAD"]:
+                res.stdout = "241b6d3\n"
+            elif cmd == ["git", "symbolic-ref", "--short", "HEAD"]:
+                res.stdout = "main\n"
+            elif cmd == ["git", "status", "--porcelain"]:
+                res.stdout = ""
+            else:
+                res.stdout = ""
+            return res
+
+        mock_run.side_effect = fake_run
+
+        stale_env = {
+            "SOFTWARE_FACTORY_COMMIT": "stale32be7e4e59d0bca4681ac3878182e19c9125f989",
+            "SOFTWARE_FACTORY_COMMIT_SHORT": "stale32",
+            "SOFTWARE_FACTORY_REF": "stale-branch",
+            "SOFTWARE_FACTORY_DIRTY": "1",
+        }
+        with patch.dict(os.environ, stale_env, clear=False):
+            prov = resolve_host_software_factory_provenance()
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT"], "241b6d39b4002b420dd1636bc2e884c1ead26c41")
+            self.assertEqual(prov["SOFTWARE_FACTORY_COMMIT_SHORT"], "241b6d3")
+            self.assertEqual(prov["SOFTWARE_FACTORY_REF"], "main")
+            self.assertEqual(prov["SOFTWARE_FACTORY_DIRTY"], "0")
 
     @patch("subprocess.run")
     def test_resolve_provenance_from_git_clean(self, mock_run):
