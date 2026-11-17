@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,7 @@ from scripts.push_repo_env import (
     commit_to_env_store,
     detect_repo_name,
     ensure_gitignore,
+    main,
     push_repo_env,
     push_repo_git_identity,
 )
@@ -90,6 +92,49 @@ class TestPushRepoEnv(unittest.TestCase):
 
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_custom_env_without_dest_fails(self, mock_encrypt, mock_commit):
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=hello\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            recipient="age1testkey",
+            dest_name=None,
+        )
+
+        self.assertFalse(res.success)
+        self.assertIn("-d/--dest", res.message)
+        mock_encrypt.assert_not_called()
+        mock_commit.assert_not_called()
+
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_custom_env_with_dest_succeeds(self, mock_encrypt, mock_commit):
+        mock_commit.return_value = "commit_sha_local"
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=local_val\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            recipient="age1testkey",
+            dest_name="default.env",
+        )
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.target_path, "my-app/default.env")
+        mock_encrypt.assert_called_once()
+        mock_commit.assert_called_once()
+
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
     def test_push_repo_git_identity_success(self, mock_encrypt, mock_commit):
         mock_commit.return_value = "git_sha_456"
 
@@ -127,6 +172,24 @@ class TestPushRepoEnv(unittest.TestCase):
 
         self.assertFalse(res.success)
         self.assertIn("Git author name and email are required", res.message)
+
+    @patch("scripts.push_repo_env.push_repo_env")
+    def test_main_cli_custom_env_without_dest_rejected(self, mock_push):
+        with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local"]):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertNotEqual(ctx.exception.code, 0)
+        mock_push.assert_not_called()
+
+    @patch("scripts.push_repo_env.push_repo_env")
+    def test_main_cli_custom_env_with_dest_accepted(self, mock_push):
+        mock_push.return_value = MagicMock(success=True, target_path="repo/default.env", commit_sha="123", org_name="sFactory0")
+        with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local", "-d", "default.env"]):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertEqual(ctx.exception.code, 0)
+        mock_push.assert_called_once()
+        self.assertEqual(mock_push.call_args.kwargs["dest_name"], "default.env")
 
 
 if __name__ == "__main__":

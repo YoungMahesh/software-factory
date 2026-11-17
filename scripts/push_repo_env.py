@@ -158,13 +158,27 @@ def push_repo_env(
     org_name: str | None = None,
     gh_token: str | None = None,
     recipient: str | None = None,
-    dest_name: str = "default.env",
+    dest_name: str | None = None,
     vault_repo: str = DEFAULT_VAULT_REPO,
 ) -> PushResult:
     """Encrypts local .env and commits to env-store vault."""
     resolved_env_file = env_file or (repo_dir / ".env")
     if not resolved_env_file.is_file():
         return PushResult(False, repo_name or "", "", message=f"Source .env file not found: {resolved_env_file}")
+
+    if not dest_name:
+        if resolved_env_file.name == ".env":
+            dest_name = "default.env"
+        else:
+            return PushResult(
+                False,
+                repo_name or "",
+                "",
+                message=(
+                    f"When source environment file is not '.env' ('{resolved_env_file.name}'), "
+                    "you must also pass -d/--dest to define the destination in env-store."
+                ),
+            )
 
     detected_org, detected_name = detect_repo_name(repo_dir)
     final_repo = repo_name or detected_name
@@ -303,10 +317,20 @@ def main() -> None:
         parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
         parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
         parser.add_argument("-t", "--token", help="GitHub Personal Access Token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")
-        parser.add_argument("-e", "--env", type=Path, default=Path(".env"), help="Path to local source .env file.")
-        parser.add_argument("-d", "--dest", default="default.env", help="Destination file name in vault (default: default.env).")
+        parser.add_argument("-e", "--env", type=Path, default=Path(".env"), help="Path to local source .env file (default: .env).")
+        parser.add_argument(
+            "-d",
+            "--dest",
+            default=None,
+            help="Destination file name in vault (required if -e is not .env; defaults to default.env when -e is .env).",
+        )
         parser.add_argument("--recipient", default=DEFAULT_AGE_RECIPIENT, help="Age public key recipient for encryption.")
         args = parser.parse_args()
+
+        if args.env.name != ".env" and not args.dest:
+            parser.error(
+                f"When -e/--env is not '.env' ('{args.env}'), you must also pass -d/--dest to define the destination in env-store."
+            )
 
         cwd = Path.cwd()
         res = push_repo_env(

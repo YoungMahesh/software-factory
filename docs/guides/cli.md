@@ -86,12 +86,38 @@ modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace.
 
 ```bash
-# Push project application environment secrets to <repo>/default.env
-push-repo-env [-r <repo>] [-o <org>] [-e .env]
+# Push default project application environment secrets (.env -> <repo>/default.env)
+push-repo-env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
+
+# Push custom environment secrets (e.g. .env.local -> <repo>/default.env)
+# NOTE: -d/--dest is REQUIRED whenever -e is not .env
+push-repo-env -e .env.local -d default.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
 # Push repository-specific Git authorship to <repo>/git.env
-push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <org>]
+push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 ```
+
+#### `push-repo-env` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-r, --repo` | string | Origin remote | Target repository name. |
+| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
+| `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
+| `-e, --env` | path | `.env` | Path to local source environment file. |
+| `-d, --dest` | string | `default.env` | Destination filename in vault. **Required if `-e` is not `.env`**. |
+| `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
+
+#### `push-repo-env git` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--name` | string | `GIT_AUTHOR_NAME` | Git author and committer name (or configured `git config user.name`). |
+| `--email` | string | `GIT_AUTHOR_EMAIL` | Git author and committer email (or configured `git config user.email`). |
+| `-r, --repo` | string | Origin remote | Target repository name. |
+| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
+| `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
+| `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
 
 ### `pull-repo-env`
 Pulls and decrypts environment secrets from the `env-store` vault into the local directory (mode `0600`) and applies repository Git authorship locally to `.git/config`.
