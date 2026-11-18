@@ -12,9 +12,11 @@ from scripts.push_repo_env import (
     commit_to_env_store,
     detect_repo_name,
     ensure_gitignore,
+    fetch_github_file,
     main,
     push_repo_env,
     push_repo_git_identity,
+    update_env_map_content,
 )
 
 
@@ -26,15 +28,30 @@ class TestPushRepoEnv(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_update_env_map_content_new(self):
+        content = update_env_map_content(None, "default.env", ".env")
+        self.assertEqual(content, "default.env = .env\n")
+
+    def test_update_env_map_content_append(self):
+        initial = "default.env = .env\n"
+        content = update_env_map_content(initial, "local.env", ".env.local")
+        self.assertIn("default.env = .env", content)
+        self.assertIn("local.env = .env.local", content)
+
+    def test_update_env_map_content_update_existing(self):
+        initial = "default.env = .env\nlocal.env = .env.old\n"
+        content = update_env_map_content(initial, "local.env", ".env.local")
+        self.assertIn("local.env = .env.local", content)
+        self.assertNotIn(".env.old", content)
+        self.assertEqual(content.count("local.env"), 1)
+
     def test_ensure_gitignore_creates_and_appends(self):
         gitignore = self.repo_dir / ".gitignore"
-        # File doesn't exist yet
         updated = ensure_gitignore(self.repo_dir)
         self.assertTrue(updated)
         self.assertTrue(gitignore.is_file())
         self.assertIn(".env*", gitignore.read_text())
 
-        # Calling again should be idempotent
         updated2 = ensure_gitignore(self.repo_dir)
         self.assertFalse(updated2)
 
@@ -51,9 +68,7 @@ class TestPushRepoEnv(unittest.TestCase):
 
     @patch("urllib.request.urlopen")
     def test_commit_to_env_store_new_file(self, mock_urlopen):
-        # 1. GET returns 404 (file doesn't exist yet)
         get_err = urllib.error.HTTPError(url="http://example", code=404, msg="Not Found", hdrs={}, fp=None)
-        # 2. PUT returns 201 (created)
         put_resp = MagicMock()
         put_resp.status = 201
         put_resp.read.return_value = b'{"commit": {"sha": "abc123"}}'
@@ -69,10 +84,12 @@ class TestPushRepoEnv(unittest.TestCase):
         )
         self.assertEqual(sha, "abc123")
 
+    @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
-    def test_push_repo_env_orchestration(self, mock_encrypt, mock_commit):
+    def test_push_repo_env_orchestration(self, mock_encrypt, mock_commit, mock_fetch):
         mock_commit.return_value = "commit_sha_123"
+        mock_fetch.return_value = None
         env_file = self.repo_dir / ".env"
         env_file.write_text("API_KEY=hello\nDB_URL=postgres://localhost\n")
 
@@ -88,7 +105,12 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertTrue(res.success)
         self.assertEqual(res.commit_sha, "commit_sha_123")
         mock_encrypt.assert_called_once()
-        mock_commit.assert_called_once()
+        self.assertEqual(mock_commit.call_count, 2)
+        # Call 1: encrypted default.env
+        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/default.env")
+        # Call 2: env.map manifest
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"default.env = .env\n")
 
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
@@ -111,10 +133,12 @@ class TestPushRepoEnv(unittest.TestCase):
         mock_encrypt.assert_not_called()
         mock_commit.assert_not_called()
 
+    @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
-    def test_push_repo_env_custom_env_with_dest_succeeds(self, mock_encrypt, mock_commit):
+    def test_push_repo_env_custom_env_with_dest_succeeds(self, mock_encrypt, mock_commit, mock_fetch):
         mock_commit.return_value = "commit_sha_local"
+        mock_fetch.return_value = None
         custom_env = self.repo_dir / ".env.local"
         custom_env.write_text("API_KEY=local_val\n")
 
@@ -125,13 +149,67 @@ class TestPushRepoEnv(unittest.TestCase):
             org_name="sFactory0",
             gh_token="ghp_test",
             recipient="age1testkey",
-            dest_name="default.env",
+            dest_name="local.env",
         )
 
         self.assertTrue(res.success)
-        self.assertEqual(res.target_path, "my-app/default.env")
+        self.assertEqual(res.target_path, "my-app/local.env")
         mock_encrypt.assert_called_once()
-        mock_commit.assert_called_once()
+        self.assertEqual(mock_commit.call_count, 2)
+        # Call 1: encrypted local.env
+        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/local.env")
+        # Call 2: env.map
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"local.env = .env.local\n")
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_custom_preserves_existing_default_env(self, mock_encrypt, mock_commit, mock_fetch):
+        def fake_fetch(owner, repo, path, token):
+            if path == "my-app/default.env":
+                return "ENC_CIPHERTEXT"
+            return None
+
+        mock_fetch.side_effect = fake_fetch
+        mock_commit.return_value = "commit_sha_local"
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=local_val\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            dest_name="local.env",
+        )
+
+        self.assertTrue(res.success)
+        map_bytes = mock_commit.call_args_list[1].kwargs["content_bytes"].decode("utf-8")
+        self.assertIn("local.env = .env.local", map_bytes)
+        self.assertIn("default.env = .env", map_bytes)
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_skips_commit_if_env_map_unchanged(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = "default.env = .env\n"
+        mock_commit.return_value = "sha1"
+        env_file = self.repo_dir / ".env"
+        env_file.write_text("FOO=bar\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=env_file,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+        )
+
+        self.assertTrue(res.success)
+        # Commit should only be called once for default.env; env.map commit skipped because identical
+        self.assertEqual(mock_commit.call_count, 1)
 
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")

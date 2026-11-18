@@ -83,15 +83,17 @@ modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 ## Central Environment Store CLI Utilities
 
 ### `push-repo-env`
-Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace.
+Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace. Automatically creates and updates `<repo>/env.map` so destination mappings are immediately discoverable by `pull-repo-env` and git worktree propagation.
 
 ```bash
 # Push default project application environment secrets (.env -> <repo>/default.env)
+# Automatically creates/maintains default.env = .env in <repo>/env.map
 push-repo-env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Push custom environment secrets (e.g. .env.local -> <repo>/default.env)
+# Push custom environment secrets (e.g. .env.local -> <repo>/local.env)
 # NOTE: -d/--dest is REQUIRED whenever -e is not .env
-push-repo-env -e .env.local -d default.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
+# Automatically updates <repo>/env.map mapping local.env = .env.local
+push-repo-env -e .env.local -d local.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
 # Push repository-specific Git authorship to <repo>/git.env
 push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
@@ -105,7 +107,7 @@ push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <
 | `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
 | `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
 | `-e, --env` | path | `.env` | Path to local source environment file. |
-| `-d, --dest` | string | `default.env` | Destination filename in vault. **Required if `-e` is not `.env`**. |
+| `-d, --dest` | string | `default.env` | Destination filename in vault. **Required if `-e` is not `.env`**. Automatically creates or updates `<repo>/env.map` in `env-store` mapping to the relative workspace path. |
 | `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
 
 #### `push-repo-env git` Options

@@ -27,10 +27,12 @@ from sandbox.env_store import (
     commit_to_env_store,
     detect_repo_name,
     ensure_gitignore,
+    fetch_github_file,
     push_repo_env as _push_repo_env,
     push_repo_git_identity as _push_repo_git_identity,
     resolve_gh_token,
     run_sops_encrypt,
+    update_env_map_content,
 )
 
 
@@ -47,6 +49,7 @@ def push_repo_env(
 ) -> PushResult:
     kwargs.setdefault("encrypt_fn", run_sops_encrypt)
     kwargs.setdefault("commit_fn", commit_to_env_store)
+    kwargs.setdefault("fetch_fn", fetch_github_file)
     return _push_repo_env(
         repo_dir=repo_dir,
         env_file=env_file,

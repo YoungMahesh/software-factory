@@ -7,13 +7,12 @@ into Modal sandboxes as defined in ADR 0057 and ADR 0067.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import re
-
 import base64
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -35,7 +34,7 @@ def serialize_env_dict(env_dict: dict[str, str]) -> str:
     lines: list[str] = []
     for k, v in env_dict.items():
         if any(c in v for c in (" ", "\t", "\n", "#", "'", '"')):
-            val = f"'{v}'" if "'" not in v else (f'"{v}"' if '"' not in v else f"'{v.replace("'", "'\\''")}'")
+            val = f"'{v}'" if "'" not in v else (f'"{v}"' if '"' not in v else f"'{v.replace('\'', '\'\\\'\'')}'")
             lines.append(f"{k}={val}")
         else:
             lines.append(f"{k}={v}")
@@ -47,16 +46,9 @@ def is_encrypted_sops_payload(raw_text: str) -> bool:
     return any(ind in raw_text for ind in indicators)
 
 def parse_env_map(raw_text: str) -> list[tuple[str, str]]:
-    """Parses plaintext env.map content returning a list of (src_rel, dest_rel) tuples.
-
-    If the manifest is encrypted with SOPS, emits a warning and returns an empty list.
-    """
+    """Parses plaintext env.map content returning a list of (src_rel, dest_rel) tuples."""
     if is_encrypted_sops_payload(raw_text):
-        warnings.warn(
-            "env.map is encrypted with SOPS. env.map must be a plaintext manifest. Skipping decryption.",
-            UserWarning,
-            stacklevel=2,
-        )
+        warnings.warn("env.map is encrypted with SOPS. env.map must be a plaintext manifest. Skipping decryption.", UserWarning, stacklevel=2)
         return []
 
     mappings: list[tuple[str, str]] = []
@@ -72,6 +64,28 @@ def parse_env_map(raw_text: str) -> list[tuple[str, str]]:
                 mappings.append((src, dest))
     return mappings
 
+def update_env_map_content(raw_text: str | None, src_name: str, dest_rel_path: str) -> str:
+    """Updates or appends a mapping in env.map content, ensuring uniqueness by src_name."""
+    lines: list[str] = []
+    found = False
+    clean_dest = dest_rel_path.strip().lstrip("/")
+    if raw_text:
+        for line in raw_text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                lines.append(line)
+                continue
+            if "=" in line:
+                s, _ = line.split("=", 1)
+                if s.strip() == src_name:
+                    lines.append(f"{src_name} = {clean_dest}")
+                    found = True
+                    continue
+            lines.append(line)
+    if not found:
+        lines.append(f"{src_name} = {clean_dest}")
+    return "\n".join(lines).strip() + "\n"
+
 def resolve_gh_token(explicit_token: str | None = None) -> str | None:
     """Resolves GitHub token from explicit arg, env (GH_TOKEN/GITHUB_TOKEN), or gh CLI."""
     if explicit_token and explicit_token.strip():
@@ -81,12 +95,7 @@ def resolve_gh_token(explicit_token: str | None = None) -> str | None:
         return from_env.strip()
     if shutil.which("gh"):
         try:
-            res = subprocess.run(
-                ["gh", "auth", "token"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=False)
             if res.returncode == 0 and res.stdout.strip():
                 return res.stdout.strip()
         except Exception:
@@ -94,10 +103,7 @@ def resolve_gh_token(explicit_token: str | None = None) -> str | None:
     return None
 
 def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | None:
-    """Fetches a file from GitHub repository using the Contents REST API.
-
-    Returns the decoded plaintext/ciphertext content, or None if not found (404).
-    """
+    """Fetches a file from GitHub repository using the Contents REST API."""
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     req = urllib.request.Request(
         url,
@@ -107,13 +113,11 @@ def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | Non
             "User-Agent": "software-factory-env-store",
         },
     )
-
     try:
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if isinstance(data, dict) and "content" in data:
-                content_b64 = data["content"]
-                return base64.b64decode(content_b64).decode("utf-8")
+                return base64.b64decode(data["content"]).decode("utf-8")
             return None
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -138,13 +142,7 @@ def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None) ->
         tmp_path = Path(tmp.name)
 
     try:
-        res = subprocess.run(
-            ["sops", "decrypt", str(tmp_path)],
-            capture_output=True,
-            text=True,
-            env=env,
-            check=False,
-        )
+        res = subprocess.run(["sops", "decrypt", str(tmp_path)], capture_output=True, text=True, env=env, check=False)
         if res.returncode != 0:
             raise RuntimeError(f"SOPS decryption failed: {res.stderr.strip()}")
         return res.stdout
@@ -160,10 +158,7 @@ def fetch_vault_env_raw(
     env_repo_name: str = DEFAULT_VAULT_REPO,
     target_filename: str = "default.env",
 ) -> str | None:
-    """Fetches and decrypts environment file text for a target repository from env-store.
-
-    Returns the decrypted plaintext raw string, or None if not found in the vault.
-    """
+    """Fetches and decrypts environment file text for a target repository from env-store."""
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
     resolved_org = org_name or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
@@ -188,10 +183,7 @@ def fetch_vault_env(
     env_repo_name: str = DEFAULT_VAULT_REPO,
     target_filename: str = "default.env",
 ) -> dict[str, str] | None:
-    """Fetches and decrypts environment variables for a target repository from env-store.
-
-    Returns the decrypted dictionary, or None if not found in the vault.
-    """
+    """Fetches and decrypts environment variables for a target repository from env-store."""
     raw_text = fetch_vault_env_raw(
         repo_name=repo_name,
         org_name=org_name,
@@ -211,12 +203,7 @@ def fetch_vault_env_bundle(
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
 ) -> dict[str, Any] | None:
-    """Fetches environment bundle (mapped files + manifest) for a repository from env-store.
-
-    Checks for env.map. If present and valid plaintext, fetches and decrypts all mapped files.
-    If absent, falls back to fetching and decrypting default.env with mapping default.env=.env.
-    Returns a bundle dict with 'env_map_content', 'mappings', and 'files', or None if not found.
-    """
+    """Fetches environment bundle (mapped files + manifest) for a repository from env-store."""
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
     resolved_org = org_name or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
@@ -249,23 +236,11 @@ def fetch_vault_env_bundle(
                 if decrypted is not None:
                     files[src] = decrypted
                 else:
-                    warnings.warn(
-                        f"Mapped secret file '{src}' not found in {bare_repo} env-store.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
+                    warnings.warn(f"Mapped secret file '{src}' not found in {bare_repo} env-store.", UserWarning, stacklevel=2)
             except Exception as e:
-                warnings.warn(
-                    f"Failed to decrypt mapped secret file '{src}' for {bare_repo}: {e}",
-                    UserWarning,
-                    stacklevel=2,
-                )
+                warnings.warn(f"Failed to decrypt mapped secret file '{src}' for {bare_repo}: {e}", UserWarning, stacklevel=2)
 
-        return {
-            "env_map_content": raw_env_map,
-            "mappings": mappings,
-            "files": files,
-        }
+        return {"env_map_content": raw_env_map, "mappings": mappings, "files": files}
 
     default_env_text = fetch_vault_env_raw(
         repo_name=bare_repo,
@@ -291,11 +266,7 @@ def fetch_vault_git_identity(
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
 ) -> dict[str, str] | None:
-    """Fetches and decrypts repository-specific git authorship from <repo>/git.env in env-store.
-
-    Returns a dictionary containing author keys (GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL),
-    or None if git.env is not configured in the vault.
-    """
+    """Fetches and decrypts repository-specific git authorship from <repo>/git.env in env-store."""
     return fetch_vault_env(
         repo_name=repo_name,
         org_name=org_name,
@@ -402,8 +373,9 @@ def push_repo_env(
     vault_repo: str = DEFAULT_VAULT_REPO,
     encrypt_fn: Any = None,
     commit_fn: Any = None,
+    fetch_fn: Any = None,
 ) -> PushResult:
-    """Encrypts local .env and commits to env-store vault."""
+    """Encrypts local .env, commits to env-store vault, and automatically updates env.map."""
     src = env_file or (repo_dir / ".env")
     if not src.is_file():
         return PushResult(False, repo_name or "", "", message=f"Source .env file not found: {src}")
@@ -427,6 +399,33 @@ def push_repo_env(
     ensure_gitignore(repo_dir)
     vault_path = f"{final_repo}/{dest_name}"
     sha = _encrypt_and_commit(src, final_org, vault_repo, vault_path, token, recip, encrypt_fn=encrypt_fn, commit_fn=commit_fn)
+
+    # Maintain env.map manifest in env-store
+    fetch_f = fetch_fn or fetch_github_file
+    com_f = commit_fn or commit_to_env_store
+    map_path = f"{final_repo}/env.map"
+    raw_map = fetch_f(final_org, vault_repo, map_path, token=token)
+
+    try:
+        rel_dest = str(src.resolve().relative_to(repo_dir.resolve()))
+    except ValueError:
+        rel_dest = src.name
+
+    new_map = update_env_map_content(raw_map, dest_name, rel_dest)
+    if raw_map is None and dest_name != "default.env":
+        if fetch_f(final_org, vault_repo, f"{final_repo}/default.env", token=token):
+            new_map = update_env_map_content(new_map, "default.env", ".env")
+
+    if new_map != (raw_map or ""):
+        com_f(
+            owner=final_org,
+            env_repo=vault_repo,
+            path=map_path,
+            content_bytes=new_map.encode("utf-8"),
+            token=token,
+            commit_message=f"chore({final_repo}): update env.map manifest",
+        )
+
     return PushResult(True, final_repo, vault_path, commit_sha=sha, message="Pushed successfully.", org_name=final_org)
 
 def push_repo_git_identity(
@@ -478,4 +477,3 @@ def push_repo_git_identity(
     finally:
         if tmp_src_path.is_file():
             tmp_src_path.unlink()
-
