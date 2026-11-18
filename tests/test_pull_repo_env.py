@@ -7,6 +7,12 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+from sandbox.env_store import (
+    decrypt_sops_payload,
+    fetch_vault_env_raw,
+    get_file_extension,
+    is_sops_supported_format,
+)
 from scripts.pull_repo_env import main as cli_main, pull_repo_env
 
 
@@ -17,6 +23,50 @@ class TestPullRepoEnv(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_sops_supported_format_resolution(self):
+        self.assertTrue(is_sops_supported_format("default.env"))
+        self.assertTrue(is_sops_supported_format(".env"))
+        self.assertTrue(is_sops_supported_format("local.env"))
+        self.assertTrue(is_sops_supported_format("config.json"))
+        self.assertTrue(is_sops_supported_format("settings.yaml"))
+        self.assertTrue(is_sops_supported_format("docker-compose.yml"))
+        self.assertTrue(is_sops_supported_format("app.ini"))
+
+        self.assertFalse(is_sops_supported_format(".env.local"))
+        self.assertFalse(is_sops_supported_format("local.custom"))
+        self.assertFalse(is_sops_supported_format("cert.pem"))
+        self.assertFalse(is_sops_supported_format("binary.bin"))
+        self.assertFalse(is_sops_supported_format("no_ext_file"))
+
+    @patch("subprocess.run")
+    def test_decrypt_sops_payload_passes_filename_override(self, mock_run):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "FOO=BAR\n"
+        mock_run.return_value = mock_proc
+
+        result = decrypt_sops_payload("CIPHERTEXT", target_filename="local.custom")
+        self.assertEqual(result, "FOO=BAR\n")
+        cmd_called = mock_run.call_args[0][0]
+        self.assertIn("--filename-override", cmd_called)
+        self.assertIn("local.custom", cmd_called)
+
+    @patch("sandbox.env_store.fetch_github_file")
+    @patch("sandbox.env_store.decrypt_sops_payload")
+    def test_fetch_vault_env_raw_passes_target_filename(self, mock_decrypt, mock_fetch):
+        mock_fetch.return_value = "CIPHERTEXT"
+        mock_decrypt.return_value = "DECRYPTED"
+
+        res = fetch_vault_env_raw(
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            age_key="AGE-TEST-KEY",
+            target_filename="custom.pem",
+        )
+        self.assertEqual(res, "DECRYPTED")
+        mock_decrypt.assert_called_once_with("CIPHERTEXT", age_private_key="AGE-TEST-KEY", target_filename="custom.pem")
 
     @patch("scripts.pull_repo_env.fetch_vault_env_raw")
     def test_pull_repo_env_success_preserves_quotes_and_comments(self, mock_fetch_raw):
@@ -110,7 +160,6 @@ class TestPullRepoEnv(unittest.TestCase):
                 cli_main()
             self.assertEqual(cm.exception.code, 0)
 
-
     @patch("subprocess.run")
     @patch("scripts.pull_repo_env.fetch_vault_git_identity")
     @patch("scripts.pull_repo_env.fetch_vault_env_raw")
@@ -144,7 +193,6 @@ class TestPullRepoEnv(unittest.TestCase):
             check=False,
         )
 
-
     @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
     def test_pull_repo_env_bundle_materialization_and_vault_staging(self, mock_fetch_bundle):
         (self.repo_dir / ".git").mkdir()
@@ -176,7 +224,29 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertTrue((vault_dir / "api.env").is_file())
         self.assertEqual((vault_dir / "env.map").read_text(), bundle["env_map_content"])
 
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_bundle_binary_safe_materialization(self, mock_fetch_bundle):
+        (self.repo_dir / ".git").mkdir()
+        raw_binary_content = b"\x00\x01\x02\xffBINARY_DATA"
+        bundle = {
+            "env_map_content": "token.bin = certs/token.bin\n",
+            "mappings": [("token.bin", "certs/token.bin")],
+            "files": {"token.bin": raw_binary_content},
+        }
+        mock_fetch_bundle.return_value = bundle
+
+        success = pull_repo_env(
+            repo_name="my-app",
+            org_name="sFactory0",
+            dest_file=self.repo_dir / ".env",
+            gh_token="ghp_test",
+        )
+
+        self.assertTrue(success)
+        token_bin = self.repo_dir / "certs" / "token.bin"
+        self.assertTrue(token_bin.is_file())
+        self.assertEqual(token_bin.read_bytes(), raw_binary_content)
+
 
 if __name__ == "__main__":
-
     unittest.main()

@@ -162,6 +162,76 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"local.env = .env.local\n")
 
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_unknown_extension_without_allow_binary_fails(self, mock_encrypt, mock_commit):
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=local_val\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            recipient="age1testkey",
+            dest_name="local.custom",
+        )
+
+        self.assertFalse(res.success)
+        self.assertIn("unsupported extension", res.message)
+        self.assertIn("--allow-binary", res.message)
+        mock_encrypt.assert_not_called()
+        mock_commit.assert_not_called()
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_unknown_extension_with_allow_binary_succeeds(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_commit.return_value = "commit_sha_bin"
+        mock_fetch.return_value = None
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=local_val\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            recipient="age1testkey",
+            dest_name="local.custom",
+            allow_binary=True,
+        )
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.target_path, "my-app/local.custom")
+        mock_encrypt.assert_called_once()
+        self.assertEqual(mock_commit.call_count, 2)
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_passes_filename_override_to_encrypt(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_commit.return_value = "commit_sha_override"
+        mock_fetch.return_value = None
+        custom_env = self.repo_dir / ".env.local"
+        custom_env.write_text("API_KEY=val\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=custom_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            dest_name="local.env",
+        )
+
+        self.assertTrue(res.success)
+        mock_encrypt.assert_called_once()
+        call_kwargs = mock_encrypt.call_args.kwargs
+        self.assertEqual(call_kwargs.get("filename_override"), "local.env")
+
     @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
@@ -268,6 +338,16 @@ class TestPushRepoEnv(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 0)
         mock_push.assert_called_once()
         self.assertEqual(mock_push.call_args.kwargs["dest_name"], "default.env")
+
+    @patch("scripts.push_repo_env.push_repo_env")
+    def test_main_cli_allow_binary_flag_passed(self, mock_push):
+        mock_push.return_value = MagicMock(success=True, target_path="repo/local.custom", commit_sha="123", org_name="sFactory0")
+        with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local", "-d", "local.custom", "--allow-binary"]):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertEqual(ctx.exception.code, 0)
+        mock_push.assert_called_once()
+        self.assertTrue(mock_push.call_args.kwargs["allow_binary"])
 
 
 if __name__ == "__main__":

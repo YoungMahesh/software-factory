@@ -23,6 +23,16 @@ import warnings
 
 DEFAULT_KEY_FILE = Path.home() / ".config" / "sops" / "age" / "keys.txt"
 DEFAULT_VAULT_REPO = "env-store"
+SOPS_SUPPORTED_EXTENSIONS = {".env", ".json", ".yaml", ".yml", ".ini"}
+
+def get_file_extension(filename: str | Path) -> str:
+    """Returns lowercased suffix or .env if file is named .env."""
+    name = Path(filename).name
+    return ".env" if name == ".env" else Path(filename).suffix.lower()
+
+def is_sops_supported_format(filename: str | Path) -> bool:
+    """Checks whether the filename extension is recognized by SOPS."""
+    return get_file_extension(filename) in SOPS_SUPPORTED_EXTENSIONS
 
 def parse_env_text(raw_text: str) -> dict[str, str]:
     """Parses .env string content into a dictionary of key-value pairs."""
@@ -50,32 +60,23 @@ def parse_env_map(raw_text: str) -> list[tuple[str, str]]:
     if is_encrypted_sops_payload(raw_text):
         warnings.warn("env.map is encrypted with SOPS. env.map must be a plaintext manifest. Skipping decryption.", UserWarning, stacklevel=2)
         return []
-
     mappings: list[tuple[str, str]] = []
     for line in raw_text.splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" in line:
+        if line and not line.startswith("#") and "=" in line:
             src, dest = line.split("=", 1)
-            src = src.strip()
-            dest = dest.strip().lstrip("/")
-            if src and dest:
-                mappings.append((src, dest))
+            s, d = src.strip(), dest.strip().lstrip("/")
+            if s and d:
+                mappings.append((s, d))
     return mappings
 
 def update_env_map_content(raw_text: str | None, src_name: str, dest_rel_path: str) -> str:
     """Updates or appends a mapping in env.map content, ensuring uniqueness by src_name."""
-    lines: list[str] = []
-    found = False
-    clean_dest = dest_rel_path.strip().lstrip("/")
+    lines, found, clean_dest = [], False, dest_rel_path.strip().lstrip("/")
     if raw_text:
         for line in raw_text.splitlines():
             stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                lines.append(line)
-                continue
-            if "=" in line:
+            if stripped and not stripped.startswith("#") and "=" in line:
                 s, _ = line.split("=", 1)
                 if s.strip() == src_name:
                     lines.append(f"{src_name} = {clean_dest}")
@@ -107,18 +108,12 @@ def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | Non
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     req = urllib.request.Request(
         url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "software-factory-env-store",
-        },
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "User-Agent": "software-factory-env-store"},
     )
     try:
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, dict) and "content" in data:
-                return base64.b64decode(data["content"]).decode("utf-8")
-            return None
+            return base64.b64decode(data["content"]).decode("utf-8") if isinstance(data, dict) and "content" in data else None
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
@@ -126,7 +121,7 @@ def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | Non
     except Exception:
         return None
 
-def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None) -> str:
+def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None, target_filename: str | None = None) -> str:
     """Decrypts a SOPS-encrypted payload string returning plaintext."""
     if not shutil.which("sops"):
         raise RuntimeError("sops executable not found in PATH.")
@@ -137,12 +132,17 @@ def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None) ->
     elif "SOPS_AGE_KEY" not in env and DEFAULT_KEY_FILE.is_file():
         env["SOPS_AGE_KEY_FILE"] = str(DEFAULT_KEY_FILE)
 
-    with tempfile.NamedTemporaryFile("w+", suffix=".env", delete=False) as tmp:
+    suffix = Path(target_filename).suffix if target_filename else ".env"
+    with tempfile.NamedTemporaryFile("w+", suffix=suffix or ".env", delete=False) as tmp:
         tmp.write(ciphertext)
         tmp_path = Path(tmp.name)
 
     try:
-        res = subprocess.run(["sops", "decrypt", str(tmp_path)], capture_output=True, text=True, env=env, check=False)
+        cmd = ["sops", "decrypt"]
+        if target_filename:
+            cmd.extend(["--filename-override", target_filename])
+        cmd.append(str(tmp_path))
+        res = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
         if res.returncode != 0:
             raise RuntimeError(f"SOPS decryption failed: {res.stderr.strip()}")
         return res.stdout
@@ -173,7 +173,10 @@ def fetch_vault_env_raw(
     if not ciphertext:
         return None
 
-    return decrypt_sops_payload(ciphertext, age_private_key=resolved_age_key)
+    try:
+        return decrypt_sops_payload(ciphertext, age_private_key=resolved_age_key, target_filename=target_filename)
+    except TypeError:
+        return decrypt_sops_payload(ciphertext, age_private_key=resolved_age_key)
 
 def fetch_vault_env(
     repo_name: str,
@@ -184,17 +187,8 @@ def fetch_vault_env(
     target_filename: str = "default.env",
 ) -> dict[str, str] | None:
     """Fetches and decrypts environment variables for a target repository from env-store."""
-    raw_text = fetch_vault_env_raw(
-        repo_name=repo_name,
-        org_name=org_name,
-        gh_token=gh_token,
-        age_key=age_key,
-        env_repo_name=env_repo_name,
-        target_filename=target_filename,
-    )
-    if raw_text is None:
-        return None
-    return parse_env_text(raw_text)
+    raw_text = fetch_vault_env_raw(repo_name=repo_name, org_name=org_name, gh_token=gh_token, age_key=age_key, env_repo_name=env_repo_name, target_filename=target_filename)
+    return parse_env_text(raw_text) if raw_text is not None else None
 
 def fetch_vault_env_bundle(
     repo_name: str,
@@ -215,48 +209,24 @@ def fetch_vault_env_bundle(
 
     env_map_path = f"{bare_repo}/env.map"
     raw_env_map = fetch_github_file(resolved_org, env_repo_name, env_map_path, token=resolved_token)
-
-    mappings: list[tuple[str, str]] = []
-    if raw_env_map:
-        mappings = parse_env_map(raw_env_map)
-
+    mappings = parse_env_map(raw_env_map) if raw_env_map else []
     files: dict[str, str] = {}
 
     if mappings:
         for src, dest in mappings:
             try:
-                decrypted = fetch_vault_env_raw(
-                    repo_name=bare_repo,
-                    org_name=resolved_org,
-                    gh_token=resolved_token,
-                    age_key=resolved_age_key,
-                    env_repo_name=env_repo_name,
-                    target_filename=src,
-                )
+                decrypted = fetch_vault_env_raw(repo_name=bare_repo, org_name=resolved_org, gh_token=resolved_token, age_key=resolved_age_key, env_repo_name=env_repo_name, target_filename=src)
                 if decrypted is not None:
                     files[src] = decrypted
                 else:
                     warnings.warn(f"Mapped secret file '{src}' not found in {bare_repo} env-store.", UserWarning, stacklevel=2)
             except Exception as e:
                 warnings.warn(f"Failed to decrypt mapped secret file '{src}' for {bare_repo}: {e}", UserWarning, stacklevel=2)
-
         return {"env_map_content": raw_env_map, "mappings": mappings, "files": files}
 
-    default_env_text = fetch_vault_env_raw(
-        repo_name=bare_repo,
-        org_name=resolved_org,
-        gh_token=resolved_token,
-        age_key=resolved_age_key,
-        env_repo_name=env_repo_name,
-        target_filename="default.env",
-    )
+    default_env_text = fetch_vault_env_raw(repo_name=bare_repo, org_name=resolved_org, gh_token=resolved_token, age_key=resolved_age_key, env_repo_name=env_repo_name, target_filename="default.env")
     if default_env_text is not None:
-        return {
-            "env_map_content": "default.env=.env\n",
-            "mappings": [("default.env", ".env")],
-            "files": {"default.env": default_env_text},
-        }
-
+        return {"env_map_content": "default.env=.env\n", "mappings": [("default.env", ".env")], "files": {"default.env": default_env_text}}
     return None
 
 def fetch_vault_git_identity(
@@ -267,14 +237,7 @@ def fetch_vault_git_identity(
     env_repo_name: str = DEFAULT_VAULT_REPO,
 ) -> dict[str, str] | None:
     """Fetches and decrypts repository-specific git authorship from <repo>/git.env in env-store."""
-    return fetch_vault_env(
-        repo_name=repo_name,
-        org_name=org_name,
-        gh_token=gh_token,
-        age_key=age_key,
-        env_repo_name=env_repo_name,
-        target_filename="git.env",
-    )
+    return fetch_vault_env(repo_name=repo_name, org_name=org_name, gh_token=gh_token, age_key=age_key, env_repo_name=env_repo_name, target_filename="git.env")
 
 DEFAULT_AGE_RECIPIENT = "age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj"
 
@@ -313,11 +276,15 @@ def detect_repo_name(repo_dir: Path | str | None = None) -> tuple[str | None, st
         pass
     return None, path.resolve().name
 
-def run_sops_encrypt(src_file: Path, dest_file: Path, recipient: str) -> None:
+def run_sops_encrypt(src_file: Path, dest_file: Path, recipient: str, filename_override: str | None = None) -> None:
     """Encrypts src_file with SOPS using recipient Age key."""
     if not shutil.which("sops"):
         raise RuntimeError("sops executable not found in PATH.")
-    res = subprocess.run(["sops", "--encrypt", "--age", recipient, str(src_file)], capture_output=True, text=True, check=False)
+    cmd = ["sops", "--encrypt"]
+    if filename_override:
+        cmd.extend(["--filename-override", filename_override])
+    cmd.extend(["--age", recipient, str(src_file)])
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         raise RuntimeError(f"SOPS encryption failed: {res.stderr.strip()}")
     dest_file.write_text(res.stdout, encoding="utf-8")
@@ -350,13 +317,17 @@ def _encrypt_and_commit(
     src_path: Path, owner: str, vault_repo: str, vault_path: str,
     token: str, recipient: str, commit_msg: str | None = None,
     encrypt_fn: Any = None, commit_fn: Any = None,
+    filename_override: str | None = None,
 ) -> str:
     enc = encrypt_fn or run_sops_encrypt
     com = commit_fn or commit_to_env_store
     with tempfile.NamedTemporaryFile("w+", suffix=".env", delete=False) as tmp_enc:
         tmp_enc_path = Path(tmp_enc.name)
     try:
-        enc(src_path, tmp_enc_path, recipient)
+        try:
+            enc(src_path, tmp_enc_path, recipient, filename_override=filename_override)
+        except TypeError:
+            enc(src_path, tmp_enc_path, recipient)
         return com(owner=owner, env_repo=vault_repo, path=vault_path, content_bytes=tmp_enc_path.read_bytes(), token=token, commit_message=commit_msg)
     finally:
         if tmp_enc_path.is_file():
@@ -371,6 +342,7 @@ def push_repo_env(
     recipient: str | None = None,
     dest_name: str | None = None,
     vault_repo: str = DEFAULT_VAULT_REPO,
+    allow_binary: bool = False,
     encrypt_fn: Any = None,
     commit_fn: Any = None,
     fetch_fn: Any = None,
@@ -396,9 +368,14 @@ def push_repo_env(
     if not token:
         return PushResult(False, final_repo, "", message="GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token.")
 
+    if not is_sops_supported_format(dest_name) and not allow_binary:
+        ext = get_file_extension(dest_name) or "(no extension)"
+        valid = ", ".join(sorted(SOPS_SUPPORTED_EXTENSIONS))
+        return PushResult(False, final_repo, "", message=f"Destination file '{dest_name}' has unsupported extension '{ext}'. Supported formats: {valid}. Pass --allow-binary to allow encrypting arbitrary or binary files.")
+
     ensure_gitignore(repo_dir)
     vault_path = f"{final_repo}/{dest_name}"
-    sha = _encrypt_and_commit(src, final_org, vault_repo, vault_path, token, recip, encrypt_fn=encrypt_fn, commit_fn=commit_fn)
+    sha = _encrypt_and_commit(src, final_org, vault_repo, vault_path, token, recip, encrypt_fn=encrypt_fn, commit_fn=commit_fn, filename_override=dest_name)
 
     # Maintain env.map manifest in env-store
     fetch_f = fetch_fn or fetch_github_file
@@ -459,7 +436,6 @@ def push_repo_git_identity(
             if not locals()[attr]:
                 res = subprocess.run(["git", "-C", str(repo_dir), "config", cmd], capture_output=True, text=True, check=False)
                 if res.returncode == 0 and res.stdout.strip():
-                    locals()[attr] = res.stdout.strip()
                     if attr == "final_name": final_name = res.stdout.strip()
                     if attr == "final_email": final_email = res.stdout.strip()
 

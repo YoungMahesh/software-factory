@@ -45,6 +45,7 @@ def push_repo_env(
     recipient: str | None = None,
     dest_name: str | None = None,
     vault_repo: str = DEFAULT_VAULT_REPO,
+    allow_binary: bool = False,
     **kwargs: Any,
 ) -> PushResult:
     kwargs.setdefault("encrypt_fn", run_sops_encrypt)
@@ -59,6 +60,7 @@ def push_repo_env(
         recipient=recipient,
         dest_name=dest_name,
         vault_repo=vault_repo,
+        allow_binary=allow_binary,
         **kwargs,
     )
 
@@ -157,6 +159,12 @@ def main() -> None:
             default=DEFAULT_AGE_RECIPIENT,
             help="Age public key recipient for encryption.",
         )
+        parser.add_argument(
+            "--allow-binary",
+            action="store_true",
+            default=False,
+            help="Allow encrypting destination files with unknown/binary extensions.",
+        )
         args = parser.parse_args()
 
         if args.env.name != ".env" and not args.dest:
@@ -173,6 +181,7 @@ def main() -> None:
             gh_token=args.token,
             recipient=args.recipient,
             dest_name=args.dest,
+            allow_binary=args.allow_binary,
         )
 
     if res.success:

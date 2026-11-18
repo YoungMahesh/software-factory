@@ -23,6 +23,7 @@ from sandbox.env_store import (
     fetch_vault_env_bundle,
     fetch_vault_env_raw,
     fetch_vault_git_identity,
+    is_sops_supported_format,
     resolve_gh_token,
 )
 from sandbox.env_store import detect_repo_name
@@ -152,7 +153,7 @@ def pull_repo_env(
                 mf.chmod(0o600)
             for sname, scontent in bundle["files"].items():
                 vf = vault_dir / sname
-                vf.write_text(scontent, encoding="utf-8")
+                vf.write_bytes(scontent.encode("utf-8") if isinstance(scontent, str) else scontent)
                 vf.chmod(0o600)
 
         base_dir = repo_git_dir or final_dest.parent
@@ -161,9 +162,10 @@ def pull_repo_env(
                 target_f = (base_dir / drel) if drel != ".env" else final_dest
                 target_f.parent.mkdir(parents=True, exist_ok=True)
                 content = bundle["files"][sname]
-                if content and not content.endswith("\n"):
-                    content += "\n"
-                target_f.write_text(content, encoding="utf-8")
+                if is_sops_supported_format(sname):
+                    if isinstance(content, str) and not content.endswith("\n"):
+                        content += "\n"
+                target_f.write_bytes(content.encode("utf-8") if isinstance(content, str) else content)
                 target_f.chmod(0o600)
     elif raw_env is not None:
         final_dest.parent.mkdir(parents=True, exist_ok=True)
