@@ -8,7 +8,7 @@ Consult the `modal` skill (`.agents/skills/modal/SKILL.md`) when writing or modi
 
 ### Issue tracker
 
-Local markdown files under `.scratch/<feature-slug>/`. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+GitHub issues on `sFactory0/software-factory` (using `gh` CLI). See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
 
 ### Triage labels
 
