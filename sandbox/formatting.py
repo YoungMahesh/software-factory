@@ -85,9 +85,6 @@ def print_access_info(
     app_name: str = "",
     sandbox_name: str | None = None,
     ssh_info: tuple[str, int] | None = None,
-    opencode_url: str | None = None,
-    opencode_port: int | None = None,
-    opencode_password: str | None = None,
     metro_url: str | None = None,
     metro_port: int | None = None,
     t3_url: str | None = None,
@@ -101,7 +98,6 @@ def print_access_info(
     xfce_port: int | None = None,
     xfce_password: str | None = None,
     memory_gb: int | None = None,
-    agy_enabled: bool = False,
     cloudflare_enabled: bool = True,
     sops_enabled: bool = False,
     is_vm: bool = False,
@@ -129,14 +125,6 @@ def print_access_info(
         print(f"  • Metro:    {metro_url} (port {metro_port})")
     if sops_enabled:
         print("  • SOPS:     Configured (~/.config/sops/age/keys.txt)")
-    if opencode_url:
-        print(f"  • OpenCode: {opencode_url} (port {opencode_port}, User: opencode)")
-        if opencode_password:
-            print(f"  • Password: {opencode_password}")
-            print(
-                f"  • Attach:   OPENCODE_SERVER_PASSWORD={opencode_password} "
-                f"opencode --server {opencode_url}"
-            )
     if xfce_url:
         print(f"  • XFCE Desktop: {xfce_url} (port {xfce_port or DEFAULT_XFCE_PORT})")
         if xfce_password:
@@ -149,8 +137,6 @@ def print_access_info(
     if t3_persist and (t3_pair_url or t3_url):
         print(f"  • T3 Storage: Persistent volume ({t3_usage_volume or 't3code-usage-v1'})")
     instance_name = t3_ssh_host or sandbox_name or app_name
-    if agy_enabled:
-        print(f"  • Remote Control: https://antigravity.google.com (Instance: {instance_name})")
     if ssh_info:
         ssh_host, ssh_port = ssh_info
         ssh_cmd = (

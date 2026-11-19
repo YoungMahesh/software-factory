@@ -83,10 +83,6 @@ Configure credentials via `.env` (copy from [`.env.example`](.env.example)) only
 | **Web Ingress (Port 3000)** | Default | None (optional `MODAL_SANDBOX_TUNNEL_DOMAIN`) | Pre-configured Cloudflare Tunnel on port 3000. Disable via `--no-cloudflare`. |
 | **Linux VM Sandbox** | `--vm` | None | Full virtualization with custom kernel privileges, Docker daemon, and swapfile. |
 | **T3 Code Server** | `--t3` | None | Background agent harness with encrypted web pairing URL and ASCII QR code. |
-| **Antigravity CLI** | `--agy` | `ANTIGRAVITY_TOKENS` | Google Gemini agent CLI and Antigravity Remote Control background daemon. |
-| **OpenCode Server** | `--opencode` | `OPENCODE_GO_API_KEY` | OpenCode web interface on port 4096 with one-time password and HTTPS tunnel. |
-| **Pi Coding Agent** | `--pi` | None | Lightweight terminal coding agent CLI pre-installed in user path. |
-| **Herdr Multiplexer** | `--herdr` | None | Terminal multiplexer and process coordinator pre-installed in `/usr/local/bin`. |
 | **React Native / Android** | `--react-native` | None | Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel (port 8081). |
 | **Headless Chrome** | `--browser` | None | Pre-baked Google Chrome for Playwright, Puppeteer, and Chrome DevTools MCP servers. |
 | **Modal Inside Sandbox** | `--modal` | `MODAL_TOKENS` | Virtual environment pre-installed with Modal SDK, configured with multi-account profiles (`~/.modal.toml`) from `.env`. |
@@ -111,7 +107,7 @@ modal-sandbox -r my-repo -b feature-branch --full-clone
 modal-sandbox -r my-repo --vm
 
 # Sandbox with complete AI developer tooling:
-modal-sandbox -r my-repo --t3 --agy --herdr --browser
+modal-sandbox -r my-repo --t3 --browser
 ```
 
 ### CLI Options Reference
@@ -126,10 +122,6 @@ modal-sandbox -r my-repo --t3 --agy --herdr --browser
 | `--memory <GB>` | (Deprecated) Configures swapfile allocation (2 × N GB) for VM sandboxes | `1` |
 | `--testing` | Target repository with `test-` prefix in default organization | `False` |
 | `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
-| `--agy` | Enable Antigravity CLI and Remote Control daemon | `False` |
-| `--opencode` | Launch OpenCode server on port 4096 with web tunnel | `False` |
-| `--pi` | Install Pi Coding Agent CLI | `False` |
-| `--herdr` | Install Herdr agent multiplexer | `False` |
 | `--browser` | Pre-bake headless Google Chrome for browser MCP tooling | `False` |
 | `--react-native` | Install Android SDK/NDK toolchain and Metro tunnel | `False` |
 | `--modal` | Provision Modal SDK and multi-account client credentials inside sandbox | `False` |
@@ -167,7 +159,6 @@ modal-sandbox --from-snapshot <image-id> --name resumed-app [--vm]
   ```
 - **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes external HTTPS traffic (customizable via `MODAL_SANDBOX_TUNNEL_DOMAIN`) to container `localhost:3000`.
 - **T3 Code Server**: Pairing URL and ASCII QR code printed on launch when `--t3` is passed.
-- **OpenCode (Port 4096)**: HTTPS tunnel URL and one-time password printed on launch when `--opencode` is passed.
 
 ---
 

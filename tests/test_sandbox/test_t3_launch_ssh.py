@@ -105,14 +105,10 @@ class TestT3CodeLaunchSSH(unittest.TestCase):
 
         mock_app_lookup.assert_called_once_with("my-repo", create_if_missing=True)
         mock_build_image.assert_called_once_with(
-            opencode=False,
-            agy=False,
             browser=True,
             modal_tooling=False,
             react_native=False,
             t3=True,
-            herdr=False,
-            pi=False,
             xfce=False,
         )
         call_kwargs = mock_sandbox_create.call_args.kwargs

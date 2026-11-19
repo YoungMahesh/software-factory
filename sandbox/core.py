@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 from sandbox.config import (
     DEFAULT_METRO_PORT,
-    DEFAULT_OPENCODE_PORT,
     DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_WEB_PORT,
@@ -29,8 +28,6 @@ class LaunchRequest(BaseModel):
     vm: bool = False
     memory: int | None = None
     no_cloudflare: bool = False
-    opencode: bool = False
-    opencode_port: int = DEFAULT_OPENCODE_PORT
     t3: bool = False
     t3_port: int = DEFAULT_T3_PORT
     t3_ssh_host: str | None = None
@@ -42,9 +39,6 @@ class LaunchRequest(BaseModel):
     profile: str | None = None
     sops: bool = False
     browser: bool = False
-    agy: bool = False
-    herdr: bool = False
-    pi: bool = False
     xfce: bool = False
     xfce_port: int = DEFAULT_XFCE_PORT
     xfce_password: str | None = None
@@ -57,9 +51,6 @@ class LaunchResponse(BaseModel):
     ssh_info: tuple[str, int] | None = None
     ssh_command: str | None = None
     ssh_config: str | None = None
-    opencode_url: str | None = None
-    opencode_port: int | None = None
-    opencode_password: str | None = None
     metro_url: str | None = None
     metro_port: int | None = None
     t3_url: str | None = None
@@ -73,7 +64,6 @@ class LaunchResponse(BaseModel):
     xfce_port: int | None = None
     xfce_password: str | None = None
     memory_gb: int | None = None
-    agy_enabled: bool = False
     cloudflare_enabled: bool = True
     sops_enabled: bool = False
     is_vm: bool = False
@@ -117,8 +107,6 @@ def validate_launch_request(req: LaunchRequest) -> None:
         raise ValueError("--no-t3-persist and --t3-usage-volume cannot be used together.")
 
     ports: list[tuple[str, int]] = []
-    if req.opencode:
-        ports.append(("--opencode-port", req.opencode_port))
     if req.react_native:
         ports.append(("--metro-port", req.metro_port))
     if req.t3:

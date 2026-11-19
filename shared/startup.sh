@@ -386,22 +386,12 @@ ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || 
 
 # sshd builds a clean environment for login sessions, so image-level PATH alone
 # does not reach interactive shells.
-if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
-    grep -qxF 'export PATH="/root/.opencode/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.opencode/bin:$PATH"' >> ~/.bashrc
-fi
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-    grep -qxF 'export PATH="/root/.local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
-    grep -qxF "alias agy='agy --dangerously-skip-permissions'" ~/.bashrc 2>/dev/null || echo "alias agy='agy --dangerously-skip-permissions'" >> ~/.bashrc
-fi
 if [ "${ENABLE_T3:-}" = "1" ]; then
-    grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+    grep -qxF 'export PATH="/root/.opencode/bin:/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.opencode/bin:/usr/local/bin:$PATH"' >> ~/.bashrc
     # Allow Chrome headless shell to run unsandboxed inside root container
     export T3CODE_SERVER_BROWSER_SANDBOX=0
     grep -qxF 'export T3CODE_SERVER_BROWSER_SANDBOX=0' /etc/environment 2>/dev/null || echo 'export T3CODE_SERVER_BROWSER_SANDBOX=0' >> /etc/environment
     grep -qxF 'export T3CODE_SERVER_BROWSER_SANDBOX=0' ~/.bashrc 2>/dev/null || echo 'export T3CODE_SERVER_BROWSER_SANDBOX=0' >> ~/.bashrc
-fi
-if [ "${ENABLE_HERDR:-}" = "1" ]; then
-    grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
 fi
 
 if [ "${ENABLE_REACT_NATIVE:-}" = "1" ]; then
@@ -524,19 +514,6 @@ EOF
     chmod +x /usr/local/bin/check-browser 2>/dev/null || true
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-    cat << 'EOF' > /usr/local/bin/check-antigravity
-#!/usr/bin/env bash
-echo "=== Antigravity CLI ===" && agy --version 2>/dev/null || true
-echo "=== Antigravity Remote Control Status ===" && agy remote-control status 2>/dev/null || true
-echo "=== Antigravity Settings ===" && cat ~/.gemini/antigravity-cli/settings.json 2>/dev/null || true
-echo "=== Antigravity Onboarding ===" && cat ~/.gemini/antigravity-cli/cache/onboarding.json 2>/dev/null || true
-echo "=== OAuth Token ===" && ls -la ~/.gemini/antigravity-cli/antigravity-oauth-token 2>/dev/null || true
-EOF
-    chmod +x /usr/local/bin/check-antigravity 2>/dev/null || true
-    ln -sf /usr/local/bin/check-antigravity /usr/local/bin/check-agy
-fi
-
 if [ "${ENABLE_T3:-}" = "1" ]; then
     cat << 'EOF' > /usr/local/bin/check-t3
 #!/usr/bin/env bash
@@ -595,7 +572,7 @@ if [ -n "${DOTENV_PRIVATE_KEY:-}" ]; then
     echo "DOTENV_PRIVATE_KEY=$DOTENV_PRIVATE_KEY" > .env.keys
 fi
 
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_PI:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
+if [ "${ENABLE_MODAL:-}" = "1" ] || [ "${ENABLE_SOPS:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
     if [ "${RESUME_SNAPSHOT:-0}" != "1" ]; then
         if [ -n "${AGE_PRIVATE_KEY:-}" ]; then
             mkdir -p ~/.config/sops/age
@@ -607,17 +584,8 @@ if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ] || [ "${ENABLE_MODAL:-}" = "1" ] || [ "${
         if [ "${ENABLE_MODAL:-}" = "1" ]; then
             setup_args+=("--modal")
         fi
-        if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-            setup_args+=("--agy")
-        fi
         if [ "${ENABLE_T3:-}" = "1" ]; then
             setup_args+=("--t3")
-        fi
-        if [ "${ENABLE_OPENCODE:-}" = "1" ] || [ "${ENABLE_T3:-}" = "1" ]; then
-            setup_args+=("--opencode")
-        fi
-        if [ "${ENABLE_PI:-}" = "1" ]; then
-            setup_args+=("--pi")
         fi
 
         setup_status=0
@@ -881,38 +849,6 @@ if [ "${ENABLE_XFCE:-}" = "1" ]; then
         /usr/local/bin/desktop-service start || echo "⚠️ Warning: desktop-service start failed"
     fi
 fi
-if [ "${ENABLE_ANTIGRAVITY:-}" = "1" ]; then
-    INSTANCE_NAME="${APP_NAME:-$(basename "$TARGET_DIR")-sandbox}"
-    export PATH="/root/.local/bin:$PATH"
-    echo "🏝️  Starting Antigravity Remote Control daemon ($INSTANCE_NAME)..."
-    agy remote-control start --name "$INSTANCE_NAME" > /tmp/agy-remote-control.log 2>&1 || true
-fi
-
-if [ "${ENABLE_OPENCODE:-}" = "1" ]; then
-    OPENCODE_PORT="${OPENCODE_PORT:-4096}"
-    if [ -f /root/.config/opencode/opencode.env ]; then
-        set -a
-        source /root/.config/opencode/opencode.env
-        set +a
-    fi
-    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
-        export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
-    fi
-    echo "🏝️  Starting OpenCode server on port $OPENCODE_PORT..."
-    nohup opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" > /tmp/opencode.log 2>&1 &
-fi
-
-if [ "${ENABLE_PI:-}" = "1" ]; then
-    if [ -f /root/.config/opencode/opencode.env ]; then
-        set -a
-        source /root/.config/opencode/opencode.env
-        set +a
-    fi
-    if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
-        export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
-    fi
-fi
-
 if [ "${ENABLE_T3:-}" = "1" ]; then
     T3_PORT="${T3_PORT:-3775}"
     if [ -f "/opt/t3/t3" ]; then

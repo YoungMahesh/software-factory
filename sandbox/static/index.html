@@ -476,10 +476,6 @@
               <input type="checkbox" x-model="freshLaunchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>SOPS</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="freshLaunchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>Antigravity</span>
-            </label>
           </div>
         </div>
 
@@ -658,10 +654,6 @@
               <input type="checkbox" x-model="launchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>SOPS</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
-              <input type="checkbox" x-model="launchForm.agy" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-              <span>Antigravity</span>
-            </label>
           </div>
         </div>
       </div>
@@ -755,15 +747,6 @@
           </div>
         </div>
 
-        <!-- OpenCode Tunnel -->
-        <div x-show="launchResult?.opencode_url" class="space-y-1">
-          <div class="text-xs text-slate-400 font-medium">OpenCode Server</div>
-          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
-            <a :href="launchResult?.opencode_url" target="_blank" class="text-indigo-400 underline" x-text="launchResult?.opencode_url"></a>
-            <span class="text-slate-500" x-text="'Password: ' + launchResult?.opencode_password"></span>
-          </div>
-        </div>
-
         <!-- T3 Pair URL -->
         <div x-show="launchResult?.t3_pair_url" class="space-y-1">
           <div class="text-xs text-slate-400 font-medium">T3 Code Server</div>
@@ -848,10 +831,8 @@
           name: '',
           vm: false,
           memory: null,
-          opencode: false,
           sops: true,
           t3: true,
-          agy: false,
           modal: true
         },
 
@@ -871,10 +852,8 @@
           vm: false,
           memory: null,
           no_cloudflare: false,
-          opencode: false,
           sops: true,
           t3: true,
-          agy: false,
           modal: true
         },
 
@@ -1028,10 +1007,8 @@
           this.launchForm.name = 'resumed-' + baseName;
           this.launchForm.vm = !!snap.is_vm;
           this.launchForm.memory = snap.is_vm ? 1 : null;
-          this.launchForm.opencode = false;
           this.launchForm.sops = true;
           this.launchForm.t3 = true;
-          this.launchForm.agy = false;
           this.launchForm.modal = true;
           this.launchModalOpen = true;
         },
@@ -1071,10 +1048,8 @@
           this.freshLaunchForm.vm = false;
           this.freshLaunchForm.memory = null;
           this.freshLaunchForm.no_cloudflare = false;
-          this.freshLaunchForm.opencode = false;
           this.freshLaunchForm.sops = true;
           this.freshLaunchForm.t3 = true;
-          this.freshLaunchForm.agy = false;
           this.freshLaunchForm.modal = true;
           this.freshLaunchLogs = [];
           this.freshLaunchModalOpen = true;

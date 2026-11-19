@@ -45,9 +45,9 @@ class TestXfceIntegration(unittest.TestCase):
         req = LaunchRequest(
             name="xfce-box",
             xfce=True,
-            xfce_port=4096,
-            opencode=True,
-            opencode_port=4096,
+            xfce_port=3775,
+            t3=True,
+            t3_port=3775,
         )
         with self.assertRaises(ValueError) as ctx:
             validate_launch_request(req)

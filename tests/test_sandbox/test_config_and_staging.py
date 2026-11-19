@@ -250,22 +250,10 @@ class TestSandboxImageStaging(unittest.TestCase):
     ):
         from shared.image import (
             build_sandbox_image,
-            LOCAL_OPENCODE_CONFIG,
-            REMOTE_OPENCODE_CONFIG,
-            LOCAL_ANTIGRAVITY_SETTINGS,
-            REMOTE_ANTIGRAVITY_SETTINGS,
-            LOCAL_ANTIGRAVITY_KEYBINDINGS,
-            REMOTE_ANTIGRAVITY_KEYBINDINGS,
-            LOCAL_ANTIGRAVITY_ONBOARDING,
-            REMOTE_ANTIGRAVITY_ONBOARDING,
             LOCAL_T3_KEYBINDINGS,
             REMOTE_T3_KEYBINDINGS,
             LOCAL_T3_WRAPPER,
             REMOTE_T3_WRAPPER,
-            LOCAL_PI_SETTINGS,
-            REMOTE_PI_SETTINGS,
-            LOCAL_PI_MODELS,
-            REMOTE_PI_MODELS,
         )
 
         mock_image = MagicMock()
@@ -274,26 +262,6 @@ class TestSandboxImageStaging(unittest.TestCase):
         mock_add_files.side_effect = lambda img, *args, **kwargs: img
 
         with patch("shared.image.base_image", mock_image):
-            # Test OpenCode
-            build_sandbox_image(opencode=True)
-            mock_add_files.assert_any_call(
-                mock_image,
-                [
-                    (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
-                ],
-            )
-
-            # Test Antigravity
-            build_sandbox_image(agy=True)
-            mock_add_files.assert_any_call(
-                mock_image,
-                [
-                    (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
-                    (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
-                    (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
-                ],
-            )
-
             # Test T3
             build_sandbox_image(t3=True)
             mock_add_files.assert_any_call(
@@ -301,16 +269,6 @@ class TestSandboxImageStaging(unittest.TestCase):
                 [
                     (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
                     (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
-                ],
-            )
-
-            # Test Pi
-            build_sandbox_image(pi=True)
-            mock_add_files.assert_any_call(
-                mock_image,
-                [
-                    (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
-                    (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
                 ],
             )
 
@@ -328,29 +286,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             img = build_sandbox_image()
             self.assertEqual(img, mock_base)
 
-            # Test OpenCode
-            build_sandbox_image(opencode=True)
+            # Test t3 launch
+            build_sandbox_image(t3=True)
             mock_base.run_commands.assert_called_with(
                 "curl -fsSL https://opencode.ai/v2/install | bash"
-            )
-
-            # Test Antigravity
-            build_sandbox_image(agy=True)
-            mock_base.run_commands.assert_called_with(
-                "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-                "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
-            )
-
-            # Test Herdr
-            build_sandbox_image(herdr=True)
-            mock_base.run_commands.assert_called_with(
-                "curl -fsSL https://herdr.dev/install.sh | env HERDR_INSTALL_DIR=/usr/local/bin sh"
-            )
-
-            # Test Pi
-            build_sandbox_image(pi=True)
-            mock_base.run_commands.assert_called_with(
-                "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
             )
 
 
@@ -409,4 +348,3 @@ class TestConfigModule(unittest.TestCase):
 
         creds = resolve_factory_credentials(env={"DEFAULT_TIMEZONE": "Asia/Kolkata"}, mutate_environ=False)
         self.assertEqual(creds.default_timezone, "Asia/Kolkata")
-

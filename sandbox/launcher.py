@@ -30,7 +30,7 @@ from sandbox.provenance import (
 )
 
 from sandbox.config import (
-    DEFAULT_METRO_PORT, DEFAULT_OPENCODE_PORT, DEFAULT_ORG,
+    DEFAULT_METRO_PORT, DEFAULT_ORG,
     DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
     resolve_factory_credentials, resolve_timezone,
 )
@@ -193,7 +193,7 @@ class SandboxLauncher:
             else modal.App.lookup(app_name, create_if_missing=True)
         )
 
-        browser_active = browser_enabled(browser=req.browser, opencode=req.opencode, agy=req.agy, t3=req.t3)
+        browser_active = browser_enabled(browser=req.browser, t3=req.t3)
 
         if req.from_snapshot:
             self._emit_log(f"🏗️ Loading container image from snapshot {req.from_snapshot}...")
@@ -201,9 +201,11 @@ class SandboxLauncher:
         else:
             self._emit_log("🏗️ Resolving container base image and tooling layers...")
             image = self.build_image_fn(
-                opencode=req.opencode, agy=req.agy, browser=browser_active,
-                modal_tooling=req.modal, react_native=req.react_native, t3=req.t3,
-                herdr=req.herdr, pi=req.pi, xfce=req.xfce,
+                browser=browser_active,
+                modal_tooling=req.modal,
+                react_native=req.react_native,
+                t3=req.t3,
+                xfce=req.xfce,
             )
 
         cloudflare_active = not req.no_cloudflare
@@ -291,14 +293,6 @@ class SandboxLauncher:
             env["SWAP_GB"] = str(memory_gb * 2 if memory_gb else 2)
             env["ENABLE_DOCKER"] = "1"
 
-        opencode_password = None
-        if req.opencode:
-            encrypted_ports.append(req.opencode_port)
-            opencode_password = secrets.token_urlsafe(16)
-            sandbox_secrets.append(modal.Secret.from_dict({"OPENCODE_SERVER_PASSWORD": opencode_password}))
-            env["ENABLE_OPENCODE"] = "1"
-            env["OPENCODE_PORT"] = str(req.opencode_port)
-
         t3_persist_enabled = req.t3 and not req.no_t3_persist
         t3_ssh_alias = req.t3_ssh_host or sandbox_name
         if req.t3:
@@ -313,9 +307,9 @@ class SandboxLauncher:
                 env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
         for flag, key in [
-            (req.agy, "ENABLE_ANTIGRAVITY"), (req.modal, "ENABLE_MODAL"),
-            (req.sops, "ENABLE_SOPS"), (req.herdr, "ENABLE_HERDR"),
-            (req.pi, "ENABLE_PI"), (browser_active, "ENABLE_BROWSER"),
+            (req.modal, "ENABLE_MODAL"),
+            (req.sops, "ENABLE_SOPS"),
+            (browser_active, "ENABLE_BROWSER"),
         ]:
             if flag: env[key] = "1"
 
@@ -340,11 +334,9 @@ class SandboxLauncher:
 
         feature_flags = [
             (not req.no_cloudflare, "Cloudflare Tunnel"), (req.full_clone, "Full Git Clone"),
-            (req.react_native, "React Native"), (req.agy, "Antigravity"),
-            (req.opencode, "OpenCode"), (req.t3, "T3 Code"),
+            (req.react_native, "React Native"), (req.t3, "T3 Code"),
             (t3_persist_enabled, "T3 Usage Persistence"), (req.modal, "Modal"),
-            (req.sops, "SOPS"), (req.herdr, "Herdr"),
-            (req.pi, "Pi"), (browser_active, "Browser"),
+            (req.sops, "SOPS"), (browser_active, "Browser"),
             (req.xfce, "XFCE Desktop"),
         ]
         features = [label for active, label in feature_flags if active]
@@ -390,11 +382,10 @@ class SandboxLauncher:
             raise RuntimeError(msg)
 
         self._emit_log("🌐 Resolving network tunnels and connection endpoints...")
-        ssh_info, opencode_url, metro_url, t3_url, xfce_url = None, None, None, None, None
+        ssh_info, metro_url, t3_url, xfce_url = None, None, None, None
         try:
             tunnels = sandbox.tunnels()
             if 22 in tunnels: ssh_info = tunnels[22].tcp_socket
-            if req.opencode and req.opencode_port in tunnels: opencode_url = tunnels[req.opencode_port].url
             if req.react_native and req.metro_port in tunnels: metro_url = tunnels[req.metro_port].url
             if req.t3 and req.t3_port in tunnels: t3_url = tunnels[req.t3_port].url
             if req.xfce:
@@ -450,9 +441,7 @@ class SandboxLauncher:
 
         response = LaunchResponse(
             sandbox_id=sandbox.object_id, app_name=app_name, sandbox_name=sandbox_name,
-            ssh_info=ssh_info, ssh_command=ssh_cmd, ssh_config=ssh_config_snippet, opencode_url=opencode_url,
-            opencode_port=req.opencode_port if req.opencode else None,
-            opencode_password=opencode_password,
+            ssh_info=ssh_info, ssh_command=ssh_cmd, ssh_config=ssh_config_snippet,
             metro_url=metro_url, metro_port=req.metro_port if req.react_native else None,
             t3_url=t3_url, t3_port=req.t3_port if req.t3 else None,
             t3_pair_url=t3_pair_url, t3_qr_code=t3_qr_code, t3_ssh_host=t3_ssh_alias,
@@ -460,7 +449,7 @@ class SandboxLauncher:
             t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None,
             xfce_url=xfce_url, xfce_port=req.xfce_port if req.xfce else None,
             xfce_password=req.xfce_password if req.xfce else None,
-            memory_gb=memory_gb, agy_enabled=req.agy,
+            memory_gb=memory_gb,
             cloudflare_enabled=cloudflare_active, sops_enabled=req.sops, is_vm=req.vm,
         )
         return RunningSandbox(sandbox=sandbox, response=response)

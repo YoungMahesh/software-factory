@@ -35,15 +35,11 @@ class TestWebFreshLaunch(unittest.TestCase):
         self.assertTrue(fresh.sops)
         self.assertTrue(fresh.modal)
         self.assertTrue(fresh.t3)
-        self.assertFalse(fresh.opencode)
-        self.assertFalse(fresh.agy)
 
         snap = SnapshotLaunchPayload()
         self.assertFalse(snap.sops)
         self.assertFalse(snap.modal)
         self.assertTrue(snap.t3)
-        self.assertFalse(snap.opencode)
-        self.assertFalse(snap.agy)
 
     @patch("sandbox.web.launch_sandbox")
     def test_launch_fresh_sandbox_propagates_sops(self, mock_launch):

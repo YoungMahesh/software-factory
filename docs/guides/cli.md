@@ -24,10 +24,6 @@ modal-sandbox [OPTIONS]
 | `--xfce-password` | string | `None` | Optional password for VNC session authentication (defaults to passwordless). |
 | `--testing` | flag | `False` | Automatically prepend `test-` prefix to repository name in test organization. |
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
-| `--agy` | flag | `False` | Enable Google Gemini Antigravity CLI and Remote Control background daemon. |
-| `--opencode` | flag | `False` | Launch OpenCode server on port 4096 with web tunnel. |
-| `--pi` | flag | `False` | Install Pi Coding Agent CLI into system PATH. |
-| `--herdr` | flag | `False` | Install Herdr agent multiplexer into `/usr/local/bin`. |
 | `--browser` | flag | `False` | Pre-bake headless Google Chrome for Playwright and MCP tooling. |
 | `--react-native` | flag | `False` | Install Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel. |
 | `--modal` | flag | `False` | Install Modal SDK and client credentials inside sandbox virtualenv. |
@@ -51,7 +47,7 @@ modal-sandbox --name dev-box
 
 ### 2. Clone a Target Repository with AI Agent Stack
 ```bash
-modal-sandbox -r my-service -b feature-auth --t3 --agy --browser
+modal-sandbox -r my-service -b feature-auth --t3 --browser
 ```
 
 ### 3. Launch a Full Linux VM with Docker Daemon

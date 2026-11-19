@@ -2,10 +2,7 @@
 set -euo pipefail
 
 SETUP_MODAL=false
-SETUP_AGY=false
 SETUP_T3=false
-SETUP_OPENCODE=false
-SETUP_PI=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -13,29 +10,17 @@ while [ "$#" -gt 0 ]; do
             SETUP_MODAL=true
             shift
             ;;
-        --agy)
-            SETUP_AGY=true
-            shift
-            ;;
         --t3)
             SETUP_T3=true
             shift
             ;;
-        --opencode)
-            SETUP_OPENCODE=true
-            shift
-            ;;
-        --pi)
-            SETUP_PI=true
-            shift
-            ;;
         -h|--help)
-            echo "Usage: $0 [--modal] [--agy] [--t3] [--opencode] [--pi]"
+            echo "Usage: $0 [--modal] [--t3]"
             exit 0
             ;;
         *)
             echo "ERROR: Unknown option: $1" >&2
-            echo "Usage: $0 [--modal] [--agy] [--t3] [--opencode] [--pi]" >&2
+            echo "Usage: $0 [--modal] [--t3]" >&2
             exit 1
             ;;
     esac
@@ -107,7 +92,7 @@ if profiles:
 ' 2>/dev/null || true
 fi
 
-if [ "$SETUP_OPENCODE" = true ] || [ "$SETUP_PI" = true ]; then
+if [ "$SETUP_T3" = true ]; then
     if [ -n "${OPENCODE_GO_API_KEY:-}" ]; then
         mkdir -p ~/.config/opencode
         cat << EOF > ~/.config/opencode/opencode.env
@@ -122,7 +107,7 @@ EOF
     fi
 fi
 
-if [ "$SETUP_AGY" = true ] || [ "$SETUP_T3" = true ] || [ "$SETUP_OPENCODE" = true ]; then
+if [ "$SETUP_T3" = true ]; then
     if command -v python3 >/dev/null 2>&1; then
         python3 -c '
 import hashlib, json, os, re
@@ -342,8 +327,4 @@ with open(t3_settings_path, "w") as fp:
 os.chmod(t3_settings_path, 0o644)
 ' 2>/dev/null || true
     fi
-fi
-
-if [ "$SETUP_PI" = true ]; then
-    mkdir -p ~/.pi/agent
 fi

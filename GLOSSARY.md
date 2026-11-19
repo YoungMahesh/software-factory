@@ -44,9 +44,9 @@ _Avoid_: Unshallow clone, complete fetch, deep repo
 A point-in-time, copy-on-write capture of a Modal sandbox's root filesystem stored as a reusable `modal.Image` with an associated Time-To-Live (TTL), used to persist workspace state or accelerate subsequent sandbox cold starts without repeating repository cloning and dependency installation.
 _Avoid_: Memory snapshot, container backup, sandbox image, VM snapshot
 
-**OpenCode Server**:
-A background web and agent server bound to a dedicated encrypted tunnel port, protected by a per-launch generated access password.
-_Avoid_: OpenCode IDE, code server
+**OpenCode Provider**:
+An internal AI agent provider spawned by T3 Code (`/root/.opencode/bin/opencode`) inside `--t3` containers. The standalone OpenCode web server daemon (`opencode serve`) and port 4096 tunnel (`--opencode`, `--opencode-port`) are retired.
+_Avoid_: OpenCode server, OpenCode IDE, code server
 
 **T3 Code Server**:
 A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
@@ -56,20 +56,20 @@ _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 The public HTTPS URL emitted by T3 Code (`t3 pair` or sandbox launch metadata) containing the Modal application tunnel domain and a cryptographically generated pairing token (`https://<sandbox-tunnel>.modal.host/pair#token=...`), enabling external browser and desktop app pairing with the remote T3 Code Server.
 _Avoid_: Local pairing URL, private IP link, direct socket URL
 
-**Herdr Multiplexer**:
-An agent-aware terminal multiplexer and background session runtime (https://herdr.dev) pre-baked into `/usr/local/bin` via `--herdr`, enabling persistent agent workflows, process status tracking across panes, and remote attachment over SSH.
+**Herdr Multiplexer (Retired)**:
+The legacy agent-aware terminal multiplexer previously provisioned via `--herdr`, retired in favor of T3 Code multi-worktree orchestration.
 _Avoid_: Terminal multiplexer, tmux clone, herdr daemon, herdr runner
 
-**Pi Coding Agent CLI**:
-A minimal, extensible terminal coding agent interface (https://pi.dev) installed into the sandbox user environment via `--pi`.
+**Pi Coding Agent CLI (Retired)**:
+The terminal coding agent previously provisioned via `--pi`, retired in favor of T3 Code agent orchestration.
 _Avoid_: Pi agent, pi terminal, pi runner
 
-**Antigravity CLI**:
-Google's terminal agent interface installed in the sandbox user environment with pre-mounted configuration and credentials.
-_Avoid_: Gemini CLI, antigravity-ide
+**Antigravity Provider**:
+Google Gemini agent provider orchestrated inside `--t3` sandboxes via T3 Code's managed ACP server (`agy_acp_server.par`), with lightweight query (`agyq`) and profile management (`agyprofile`) CLI utilities. The standalone Antigravity CLI binary and `--agy` launch flag are retired.
+_Avoid_: Antigravity CLI, Gemini CLI, antigravity-ide
 
-**Antigravity Remote Control**:
-A background reverse tunnel connection between the sandbox's Antigravity CLI and Google's Antigravity platform (https://antigravity.google.com), authenticated via the Antigravity OAuth Token, permitting remote monitoring, actuation, and interaction from a web browser without inbound open ports or Modal tunnel URLs.
+**Antigravity Remote Control (Retired)**:
+The legacy background daemon (`agy remote-control start`) previously running under `--agy`, retired in favor of T3 Code's web and mobile pairing surfaces.
 _Avoid_: Antigravity web, agy proxy, remote tunnel
 
 **React Native Tooling**:
@@ -109,7 +109,7 @@ A bootstrap mechanism during sandbox initialization that uses `AGE_PRIVATE_KEY` 
 _Avoid_: Sops setup, age injection, secret script
 
 **Tooling Setup Script**:
-A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that provisions opt-in tooling credentials (`--modal`, `--agy`, `--opencode`) from environment variables into user configuration directories, running identically on host workstations and inside sandboxes.
+A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that provisions opt-in tooling credentials (`--modal`, `--t3`) from environment variables into user configuration directories, running identically on host workstations and inside sandboxes.
 _Avoid_: Repo setup script, secret decrypter, install script
 
 **Modal Sandbox SSH Key**:
@@ -117,11 +117,11 @@ The dedicated SSH key pair used to authenticate into running sandboxes. The publ
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
 **Antigravity OAuth Token**:
-The authenticated session credential for the Antigravity CLI and T3 Code provider instances, configured via the `ANTIGRAVITY_TOKENS` JSON profile array in `.env` and provisioned dynamically to `~/.gemini/antigravity-cli/profiles/` and `~/.t3/userdata/providers/antigravity/` by `scripts/setup.sh --agy`.
+The authenticated session credential for the Antigravity CLI and T3 Code provider instances, configured via the `ANTIGRAVITY_TOKENS` JSON profile array in `.env` and provisioned dynamically to `~/.gemini/antigravity-cli/profiles/` and `~/.t3/userdata/providers/antigravity/` by `scripts/setup.sh --t3`.
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
-Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/antigravity-settings.json`, `shared/antigravity-keybindings.json`, `shared/antigravity-onboarding.json`, `shared/pi-settings.json`, `shared/pi-models.json`, `shared/t3-keybindings.json`) and mounted into sandboxes at runtime.
+Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/t3-keybindings.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
 **Sandbox Shell Aliases**:

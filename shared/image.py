@@ -25,12 +25,6 @@ LOCAL_GITCONFIG = SHARED_DIR / "gitconfig"
 REMOTE_GITCONFIG = "/root/.gitconfig"
 LOCAL_OPENCODE_CONFIG = SHARED_DIR / "opencode.json"
 REMOTE_OPENCODE_CONFIG = "/root/.config/opencode/opencode.json"
-LOCAL_ANTIGRAVITY_SETTINGS = SHARED_DIR / "antigravity-settings.json"
-REMOTE_ANTIGRAVITY_SETTINGS = "/root/.gemini/antigravity-cli/settings.json"
-LOCAL_ANTIGRAVITY_KEYBINDINGS = SHARED_DIR / "antigravity-keybindings.json"
-REMOTE_ANTIGRAVITY_KEYBINDINGS = "/root/.gemini/antigravity-cli/keybindings.json"
-LOCAL_ANTIGRAVITY_ONBOARDING = SHARED_DIR / "antigravity-onboarding.json"
-REMOTE_ANTIGRAVITY_ONBOARDING = "/root/.gemini/antigravity-cli/cache/onboarding.json"
 SHARED_SSH_PUB_KEY = SHARED_DIR / "ssh-key.pub"
 LOCAL_DESKTOP_SERVICE = SHARED_DIR / "desktop-service"
 REMOTE_DESKTOP_SERVICE = "/usr/local/bin/desktop-service"
@@ -87,10 +81,6 @@ REMOTE_PULL_REPO_ENV = "/usr/local/bin/pull-repo-env"
 LOCAL_POST_CHECKOUT_HOOK = SHARED_DIR / "git-hooks" / "post-checkout"
 REMOTE_POST_CHECKOUT_HOOK = "/root/.git-hooks/post-checkout"
 
-LOCAL_PI_SETTINGS = SHARED_DIR / "pi-settings.json"
-REMOTE_PI_SETTINGS = "/root/.pi/agent/settings.json"
-LOCAL_PI_MODELS = SHARED_DIR / "pi-models.json"
-REMOTE_PI_MODELS = "/root/.pi/agent/models.json"
 LOCAL_T3_KEYBINDINGS = SHARED_DIR / "t3-keybindings.json"
 REMOTE_T3_KEYBINDINGS = "/root/.t3/userdata/keybindings.json"
 LOCAL_T3_WRAPPER = SHARED_DIR / "t3-wrapper.sh"
@@ -271,16 +261,13 @@ def load_ssh_pub_key() -> str:
 def browser_enabled(
     *,
     browser: bool = False,
-    opencode: bool = False,
-    agy: bool = False,
     t3: bool = False,
 ) -> bool:
     """Resolves whether Browser Tooling should be provisioned.
 
-    A standalone `--browser` launch is supported, but any agent surface that can
-    drive a browser implies it: `--opencode`, `--agy`, and `--t3` enable it so
-    their browser MCP servers and built-in browser panels work out of the box."""
-    return browser or opencode or agy or t3
+    A standalone `--browser` launch is supported, but `--t3` implies it so
+    browser MCP servers and built-in browser panels work out of the box."""
+    return browser or t3
 
 
 # T3 Code release configuration and binary patch target
@@ -310,14 +297,10 @@ T3_ACTIVE_JSON = f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}"}}'
 
 def build_sandbox_image(
     *,
-    opencode: bool = False,
-    agy: bool = False,
     browser: bool = False,
     modal_tooling: bool = False,
     react_native: bool = False,
     t3: bool = False,
-    herdr: bool = False,
-    pi: bool = False,
     xfce: bool = False,
 ) -> modal.Image:
     """Builds a customized sandbox image layered on top of base_image."""
@@ -365,7 +348,7 @@ def build_sandbox_image(
             ]
         )
 
-    if opencode or t3:
+    if t3:
         image = image.run_commands(
             "curl -fsSL https://opencode.ai/v2/install | bash"
         )
@@ -377,22 +360,7 @@ def build_sandbox_image(
             ],
         )
 
-    if agy:
-        image = image.run_commands(
-            "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-            "mkdir -p /root/.gemini/antigravity-cli /root/.gemini/antigravity-cli/cache",
-        )
-        path_prefixes.append("/root/.local/bin")
-        image = add_local_files_if_present(
-            image,
-            [
-                (LOCAL_ANTIGRAVITY_SETTINGS, REMOTE_ANTIGRAVITY_SETTINGS),
-                (LOCAL_ANTIGRAVITY_KEYBINDINGS, REMOTE_ANTIGRAVITY_KEYBINDINGS),
-                (LOCAL_ANTIGRAVITY_ONBOARDING, REMOTE_ANTIGRAVITY_ONBOARDING),
-            ],
-        )
-
-    if browser_enabled(browser=browser, opencode=opencode, agy=agy, t3=t3):
+    if browser_enabled(browser=browser, t3=t3):
         image = image.run_commands(
             "uvx playwright install --with-deps chromium",
             "chmod -R 777 /root/.cache/ms-playwright 2>/dev/null || true",
@@ -429,23 +397,6 @@ def build_sandbox_image(
             [
                 (LOCAL_T3_KEYBINDINGS, REMOTE_T3_KEYBINDINGS),
                 (LOCAL_T3_WRAPPER, REMOTE_T3_WRAPPER),
-            ],
-        )
-
-    if herdr:
-        image = image.run_commands(
-            "curl -fsSL https://herdr.dev/install.sh | env HERDR_INSTALL_DIR=/usr/local/bin sh"
-        )
-
-    if pi:
-        image = image.run_commands(
-            "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
-        )
-        image = add_local_files_if_present(
-            image,
-            [
-                (LOCAL_PI_SETTINGS, REMOTE_PI_SETTINGS),
-                (LOCAL_PI_MODELS, REMOTE_PI_MODELS),
             ],
         )
 

@@ -91,20 +91,6 @@ class TestT3CodeCli(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 run_sandbox_launch(args, repo_root=Path(tmpdir))
 
-    def test_t3_port_collision_with_opencode(self):
-        from sandbox.main import create_parser, run_sandbox_launch
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            secrets_file = Path(tmpdir) / "secrets" / "github-orgs.env"
-            secrets_file.parent.mkdir(parents=True)
-            secrets_file.write_text("SFACTORY0_GH_TOKEN=dummy\n")
-
-            parser = create_parser()
-            args = parser.parse_args(["-r", "test-repo", "--t3", "--opencode", "--t3-port", "4096"])
-            with self.assertRaises(SystemExit):
-                run_sandbox_launch(args, repo_root=Path(tmpdir))
-
     def test_t3_port_collision_with_metro(self):
         from sandbox.main import create_parser, run_sandbox_launch
         import tempfile

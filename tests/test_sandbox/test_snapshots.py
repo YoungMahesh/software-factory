@@ -86,7 +86,7 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
         self.assertIn("cannot be used with --name", res.stderr)
 
     def test_snapshot_mutual_exclusion_with_launch_flags(self):
-        for flag in [["--vm"], ["--memory", "2"], ["--no-cloudflare"], ["--github-branch", "feat"], ["--agy"]]:
+        for flag in [["--vm"], ["--memory", "2"], ["--no-cloudflare"], ["--github-branch", "feat"], ["--react-native"]]:
             res = subprocess.run(
                 [sys.executable, str(self.sandbox_main), "--snapshot", "sb-123"] + flag,
                 capture_output=True,

@@ -266,8 +266,6 @@ class TestWebAPI(unittest.TestCase):
                 "  StrictHostKeyChecking no\n"
                 "  UserKnownHostsFile /dev/null\n"
             ),
-            opencode_url="https://opencode.modal.run",
-            opencode_password="pass",
             is_vm=False,
         )
         mock_launch.return_value = (MagicMock(), mock_response)
@@ -275,7 +273,6 @@ class TestWebAPI(unittest.TestCase):
         payload = {
             "name": "resumed-app",
             "vm": False,
-            "opencode": True,
             "profile": "prod-profile",
         }
         response = self.client.post("/api/snapshots/im-snap1/launch", json=payload)
@@ -283,7 +280,6 @@ class TestWebAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["sandbox_id"], "sb-new")
         self.assertEqual(data["app_name"], "resumed-app")
-        self.assertEqual(data["opencode_url"], "https://opencode.modal.run")
         self.assertEqual(
             data["ssh_config"],
             (
@@ -315,8 +311,6 @@ class TestWebAPI(unittest.TestCase):
 
         payload_obj = SnapshotLaunchPayload()
         self.assertTrue(payload_obj.t3)
-        self.assertFalse(payload_obj.opencode)
-        self.assertFalse(payload_obj.agy)
         self.assertFalse(payload_obj.modal)
 
         response = self.client.post("/api/snapshots/im-snap1/launch", json={})
@@ -324,8 +318,6 @@ class TestWebAPI(unittest.TestCase):
         mock_launch.assert_called_once()
         req = mock_launch.call_args[0][0]
         self.assertTrue(req.t3)
-        self.assertFalse(req.opencode)
-        self.assertFalse(req.agy)
         self.assertFalse(req.modal)
         self.assertFalse(req.vm)
         self.assertIsNone(req.memory)
@@ -347,7 +339,6 @@ class TestWebAPI(unittest.TestCase):
             "testing": True,
             "full_clone": True,
             "t3": True,
-            "opencode": False,
         }
         response = self.client.post("/api/sandboxes", json=payload)
         self.assertEqual(response.status_code, 200)

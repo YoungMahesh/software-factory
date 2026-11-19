@@ -54,10 +54,8 @@ class TestT3CodeImage(unittest.TestCase):
 
         self.assertFalse(browser_enabled())
         self.assertTrue(browser_enabled(browser=True))
-        self.assertTrue(browser_enabled(opencode=True))
-        self.assertTrue(browser_enabled(agy=True))
         self.assertTrue(browser_enabled(t3=True))
-        self.assertTrue(browser_enabled(browser=False, opencode=False, agy=False, t3=True))
+        self.assertTrue(browser_enabled(browser=False, t3=True))
 
     def test_build_sandbox_image_layers_t3(self):
         from shared.image import (

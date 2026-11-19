@@ -8,7 +8,6 @@ import modal
 from shared.image import DEFAULT_T3_USAGE_VOLUME
 from .config import (
     DEFAULT_METRO_PORT,
-    DEFAULT_OPENCODE_PORT,
     DEFAULT_SNAPSHOT_TIMEOUT,
     DEFAULT_T3_PORT,
     DEFAULT_XFCE_PORT,
@@ -121,25 +120,9 @@ def create_parser() -> argparse.ArgumentParser:
         help="Target repository with test- prefix in default organization (e.g. test-<repo>).",
     )
     parser.add_argument(
-        "--opencode",
-        action="store_true",
-        help="Also run an OpenCode server in the sandbox and expose its WebUI over public HTTPS URL.",
-    )
-    parser.add_argument(
         "--browser",
         action="store_true",
-        help="Also pre-bake a headless Google Chrome shared by the Playwright and Chrome DevTools MCP servers. Implied by --opencode and --agy.",
-    )
-    parser.add_argument(
-        "--agy",
-        action="store_true",
-        help="Also set up antigravity-cli and launch the background Antigravity Remote Control daemon (mounts shared settings, keybindings & onboarding and automatically enables SOPS secret decryption).",
-    )
-    parser.add_argument(
-        "--opencode-port",
-        type=int,
-        default=DEFAULT_OPENCODE_PORT,
-        help=f"Port for the OpenCode server, only used with --opencode (default: {DEFAULT_OPENCODE_PORT})",
+        help="Also pre-bake a headless Google Chrome shared by the Playwright and Chrome DevTools MCP servers. Implied by --t3.",
     )
     parser.add_argument(
         "--t3",
@@ -218,16 +201,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Retain SOPS age private key and credentials in ~/.config/sops for interactive debugging.",
     )
     parser.add_argument(
-        "--herdr",
-        action="store_true",
-        help="Also install Herdr agent multiplexer (https://herdr.dev) into /usr/local/bin in the sandbox.",
-    )
-    parser.add_argument(
-        "--pi",
-        action="store_true",
-        help="Also install Pi coding agent CLI (https://pi.dev) and configure OpenCode Go with DeepSeek V4.1 Flash in the sandbox.",
-    )
-    parser.add_argument(
         "--xfce",
         action="store_true",
         help="Also run an XFCE 4 desktop with TigerVNC, noVNC, and Google Chrome exposed over Cloudflare Tunnel (implies --vm).",
@@ -272,19 +245,15 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
         if getattr(args, "snapshot_timeout", DEFAULT_SNAPSHOT_TIMEOUT) <= 0:
             parser.error("--snapshot-timeout must be a positive integer.")
         if (
-            args.opencode
-            or args.react_native
+            args.react_native
             or args.modal
             or getattr(args, "profile", None)
             or args.sops
             or args.browser
-            or args.agy
             or args.t3
             or args.t3_ssh_host
             or getattr(args, "no_t3_persist", False)
             or getattr(args, "t3_usage_volume", DEFAULT_T3_USAGE_VOLUME) != DEFAULT_T3_USAGE_VOLUME
-            or args.herdr
-            or args.pi
             or getattr(args, "xfce", False)
             or args.full_clone
             or getattr(args, "no_ssh_config", False)

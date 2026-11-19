@@ -24,7 +24,7 @@ flowchart TD
             subgraph Services["Network Ingress & Services"]
                 SSH["OpenSSH Server (Port 2222)"]
                 Tunnel["Cloudflare Ingress (Port 3000)"]
-                AgentTools["AI Dev Tooling:<br/>T3 Code (3775), OpenCode (4096),<br/>Antigravity Daemon, Herdr, Pi Agent"]
+                AgentTools["AI Dev Tooling:<br/>T3 Code (3775), Antigravity ACP,<br/>OpenCode Provider, Chrome Headless"]
             end
         end
 
@@ -47,7 +47,7 @@ flowchart TD
 - **Dual Runtimes**: Choose between lightweight standard container sandboxes and full Linux VM sandboxes (`--vm`) equipped with Docker-in-Docker and custom kernel privileges.
 - **Hermetic Ingress**: Automatic Cloudflare Tunnel provisioned on port 3000 alongside OpenSSH on port 2222 with zero-friction SSH config registration (`ssh <sandbox-name>`).
 - **Filesystem Snapshotting**: Instant copy-on-write image capture (`modal-sandbox --snapshot <id>`) and resumption (`modal-sandbox --from-snapshot <image-id>`).
-- **Integrated AI Developer Tooling**: Turnkey provisioning for T3 Code, Antigravity ACP, OpenCode Go, Pi Agent, Herdr, and Playwright-ready headless Chrome.
+- **Integrated AI Developer Tooling**: Turnkey provisioning for T3 Code with Antigravity ACP, OpenCode Go, and Playwright-ready headless Chrome.
 - **Serverless Web Control Plane**: Deploy a lightweight FastAPI control plane on Modal (`modal deploy sandbox/function.py`) providing a unified web dashboard and REST API.
 
 ---
@@ -84,7 +84,7 @@ flowchart TD
 
     ---
 
-    Connect T3 Code, Antigravity, OpenCode, and Pi Coding Agent to live sandboxes.
+    Connect T3 Code with Antigravity and OpenCode agent providers to live sandboxes.
 
     [:octicons-arrow-right-24: Configure AI Tools](guides/ai-tooling.md)
 

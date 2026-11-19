@@ -28,7 +28,6 @@ from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
 )
 from sandbox.core import (
-    DEFAULT_OPENCODE_PORT,
     DEFAULT_T3_PORT,
     LaunchRequest,
     LaunchResponse,
@@ -125,13 +124,9 @@ class SnapshotLaunchPayload(BaseModel):
     vm: bool = False
     memory: int | None = None
     no_cloudflare: bool = False
-    opencode: bool = False
     t3: bool = True
     t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
     no_t3_persist: bool = False
-    agy: bool = False
-    herdr: bool = False
-    pi: bool = False
     modal: bool = False
     sops: bool = False
     profile: str | None = None
@@ -148,13 +143,9 @@ class FreshSandboxLaunchPayload(BaseModel):
     vm: bool = False
     memory: int | None = None
     no_cloudflare: bool = False
-    opencode: bool = False
     t3: bool = True
     t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
     no_t3_persist: bool = False
-    agy: bool = False
-    herdr: bool = False
-    pi: bool = False
     modal: bool = True
     sops: bool = True
     browser: bool = False
@@ -171,11 +162,11 @@ def favicon() -> Response:
 def api_get_version() -> dict[str, Any]:
     """Returns software-factory Git deployment provenance and version metadata."""
     prov = resolve_host_software_factory_provenance()
-    return {
-        "commit": prov.get("SOFTWARE_FACTORY_COMMIT", "unknown"),
-        "commit_short": prov.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
-        "ref": prov.get("SOFTWARE_FACTORY_REF", "unknown"),
-        "dirty": prov.get("SOFTWARE_FACTORY_DIRTY") == "1",
+    return {\
+        "commit": prov.get("SOFTWARE_FACTORY_COMMIT", "unknown"),\
+        "commit_short": prov.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),\
+        "ref": prov.get("SOFTWARE_FACTORY_REF", "unknown"),\
+        "dirty": prov.get("SOFTWARE_FACTORY_DIRTY") == "1",\
     }
 
 
@@ -228,13 +219,9 @@ def _build_fresh_launch_request(payload: FreshSandboxLaunchPayload) -> LaunchReq
         vm=payload.vm,
         memory=payload.memory,
         no_cloudflare=payload.no_cloudflare,
-        opencode=payload.opencode,
         t3=payload.t3,
         t3_usage_volume=payload.t3_usage_volume,
         no_t3_persist=payload.no_t3_persist,
-        agy=payload.agy,
-        herdr=payload.herdr,
-        pi=payload.pi,
         modal=payload.modal,
         sops=payload.sops,
         browser=payload.browser,
@@ -393,13 +380,9 @@ def api_launch_from_snapshot(image_id: str, payload: SnapshotLaunchPayload) -> L
         vm=payload.vm,
         memory=payload.memory,
         no_cloudflare=payload.no_cloudflare,
-        opencode=payload.opencode,
         t3=payload.t3,
         t3_usage_volume=payload.t3_usage_volume,
         no_t3_persist=payload.no_t3_persist,
-        agy=payload.agy,
-        herdr=payload.herdr,
-        pi=payload.pi,
         modal=payload.modal,
         sops=payload.sops,
     )
