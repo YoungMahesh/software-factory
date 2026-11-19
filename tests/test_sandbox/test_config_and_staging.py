@@ -386,3 +386,27 @@ class TestConfigModule(unittest.TestCase):
         self.assertEqual(creds.age_private_key, "AGE-SECRET-KEY-1")
         self.assertEqual(creds.modal_tokens, '[{"name": "p1"}]')
 
+    def test_resolve_timezone_defaults_and_overrides(self):
+        from sandbox.config import resolve_timezone
+
+        # 1. Default fallback is Asia/Kolkata
+        self.assertEqual(resolve_timezone(env={}), "Asia/Kolkata")
+
+        # 2. DEFAULT_TIMEZONE takes precedence
+        self.assertEqual(resolve_timezone(env={"DEFAULT_TIMEZONE": "America/New_York"}), "America/New_York")
+
+        # 3. TZ fallback
+        self.assertEqual(resolve_timezone(env={"TZ": "Europe/London"}), "Europe/London")
+
+        # 4. DEFAULT_TIMEZONE wins over TZ
+        self.assertEqual(
+            resolve_timezone(env={"DEFAULT_TIMEZONE": "Asia/Tokyo", "TZ": "UTC"}),
+            "Asia/Tokyo",
+        )
+
+    def test_resolve_factory_credentials_includes_timezone(self):
+        from sandbox.config import resolve_factory_credentials
+
+        creds = resolve_factory_credentials(env={"DEFAULT_TIMEZONE": "Asia/Kolkata"}, mutate_environ=False)
+        self.assertEqual(creds.default_timezone, "Asia/Kolkata")
+

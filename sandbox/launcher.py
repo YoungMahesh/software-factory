@@ -32,7 +32,7 @@ from sandbox.provenance import (
 from sandbox.config import (
     DEFAULT_METRO_PORT, DEFAULT_OPENCODE_PORT, DEFAULT_ORG,
     DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
-    resolve_factory_credentials,
+    resolve_factory_credentials, resolve_timezone,
 )
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
 from sandbox.formatting import append_ssh_config, generate_ssh_config_snippet
@@ -222,10 +222,12 @@ class SandboxLauncher:
             if env_dict:
                 sandbox_secrets.append(modal.Secret.from_dict(env_dict))
 
+        target_tz = resolve_timezone(repo_root)
         env: dict[str, str | None] = {
             "SSH_AUTHORIZED_KEY": pubkey_content, "PORT": str(DEFAULT_WEB_PORT),
             "HOSTNAME": "0.0.0.0", "APP_NAME": sandbox_name,
             "MODAL_APP_NAME": app_name, "SANDBOX_NAME": sandbox_name,
+            "TZ": target_tz, "DEFAULT_TIMEZONE": target_tz,
         }
         env.update(self.resolve_git_identity_fn())
         provenance = self.resolve_provenance_fn(repo_root)
@@ -241,6 +243,7 @@ class SandboxLauncher:
                     for content in bundle.get("files", {}).values():
                         all_vars.update(parse_env_text(content))
                     if all_vars:
+                        if all_vars.get("TZ"): env["TZ"] = all_vars["TZ"]
                         sandbox_secrets.append(modal.Secret.from_dict(all_vars))
                         self._emit_log(f"🔐 Injected {len(all_vars)} secrets from env-store bundle into {bare_repo}...")
                     raw_vault_env = bundle.get("files", {}).get("default.env") or (next(iter(bundle["files"].values())) if bundle.get("files") else None)
@@ -254,6 +257,7 @@ class SandboxLauncher:
                         if vault_env is not None:
                             raw_vault_env = serialize_env_dict(vault_env)
                     if vault_env:
+                        if vault_env.get("TZ"): env["TZ"] = vault_env["TZ"]
                         self._emit_log(f"🔐 Injected {len(vault_env)} secrets from env-store into {bare_repo}...")
                         sandbox_secrets.append(modal.Secret.from_dict(vault_env))
                     else:
@@ -353,6 +357,7 @@ class SandboxLauncher:
             "software_factory_commit": provenance.get("SOFTWARE_FACTORY_COMMIT_SHORT", "unknown"),
             "software_factory_dirty": provenance.get("SOFTWARE_FACTORY_DIRTY", "0"),
             "created_at": created_at_iso, "timeout_secs": str(TIMEOUT_SECS),
+            "timezone": str(env.get("TZ") or target_tz),
         }
 
         sandbox_kwargs: dict[str, Any] = {

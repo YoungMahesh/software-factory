@@ -132,6 +132,10 @@ _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
 Declarative global Git configuration tracked in `shared/gitconfig`, staged into the Shared Base Image at `/root/.gitconfig`, providing default branch initialization (`main`) and GitHub credential helpers (`gh auth git-credential`). Multi-tier user authorship is resolved dynamically: `DEFAULT_GIT_NAME` and `DEFAULT_GIT_EMAIL` provide default identity fallback applied globally, while repository-specific overrides (`GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`) are stored decoupled in `<repo>/git.env` within the `env-store` vault and applied purely via `git config --local user.name` and `user.email`. Synthetic fallback identities are never injected.
 _Avoid_: Dynamic git config, inline git config, hardcoded git config
 
+**Sandbox Timezone Configuration**:
+Declarative and runtime timezone localization configured globally via `DEFAULT_TIMEZONE` in `.env` (defaulting to `Asia/Kolkata` for Indian Standard Time), with ambient `TZ` fallback and repository-level overrides via `env-store`. Staged into sandbox containers at `/etc/localtime`, `/etc/timezone`, `/etc/environment`, and `~/.bashrc`, accompanied by declarative `[log] date = format-local:%a %b %d %H:%M:%S %Y %z` in `shared/gitconfig` so both git commit creation and git log presentation consistently render in the sandbox's designated timezone.
+_Avoid_: Hardcoded UTC, container clock hack, inline tz
+
 **Cloudflare Tunnel Domain**:
 The public hostname routed by Cloudflare Tunnel to container port 3000, configured via `MODAL_SANDBOX_TUNNEL_DOMAIN` (or `CLOUDFLARE_TUNNEL_DOMAIN`), announced during sandbox readiness output or defaulting to a port readiness notice when unconfigured.
 _Avoid_: Static tunnel URL, hardcoded tunnel domain

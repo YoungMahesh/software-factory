@@ -442,6 +442,33 @@ class TestSandboxLauncher(unittest.TestCase):
         self.assertEqual(decoded_bundle["mappings"], [["web.env", "apps/web/.env"], ["api.env", "packages/api/.env"]])
         self.assertEqual(decoded_bundle["files"]["web.env"], "WEB_PORT=3000\n")
 
+    @patch("modal.Sandbox.create")
+    @patch("modal.App.lookup")
+    def test_launcher_injects_timezone_into_container_env_and_tags(self, mock_lookup, mock_create):
+        mock_sandbox = MagicMock()
+        mock_sandbox.object_id = "sb-tz-test"
+        mock_sandbox.poll.return_value = None
+        mock_sandbox.tunnels.return_value = {}
+        mock_create.return_value = mock_sandbox
+
+        launcher = SandboxLauncher(
+            build_image_fn=MagicMock(),
+            load_pubkey_fn=MagicMock(return_value="key"),
+            repo_root=Path("/nonexistent"),
+        )
+        req = LaunchRequest(name="tz-box")
+
+        with patch.dict(os.environ, {"DEFAULT_TIMEZONE": "Asia/Kolkata"}, clear=False):
+            launcher.launch(req)
+
+        call_kwargs = mock_create.call_args.kwargs
+        call_env = call_kwargs["env"]
+        call_tags = call_kwargs["tags"]
+
+        self.assertEqual(call_env.get("TZ"), "Asia/Kolkata")
+        self.assertEqual(call_env.get("DEFAULT_TIMEZONE"), "Asia/Kolkata")
+        self.assertEqual(call_tags.get("timezone"), "Asia/Kolkata")
+
 
 if __name__ == "__main__":
     unittest.main()

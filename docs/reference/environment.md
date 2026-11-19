@@ -39,6 +39,10 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `DEFAULT_GIT_NAME`: Default Git author and committer name applied globally across sandbox containers when repository-specific authorship is not specified.
 - `DEFAULT_GIT_EMAIL`: Default Git author and committer email address applied globally across sandbox containers when repository-specific authorship is not specified.
 
+### 9. Timezone & Localization
+- `DEFAULT_TIMEZONE`: Default system and Git timezone applied across sandbox containers, background daemons, and terminal environments (defaults to `Asia/Kolkata` when unspecified).
+- `TZ`: Standard POSIX timezone identifier used as an ambient override or per-repository secret in `env-store` (`<repo>/git.env` or `<repo>/default.env`).
+
 ---
 
 ## Resolution Order & Precedence

@@ -3,6 +3,15 @@ set -euo pipefail
 
 BRANCH="${1:-main}"
 
+# Configure system timezone and environment clock
+TARGET_TZ="${TZ:-${DEFAULT_TIMEZONE:-Asia/Kolkata}}"
+export TZ="$TARGET_TZ"
+grep -qxF "export TZ=\"$TARGET_TZ\"" ~/.bashrc 2>/dev/null || echo "export TZ=\"$TARGET_TZ\"" >> ~/.bashrc
+grep -qxF "TZ=\"$TARGET_TZ\"" /etc/environment 2>/dev/null || echo "TZ=\"$TARGET_TZ\"" >> /etc/environment
+if [ -f "/usr/share/zoneinfo/$TARGET_TZ" ]; then
+    ln -sf "/usr/share/zoneinfo/$TARGET_TZ" /etc/localtime 2>/dev/null || true
+    echo "$TARGET_TZ" > /etc/timezone 2>/dev/null || true
+fi
 # 0. Setup and start SSH server
 mkdir -p /run/sshd /root/.ssh
 ssh-keygen -A 2>/dev/null || true
