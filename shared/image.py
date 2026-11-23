@@ -3,14 +3,8 @@ from pathlib import Path
 import modal
 
 from shared.t3_patches import (
-    T3_CURRENT_MODELS_PATCH_REPLACEMENT,
-    T3_CURRENT_MODELS_PATCH_TARGET,
     T3_DRIVER_ORDER_PATCH_REPLACEMENT,
     T3_DRIVER_ORDER_PATCH_TARGET,
-    T3_IPV6_PATCH_REPLACEMENT,
-    T3_IPV6_PATCH_TARGET,
-    T3_MODELS_MANIFEST_PATCH_REPLACEMENT,
-    T3_MODELS_MANIFEST_PATCH_TARGET,
     T3_PATCH_SCRIPT,
     T3_SSH_PATCH_REPLACEMENT,
     T3_SSH_PATCH_TARGET,
@@ -134,7 +128,7 @@ def add_local_files_if_present(
     return image
 
 
-BASE_IMAGE_FILES: list[tuple[Path, str]] = [
+BASE_IMAGE_FILES: list[tuple[Path, str]] = [\
     (LOCAL_STARTUP_SCRIPT, REMOTE_STARTUP_SCRIPT),
     (LOCAL_ALIASES_BASH, REMOTE_ALIASES_BASH),
     (LOCAL_GITCONFIG, REMOTE_GITCONFIG),
@@ -271,26 +265,28 @@ def browser_enabled(
 
 
 # T3 Code release configuration and binary patch target
-T3_VERSION = "0.1.3"
+T3_VERSION = "0.1.11"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
-# Antigravity ACP plugin bundle configuration
-T3_ANTIGRAVITY_VERSION = "1.3.0"
-T3_ANTIGRAVITY_RELEASE_ID = (
-    "9fb60956af0a9d76220a4db91ca9ac88e2a2372ad68f985ab5fceace6b825b96"
+# Antigravity ACP runtime configuration
+T3_ANTIGRAVITY_VERSION = "1.5.14"
+T3_ANTIGRAVITY_SHA512 = (
+    "83311d3f354567612dc16c1ae2ea9b503d6f6833aa4e138d39aa229da3f3bb99"
+    "b0e4d7cca0bce4796b0060d6a51d8113eb7449ed5dc0e7900bf217107ea5bff9"
 )
+T3_ANTIGRAVITY_RELEASE_ID = T3_ANTIGRAVITY_SHA512[:64]
 T3_ANTIGRAVITY_URL = (
-    f"https://dl.google.com/agy-extensions/releases/linux/"
-    f"agy-acp-server-{T3_ANTIGRAVITY_VERSION}-linux-x86_64.zip"
+    f"https://storage.googleapis.com/antigravity-public/antigravity-cli/"
+    f"{T3_ANTIGRAVITY_VERSION}-5302690847260672/linux-x64/cli_linux_x64.tar.gz"
 )
 T3_ANTIGRAVITY_MANAGED_DIR = "/root/.t3/tools/antigravity-acp/linux-x64"
 T3_ANTIGRAVITY_VERSION_DIR = (
     f"{T3_ANTIGRAVITY_MANAGED_DIR}/versions/{T3_ANTIGRAVITY_RELEASE_ID}"
 )
+T3_ANTIGRAVITY_BYTES = 273240776
 T3_INSTALL_COMPLETE_JSON = (
     f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}","version":"{T3_ANTIGRAVITY_VERSION}",'
-    f'"executable":{{"name":"agy_acp_server.par","bytes":926533965}},'
-    f'"harness":{{"name":"localharness_external","bytes":130388040}}}}'
+    f'"executable":{{"name":"antigravity","bytes":{T3_ANTIGRAVITY_BYTES}}}}}'
 )
 T3_ACTIVE_JSON = f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}"}}'
 
@@ -381,13 +377,8 @@ def build_sandbox_image(
             "ln -sf /opt/t3/t3 /usr/local/bin/t3",
             T3_PATCH_SCRIPT,
             f"mkdir -p {T3_ANTIGRAVITY_VERSION_DIR}",
-            f"curl -fsSL {T3_ANTIGRAVITY_URL} -o /tmp/agy-acp.zip",
-            f"unzip -q /tmp/agy-acp.zip -d {T3_ANTIGRAVITY_VERSION_DIR}",
-            "rm -f /tmp/agy-acp.zip",
-            (
-                f"chmod 0755 {T3_ANTIGRAVITY_VERSION_DIR}/agy_acp_server.par "
-                f"{T3_ANTIGRAVITY_VERSION_DIR}/localharness_external"
-            ),
+            f"curl -fsSL {T3_ANTIGRAVITY_URL} | tar -xz -C {T3_ANTIGRAVITY_VERSION_DIR}",
+            f"chmod 0755 {T3_ANTIGRAVITY_VERSION_DIR}/antigravity",
             f"echo '{T3_INSTALL_COMPLETE_JSON}' > {T3_ANTIGRAVITY_VERSION_DIR}/.install-complete.json",
             f"echo '{T3_ACTIVE_JSON}' > {T3_ANTIGRAVITY_MANAGED_DIR}/active.json",
             "/opt/t3/t3 browser setup",

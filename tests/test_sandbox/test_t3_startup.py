@@ -31,7 +31,7 @@ class TestT3CodeStartup(unittest.TestCase):
 
     def test_startup_script_contains_t3_daemon_and_check_script(self):
         content = self.startup_sh.read_text()
-        for token in ["ENABLE_T3", "check-t3", "t3 serve", "GitHub CLI", "--auto-bootstrap-project-from-cwd"]:
+        for token in ["ENABLE_T3", "check-t3", "t3 serve", "GitHub CLI", "$TARGET_DIR"]:
             self.assertIn(token, content)
 
     def test_startup_script_contains_t3_browser_sandbox_env(self):

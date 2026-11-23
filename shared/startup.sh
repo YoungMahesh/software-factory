@@ -1179,7 +1179,7 @@ EOF
     fi
 
     echo "🏝️  Starting T3 Code server on port $T3_PORT..."
-    nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web --auto-bootstrap-project-from-cwd "$TARGET_DIR" > /tmp/t3.log 2>&1 &
+    nohup t3 serve --host 0.0.0.0 --port "$T3_PORT" --mode web "$TARGET_DIR" > /tmp/t3.log 2>&1 &
     t3 auth pairing create --ttl 24h --json > /tmp/t3-pairing.json 2>/dev/null || true
 
     # Background daemon to continuously sync T3 Code usage and conversations to persistent volume

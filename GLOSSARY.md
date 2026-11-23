@@ -65,7 +65,7 @@ The terminal coding agent previously provisioned via `--pi`, retired in favor of
 _Avoid_: Pi agent, pi terminal, pi runner
 
 **Antigravity Provider**:
-Google Gemini agent provider orchestrated inside `--t3` sandboxes via T3 Code's managed ACP server (`agy_acp_server.par`), with lightweight query (`agyq`) and profile management (`agyprofile`) CLI utilities. The standalone Antigravity CLI binary and `--agy` launch flag are retired.
+Google Gemini agent provider orchestrated inside `--t3` sandboxes via T3 Code's managed Agent Client Protocol (ACP) runtime (`antigravity` CLI running `antigravity acp`), with lightweight query (`agyq`) and profile management (`agyprofile`) CLI utilities. The standalone Antigravity CLI binary and `--agy` launch flag are retired.
 _Avoid_: Antigravity CLI, Gemini CLI, antigravity-ide
 
 **Antigravity Remote Control (Retired)**:
