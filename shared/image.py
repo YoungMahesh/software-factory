@@ -269,21 +269,21 @@ T3_VERSION = "0.1.11"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
 # Antigravity ACP runtime configuration
-T3_ANTIGRAVITY_VERSION = "1.5.14"
+T3_ANTIGRAVITY_VERSION = "1.5.15"
 T3_ANTIGRAVITY_SHA512 = (
-    "83311d3f354567612dc16c1ae2ea9b503d6f6833aa4e138d39aa229da3f3bb99"
-    "b0e4d7cca0bce4796b0060d6a51d8113eb7449ed5dc0e7900bf217107ea5bff9"
+    "af3f0be58b8475940d79f9abea19e762ecc3d265ea9f56cff8dd805e27ba299b"
+    "44a305a79504a7ffe6ebdfa29a294c56edc4caed1875990bfaf2fef1508ec8b0"
 )
 T3_ANTIGRAVITY_RELEASE_ID = T3_ANTIGRAVITY_SHA512[:64]
 T3_ANTIGRAVITY_URL = (
     f"https://storage.googleapis.com/antigravity-public/antigravity-cli/"
-    f"{T3_ANTIGRAVITY_VERSION}-5302690847260672/linux-x64/cli_linux_x64.tar.gz"
+    f"{T3_ANTIGRAVITY_VERSION}-5514532022517760/linux-x64/cli_linux_x64.tar.gz"
 )
 T3_ANTIGRAVITY_MANAGED_DIR = "/root/.t3/tools/antigravity-acp/linux-x64"
 T3_ANTIGRAVITY_VERSION_DIR = (
     f"{T3_ANTIGRAVITY_MANAGED_DIR}/versions/{T3_ANTIGRAVITY_RELEASE_ID}"
 )
-T3_ANTIGRAVITY_BYTES = 273240776
+T3_ANTIGRAVITY_BYTES = 273879752
 T3_INSTALL_COMPLETE_JSON = (
     f'{{"releaseId":"{T3_ANTIGRAVITY_RELEASE_ID}","version":"{T3_ANTIGRAVITY_VERSION}",'
     f'"executable":{{"name":"antigravity","bytes":{T3_ANTIGRAVITY_BYTES}}}}}'

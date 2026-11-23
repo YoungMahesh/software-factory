@@ -983,16 +983,49 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
             ]
         }
 
+        oauth_token_data = {
+            "token": {
+                "access_token": "placeholder",
+                "token_type": "Bearer",
+                "refresh_token": refresh_token,
+                "expiry": "2020-01-01T00:00:00Z"
+            },
+            "auth_method": "consumer"
+        }
+
+        profile_dir = os.path.expanduser("~/.gemini/antigravity-cli/profiles")
+        os.makedirs(profile_dir, mode=0o700, exist_ok=True)
+        profile_path = os.path.join(profile_dir, slug)
+        with open(profile_path, "w") as pf:
+            json.dump(oauth_token_data, pf, indent=2)
+        os.chmod(profile_path, 0o600)
+
+        if is_primary:
+            primary_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+            with open(primary_path, "w") as pf:
+                json.dump(oauth_token_data, pf, indent=2)
+            os.chmod(primary_path, 0o600)
+
         for d in target_dirs:
             os.makedirs(d, mode=0o700, exist_ok=True)
             tok_file = os.path.join(d, "acp_token.json")
             set_file = os.path.join(d, "settings.json")
+            oauth_file = os.path.join(d, "antigravity-oauth-token")
             with open(tok_file, "w") as fp:
                 json.dump(acp_token, fp, indent=2)
             os.chmod(tok_file, 0o600)
             with open(set_file, "w") as fp:
                 json.dump(acp_settings, fp, indent=2)
             os.chmod(set_file, 0o600)
+            with open(oauth_file, "w") as fp:
+                json.dump(oauth_token_data, fp, indent=2)
+            os.chmod(oauth_file, 0o600)
+            cache_sub = os.path.join(d, "cache")
+            os.makedirs(cache_sub, mode=0o700, exist_ok=True)
+            with open(os.path.join(cache_sub, "acp-auth-state.json"), "w") as fp:
+                json.dump({"methodId": "oauth-personal"}, fp)
+            with open(os.path.join(cache_sub, "onboarding.json"), "w") as fp:
+                json.dump({"consumerOnboardingComplete": False, "enterpriseOnboardingComplete": False, "onboardingComplete": False}, fp)
 
         settings["providerInstances"][instance_id] = {
             "driver": "antigravity",
@@ -1002,12 +1035,103 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
         configured_antigravity.append(instance_id)
 
         t3_cache_file = os.path.join(t3_cache_dir, f"{instance_id}.json")
+        models_data = [
+            {
+                "slug": "gemini-3.8-flash",
+                "name": "Gemini 3.8 Flash",
+                "isCustom": False,
+                "isDefault": True,
+                "aliases": [f"{instance_id}-default", "gemini-3.8-flash-high"],
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "thought_level",
+                            "label": "Thinking Level",
+                            "type": "select",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"}
+                            ],
+                            "currentValue": "high",
+                            "role": "reasoning"
+                        }
+                    ]
+                }
+            },
+            {
+                "slug": "claude-sonnet-4-6",
+                "name": "Claude Sonnet 4.6 (Thinking)",
+                "isCustom": False,
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "thought_level",
+                            "label": "Thinking Level",
+                            "type": "select",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"}
+                            ],
+                            "role": "reasoning"
+                        }
+                    ]
+                }
+            },
+            {
+                "slug": "claude-opus-4-6-thinking",
+                "name": "Claude Opus 4.6 (Thinking)",
+                "isCustom": False,
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "thought_level",
+                            "label": "Thinking Level",
+                            "type": "select",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"}
+                            ],
+                            "role": "reasoning"
+                        }
+                    ]
+                }
+            },
+            {
+                "slug": "gpt-oss-120b-medium",
+                "name": "GPT-OSS 120B (Medium)",
+                "isCustom": False,
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "thought_level",
+                            "label": "Thinking Level",
+                            "type": "select",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"}
+                            ],
+                            "role": "reasoning"
+                        }
+                    ]
+                }
+            }
+        ]
         cache_data = {
             "displayName": display_name,
             "showInteractionModeToggle": False,
+            "supportedRuntimeModes": [
+                "approval-required",
+                "auto-accept-edits",
+                "auto",
+                "full-access"
+            ],
             "enabled": True,
             "installed": True,
-            "version": "1.3.0",
+            "version": "1.5.15",
             "status": "ready",
             "auth": {
                 "status": "authenticated",
@@ -1019,19 +1143,10 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
                 "canInstall": True
             },
             "checkedAt": "2026-10-27T12:00:00.000Z",
-            "models": [
-                {
-                    "slug": "gemini-3.8-flash-high",
-                    "name": "Gemini 3.8 Flash (High)",
-                    "isCustom": False,
-                    "isDefault": True,
-                    "aliases": [f"{instance_id}-default"],
-                    "capabilities": {"optionDescriptors": []}
-                }
-            ],
+            "models": models_data,
             "slashCommands": [],
             "skills": [],
-            "supportsConversationRollback": False,
+            "supportsConversationRollback": True,
             "supportsTextGeneration": True,
             "instanceId": instance_id,
             "driver": "antigravity"
