@@ -31,12 +31,14 @@ from sandbox.config import (
     DEFAULT_XFCE_PORT,
     IDLE_TIMEOUT_SECS,
     TIMEOUT_SECS,
+    resolve_web_ui_credentials,
 )
 from sandbox.cli import (
     SnapshotTTLAction,
     append_ssh_config,
     capture_snapshot,
     create_parser,
+    display_launch_summary,
     generate_ascii_qr,
     generate_ssh_config_snippet,
     print_access_info,
@@ -57,21 +59,9 @@ def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    user = os.environ.get("WEB_UI_USERNAME")
-    passwd = os.environ.get("WEB_UI_PASSWORD")
-    if not user or not passwd:
-        dotenv_path = Path(__file__).resolve().parent.parent / ".env"
-        if dotenv_path.is_file():
-            try:
-                for line in dotenv_path.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line.startswith("WEB_UI_USERNAME=") and not user:
-                        user = line.split("=", 1)[1].strip().strip("'\"")
-                    elif line.startswith("WEB_UI_PASSWORD=") and not passwd:
-                        passwd = line.split("=", 1)[1].strip().strip("'\"")
-            except Exception:
-                pass
-
+    creds_dict = resolve_web_ui_credentials(repo_root=Path(__file__).resolve().parent.parent)
+    user = creds_dict.get("WEB_UI_USERNAME")
+    passwd = creds_dict.get("WEB_UI_PASSWORD")
     if not user or not passwd:
         raise ValueError(
             "Remote control plane invocation requires WEB_UI_USERNAME and WEB_UI_PASSWORD to be set in environment or .env."
@@ -150,39 +140,7 @@ def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser 
         "xfce_password": getattr(args, "xfce_password", None),
     }
     data = run_remote_request(endpoint_url, "/launch", payload)
-    ssh_info = tuple(data["ssh_info"]) if data.get("ssh_info") else None
-    print_fn = getattr(sys.modules.get("sandbox.main"), "print_access_info", print_access_info)
-    print_fn(
-        app_name=data.get("app_name", ""),
-        sandbox_name=data.get("sandbox_name"),
-        sandbox_id=data.get("sandbox_id"),
-        ssh_info=ssh_info,
-        metro_url=data.get("metro_url"),
-        metro_port=data.get("metro_port"),
-        t3_url=data.get("t3_url"),
-        t3_port=data.get("t3_port"),
-        t3_pair_url=data.get("t3_pair_url"),
-        t3_qr_code=data.get("t3_qr_code"),
-        t3_ssh_host=data.get("t3_ssh_host"),
-        t3_persist=data.get("t3_persist", False),
-        t3_usage_volume=data.get("t3_usage_volume"),
-        codex_profile=data.get("codex_profile"),
-        xfce_url=data.get("xfce_url"),
-        xfce_port=data.get("xfce_port"),
-        xfce_password=data.get("xfce_password"),
-        memory_gb=data.get("memory_gb"),
-        cloudflare_enabled=data.get("cloudflare_enabled", True),
-        sops_enabled=data.get("sops_enabled", False),
-        is_vm=data.get("is_vm", False),
-    )
-    if ssh_info and not getattr(args, "no_ssh_config", False):
-        instance_name = data.get("t3_ssh_host") or data.get("sandbox_name") or data.get("app_name", "")
-        append_fn = getattr(sys.modules.get("sandbox.main"), "append_ssh_config", append_ssh_config)
-        append_fn(
-            instance_name=instance_name,
-            ssh_host=ssh_info[0],
-            ssh_port=ssh_info[1],
-        )
+    display_launch_summary(data, register_ssh=not getattr(args, "no_ssh_config", False))
 
 
 def run_sandbox_launch(
@@ -247,39 +205,11 @@ def run_sandbox_launch(
         )
         sys.exit(1)
 
-    print_fn = getattr(sys.modules.get("sandbox.main"), "print_access_info", print_access_info)
-    print_fn(
+    display_launch_summary(
+        result,
         sandbox=sandbox,
-        app_name=result.app_name,
-        sandbox_name=result.sandbox_name,
-        ssh_info=result.ssh_info,
-        metro_url=result.metro_url,
-        metro_port=result.metro_port,
-        t3_url=result.t3_url,
-        t3_port=result.t3_port,
-        t3_pair_url=result.t3_pair_url,
-        t3_qr_code=result.t3_qr_code,
-        t3_ssh_host=result.t3_ssh_host,
-        t3_persist=result.t3_persist,
-        t3_usage_volume=result.t3_usage_volume,
-        codex_profile=result.codex_profile,
-        xfce_url=result.xfce_url,
-        xfce_port=result.xfce_port,
-        xfce_password=result.xfce_password,
-        memory_gb=result.memory_gb,
-        cloudflare_enabled=result.cloudflare_enabled,
-        sops_enabled=result.sops_enabled,
-        is_vm=result.is_vm,
+        register_ssh=not getattr(args, "no_ssh_config", False),
     )
-
-    if result.ssh_info and not getattr(args, "no_ssh_config", False):
-        instance_name = result.t3_ssh_host or result.sandbox_name or result.app_name
-        append_fn = getattr(sys.modules.get("sandbox.main"), "append_ssh_config", append_ssh_config)
-        append_fn(
-            instance_name=instance_name,
-            ssh_host=result.ssh_info[0],
-            ssh_port=result.ssh_info[1],
-        )
 
 
 def main():

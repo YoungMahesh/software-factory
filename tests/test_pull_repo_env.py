@@ -68,15 +68,15 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertEqual(res, "DECRYPTED")
         mock_decrypt.assert_called_once_with("CIPHERTEXT", age_private_key="AGE-TEST-KEY", target_filename="custom.pem")
 
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
-    def test_pull_repo_env_success_preserves_quotes_and_comments(self, mock_fetch_raw):
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_success_preserves_quotes_and_comments(self, mock_fetch_bundle):
         mock_raw_env = (
             "# Project configuration\n"
             "SECRET_ONE=value1\n"
             "SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3NzaC1yc2EAAA... test@example'\n"
             'OTHER_KEY="double quoted"\n'
         )
-        mock_fetch_raw.return_value = mock_raw_env
+        mock_fetch_bundle.return_value = {"files": {"default.env": mock_raw_env}}
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(
@@ -95,9 +95,9 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertIn("# Project configuration", content)
         self.assertEqual(oct(dest_file.stat().st_mode)[-3:], "600")
 
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
-    def test_pull_repo_env_not_found(self, mock_fetch_raw):
-        mock_fetch_raw.return_value = None
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_not_found(self, mock_fetch_bundle):
+        mock_fetch_bundle.return_value = None
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(
@@ -110,9 +110,9 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertFalse(success)
         self.assertFalse(dest_file.is_file())
 
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
-    def test_pull_repo_env_optional_when_not_found(self, mock_fetch_raw):
-        mock_fetch_raw.return_value = None
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_optional_when_not_found(self, mock_fetch_bundle):
+        mock_fetch_bundle.return_value = None
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(
@@ -126,9 +126,9 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertFalse(success)
         self.assertFalse(dest_file.is_file())
 
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
-    def test_pull_repo_env_optional_on_decryption_error(self, mock_fetch_raw):
-        mock_fetch_raw.side_effect = RuntimeError("SOPS decryption failed: missing private key")
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_optional_on_decryption_error(self, mock_fetch_bundle):
+        mock_fetch_bundle.side_effect = RuntimeError("SOPS decryption failed: missing private key")
 
         dest_file = self.repo_dir / ".env"
         success = pull_repo_env(
@@ -142,9 +142,9 @@ class TestPullRepoEnv(unittest.TestCase):
         self.assertFalse(success)
         self.assertFalse(dest_file.is_file())
 
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
-    def test_cli_optional_flag_exits_zero_on_missing(self, mock_fetch_raw):
-        mock_fetch_raw.return_value = None
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_cli_optional_flag_exits_zero_on_missing(self, mock_fetch_bundle):
+        mock_fetch_bundle.return_value = None
         dest_file = self.repo_dir / ".env"
 
         test_args = [
@@ -162,11 +162,11 @@ class TestPullRepoEnv(unittest.TestCase):
 
     @patch("subprocess.run")
     @patch("scripts.pull_repo_env.fetch_vault_git_identity")
-    @patch("scripts.pull_repo_env.fetch_vault_env_raw")
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
     def test_pull_repo_env_configures_local_git_author_when_git_env_present(
-        self, mock_fetch_raw, mock_fetch_git, mock_run
+        self, mock_fetch_bundle, mock_fetch_git, mock_run
     ):
-        mock_fetch_raw.return_value = "API_KEY=123\n"
+        mock_fetch_bundle.return_value = {"files": {"default.env": "API_KEY=123\n"}}
         mock_fetch_git.return_value = {
             "GIT_AUTHOR_NAME": "Repo User",
             "GIT_AUTHOR_EMAIL": "repo@example.com",

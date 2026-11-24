@@ -9,6 +9,12 @@ from fastapi import Depends, FastAPI, HTTPException, status
 import modal
 
 from shared.image import SOPS_INSTALL_COMMANDS
+from sandbox.config import (
+    collect_control_plane_secrets_dict,
+    compile_control_plane_secrets,
+    parse_env_file,
+    resolve_web_ui_credentials,
+)
 from sandbox.core import (
     LaunchRequest,
     LaunchResponse,
@@ -33,120 +39,31 @@ repo_root = Path(__file__).resolve().parent.parent
 
 
 def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None) -> dict[str, str]:
-    """Resolves and validates WEB_UI_USERNAME and WEB_UI_PASSWORD.
-
-    Checks os.environ, falling back to .env / secrets/.env. Raises a RuntimeError
-    during modal deploy or modal serve if required credentials are missing.
-    Bypassed during test execution when running under pytest unless enforce=True.
-    """
-    credentials: dict[str, str] = {}
-    for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD"):
-        val = os.environ.get(key)
-        if val:
-            credentials[key] = val
-
-    if not credentials.get("WEB_UI_USERNAME") or not credentials.get("WEB_UI_PASSWORD"):
-        candidate_files = [
-            root / ".env",
-            root / ".secrets" / ".env",
-            root / "secrets" / ".env",
-        ]
-        for env_file in candidate_files:
-            if env_file.is_file():
-                for line in env_file.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        k = k.strip()
-                        v = v.strip().strip("'\"")
-                        if k in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD") and k not in credentials:
-                            credentials[k] = v
-
-    if enforce is None:
-        is_testing = (
-            "pytest" in sys.modules
-            or "PYTEST_CURRENT_TEST" in os.environ
-            or any("pytest" in str(arg) for arg in sys.argv)
-        )
-        should_enforce = not is_testing
-    else:
-        should_enforce = enforce
-
-    if not should_enforce:
-        return credentials
-
-    missing = [key for key in ("WEB_UI_USERNAME", "WEB_UI_PASSWORD") if not credentials.get(key)]
-    if missing:
-        missing_str = ", ".join(missing)
-        raise RuntimeError(
-            f"Missing required environment variable(s) for Web UI deployment: {missing_str}. "
-            "Please configure WEB_UI_USERNAME and WEB_UI_PASSWORD in your environment or .env file "
-            "before running 'modal deploy' or 'modal serve'."
-        )
-
-    return credentials
+    """Resolves and validates WEB_UI_USERNAME and WEB_UI_PASSWORD via FactoryConfiguration."""
+    return resolve_web_ui_credentials(repo_root=root, enforce=enforce)
 
 
 def collect_control_plane_secrets(root: Path) -> dict[str, str]:
     """Collects control plane secrets from .env and environment for Modal secret injection."""
-    secrets: dict[str, str] = {}
-    dotenv_file = root / ".env"
-    if dotenv_file.is_file():
-        try:
-            from dotenv import dotenv_values
-            for k, v in dotenv_values(dotenv_file).items():
-                if v:
-                    secrets[k] = v
-        except ImportError:
-            for line in dotenv_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    val = v.strip().strip("'\"")
-                    if val:
-                        secrets[k.strip()] = val
-
-    auth_env = resolve_and_validate_web_credentials(root)
-    secrets.update(auth_env)
-
-    # Pass through software-factory Git provenance metadata
-    prov = resolve_host_software_factory_provenance(root)
-    secrets.update(prov)
-
-    # Pass through standard environment secrets if set in the host environment
-    for key in (
-        "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
-        "MODAL_SANDBOX_TUNNEL_DOMAIN", "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID",
-        "ANTIGRAVITY_CLIENT_SECRET", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
-        "MODAL_TOKENS", "CODEX_PROFILE_VOLUME_PREFIX", "CODEX_STATUS_SECRET",
-        "MODAL_SANDBOX_ENDPOINT_URL",
-    ):
-        val = os.environ.get(key)
-        if val and key not in secrets:
-            secrets[key] = val
-
-    return secrets
+    prov_fn = getattr(sys.modules.get("sandbox.function"), "resolve_host_software_factory_provenance", None)
+    prov = prov_fn(root) if prov_fn else None
+    return collect_control_plane_secrets_dict(repo_root=root, provenance=prov)
 
 
 def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> bool:
     """Validates GitHub access credentials and Age decryption keys for repository sandbox provisioning."""
-    has_creds = bool(os.environ.get("GH_TOKEN"))
-    has_age_key = bool(os.environ.get("AGE_PRIVATE_KEY") or os.environ.get("SOPS_AGE_KEY"))
+    parsed: dict[str, str] = {}
     dotenv_path = root / ".env"
-    if (not has_creds or not has_age_key) and dotenv_path.is_file():
-        try:
-            for line in dotenv_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not has_creds and line.startswith("GH_TOKEN="):
-                    val = line.split("=", 1)[1].strip().strip("'\"")
-                    if val:
-                        has_creds = True
-                if not has_age_key and (line.startswith("AGE_PRIVATE_KEY=") or line.startswith("SOPS_AGE_KEY=")):
-                    val = line.split("=", 1)[1].strip().strip("'\"")
-                    if val:
-                        has_age_key = True
-        except Exception:
-            pass
+    if dotenv_path.is_file():
+        parsed = parse_env_file(dotenv_path)
+
+    has_creds = bool(os.environ.get("GH_TOKEN") or parsed.get("GH_TOKEN"))
+    has_age_key = bool(
+        os.environ.get("AGE_PRIVATE_KEY")
+        or os.environ.get("SOPS_AGE_KEY")
+        or parsed.get("AGE_PRIVATE_KEY")
+        or parsed.get("SOPS_AGE_KEY")
+    )
 
     if not has_creds:
         logger.warning(
@@ -231,7 +148,7 @@ validate_deployment_credentials(repo_root)
 validate_clean_working_tree(repo_root)
 
 if modal.is_local():
-    function_secrets = [modal.Secret.from_dict(collect_control_plane_secrets(repo_root))]
+    function_secrets = compile_control_plane_secrets(repo_root)
 else:
     function_secrets = [modal.Secret.from_dict({})]
 

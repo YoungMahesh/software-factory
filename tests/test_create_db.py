@@ -13,6 +13,7 @@ import httpx
 from sandbox.db_host import (
     DEFAULT_PORT,
     DatabaseConnectionInfo,
+    DbHostClient,
     DbHostConfig,
     call_mcp_tool,
     create_database_connection,
@@ -314,3 +315,27 @@ class TestCreateDbCli(unittest.TestCase):
         with patch("sys.stdout") as mock_stdout:
             exit_code = main(["demo_db", "--domain", "db-host.test", "--token", "tok", "-q"])
             self.assertEqual(exit_code, 0)
+
+
+class TestDbHostClientDirect(unittest.TestCase):
+    def test_client_init_and_properties(self):
+        client = DbHostClient.from_env(domain="test.host.internal", token="admintok123")
+        self.assertEqual(client.domain, "test.host.internal")
+        self.assertEqual(client.admin_token, "admintok123")
+        self.assertEqual(client.base_url, "https://test.host.internal")
+
+    @patch("sandbox.db_host_client.call_mcp_tool")
+    def test_client_call_tool_and_ensure_project(self, mock_tool):
+        mock_tool.return_value = {"id": "p-1", "name": "my-proj"}
+        client = DbHostClient(domain="test.host.internal", token="tok")
+        res = client.call_tool("list_projects", {})
+        self.assertEqual(res["id"], "p-1")
+        mock_tool.assert_called_once()
+
+    def test_client_update_env_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            env_file = Path(td) / ".env"
+            client = DbHostClient(domain="test.host.internal", token="tok")
+            client.update_env_file(env_file, "FOO", "BAR")
+            self.assertIn('FOO="BAR"', env_file.read_text())
+

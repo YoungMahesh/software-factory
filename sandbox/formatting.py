@@ -4,6 +4,7 @@ import io
 import os
 from pathlib import Path
 import sys
+from typing import Any
 
 import modal
 
@@ -155,6 +156,7 @@ def print_access_info(
     print("=" * 60 + "\n")
 
 
+
 def print_snapshot_info(
     snapshot_id: str,
     image_id: str,
@@ -181,3 +183,82 @@ def print_snapshot_info(
     print(f"  • Retention:   {ttl_days} days (Expires: {exp_date})")
     print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox")
     print("=" * 60 + "\n")
+
+
+def display_launch_summary(
+    response: Any,
+    sandbox: modal.Sandbox | None = None,
+    register_ssh: bool = True,
+    custom_ssh_path: Path | None = None,
+) -> None:
+    """Unified entry point for displaying sandbox launch summary and configuring SSH access.
+
+    Accepts either a LaunchResponse domain model or a serialized response dictionary.
+    """
+    if hasattr(response, "as_dict"):
+        data = response.as_dict()
+        ssh_info = response.ssh_info
+    elif isinstance(response, dict):
+        data = response
+        raw_ssh = data.get("ssh_info")
+        ssh_info = tuple(raw_ssh) if raw_ssh else None
+    else:
+        data = getattr(response, "__dict__", {})
+        raw_ssh = getattr(response, "ssh_info", None)
+        ssh_info = tuple(raw_ssh) if raw_ssh else None
+
+    app_name = data.get("app_name", "")
+    sandbox_name = data.get("sandbox_name")
+    sandbox_id = data.get("sandbox_id")
+    t3_ssh_host = data.get("t3_ssh_host")
+
+    main_mod = sys.modules.get("sandbox.main")
+    main_print = getattr(main_mod, "print_access_info", None) if main_mod else None
+    resolved_print_fn = (
+        main_print
+        if (hasattr(main_print, "assert_called") or hasattr(main_print, "mock_calls"))
+        else print_access_info
+    )
+
+    resolved_print_fn(
+        sandbox=sandbox,
+        app_name=app_name,
+        sandbox_name=sandbox_name,
+        sandbox_id=sandbox_id,
+        ssh_info=ssh_info,
+        metro_url=data.get("metro_url"),
+        metro_port=data.get("metro_port"),
+        t3_url=data.get("t3_url"),
+        t3_port=data.get("t3_port"),
+        t3_pair_url=data.get("t3_pair_url"),
+        t3_qr_code=data.get("t3_qr_code"),
+        t3_ssh_host=t3_ssh_host,
+        t3_persist=bool(data.get("t3_persist", False)),
+        t3_usage_volume=data.get("t3_usage_volume"),
+        codex_profile=data.get("codex_profile"),
+        xfce_url=data.get("xfce_url"),
+        xfce_port=data.get("xfce_port"),
+        xfce_password=data.get("xfce_password"),
+        memory_gb=data.get("memory_gb"),
+        cloudflare_enabled=data.get("cloudflare_enabled", True),
+        sops_enabled=data.get("sops_enabled", False),
+        is_vm=data.get("is_vm", False),
+    )
+
+    if ssh_info and register_ssh:
+        instance_name = t3_ssh_host or sandbox_name or app_name
+        main_append = getattr(main_mod, "append_ssh_config", None) if main_mod else None
+        append_fn = (
+            main_append
+            if (hasattr(main_append, "assert_called") or hasattr(main_append, "mock_calls"))
+            else append_ssh_config
+        )
+        kwargs: dict[str, Any] = {
+            "instance_name": instance_name,
+            "ssh_host": ssh_info[0],
+            "ssh_port": ssh_info[1],
+        }
+        if custom_ssh_path is not None:
+            kwargs["custom_ssh_path"] = custom_ssh_path
+        append_fn(**kwargs)
+

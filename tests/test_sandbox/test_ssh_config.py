@@ -233,3 +233,41 @@ class TestSSHConfigLaunchIntegration(unittest.TestCase):
         run_remote_launch(args, parser=parser)
 
         mock_append.assert_not_called()
+
+    @patch("sandbox.formatting.append_ssh_config")
+    @patch("sandbox.formatting.print_access_info")
+    def test_display_launch_summary_with_launch_response(self, mock_print, mock_append):
+        from sandbox.formatting import display_launch_summary
+
+        resp = LaunchResponse(
+            sandbox_id="sb-summary-1",
+            app_name="app-summary",
+            sandbox_name="app-summary-1234",
+            ssh_info=("10.0.0.1", 2222),
+            t3_ssh_host="custom-ssh-host",
+        )
+        display_launch_summary(resp, register_ssh=True)
+        mock_print.assert_called_once()
+        self.assertEqual(mock_print.call_args.kwargs["sandbox_id"], "sb-summary-1")
+        mock_append.assert_called_once_with(
+            instance_name="custom-ssh-host",
+            ssh_host="10.0.0.1",
+            ssh_port=2222,
+        )
+
+    @patch("sandbox.formatting.append_ssh_config")
+    @patch("sandbox.formatting.print_access_info")
+    def test_display_launch_summary_with_dict(self, mock_print, mock_append):
+        from sandbox.formatting import display_launch_summary
+
+        data = {
+            "sandbox_id": "sb-dict-2",
+            "app_name": "app-dict",
+            "sandbox_name": "dict-inst",
+            "ssh_info": ["10.0.0.2", 2200],
+        }
+        display_launch_summary(data, register_ssh=False)
+        mock_print.assert_called_once()
+        self.assertEqual(mock_print.call_args.kwargs["sandbox_id"], "sb-dict-2")
+        mock_append.assert_not_called()
+

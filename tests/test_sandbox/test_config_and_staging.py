@@ -360,3 +360,36 @@ class TestConfigModule(unittest.TestCase):
 
         creds = resolve_factory_credentials(env={"DEFAULT_TIMEZONE": "Asia/Kolkata"}, mutate_environ=False)
         self.assertEqual(creds.default_timezone, "Asia/Kolkata")
+
+    def test_resolve_factory_configuration_full(self):
+        from sandbox.config import resolve_factory_configuration
+
+        test_env = {
+            "GH_TOKEN": "ghp_full123",
+            "GH_ORG_NAME": "org_full",
+            "AGE_PRIVATE_KEY": "AGE-SECRET-KEY-FULL",
+            "MODAL_TOKENS": '[{"name": "p_full"}]',
+            "CLOUDFLARE_TUNNEL_TOKEN": "cf-tok-123",
+            "WEB_UI_USERNAME": "superadmin",
+            "WEB_UI_PASSWORD": "supersecretpassword",
+            "CODEX_STATUS_SECRET": "status_sec_abc",
+        }
+        cfg = resolve_factory_configuration(env=test_env, mutate_environ=False)
+        self.assertEqual(cfg.gh_token, "ghp_full123")
+        self.assertEqual(cfg.gh_org_name, "org_full")
+        self.assertEqual(cfg.age_private_key, "AGE-SECRET-KEY-FULL")
+        self.assertEqual(cfg.modal_tokens, '[{"name": "p_full"}]')
+        self.assertEqual(cfg.cloudflare_tunnel_token, "cf-tok-123")
+        self.assertEqual(cfg.web_ui_username, "superadmin")
+        self.assertEqual(cfg.web_ui_password, "supersecretpassword")
+        self.assertEqual(cfg.codex_status_secret, "status_sec_abc")
+
+    def test_compile_control_plane_secrets(self):
+        from sandbox.config import compile_control_plane_secrets
+        import modal
+
+        secrets = compile_control_plane_secrets(extra_secrets={"TEST_CP_SECRET": "1"})
+        self.assertIsInstance(secrets, list)
+        self.assertEqual(len(secrets), 1)
+        self.assertIsInstance(secrets[0], modal.Secret)
+

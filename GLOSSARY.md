@@ -262,3 +262,16 @@ _Avoid_: GUI sandbox, VNC runner, X11 container
 **noVNC Web Ingress**:
 The browser-accessible HTML5 VNC client served via websockify on the sandbox's default web port (3000) or a custom `--xfce-port`, forwarded securely by Cloudflare Tunnel to provide instant graphical desktop interaction without local VNC client installation.
 _Avoid_: VNC web, noVNC proxy, desktop web UI
+
+**DbHostClient**:
+A deep control plane client module (`sandbox/db_host_client.py`) that encapsulates JSON-RPC over HTTP communication with the db-host MCP server, managing admin authentication, project scoping, and root CA certificate caching behind a cohesive transport seam.
+_Avoid_: MCP client, db-host transport, postgres helper, rpc caller
+
+**EnvStoreVault**:
+A domain adapter and vault client module (`sandbox/env_store.py`) that encapsulates target repository secret resolution, SOPS decryption, manifest parsing, and bundle packaging, exposing symmetric push/pull and sandbox bundle projection seams.
+_Avoid_: Secret fetcher, vault script, env parser, sops helper
+
+**FactoryConfiguration**:
+A centralized configuration and credentials discovery module (`sandbox/config.py`) that encapsulates multi-path `.env` resolution, host environment inspection, and Modal secret compilation into cohesive domain models (`FactoryConfiguration` and `FactoryCredentials`).
+_Avoid_: Config parser, dotenv reader, creds loader, secret scanner
+

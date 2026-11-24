@@ -14,6 +14,7 @@ from .config import (
 )
 from .formatting import (
     append_ssh_config,
+    display_launch_summary,
     generate_ascii_qr,
     generate_ssh_config_snippet,
     print_access_info,

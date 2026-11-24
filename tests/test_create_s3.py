@@ -132,7 +132,7 @@ class TestS3HostDomain(unittest.TestCase):
         self.assertIn('APP_AWS_ACCESS_KEY_ID="KEY"', content)
         self.assertIn('APP_S3_BUCKET_NAME="test-bucket"', content)
 
-    @patch("sandbox.db_host.call_mcp_tool")
+    @patch("sandbox.s3_host.call_mcp_tool")
     def test_create_s3_bucket_flow(self, mock_mcp):
         def side_effect(base_url, admin_token, tool_name, arguments, **kwargs):
             if tool_name == "list_projects":
@@ -173,7 +173,7 @@ class TestS3HostDomain(unittest.TestCase):
         self.assertFalse(info.already_existed)
         self.assertIn("s3 = boto3.client", info.formatted_boto3)
 
-    @patch("sandbox.db_host.call_mcp_tool")
+    @patch("sandbox.s3_host.call_mcp_tool")
     def test_create_s3_bucket_idempotent_reused(self, mock_mcp):
         def side_effect(base_url, admin_token, tool_name, arguments, **kwargs):
             if tool_name == "list_projects":
@@ -206,7 +206,7 @@ class TestS3HostDomain(unittest.TestCase):
         self.assertTrue(info.already_existed)
         self.assertEqual(info.access_key_id, "AKIAEXISTING")
 
-    @patch("sandbox.db_host.call_mcp_tool")
+    @patch("sandbox.s3_host.call_mcp_tool")
     def test_create_s3_bucket_fail_if_exists(self, mock_mcp):
         def side_effect(base_url, admin_token, tool_name, arguments, **kwargs):
             if tool_name == "list_projects":

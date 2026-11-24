@@ -8,15 +8,36 @@ provisioning, credential retrieval, and environment variable formatting.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
-import os
 from pathlib import Path
 import re
 from typing import Any
 
 import httpx
 
-from sandbox import db_host
+from sandbox import db_host_client as _client_mod
+from sandbox.db_host_client import (
+    DbHostClient,
+    call_mcp_tool,
+    resolve_db_host_config,
+    resolve_project_name,
+    update_env_file,
+)
+
+
+def ensure_project(
+    base_url: str,
+    admin_token: str,
+    project_name: str,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """Ensures a project exists in db-host, routing tool calls through module call_mcp_tool."""
+    return _client_mod.ensure_project(
+        base_url=base_url,
+        admin_token=admin_token,
+        project_name=project_name,
+        client=client,
+        call_tool_fn=call_mcp_tool,
+    )
 
 
 _BUCKET_NAME_REGEX = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
@@ -129,7 +150,7 @@ def write_s3_env_vars(
 
     updated_keys: list[str] = []
     for key, value in key_map.items():
-        db_host.update_env_file(env_file_path, key, value)
+        update_env_file(env_file_path, key, value)
         updated_keys.append(key)
 
     return updated_keys
@@ -142,18 +163,23 @@ def create_s3_bucket(
     token: str | None = None,
     if_not_exists: bool = True,
     client: httpx.Client | None = None,
+    db_host_client: DbHostClient | None = None,
 ) -> S3BucketInfo:
     """High-level orchestration: validates name, ensures project, creates/resolves bucket, and retrieves credentials."""
     clean_bucket_name = validate_bucket_name(bucket_name)
-    config = db_host.resolve_db_host_config(domain=domain, token=token)
-    resolved_proj_name = db_host.resolve_project_name(project_name)
+    db_client = db_host_client or DbHostClient(
+        domain=domain,
+        token=token,
+        http_client=client,
+    )
+    resolved_proj_name = resolve_project_name(project_name)
 
     # 1. Ensure target project exists
-    project = db_host.ensure_project(
-        base_url=config.base_url,
-        admin_token=config.admin_token,
+    project = ensure_project(
+        base_url=db_client.base_url,
+        admin_token=db_client.admin_token,
         project_name=resolved_proj_name,
-        client=client,
+        client=db_client.http_client,
     )
     project_id = project.get("id")
     if not project_id:
@@ -162,15 +188,15 @@ def create_s3_bucket(
     # 2. Provision or resolve existing S3 bucket
     already_existed = False
     try:
-        db_host.call_mcp_tool(
-            base_url=config.base_url,
-            admin_token=config.admin_token,
+        call_mcp_tool(
+            base_url=db_client.base_url,
+            admin_token=db_client.admin_token,
             tool_name="create_object_storage",
             arguments={
                 "projectId": project_id,
                 "bucketName": clean_bucket_name,
             },
-            client=client,
+            client=db_client.http_client,
         )
     except RuntimeError as err:
         err_msg = str(err)
@@ -182,15 +208,15 @@ def create_s3_bucket(
             raise
 
     # 3. Retrieve storage credentials
-    creds = db_host.call_mcp_tool(
-        base_url=config.base_url,
-        admin_token=config.admin_token,
+    creds = call_mcp_tool(
+        base_url=db_client.base_url,
+        admin_token=db_client.admin_token,
         tool_name="get_storage_credentials",
         arguments={
             "bucketName": clean_bucket_name,
             "projectId": project_id,
         },
-        client=client,
+        client=db_client.http_client,
     )
 
     storage_id = creds.get("id", "")

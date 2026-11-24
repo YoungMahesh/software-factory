@@ -21,18 +21,13 @@ import base64
 import modal
 
 from sandbox.env_store import (
-    fetch_vault_env, fetch_vault_env_bundle, fetch_vault_env_raw,
-    fetch_vault_git_identity, parse_env_text, serialize_env_dict,
+    VaultBundle, fetch_vault_env, fetch_vault_env_bundle, fetch_vault_env_raw,
+    fetch_vault_git_identity, parse_env_text, resolve_sandbox_bundle, serialize_env_dict,
 )
-from sandbox.provenance import (
-    resolve_host_git_identity,
-    resolve_host_software_factory_provenance,
-)
-
+from sandbox.provenance import resolve_host_git_identity, resolve_host_software_factory_provenance
 from sandbox.config import (
-    DEFAULT_METRO_PORT, DEFAULT_ORG,
-    DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
-    resolve_factory_credentials, resolve_timezone,
+    DEFAULT_METRO_PORT, DEFAULT_ORG, DEFAULT_T3_PORT, DEFAULT_WEB_PORT,
+    IDLE_TIMEOUT_SECS, TIMEOUT_SECS, resolve_factory_credentials, resolve_timezone,
 )
 from sandbox.codex_profiles import prepare_profile
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
@@ -62,7 +57,6 @@ class RunningSandbox:
     def ssh_info(self) -> tuple[str, int] | None: return self.response.ssh_info
     @property
     def ssh_command(self) -> str | None: return self.response.ssh_command
-
     @property
     def stdout(self) -> Any: return self.sandbox.stdout
     @property
@@ -97,8 +91,8 @@ class SandboxLauncher:
         fetch_vault_env_raw_fn: Callable[..., str | None] | None = None,
         fetch_vault_env_bundle_fn: Callable[..., dict[str, Any] | None] | None = None,
         fetch_vault_git_identity_fn: Callable[..., dict[str, str] | None] | None = None,
-        log_cb: Callable[[str], None] | None = None,
-        repo_root: Path | None = None,
+        resolve_vault_bundle_fn: Callable[..., VaultBundle | None] | None = None,
+        log_cb: Callable[[str], None] | None = None, repo_root: Path | None = None,
     ) -> None:
         self.client = client
         self.build_image_fn = build_image_fn or build_sandbox_image
@@ -106,14 +100,15 @@ class SandboxLauncher:
         self.append_ssh_fn = append_ssh_fn or append_ssh_config
         self.resolve_git_identity_fn = resolve_git_identity_fn or resolve_host_git_identity
         self.resolve_provenance_fn = resolve_provenance_fn or resolve_host_software_factory_provenance
-        self.fetch_vault_env_fn = fetch_vault_env_fn or fetch_vault_env
-        self.fetch_vault_env_raw_fn = (
-            fetch_vault_env_raw_fn or (fetch_vault_env_raw if fetch_vault_env_fn is None else None)
+        self.fetch_vault_env_fn = fetch_vault_env_fn
+        self.fetch_vault_env_raw_fn = fetch_vault_env_raw_fn
+        self.fetch_vault_env_bundle_fn = fetch_vault_env_bundle_fn
+        self.fetch_vault_git_identity_fn = fetch_vault_git_identity_fn
+        self.resolve_vault_bundle_fn = resolve_vault_bundle_fn or (
+            resolve_sandbox_bundle
+            if (fetch_vault_env_fn is None and fetch_vault_env_raw_fn is None and fetch_vault_env_bundle_fn is None)
+            else None
         )
-        self.fetch_vault_env_bundle_fn = (
-            fetch_vault_env_bundle_fn or (fetch_vault_env_bundle if fetch_vault_env_fn is None and fetch_vault_env_raw_fn is None else None)
-        )
-        self.fetch_vault_git_identity_fn = fetch_vault_git_identity_fn or fetch_vault_git_identity
         self.log_cb = log_cb
         self.repo_root = repo_root
 
@@ -243,44 +238,49 @@ class SandboxLauncher:
 
         if bare_repo:
             try:
-                bundle = self.fetch_vault_env_bundle_fn(bare_repo, org_name=org_name) if self.fetch_vault_env_bundle_fn else None
-                raw_vault_env, vault_env = None, None
-                if bundle:
-                    env["VAULT_ENV_BUNDLE_B64"] = base64.b64encode(json.dumps(bundle).encode("utf-8")).decode("ascii")
-                    all_vars: dict[str, str] = {}
-                    for content in bundle.get("files", {}).values():
-                        all_vars.update(parse_env_text(content))
-                    if all_vars:
-                        if all_vars.get("TZ"): env["TZ"] = all_vars["TZ"]
-                        sandbox_secrets.append(modal.Secret.from_dict(all_vars))
-                        self._emit_log(f"🔐 Injected {len(all_vars)} secrets from env-store bundle into {bare_repo}...")
-                    raw_vault_env = bundle.get("files", {}).get("default.env") or (next(iter(bundle["files"].values())) if bundle.get("files") else None)
-                else:
+                vault_bundle: VaultBundle | None = None
+                if self.resolve_vault_bundle_fn:
+                    vault_bundle = self.resolve_vault_bundle_fn(bare_repo, org_name=org_name)
+                elif self.fetch_vault_env_bundle_fn:
+                    b = self.fetch_vault_env_bundle_fn(bare_repo, org_name=org_name)
+                    if b:
+                        all_v = {k: v for c in b.get("files", {}).values() if isinstance(c, str) for k, v in parse_env_text(c).items()}
+                        raw = b.get("files", {}).get("default.env") or (next(iter(b["files"].values())) if b.get("files") else None)
+                        git_id = self.fetch_vault_git_identity_fn(bare_repo, org_name=org_name) if self.fetch_vault_git_identity_fn else {}
+                        vault_bundle = VaultBundle(
+                            env_dict=all_v, encoded_bundle=base64.b64encode(json.dumps(b).encode("utf-8")).decode("ascii"),
+                            dotenv_b64=base64.b64encode(raw.encode("utf-8")).decode("ascii") if raw else None,
+                            git_author_name=(git_id or {}).get("GIT_AUTHOR_NAME"),
+                            git_author_email=(git_id or {}).get("GIT_AUTHOR_EMAIL"), tz=all_v.get("TZ"),
+                        )
+                if vault_bundle is None and (self.fetch_vault_env_raw_fn or self.fetch_vault_env_fn or self.fetch_vault_git_identity_fn):
+                    raw_v, v_dict = None, None
                     if self.fetch_vault_env_raw_fn:
-                        raw_vault_env = self.fetch_vault_env_raw_fn(bare_repo, org_name=org_name)
-                        if raw_vault_env is not None:
-                            vault_env = parse_env_text(raw_vault_env)
-                    if vault_env is None and self.fetch_vault_env_fn:
-                        vault_env = self.fetch_vault_env_fn(bare_repo, org_name=org_name)
-                        if vault_env is not None:
-                            raw_vault_env = serialize_env_dict(vault_env)
-                    if vault_env:
-                        if vault_env.get("TZ"): env["TZ"] = vault_env["TZ"]
-                        self._emit_log(f"🔐 Injected {len(vault_env)} secrets from env-store into {bare_repo}...")
-                        sandbox_secrets.append(modal.Secret.from_dict(vault_env))
+                        raw_v = self.fetch_vault_env_raw_fn(bare_repo, org_name=org_name)
+                        if raw_v is not None: v_dict = parse_env_text(raw_v)
+                    if v_dict is None and self.fetch_vault_env_fn:
+                        v_dict = self.fetch_vault_env_fn(bare_repo, org_name=org_name)
+                        if v_dict is not None: raw_v = serialize_env_dict(v_dict)
+                    git_id = self.fetch_vault_git_identity_fn(bare_repo, org_name=org_name) if self.fetch_vault_git_identity_fn else {}
+                    vault_bundle = VaultBundle(
+                        env_dict=v_dict or {},
+                        dotenv_b64=base64.b64encode(raw_v.encode("utf-8")).decode("ascii") if raw_v else None,
+                        git_author_name=(git_id or {}).get("GIT_AUTHOR_NAME"),
+                        git_author_email=(git_id or {}).get("GIT_AUTHOR_EMAIL"), tz=(v_dict or {}).get("TZ"),
+                    )
+                if vault_bundle:
+                    if vault_bundle.encoded_bundle: env["VAULT_ENV_BUNDLE_B64"] = vault_bundle.encoded_bundle
+                    if vault_bundle.dotenv_b64: env["VAULT_DOTENV_B64"] = vault_bundle.dotenv_b64
+                    if vault_bundle.git_author_name: env["TARGET_GIT_AUTHOR_NAME"] = vault_bundle.git_author_name
+                    if vault_bundle.git_author_email:
+                        env["TARGET_GIT_AUTHOR_EMAIL"] = vault_bundle.git_author_email
+                        self._emit_log(f"👤 Resolved repo-specific Git identity from env-store for {bare_repo}...")
+                    if vault_bundle.tz: env["TZ"] = vault_bundle.tz
+                    if vault_bundle.env_dict:
+                        sandbox_secrets.append(modal.Secret.from_dict(vault_bundle.env_dict))
+                        self._emit_log(f"🔐 Injected {len(vault_bundle.env_dict)} secrets from env-store into {bare_repo}...")
                     else:
                         self._emit_log(f"ℹ️ No secrets found for {bare_repo} in env-store.")
-
-                if raw_vault_env is not None:
-                    env["VAULT_DOTENV_B64"] = base64.b64encode(raw_vault_env.encode("utf-8")).decode("ascii")
-                if self.fetch_vault_git_identity_fn:
-                    vault_git = self.fetch_vault_git_identity_fn(bare_repo, org_name=org_name)
-                    if vault_git:
-                        if "GIT_AUTHOR_NAME" in vault_git:
-                            env["TARGET_GIT_AUTHOR_NAME"] = vault_git["GIT_AUTHOR_NAME"]
-                        if "GIT_AUTHOR_EMAIL" in vault_git:
-                            env["TARGET_GIT_AUTHOR_EMAIL"] = vault_git["GIT_AUTHOR_EMAIL"]
-                        self._emit_log(f"👤 Resolved repo-specific Git identity from env-store for {bare_repo}...")
             except Exception as e:
                 self._emit_log(f"⚠️ env-store resolution skipped: {e}")
 
@@ -312,11 +312,7 @@ class SandboxLauncher:
                 env["T3_USAGE_VOLUME"] = req.t3_usage_volume
                 env["ANTIGRAVITY_DATA_DIR"] = f"{T3_STORAGE_MOUNT_PATH}/conversations"
 
-        for flag, key in [
-            (req.modal, "ENABLE_MODAL"),
-            (req.sops, "ENABLE_SOPS"),
-            (browser_active, "ENABLE_BROWSER"),
-        ]:
+        for flag, key in [(req.modal, "ENABLE_MODAL"), (req.sops, "ENABLE_SOPS"), (browser_active, "ENABLE_BROWSER")]:
             if flag: env[key] = "1"
 
         if req.xfce:

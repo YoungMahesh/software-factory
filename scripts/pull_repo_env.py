@@ -68,34 +68,19 @@ def pull_repo_env(
 
     raw_env = None
     bundle = None
-    if hasattr(fetch_vault_env_raw, "assert_called") or hasattr(fetch_vault_env_raw, "return_value"):
-        try:
-            raw_env = fetch_vault_env_raw(
-                repo_name=final_repo,
-                org_name=final_org,
-                gh_token=token,
-                age_key=age_key,
-                env_repo_name=vault_repo,
-            )
-        except Exception as e:
-            if optional:
-                print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
-                return False
-            raise
-    else:
-        try:
-            bundle = fetch_vault_env_bundle(
-                repo_name=final_repo,
-                org_name=final_org,
-                gh_token=token,
-                age_key=age_key,
-                env_repo_name=vault_repo,
-            )
-        except Exception as e:
-            if optional:
-                print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
-                return False
-            raise
+    try:
+        bundle = fetch_vault_env_bundle(
+            repo_name=final_repo,
+            org_name=final_org,
+            gh_token=token,
+            age_key=age_key,
+            env_repo_name=vault_repo,
+        )
+    except Exception as e:
+        if optional:
+            print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
+            return False
+        raise
 
     if bundle and bundle.get("files"):
         raw_env = bundle.get("files", {}).get("default.env") or (next(iter(bundle["files"].values())) if bundle.get("files") else None)
