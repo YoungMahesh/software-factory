@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,8 @@ from sandbox.infra_deploy import (
     sync_resource_plane_to_vps,
 )
 
+from sandbox.main import main as sandbox_main
+
 
 class TestInfraDeploy(unittest.TestCase):
     """Test suite for infra_deploy configuration, commands, and orchestration."""
@@ -34,6 +37,24 @@ class TestInfraDeploy(unittest.TestCase):
             key_path=Path("/tmp/test_key"),
             remote_dir="/srv/resource-plane",
         )
+
+    def test_infra_deploy_check_only_reads_checkout_env(self):
+        argv = ["modal-sandbox", "infra", "deploy", "--check-only"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env").write_text("RESOURCE_PLANE_SSH_HOST=fixture.invalid\n")
+            with (
+                patch("sys.argv", argv),
+                patch.dict(os.environ, {}, clear=True),
+                patch("sandbox.infra_deploy.resolve_factory_root", return_value=root),
+                patch("sandbox.infra_deploy.check_ssh_connection", return_value=True) as ssh,
+                patch("sandbox.infra_deploy.check_remote_docker", return_value=(True, "Docker OK")),
+                self.assertRaises(SystemExit) as exit_context,
+            ):
+                sandbox_main()
+
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertEqual(ssh.call_args.args[0].host, "fixture.invalid")
 
     def test_resolve_vps_ssh_config_from_args(self):
         """Resolves configuration directly from explicit arguments."""
@@ -163,6 +184,7 @@ class TestInfraDeploy(unittest.TestCase):
         result = sync_resource_plane_to_vps(self.sample_config)
         self.assertTrue(result)
         self.assertEqual(mock_popen.call_count, 2)
+        self.assertIn("--exclude=.env", mock_popen.call_args_list[0].args[0])
 
     @patch("subprocess.run")
     def test_execute_remote_deploy_stream(self, mock_run):

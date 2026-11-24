@@ -13,6 +13,7 @@ from sandbox.config import (
     collect_control_plane_secrets_dict,
     compile_control_plane_secrets,
     parse_env_file,
+    resolve_factory_root,
     resolve_web_ui_credentials,
 )
 from sandbox.core import (
@@ -37,7 +38,7 @@ app = modal.App(APP_NAME)
 
 sandbox_dir = Path(__file__).resolve().parent
 execution_root = sandbox_dir.parent
-repo_root = execution_root.parent if (execution_root.parent / "GLOSSARY.md").is_file() else execution_root
+repo_root = resolve_factory_root()
 
 
 def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None) -> dict[str, str]:

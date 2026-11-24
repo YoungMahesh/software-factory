@@ -4,6 +4,7 @@ import base64
 import json
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -72,6 +73,20 @@ class TestRunningSandbox(unittest.TestCase):
 
 
 class TestSandboxLauncher(unittest.TestCase):
+    def test_local_launch_reads_checkout_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "GLOSSARY.md").touch()
+            (root / ".env").write_text("GH_TOKEN=fixture-token\nGH_ORG_NAME=fixture-org\n")
+            package_file = root / "sandboxes" / "sandbox" / "config.py"
+            with (
+                patch("sandbox.config.__file__", str(package_file)),
+                patch.dict(os.environ, {}, clear=True),
+                patch("modal.App.lookup", side_effect=RuntimeError("Reached Modal lookup")),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Reached Modal lookup"):
+                    SandboxLauncher().launch(LaunchRequest(repo="example"))
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     def test_launcher_dependency_injection(self, mock_lookup, mock_create):

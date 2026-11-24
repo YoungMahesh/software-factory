@@ -31,6 +31,8 @@ from sandbox.config import (
     DEFAULT_XFCE_PORT,
     IDLE_TIMEOUT_SECS,
     TIMEOUT_SECS,
+    parse_env_file,
+    resolve_factory_root,
     resolve_web_ui_credentials,
 )
 from sandbox.cli import (
@@ -59,7 +61,7 @@ def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    creds_dict = resolve_web_ui_credentials(repo_root=Path(__file__).resolve().parent.parent)
+    creds_dict = resolve_web_ui_credentials(repo_root=resolve_factory_root(), enforce=False)
     user = creds_dict.get("WEB_UI_USERNAME")
     passwd = creds_dict.get("WEB_UI_PASSWORD")
     if not user or not passwd:
@@ -89,6 +91,8 @@ def run_remote_request(endpoint_url: str, path: str, payload: dict) -> dict:
 def run_remote_launch(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
     """Delegates sandbox launch or snapshot capture to the hosted Modal control plane."""
     endpoint_url = args.endpoint_url or os.environ.get("MODAL_SANDBOX_ENDPOINT_URL")
+    if not endpoint_url:
+        endpoint_url = parse_env_file(resolve_factory_root() / ".env").get("MODAL_SANDBOX_ENDPOINT_URL")
     if not endpoint_url:
         msg = "--remote requires --endpoint-url or the MODAL_SANDBOX_ENDPOINT_URL environment variable."
         if parser:
@@ -215,7 +219,8 @@ def run_sandbox_launch(
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "infra":
         from sandbox.infra_deploy import main as infra_main
-        sys.exit(infra_main(sys.argv[2:]))
+        args = sys.argv[2:]
+        sys.exit(infra_main(args[1:] if args[:1] == ["deploy"] else args))
 
     parser = create_parser()
     args = parser.parse_args()

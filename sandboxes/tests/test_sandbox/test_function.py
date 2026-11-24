@@ -281,6 +281,21 @@ class TestSandboxFunctionAPI(unittest.TestCase):
 
 
 class TestSandboxCliRemoteIntegration(unittest.TestCase):
+    def test_remote_client_uses_checkout_env_after_package_move(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "GLOSSARY.md").touch()
+            (root / ".env").write_text("WEB_UI_USERNAME=admin\nWEB_UI_PASSWORD=secretpassword\n")
+            package_file = root / "sandboxes" / "sandbox" / "config.py"
+            with (
+                patch("sandbox.config.__file__", str(package_file)),
+                patch.dict("os.environ", {}, clear=True),
+                patch("sandbox.main.urllib.request.urlopen") as send,
+            ):
+                send.return_value.__enter__.return_value.read.return_value = b"{}"
+                self.assertEqual(run_remote_request("https://example.invalid", "/launch", {}), {})
+                self.assertEqual(send.call_args.args[0].get_header("Authorization"), BASIC_AUTH_HEADER["Authorization"])
+
     def test_parser_accepts_remote_and_endpoint_url(self):
         parser = create_parser()
         args = parser.parse_args(["--remote", "--endpoint-url", "https://modal.run", "--name", "app1"])

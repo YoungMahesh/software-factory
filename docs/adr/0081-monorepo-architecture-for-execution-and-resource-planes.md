@@ -38,7 +38,7 @@ We enforce a strict separation of concerns between infrastructure provisioning a
 
 ### 5. Single-Root Developer Ergonomics & Line Budget Ratchet
 - Root `pyproject.toml` references `where = ["sandboxes"]`, enabling contributors to install all Python tooling directly with `pip install -e .` from the repository root.
-- Root `pnpm-workspace.yaml` references `resource-plane`, enabling TypeScript installation with `pnpm install` from the repository root.
+- Root `pnpm-workspace.yaml` references `resource-plane`, enabling TypeScript installation from the repository root. The root and Resource Plane lockfiles support frozen installs from both locations. When changing Resource Plane dependencies, update both lockfiles so the monorepo and standalone Docker build resolve the same dependencies.
 - `tests/test_standards.py` scopes Python file line-budget enforcement (<= 500 lines) to `sandboxes/`, strictly excluding `resource-plane/` and `node_modules`.
 
 ## Consequences

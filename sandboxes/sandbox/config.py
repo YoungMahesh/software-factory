@@ -75,6 +75,14 @@ def parse_env_file(path_or_content: str | Path) -> dict[str, str]:
     return env_dict
 
 
+def resolve_factory_root() -> Path:
+    """Find the checkout root or the package parent in an installed runtime."""
+    package_parent = Path(__file__).resolve().parent.parent
+    if (package_parent.parent / "GLOSSARY.md").is_file():
+        return package_parent.parent
+    return package_parent
+
+
 def resolve_dotenv_candidates(repo_root: Path | None = None) -> list[Path]:
     """Finds candidate .env files in standard repo locations or system paths."""
     if repo_root is not None:

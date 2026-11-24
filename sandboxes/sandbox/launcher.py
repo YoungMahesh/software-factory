@@ -27,7 +27,7 @@ from sandbox.env_store import (
 from sandbox.provenance import resolve_host_git_identity, resolve_host_software_factory_provenance
 from sandbox.config import (
     DEFAULT_METRO_PORT, DEFAULT_ORG, DEFAULT_T3_PORT, DEFAULT_WEB_PORT,
-    IDLE_TIMEOUT_SECS, TEST_BASELINE_REPO, TIMEOUT_SECS, resolve_factory_credentials, resolve_timezone,
+    IDLE_TIMEOUT_SECS, TEST_BASELINE_REPO, TIMEOUT_SECS, resolve_factory_credentials, resolve_factory_root, resolve_timezone,
 )
 from sandbox.codex_profiles import prepare_profile
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
@@ -123,9 +123,10 @@ class SandboxLauncher:
     def _resolve_repo_root(self) -> Path:
         if self.repo_root is not None:
             return self.repo_root
-        if Path("/root/.env").is_file():
-            return Path("/root")
-        return Path(__file__).resolve().parent.parent
+        root = resolve_factory_root()
+        if (root / "GLOSSARY.md").is_file() or not Path("/root/.env").is_file():
+            return root
+        return Path("/root")
 
     def launch(
         self,
@@ -135,7 +136,6 @@ class SandboxLauncher:
         """Provisions a Modal sandbox and executes the post-launch setup pipeline."""
         self._emit_log("▶ Validating launch request...")
         validate_launch_request(req)
-
         repo_root = self._resolve_repo_root()
         dotenv_file = repo_root / ".env"
         clean_repo = req.repo.strip().rstrip("/") if req.repo else None

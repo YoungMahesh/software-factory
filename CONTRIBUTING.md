@@ -75,7 +75,7 @@ Before submitting a Pull Request, run the automated test suite locally:
 
 ```bash
 # Run standards check and line budget ratchet:
-pytest tests/test_standards.py
+pytest sandboxes/tests/test_standards.py
 
 # Run the complete hermetic test suite:
 pytest
@@ -91,7 +91,7 @@ If your changes alter container startup routines, base image definition, or SSH 
 
 ```bash
 # Verify against the canonical test fixture repository:
-python sandbox/main.py -r live-test1 --testing
+modal-sandbox --testing --repo software-factory
 
 # Or test a standalone clean sandbox:
 modal-sandbox --name test-verify-box
@@ -100,7 +100,7 @@ modal-sandbox --name test-verify-box
 > [!IMPORTANT]
 > Ensure any live test sandboxes are terminated immediately after verification to prevent unnecessary cloud resource consumption:
 > ```bash
-> python scripts/manage_sandboxes.py
+> python sandboxes/scripts/manage_sandboxes.py
 > ```
 
 ---

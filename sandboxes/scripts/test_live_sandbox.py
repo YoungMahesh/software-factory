@@ -20,25 +20,11 @@ from shared.image import (
     build_sandbox_image,
     load_ssh_pub_key,
 )
-from sandbox.config import TEST_BASELINE_REPO
+from sandbox.config import TEST_BASELINE_REPO, parse_env_file, resolve_factory_root
 
 
 def resolve_default_org() -> str:
-    org = os.environ.get("GH_ORG_NAME", "")
-    if org:
-        return org
-    dotenv = root_dir / ".env"
-    if dotenv.is_file():
-        try:
-            for line in dotenv.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("GH_ORG_NAME="):
-                    val = line.split("=", 1)[1].strip().strip("'\"")
-                    if val:
-                        return val
-        except Exception:
-            pass
-    return ""
+    return os.environ.get("GH_ORG_NAME") or parse_env_file(resolve_factory_root() / ".env").get("GH_ORG_NAME", "")
 
 
 DEFAULT_ORG = resolve_default_org()
@@ -128,12 +114,8 @@ def main() -> None:
         env["SWAP_GB"] = "2"
         env["ENABLE_DOCKER"] = "1"
 
-    dotenv_file = root_dir / ".env"
-    sandbox_secrets = (
-        [modal.Secret.from_dotenv(dotenv_file)]
-        if dotenv_file.is_file()
-        else [modal.Secret.from_dict({"GH_TOKEN": os.environ.get("GH_TOKEN", "")})]
-    )
+    github_token = os.environ.get("GH_TOKEN") or parse_env_file(resolve_factory_root() / ".env").get("GH_TOKEN", "")
+    sandbox_secrets = [modal.Secret.from_dict({"GH_TOKEN": github_token})]
 
     print(f"📦 Provisioning ephemeral Modal Sandbox for {target_repo}...")
     sandbox = modal.Sandbox.create(

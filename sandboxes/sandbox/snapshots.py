@@ -298,7 +298,7 @@ def capture_sandbox_snapshot(
         print(f"  • Sandbox ID:  {sandbox_id}")
         print(f"  • Image ID:    {image_id}")
         print(f"  • Retention:   {ttl_days} days ({ttl_seconds}s)")
-        print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
+        print(f"  • Resume:      modal-sandbox --from-snapshot {image_id} --name resumed-sandbox{vm_flag}")
         print("=" * 60 + "\n")
 
     if terminate:

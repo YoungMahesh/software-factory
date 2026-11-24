@@ -22,9 +22,9 @@ Safely inspect, filter, and terminate running Modal sandboxes without stopping o
 Run the management script to list active sandboxes and their resolved instance names:
 
 ```bash
-uv run python scripts/manage_sandboxes.py --list
+uv run python sandboxes/scripts/manage_sandboxes.py --list
 ```
-*(Or use `/root/software-factory/.venv/bin/python scripts/manage_sandboxes.py --list`)*
+*(Or use `/root/software-factory/.venv/bin/python sandboxes/scripts/manage_sandboxes.py --list`)*
 
 Sample output:
 ```
@@ -39,12 +39,12 @@ Before terminating, check the target list with `--dry-run`:
 
 - **Close all except whitelist (keep specific sandboxes)**:
   ```bash
-  uv run python scripts/manage_sandboxes.py --dry-run --keep software-factory-286b1142 software-factory-b15fb788
+  uv run python sandboxes/scripts/manage_sandboxes.py --dry-run --keep software-factory-286b1142 software-factory-b15fb788
   ```
 
 - **Terminate specific sandboxes**:
   ```bash
-  uv run python scripts/manage_sandboxes.py --dry-run --terminate software-factory-bf5ba032 sb-01M5YMHXKWJX6KPWWPA6S6XDBR
+  uv run python sandboxes/scripts/manage_sandboxes.py --dry-run --terminate software-factory-bf5ba032 sb-01M5YMHXKWJX6KPWWPA6S6XDBR
   ```
 
 ### 3. Terminate Target Sandboxes
@@ -52,9 +52,9 @@ Before terminating, check the target list with `--dry-run`:
 Execute the command without `--dry-run`:
 
 ```bash
-uv run python scripts/manage_sandboxes.py --keep <NAME_OR_ID_TO_KEEP> ...
+uv run python sandboxes/scripts/manage_sandboxes.py --keep <NAME_OR_ID_TO_KEEP> ...
 # or
-uv run python scripts/manage_sandboxes.py --terminate <NAME_OR_ID_TO_TERMINATE> ...
+uv run python sandboxes/scripts/manage_sandboxes.py --terminate <NAME_OR_ID_TO_TERMINATE> ...
 ```
 
 ### 4. Verify Active State
@@ -65,7 +65,7 @@ Confirm that:
 3. The deployed Modal App (`modal app list`) remains active in `deployed` state.
 
 ```bash
-uv run python scripts/manage_sandboxes.py --list
+uv run python sandboxes/scripts/manage_sandboxes.py --list
 ```
 
 ---

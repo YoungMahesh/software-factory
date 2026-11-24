@@ -72,7 +72,7 @@ modal-sandbox infra deploy
 The pipeline executes the following stages automatically:
 1. **Connectivity Check**: Tests SSH reachability.
 2. **Environment Validation**: Runs `docker info` remotely to verify the daemon.
-3. **File Synchronization**: Archives `resource-plane/` locally (respecting `.dockerignore` and `.gitignore`) and streams it via `ssh` + `tar` extraction into `RESOURCE_PLANE_REMOTE_DIR`.
+3. **File Synchronization**: Streams `resource-plane/` to `RESOURCE_PLANE_REMOTE_DIR` using SSH and tar. The archive excludes `.env`, `.data`, `.git`, `node_modules`, and `.next`.
 4. **Container Orchestration**: Executes `./deploy.sh` remotely, starting PostgreSQL, SeaweedFS, and the Next.js web application via Docker Compose, then applies Drizzle database migrations.
 
 Output on completion:

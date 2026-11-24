@@ -14,6 +14,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from sandbox.config import parse_env_file, resolve_factory_root
+
 
 DEFAULT_REMOTE_DIR = "/opt/resource-plane"
 DEFAULT_SSH_PORT = 22
@@ -36,46 +38,27 @@ def resolve_vps_ssh_config(
     port: int | None = None,
     key_path: str | Path | None = None,
     remote_dir: str | None = None,
+    *,
+    dotenv: dict[str, str] | None = None,
 ) -> VpsSshConfig:
     """Resolves VPS SSH connection configuration from arguments or environment."""
-    resolved_host = (
-        host
-        or os.environ.get("RESOURCE_PLANE_SSH_HOST")
-        or os.environ.get("DB_HOST_SSH_HOST")
-    )
+    file_env = dotenv or {}
+
+    def setting(current: str, legacy: str) -> str | None:
+        return os.environ.get(current) or os.environ.get(legacy) or file_env.get(current) or file_env.get(legacy)
+
+    resolved_host = host or setting("RESOURCE_PLANE_SSH_HOST", "DB_HOST_SSH_HOST")
     if not resolved_host or not resolved_host.strip():
         raise ValueError(
             "Missing VPS SSH host. Set RESOURCE_PLANE_SSH_HOST in .env or provide --host."
         )
 
-    resolved_user = (
-        user
-        or os.environ.get("RESOURCE_PLANE_SSH_USER")
-        or os.environ.get("DB_HOST_SSH_USER")
-        or DEFAULT_SSH_USER
-    )
-
-    raw_port = (
-        port
-        or os.environ.get("RESOURCE_PLANE_SSH_PORT")
-        or os.environ.get("DB_HOST_SSH_PORT")
-        or DEFAULT_SSH_PORT
-    )
+    resolved_user = user or setting("RESOURCE_PLANE_SSH_USER", "DB_HOST_SSH_USER") or DEFAULT_SSH_USER
+    raw_port = port or setting("RESOURCE_PLANE_SSH_PORT", "DB_HOST_SSH_PORT") or DEFAULT_SSH_PORT
     resolved_port = int(raw_port)
-
-    raw_key = (
-        key_path
-        or os.environ.get("RESOURCE_PLANE_SSH_KEY")
-        or os.environ.get("DB_HOST_SSH_KEY")
-    )
+    raw_key = key_path or setting("RESOURCE_PLANE_SSH_KEY", "DB_HOST_SSH_KEY")
     resolved_key = Path(raw_key).expanduser().resolve() if raw_key else None
-
-    resolved_remote_dir = (
-        remote_dir
-        or os.environ.get("RESOURCE_PLANE_REMOTE_DIR")
-        or os.environ.get("DB_HOST_REMOTE_DIR")
-        or DEFAULT_REMOTE_DIR
-    )
+    resolved_remote_dir = remote_dir or setting("RESOURCE_PLANE_REMOTE_DIR", "DB_HOST_REMOTE_DIR") or DEFAULT_REMOTE_DIR
 
     return VpsSshConfig(
         host=resolved_host.strip(),
@@ -161,6 +144,7 @@ def sync_resource_plane_to_vps(
         "--exclude=.git",
         "--exclude=node_modules",
         "--exclude=.data",
+        "--exclude=.env",
         "--exclude=.next",
         "-C",
         str(parent_dir),
@@ -294,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             key_path=args.key,
             remote_dir=args.remote_dir,
+            dotenv=parse_env_file(resolve_factory_root() / ".env"),
         )
     except ValueError as exc:
         print(f"❌ {exc}", file=sys.stderr)

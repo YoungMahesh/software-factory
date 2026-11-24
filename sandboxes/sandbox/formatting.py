@@ -181,7 +181,7 @@ def print_snapshot_info(
     if profile:
         print(f"  • Profile:     {profile}")
     print(f"  • Retention:   {ttl_days} days (Expires: {exp_date})")
-    print(f"  • Resume:      python3 sandbox/main.py --from-snapshot {image_id} --name resumed-sandbox")
+    print(f"  • Resume:      modal-sandbox --from-snapshot {image_id} --name resumed-sandbox")
     print("=" * 60 + "\n")
 
 
