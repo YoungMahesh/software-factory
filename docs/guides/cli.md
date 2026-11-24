@@ -131,3 +131,51 @@ Clones a target repository and automatically pulls decrypted secrets and Git aut
 ```bash
 ghclone my-service
 ```
+
+---
+
+## Database Provisioning CLI Utilities
+
+### `create-db`
+Provisions an isolated PostgreSQL database connection on the hosted `db-host` deployment, automatically resolves or creates the associated project, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local project `.env`.
+
+```bash
+# Provision or resolve database under current project (derived from Git repo name)
+create-db <database_name>
+
+# Explicitly target a project
+create-db my-service-db -p custom-project
+
+# Inject connection URI into local .env as DATABASE_URL
+create-db my-service-db --write-env
+
+# Inject into custom variable name in custom env file
+create-db my-service-db --write-env --env-file .env.local --env-var ANALYTICS_DB_URL
+
+# Inject and immediately encrypt into the central env-store vault
+create-db my-service-db --write-env --push-vault
+
+# Output raw JSON for automation and agent scripts
+create-db my-service-db --json
+
+# Strict mode: fail if database already exists
+create-db my-service-db --fail-if-exists
+```
+
+#### `create-db` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | string | (required) | Target PostgreSQL database name to provision or resolve. |
+| `-p, --project` | string | Git repo name / `default` | Project name on db-host. |
+| `--domain` | string | `DB_HOST_DOMAIN` | Domain or URL of the db-host deployment. |
+| `--token` | string | `DB_HOST_ADMIN_TOKEN` | Admin bearer token for MCP server authentication. |
+| `--write-env` | flag | `False` | Inject or update connection URI in local `.env` file. |
+| `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
+| `--env-var` | string | `DATABASE_URL` | Variable name to write in environment file. |
+| `--push-vault` | flag | `False` | Automatically push updated `.env` to central `env-store` vault via `push-repo-env`. |
+| `--ca-path` | path | `~/.config/db-host/ca.crt` | Destination path for cached root CA certificate. |
+| `--json` | flag | `False` | Emit raw credentials and connection details as JSON. |
+| `-q, --quiet` | flag | `False` | Output only the PostgreSQL connection URI string. |
+| `--fail-if-exists` | flag | `False` | Exit with error if database already exists instead of reusing existing connection. |
+

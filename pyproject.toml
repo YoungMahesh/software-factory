@@ -44,6 +44,7 @@ docs = [
 modal-sandbox = "sandbox.main:main"
 push-repo-env = "scripts.push_repo_env:main"
 pull-repo-env = "scripts.pull_repo_env:main"
+create-db = "scripts.create_db:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

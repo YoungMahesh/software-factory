@@ -328,7 +328,7 @@ grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'ex
 # Workspace Repository ($TARGET_DIR/scripts) > Staged Dot Directory (/root/.scripts) > Pre-baked Image Binary (/usr/local/bin)
 
 # 1. Staged scripts in /root/.scripts or /root/scripts overwrite base image fallbacks
-for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env; do
+for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db; do
     cmd_py="${cmd//-/_}.py"
     if [ -f "/root/.scripts/$cmd" ] && [ ! -L "/root/.scripts/$cmd" ]; then
         ln -sf "/root/.scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
@@ -348,7 +348,7 @@ done
 # 2. Workspace repository scripts ($TARGET_DIR/scripts) take highest precedence
 if [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR/scripts" ]; then
     echo "🔗 Linking developer tools from $TARGET_DIR/scripts to /usr/local/bin..."
-    for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env; do
+    for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db; do
         cmd_py="${cmd//-/_}.py"
         if [ -f "$TARGET_DIR/scripts/$cmd" ]; then
             ln -sf "$TARGET_DIR/scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
@@ -361,15 +361,16 @@ if [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR/scripts" ]; then
 fi
 
 # Ensure developer CLI tools in /usr/local/bin are executable and symlinked
-chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env 2>/dev/null || true
+chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/create-db 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true
 ln -sf /usr/local/bin/push-repo-env /usr/local/bin/push_repo_env.py 2>/dev/null || true
 ln -sf /usr/local/bin/pull-repo-env /usr/local/bin/pull_repo_env.py 2>/dev/null || true
+ln -sf /usr/local/bin/create-db /usr/local/bin/create_db.py 2>/dev/null || true
 
 # Ensure convenience symlinks in /root/.scripts point to /usr/local/bin
 mkdir -p /root/.scripts 2>/dev/null || true
-for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env; do
+for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db; do
     if [ -f "/usr/local/bin/$cmd" ]; then
         if [ ! -e "/root/.scripts/$cmd" ] || [ -L "/root/.scripts/$cmd" ]; then
             target_real=$(realpath "/usr/local/bin/$cmd" 2>/dev/null || true)
@@ -383,6 +384,7 @@ ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile 2>/dev/null |
 ln -sf /usr/local/bin/agyprofile /root/.scripts/switch-agy-profile.sh 2>/dev/null || true
 ln -sf /usr/local/bin/push-repo-env /root/.scripts/push-repo-env 2>/dev/null || true
 ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || true
+ln -sf /usr/local/bin/create-db /root/.scripts/create-db 2>/dev/null || true
 
 # sshd builds a clean environment for login sessions, so image-level PATH alone
 # does not reach interactive shells.
