@@ -134,7 +134,7 @@ ghclone my-service
 
 ---
 
-## Database Provisioning CLI Utilities
+## Database & Storage Provisioning CLI Utilities
 
 ### `create-db`
 Provisions an isolated PostgreSQL database connection on the hosted `db-host` deployment, automatically resolves or creates the associated project, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local project `.env`.
@@ -178,4 +178,52 @@ create-db my-service-db --fail-if-exists
 | `--json` | flag | `False` | Emit raw credentials and connection details as JSON. |
 | `-q, --quiet` | flag | `False` | Output only the PostgreSQL connection URI string. |
 | `--fail-if-exists` | flag | `False` | Exit with error if database already exists instead of reusing existing connection. |
+
+---
+
+### `create-s3`
+Provisions an isolated SeaweedFS S3 object storage bucket on the hosted `db-host` deployment, validates bucket naming rules, retrieves dedicated IAM credentials, and optionally injects standard AWS SDK environment variables into the local project `.env`.
+
+```bash
+# Provision or resolve S3 bucket under current project (derived from Git repo name)
+create-s3 <bucket_name>
+
+# Explicitly target a project
+create-s3 my-bucket -p custom-project
+
+# Inject standard AWS SDK variables into local .env
+create-s3 my-bucket --write-env
+
+# Inject with custom variable prefix (e.g. UPLOADS_AWS_ACCESS_KEY_ID)
+create-s3 my-bucket --write-env --prefix UPLOADS_
+
+# Inject and immediately encrypt into the central env-store vault
+create-s3 my-bucket --write-env --push-vault
+
+# Output raw JSON with credentials and code snippets (boto3, Node SDK, AWS CLI)
+create-s3 my-bucket --json
+
+# Quiet mode: output only canonical S3 URI (s3://<bucket_name>)
+create-s3 my-bucket -q
+
+# Strict mode: fail if bucket already exists
+create-s3 my-bucket --fail-if-exists
+```
+
+#### `create-s3` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | string | (required) | Target S3 bucket name (3-63 lowercase alphanumeric and hyphens). |
+| `-p, --project` | string | Git repo name / `default` | Project name on db-host. |
+| `--domain` | string | `DB_HOST_DOMAIN` | Domain or URL of the db-host deployment. |
+| `--token` | string | `DB_HOST_ADMIN_TOKEN` | Admin bearer token for MCP server authentication. |
+| `--write-env` | flag | `False` | Inject or update standard AWS SDK variables in local `.env` file. |
+| `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
+| `--prefix` | string | `""` | Prefix prepended to environment variable names. |
+| `--push-vault` | flag | `False` | Automatically push updated `.env` to central `env-store` vault via `push-repo-env`. |
+| `--json` | flag | `False` | Emit raw credentials, connection details, and code snippets as JSON. |
+| `-q, --quiet` | flag | `False` | Output only the canonical S3 URI (`s3://<bucket-name>`). |
+| `--fail-if-exists` | flag | `False` | Exit with error if bucket already exists instead of reusing existing credentials. |
+
 

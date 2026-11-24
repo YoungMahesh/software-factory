@@ -45,6 +45,7 @@ modal-sandbox = "sandbox.main:main"
 push-repo-env = "scripts.push_repo_env:main"
 pull-repo-env = "scripts.pull_repo_env:main"
 create-db = "scripts.create_db:main"
+create-s3 = "scripts.create_s3:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

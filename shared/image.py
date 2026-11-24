@@ -74,6 +74,8 @@ LOCAL_PULL_REPO_ENV = _resolve_file("pull_repo_env.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_PULL_REPO_ENV = "/usr/local/bin/pull-repo-env"
 LOCAL_CREATE_DB = _resolve_file("create_db.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_CREATE_DB = "/usr/local/bin/create-db"
+LOCAL_CREATE_S3 = _resolve_file("create_s3.py", *_SCRIPTS_SEARCH_DIRS)
+REMOTE_CREATE_S3 = "/usr/local/bin/create-s3"
 LOCAL_POST_CHECKOUT_HOOK = SHARED_DIR / "git-hooks" / "post-checkout"
 REMOTE_POST_CHECKOUT_HOOK = "/root/.git-hooks/post-checkout"
 
@@ -143,6 +145,7 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [\
     (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
     (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
     (LOCAL_CREATE_DB, REMOTE_CREATE_DB),
+    (LOCAL_CREATE_S3, REMOTE_CREATE_S3),
     (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
     (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
     (LOCAL_DESKTOP_SERVICE, REMOTE_DESKTOP_SERVICE),
@@ -223,12 +226,13 @@ base_image = (
 
 base_image = add_local_files_if_present(base_image, BASE_IMAGE_FILES)
 base_image = base_image.run_commands(
-    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/create-db /usr/local/bin/t3-usage-sync /usr/local/bin/desktop-service /root/.scripts/setup.sh 2>/dev/null || true",
+    "chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/create-db /usr/local/bin/create-s3 /usr/local/bin/t3-usage-sync /usr/local/bin/desktop-service /root/.scripts/setup.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true",
     "ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true",
     "ln -sf /usr/local/bin/push-repo-env /usr/local/bin/push_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/pull-repo-env /usr/local/bin/pull_repo_env.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/create-db /usr/local/bin/create_db.py 2>/dev/null || true",
+    "ln -sf /usr/local/bin/create-s3 /usr/local/bin/create_s3.py 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /usr/local/bin/t3_usage_sync 2>/dev/null || true",
     "mkdir -p /root/.scripts",
     "ln -sf /usr/local/bin/agyq /root/.scripts/agyq 2>/dev/null || true",
@@ -241,6 +245,7 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/push-repo-env /root/.scripts/push-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || true",
     "ln -sf /usr/local/bin/create-db /root/.scripts/create-db 2>/dev/null || true",
+    "ln -sf /usr/local/bin/create-s3 /root/.scripts/create-s3 2>/dev/null || true",
     "ln -sf /usr/local/bin/t3-usage-sync /root/.scripts/t3-usage-sync 2>/dev/null || true",
     "chmod +x /root/.git-hooks/post-checkout 2>/dev/null || true",
 )

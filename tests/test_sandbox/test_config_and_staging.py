@@ -146,6 +146,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_PUSH_REPO_ENV,
             LOCAL_PULL_REPO_ENV,
             REMOTE_PULL_REPO_ENV,
+            LOCAL_CREATE_DB,
+            REMOTE_CREATE_DB,
+            LOCAL_CREATE_S3,
+            REMOTE_CREATE_S3,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
             LOCAL_POST_CHECKOUT_HOOK,
@@ -166,6 +170,8 @@ class TestSandboxImageStaging(unittest.TestCase):
             (LOCAL_AGYPROFILE, REMOTE_AGYPROFILE),
             (LOCAL_PUSH_REPO_ENV, REMOTE_PUSH_REPO_ENV),
             (LOCAL_PULL_REPO_ENV, REMOTE_PULL_REPO_ENV),
+            (LOCAL_CREATE_DB, REMOTE_CREATE_DB),
+            (LOCAL_CREATE_S3, REMOTE_CREATE_S3),
             (LOCAL_T3_USAGE_SYNC, REMOTE_T3_USAGE_SYNC),
             (LOCAL_POST_CHECKOUT_HOOK, REMOTE_POST_CHECKOUT_HOOK),
             (LOCAL_DESKTOP_SERVICE, REMOTE_DESKTOP_SERVICE),
@@ -192,6 +198,10 @@ class TestSandboxImageStaging(unittest.TestCase):
             REMOTE_PUSH_REPO_ENV,
             LOCAL_PULL_REPO_ENV,
             REMOTE_PULL_REPO_ENV,
+            LOCAL_CREATE_DB,
+            REMOTE_CREATE_DB,
+            LOCAL_CREATE_S3,
+            REMOTE_CREATE_S3,
             LOCAL_T3_USAGE_SYNC,
             REMOTE_T3_USAGE_SYNC,
             LOCAL_POST_CHECKOUT_HOOK,
@@ -215,6 +225,8 @@ class TestSandboxImageStaging(unittest.TestCase):
         self.assertTrue(LOCAL_AGYPROFILE.exists(), "scripts/agyprofile must exist")
         self.assertTrue(LOCAL_PUSH_REPO_ENV.exists(), "scripts/push_repo_env.py must exist")
         self.assertTrue(LOCAL_PULL_REPO_ENV.exists(), "scripts/pull_repo_env.py must exist")
+        self.assertTrue(LOCAL_CREATE_DB.exists(), "scripts/create_db.py must exist")
+        self.assertTrue(LOCAL_CREATE_S3.exists(), "scripts/create_s3.py must exist")
         self.assertTrue(LOCAL_T3_USAGE_SYNC.exists(), "shared/t3_usage_sync.py must exist")
 
         startup_content = (repo_root / "shared" / "startup.sh").read_text()
