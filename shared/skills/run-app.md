@@ -1,0 +1,1 @@
+Run `pnpm run dev` and open localhost in t3code browser.
