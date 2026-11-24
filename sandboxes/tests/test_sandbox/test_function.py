@@ -32,6 +32,13 @@ BASIC_AUTH_HEADER = {
 }
 
 
+def image_dependencies(obj):
+    yield obj
+    if hasattr(obj, "_deps_"):
+        for dependency in obj._deps_():
+            yield from image_dependencies(dependency)
+
+
 class TestSandboxFunctionAPI(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(web_app)
@@ -253,17 +260,24 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         self.assertIn("v3.13.3", SOPS_VERSION)
         self.assertTrue(any("sops" in cmd for cmd in SOPS_INSTALL_COMMANDS))
 
-        def get_all_deps(obj):
-            res = [obj]
-            if hasattr(obj, "_deps_"):
-                for dep in obj._deps_():
-                    res.extend(get_all_deps(dep))
-            return res
-
-        deps = get_all_deps(control_plane_image)
-        dep_reprs = [repr(d) for d in deps]
+        dep_reprs = [repr(dep) for dep in image_dependencies(control_plane_image)]
         self.assertTrue(any("run_commands" in r for r in dep_reprs))
         self.assertTrue(any("apt_install" in r for r in dep_reprs))
+
+    def test_control_plane_image_uploads_dashboard_and_support_files(self):
+        mounted_files = {
+            str(remote_path)
+            for dependency in image_dependencies(control_plane_image)
+            for entry in getattr(dependency, "entries", ())
+            for _, remote_path in entry.get_files_to_upload()
+        }
+        expected_files = {
+            "/root/sandbox/web.py",
+            "/root/sandbox/static/index.html",
+            "/root/shared/startup.sh",
+            "/root/.scripts/setup.sh",
+        }
+        self.assertEqual(expected_files - mounted_files, set())
 
 
 class TestSandboxCliRemoteIntegration(unittest.TestCase):

@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 APP_NAME = "sandbox-control-plane"
 app = modal.App(APP_NAME)
 
-repo_root = Path(__file__).resolve().parent.parent.parent if (Path(__file__).resolve().parent.parent.parent / "GLOSSARY.md").is_file() else Path(__file__).resolve().parent.parent
+sandbox_dir = Path(__file__).resolve().parent
+execution_root = sandbox_dir.parent
+repo_root = execution_root.parent if (execution_root.parent / "GLOSSARY.md").is_file() else execution_root
 
 
 def resolve_and_validate_web_credentials(root: Path, enforce: bool | None = None) -> dict[str, str]:
@@ -130,13 +132,11 @@ image = (
         "pydantic>=2.0.0",
         "qrcode>=7.4.2",
     )
-    .add_local_python_source("shared", "sandbox")
-    .add_local_dir(str(repo_root / "shared"), "/root/shared")
-    .add_local_dir(str(repo_root / "scripts"), "/root/.scripts")
+    .add_local_python_source("sandbox")
+    .add_local_dir(execution_root / "shared", "/root/shared", ignore=["**/__pycache__"])
+    .add_local_dir(execution_root / "scripts", "/root/.scripts", ignore=["**/__pycache__"])
+    .add_local_dir(sandbox_dir / "static", "/root/sandbox/static")
 )
-
-if (repo_root / "sandbox" / "static").is_dir():
-    image = image.add_local_dir(str(repo_root / "sandbox" / "static"), "/root/sandbox/static")
 
 # Secrets are injected via modal.Secret, not staged to filesystem
 auth_env = resolve_and_validate_web_credentials(repo_root)
