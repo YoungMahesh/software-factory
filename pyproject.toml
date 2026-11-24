@@ -52,5 +52,5 @@ where = ["."]
 include = ["sandbox*", "shared*", "scripts*"]
 
 [tool.setuptools.package-data]
-shared = ["*"]
+shared = ["*", "skills/**/*"]
 sandbox = ["static/*"]

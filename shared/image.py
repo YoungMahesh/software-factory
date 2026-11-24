@@ -249,6 +249,12 @@ base_image = base_image.run_commands(
     "ln -sf /usr/local/bin/t3-usage-sync /root/.scripts/t3-usage-sync 2>/dev/null || true",
     "chmod +x /root/.git-hooks/post-checkout 2>/dev/null || true",
 )
+base_image = base_image.add_local_dir(
+    SHARED_DIR / "skills", "/root/.agents/skills", copy=True
+).run_commands(
+    "mkdir -p /root/.gemini/config",
+    "ln -s /root/.agents/skills /root/.gemini/config/skills",
+)
 
 
 def load_ssh_pub_key() -> str:

@@ -131,6 +131,9 @@ _Avoid_: Gemini token, antigravity auth token, cli token
 Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/t3-keybindings.json`) and mounted into sandboxes at runtime.
 _Avoid_: Sandbox config, local config, runner settings
 
+**Shared Agent Skills**:
+Factory-maintained agent skills available across workspaces in every fresh sandbox. A sandbox resumed from a Filesystem Snapshot retains the skill set captured in that snapshot.
+
 **Sandbox Shell Aliases**:
 A curated collection of interactive shell shortcuts for Docker and Git operations tracked in `shared/aliases.bash`, staged into sandboxes at `/root/.bash_aliases`, and automatically sourced in `~/.bashrc` across all sandbox runtime modes.
 _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
