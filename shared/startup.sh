@@ -388,6 +388,28 @@ ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || 
 # does not reach interactive shells.
 if [ "${ENABLE_T3:-}" = "1" ]; then
     grep -qxF 'export PATH="/root/.opencode/bin:/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="/root/.opencode/bin:/usr/local/bin:$PATH"' >> ~/.bashrc
+    if [ -x /usr/local/bin/codexprofile ] && command -v codex >/dev/null 2>&1; then
+        export CODEX_RUNTIME_INSTALLED=1
+        python3 - <<'PYPROFILE'
+import json
+import os
+from pathlib import Path
+
+keys = ("CODEX_PROFILE", "CODEX_HOME", "CODEX_STATUS_URL", "CODEX_STATUS_TOKEN")
+path = Path("/dev/shm/codexprofile.json")
+path.parent.mkdir(parents=True, exist_ok=True)
+with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as output:
+    json.dump({key: os.environ[key] for key in keys if os.environ.get(key)}, output)
+PYPROFILE
+        unset CODEX_STATUS_TOKEN CODEX_STATUS_URL
+        : > /etc/profile.d/codex-profile.sh
+        if [ -n "${CODEX_PROFILE:-}" ]; then
+            chmod 700 -- "$CODEX_HOME"
+            printf 'export CODEX_HOME=%q CODEX_PROFILE=%q\n' "$CODEX_HOME" "$CODEX_PROFILE" > /etc/profile.d/codex-profile.sh
+            grep -qxF '. /etc/profile.d/codex-profile.sh' ~/.bashrc 2>/dev/null || \
+                echo '. /etc/profile.d/codex-profile.sh' >> ~/.bashrc
+        fi
+    fi
     # Allow Chrome headless shell to run unsandboxed inside root container
     export T3CODE_SERVER_BROWSER_SANDBOX=0
     grep -qxF 'export T3CODE_SERVER_BROWSER_SANDBOX=0' /etc/environment 2>/dev/null || echo 'export T3CODE_SERVER_BROWSER_SANDBOX=0' >> /etc/environment
@@ -1193,8 +1215,11 @@ if "claudeAgent" not in settings["providerInstances"]:
 if "codex" not in settings["providerInstances"]:
     settings["providerInstances"]["codex"] = {
         "driver": "codex",
-        "enabled": False
+        "enabled": bool(os.environ.get("CODEX_RUNTIME_INSTALLED"))
     }
+
+if bool(os.environ.get("CODEX_RUNTIME_INSTALLED")):
+    settings["providerInstances"]["codex"]["enabled"] = True
 
 default_agy_instance = None
 for candidate in ["antigravity-anv", "antigravity-mgh", "antigravity"]:
@@ -1209,9 +1234,9 @@ if default_agy_instance:
         "instanceId": default_agy_instance,
         "model": "gemini-3.8-flash-low"
     }
-    if not settings.get("sourceControlWriterModelSelection") or settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex":
+    if not settings.get("sourceControlWriterModelSelection") or (settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex" and not settings["providerInstances"]["codex"]["enabled"]):
         settings["sourceControlWriterModelSelection"] = model_sel
-    if not settings.get("textGenerationModelSelection") or settings.get("textGenerationModelSelection", {}).get("instanceId") == "codex":
+    if not settings.get("textGenerationModelSelection") or (settings.get("textGenerationModelSelection", {}).get("instanceId") == "codex" and not settings["providerInstances"]["codex"]["enabled"]):
         settings["textGenerationModelSelection"] = model_sel
 
 with open(t3_settings_path, "w") as fp:

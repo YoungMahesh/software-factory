@@ -231,7 +231,8 @@ class TestT3CodeStartup(unittest.TestCase):
             self.assertNotIn("devUrl", data_after_serve)
 
             # Test pair command: devUrl is injected into server-runtime.json
-            res_pair = subprocess.run([str(wrapper), "pair"], capture_output=True, text=True)
+            env = {**os.environ, "T3_PUBLIC_URL": ""}
+            res_pair = subprocess.run([str(wrapper), "pair"], capture_output=True, text=True, env=env)
             self.assertEqual(res_pair.returncode, 0)
             self.assertIn("MOCK_CALLED: pair", res_pair.stdout)
             data_after_pair = json.loads(runtime_json.read_text())

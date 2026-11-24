@@ -34,6 +34,7 @@ from sandbox.config import (
     DEFAULT_T3_PORT, DEFAULT_WEB_PORT, IDLE_TIMEOUT_SECS, TIMEOUT_SECS,
     resolve_factory_credentials, resolve_timezone,
 )
+from sandbox.codex_profiles import prepare_profile
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
 from sandbox.formatting import append_ssh_config, generate_ssh_config_snippet
 from sandbox.t3 import setup_t3 as _setup_t3
@@ -211,7 +212,12 @@ class SandboxLauncher:
         cloudflare_active = not req.no_cloudflare
         encrypted_ports: list[int] = []
         sandbox_secrets: list[modal.Secret] = []
-        if dotenv_file.is_file():
+        if "CODEX_STATUS_SECRET" in creds.extra_env:
+            from dotenv import dotenv_values
+            sandbox_secrets.append(modal.Secret.from_dict({
+                k: v for k, v in dotenv_values(dotenv_file).items() if k != "CODEX_STATUS_SECRET" and v is not None
+            }))
+        elif dotenv_file.is_file():
             sandbox_secrets.append(modal.Secret.from_dotenv(dotenv_file))
         else:
             secret_keys = [
@@ -362,6 +368,11 @@ class SandboxLauncher:
         if target_client is not None:
             sandbox_kwargs["client"] = target_client
 
+        codex = None
+        if req.t3 and not req.from_snapshot:
+            codex = prepare_profile({**os.environ, **creds.extra_env}, req, target_client, env, volumes, tags)
+            self._emit_log(f"Codex profile: {codex.label if codex else 'none (manual sign-in)'}")
+
         self._emit_log("🚀 Instantiating Modal Sandbox container...")
         with modal.enable_output():
             sandbox = modal.Sandbox.create(
@@ -370,6 +381,11 @@ class SandboxLauncher:
             )
 
         self._emit_log(f"📦 Modal Sandbox container created: {sandbox.object_id}")
+        if codex:
+            try:
+                codex.record(sandbox_name, app_name, sandbox.object_id)
+            except (modal.exception.Error, OSError):
+                self._emit_log("Could not save Codex owner ID. The pending reservation can be reconciled by name.")
         poll_val = sandbox.poll()
         if isinstance(poll_val, int) and poll_val != 0:
             err = ""
@@ -445,6 +461,7 @@ class SandboxLauncher:
             metro_url=metro_url, metro_port=req.metro_port if req.react_native else None,
             t3_url=t3_url, t3_port=req.t3_port if req.t3 else None,
             t3_pair_url=t3_pair_url, t3_qr_code=t3_qr_code, t3_ssh_host=t3_ssh_alias,
+            codex_profile=codex.label if codex else None,
             t3_persist=t3_persist_enabled,
             t3_usage_volume=req.t3_usage_volume if t3_persist_enabled else None,
             xfce_url=xfce_url, xfce_port=req.xfce_port if req.xfce else None,

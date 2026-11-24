@@ -372,6 +372,7 @@ class TestStartupScriptResume(unittest.TestCase):
             test_script = f"""
             export HOME="{fake_root}"
             export RESUME_SNAPSHOT="1"
+            unset GH_REPO VIRTUAL_ENV
             export ENABLE_CLOUDFLARE="0"
             export ENABLE_T3="0"
             export ENABLE_ANTIGRAVITY="0"
@@ -384,6 +385,7 @@ class TestStartupScriptResume(unittest.TestCase):
             export PATH="{fake_bin}:$PATH"
             sed -e 's|/root|{fake_root}|g' \
                 -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/etc/workspace-target-dir|{fake_root}/etc-workspace-target-dir|g; s|/etc/software-factory-version.json|{fake_root}/etc-software-factory-version.json|g' \
                 -e 's|/usr/sbin/sshd|true|g' \
                 -e 's|exec sleep infinity|exit 0|g' \
                 "{self.startup_sh}" > "{tmpdir}/run_startup.sh"
@@ -424,6 +426,7 @@ class TestStartupScriptResume(unittest.TestCase):
             test_script = f"""
             export HOME="{fake_root}"
             export RESUME_SNAPSHOT="1"
+            unset GH_REPO VIRTUAL_ENV
             export ENABLE_CLOUDFLARE="0"
             export ENABLE_T3="0"
             export ENABLE_ANTIGRAVITY="0"
@@ -436,6 +439,7 @@ class TestStartupScriptResume(unittest.TestCase):
             export PATH="{fake_bin}:$PATH"
             sed -e 's|/root|{fake_root}|g' \
                 -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/etc/workspace-target-dir|{fake_root}/etc-workspace-target-dir|g; s|/etc/software-factory-version.json|{fake_root}/etc-software-factory-version.json|g' \
                 -e 's|/usr/sbin/sshd|true|g' \
                 -e 's|exec sleep infinity|exit 0|g' \
                 "{self.startup_sh}" > "{tmpdir}/run_startup.sh"
@@ -471,6 +475,7 @@ class TestStartupScriptResume(unittest.TestCase):
             test_script = f"""
             export HOME="{fake_root}"
             export RESUME_SNAPSHOT="1"
+            unset GH_REPO VIRTUAL_ENV
             export ENABLE_CLOUDFLARE="0"
             export ENABLE_T3="0"
             export ENABLE_ANTIGRAVITY="0"
@@ -483,6 +488,7 @@ class TestStartupScriptResume(unittest.TestCase):
             export PATH="{fake_bin}:$PATH"
             sed -e 's|/root|{fake_root}|g' \
                 -e 's|/usr/local/bin|{fake_bin}|g' \
+                -e 's|/etc/workspace-target-dir|{fake_root}/etc-workspace-target-dir|g; s|/etc/software-factory-version.json|{fake_root}/etc-software-factory-version.json|g' \
                 -e 's|/usr/sbin/sshd|true|g' \
                 -e 's|exec sleep infinity|exit 0|g' \
                 "{self.startup_sh}" > "{tmpdir}/run_startup.sh"

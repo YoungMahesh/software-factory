@@ -266,6 +266,9 @@ def browser_enabled(
 
 # T3 Code release configuration and binary patch target
 T3_VERSION = "0.1.11"
+CODEX_VERSION = "0.171.0"
+LOCAL_CODEXPROFILE = _resolve_file("codexprofile", *_SCRIPTS_SEARCH_DIRS)
+REMOTE_CODEXPROFILE = "/usr/local/bin/codexprofile"
 T3_TAR_URL = f"https://github.com/pingdotgg/t3code/releases/download/v{T3_VERSION}/t3-{T3_VERSION}-linux-x64.tar.gz"
 
 # Antigravity ACP runtime configuration
@@ -353,6 +356,7 @@ def build_sandbox_image(
             image,
             [
                 (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                (LOCAL_CODEXPROFILE, REMOTE_CODEXPROFILE),
             ],
         )
 
@@ -372,6 +376,8 @@ def build_sandbox_image(
 
     if t3:
         image = image.run_commands(
+            "chmod 755 /usr/local/bin/codexprofile",
+            f"npm install -g @openai/codex@{CODEX_VERSION}",
             "mkdir -p /opt/t3",
             f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
             "ln -sf /opt/t3/t3 /usr/local/bin/t3",

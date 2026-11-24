@@ -60,6 +60,9 @@ class TestT3CodeImage(unittest.TestCase):
             T3_ANTIGRAVITY_MANAGED_DIR,
             T3_INSTALL_COMPLETE_JSON,
             T3_ACTIVE_JSON,
+            CODEX_VERSION,
+            LOCAL_CODEXPROFILE,
+            REMOTE_CODEXPROFILE,
             LOCAL_OPENCODE_CONFIG,
             REMOTE_OPENCODE_CONFIG,
             LOCAL_T3_KEYBINDINGS,
@@ -92,6 +95,7 @@ class TestT3CodeImage(unittest.TestCase):
                         mock_img1,
                         [
                             (LOCAL_OPENCODE_CONFIG, REMOTE_OPENCODE_CONFIG),
+                            (LOCAL_CODEXPROFILE, REMOTE_CODEXPROFILE),
                         ],
                     ),
                     call(
@@ -108,6 +112,8 @@ class TestT3CodeImage(unittest.TestCase):
                 "chmod -R 777 /root/.cache/ms-playwright 2>/dev/null || true",
             )
             mock_img2.run_commands.assert_called_once_with(
+                "chmod 755 /usr/local/bin/codexprofile",
+                f"npm install -g @openai/codex@{CODEX_VERSION}",
                 "mkdir -p /opt/t3",
                 f"curl -fsSL {T3_TAR_URL} | tar -xz -C /opt/t3 --strip-components=1",
                 "ln -sf /opt/t3/t3 /usr/local/bin/t3",

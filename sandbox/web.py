@@ -109,6 +109,25 @@ def check_authentication(request: Request) -> None:
 
 
 router = APIRouter(dependencies=[Depends(check_authentication)])
+codex_router = APIRouter()
+
+
+@codex_router.get("/api/codex/profiles")
+def api_codex_profiles(request: Request) -> list[dict]:
+    from sandbox.codex_profiles import decode_status_access, list_profiles, pool_prefix
+
+    header = request.headers.get("Authorization", "")
+    try:
+        if not header.startswith("Bearer "):
+            raise ValueError("Missing bearer token")
+        profile, testing = decode_status_access(header[7:], os.environ.get("CODEX_STATUS_SECRET", ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid Codex profile status credential") from exc
+
+    prefix = pool_prefix(os.environ.get("CODEX_PROFILE_VOLUME_PREFIX", ""), testing)
+    client = get_client_for_profile(profile) if profile else None
+    return [entry.status() for entry in list_profiles(prefix, client)]
+
 
 
 class SnapshotCreatePayload(BaseModel):
@@ -425,6 +444,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
     app_instance.include_router(router)
+    app_instance.include_router(codex_router)
     return app_instance
 
 

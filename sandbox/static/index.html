@@ -755,6 +755,11 @@
           </div>
         </div>
 
+        <p x-show="launchResult?.t3_port" class="text-xs text-slate-400">
+          Codex profile
+          <span class="text-slate-200" x-text="launchResult?.codex_profile || 'none (manual sign-in)'"></span>
+        </p>
+
         <!-- Launch Transcript Toggle in Result Modal -->
         <div x-show="lastLaunchLogs.length > 0" class="pt-2 border-t border-slate-800" x-data="{ showLogs: false }">
           <button @click="showLogs = !showLogs" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium">

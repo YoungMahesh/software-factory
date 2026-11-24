@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Inspect the attached Codex profile and sign in from a T3 sandbox."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("current", "login", "status"))
+    args = parser.parse_args()
+    settings = Path("/dev/shm/codexprofile.json")
+    config = json.loads(settings.read_text()) if settings.is_file() else {}
+    profile = config.get("CODEX_PROFILE") or os.getenv("CODEX_PROFILE")
+    home = config.get("CODEX_HOME") or os.getenv("CODEX_HOME")
+    if home:
+        os.environ["CODEX_HOME"] = home
+
+    if args.command == "current":
+        print(profile or "none")
+        return 0
+
+    if args.command == "login":
+        print(f"Sign in to Codex profile {profile}." if profile
+              else "Sign in to Codex for this sandbox only.", flush=True)
+        result = subprocess.run(["codex", "login", "--device-auth"], check=False)
+        if result.returncode == 0 and profile and home:
+            return subprocess.run(["sync", home], check=False).returncode
+        return result.returncode
+
+    print(f"Attached profile: {profile or 'none'}", flush=True)
+    subprocess.run(["codex", "login", "status"], check=False)
+    url = config.get("CODEX_STATUS_URL")
+    token = config.get("CODEX_STATUS_TOKEN")
+    if not url or not token:
+        print("Pool status requires a configured Codex status endpoint.")
+        return 0
+
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(request, timeout=10) as response:
+            profiles = json.load(response)
+    except (OSError, ValueError):
+        print("Could not retrieve Codex profile status.", file=sys.stderr)
+        return 1
+    for entry in profiles:
+        saved = "saved login" if entry["saved_login"] else "no saved login"
+        owner = entry["sandbox"] or "—"
+        here = " (here)" if entry["profile"] == profile else ""
+        print(f'{entry["profile"]}{here}: {saved}, {entry["state"]}, sandbox {owner}')
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

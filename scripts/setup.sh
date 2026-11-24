@@ -411,7 +411,7 @@ if "claudeAgent" not in settings["providerInstances"]:
 if "codex" not in settings["providerInstances"]:
     settings["providerInstances"]["codex"] = {
         "driver": "codex",
-        "enabled": False
+        "enabled": bool(os.environ.get("CODEX_RUNTIME_INSTALLED"))
     }
 
 default_agy_instance = configured_antigravity[0] if configured_antigravity else None
@@ -420,9 +420,9 @@ if default_agy_instance:
         "instanceId": default_agy_instance,
         "model": "gemini-3.8-flash-low"
     }
-    if not settings.get("sourceControlWriterModelSelection") or settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex":
+    if not settings.get("sourceControlWriterModelSelection") or (settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex" and not settings["providerInstances"]["codex"]["enabled"]):
         settings["sourceControlWriterModelSelection"] = model_sel
-    if not settings.get("textGenerationModelSelection") or settings.get("textGenerationModelSelection", {}).get("instanceId") == "codex":
+    if not settings.get("textGenerationModelSelection") or (settings.get("textGenerationModelSelection", {}).get("instanceId") == "codex" and not settings["providerInstances"]["codex"]["enabled"]):
         settings["textGenerationModelSelection"] = model_sel
 
 with open(t3_settings_path, "w") as fp:

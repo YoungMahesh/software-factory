@@ -52,6 +52,13 @@ _Avoid_: OpenCode server, OpenCode IDE, code server
 A background agent harness control surface running inside the sandbox (`t3 serve`), managing local CLI agents across isolated Git worktrees, bound to a dedicated encrypted tunnel port.
 _Avoid_: T3 IDE, t3 daemon, Theo agent runner, t3 web
 
+**Codex Provider**:
+The OpenAI coding agent available through T3 Code in a sandbox.
+
+**Codex Credential Profile**:
+One reusable ChatGPT sign-in session for the Codex Provider. Multiple profiles can belong to the same ChatGPT account, and each profile can serve one running sandbox at a time.
+_Avoid_: Modal profile, ChatGPT account
+
 **Pairing URL**:
 The public HTTPS URL emitted by T3 Code (`t3 pair` or sandbox launch metadata) containing the Modal application tunnel domain and a cryptographically generated pairing token (`https://<sandbox-tunnel>.modal.host/pair#token=...`), enabling external browser and desktop app pairing with the remote T3 Code Server.
 _Avoid_: Local pairing URL, private IP link, direct socket URL

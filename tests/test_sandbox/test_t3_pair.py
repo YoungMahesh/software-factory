@@ -58,7 +58,8 @@ class TestT3PairWrapper(unittest.TestCase):
             test_wrapper.chmod(0o755)
 
             # Running pair without base-dir from root
-            res = subprocess.run([str(test_wrapper), "pair"], capture_output=True, text=True, cwd=str(tmp_path))
+            env = {**os.environ, "T3_PUBLIC_URL": ""}
+            res = subprocess.run([str(test_wrapper), "pair"], capture_output=True, text=True, cwd=str(tmp_path), env=env)
             self.assertEqual(res.returncode, 0)
             self.assertIn("MOCK_ARGS: pair", res.stdout)
 

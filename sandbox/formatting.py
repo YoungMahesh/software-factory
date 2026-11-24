@@ -102,6 +102,7 @@ def print_access_info(
     sops_enabled: bool = False,
     is_vm: bool = False,
     sandbox_id: str | None = None,
+    codex_profile: str | None = None,
 ):
     print("\n" + "=" * 60)
     print("🏝️  Sandbox Ready!")
@@ -134,6 +135,8 @@ def print_access_info(
     elif t3_url:
         print(f"  • T3 Code:  {t3_url} (port {t3_port})")
         print(f"  • Web UI:   {t3_url}")
+    if codex_profile or t3_port is not None:
+        print(f"  • Codex profile: {codex_profile or 'none (manual sign-in)'}")
     if t3_persist and (t3_pair_url or t3_url):
         print(f"  • T3 Storage: Persistent volume ({t3_usage_volume or 't3code-usage-v1'})")
     instance_name = t3_ssh_host or sandbox_name or app_name

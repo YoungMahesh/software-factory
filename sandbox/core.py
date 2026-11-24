@@ -58,6 +58,7 @@ class LaunchResponse(BaseModel):
     t3_pair_url: str | None = None
     t3_qr_code: str | None = None
     t3_ssh_host: str | None = None
+    codex_profile: str | None = None
     t3_persist: bool = False
     t3_usage_volume: str | None = None
     xfce_url: str | None = None

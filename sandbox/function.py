@@ -22,7 +22,7 @@ from sandbox.launcher import (
     launch_sandbox,
 )
 from sandbox.provenance import resolve_host_software_factory_provenance
-from sandbox.web import check_authentication, router as web_router
+from sandbox.web import check_authentication, codex_router, router as web_router
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,8 @@ def collect_control_plane_secrets(root: Path) -> dict[str, str]:
         "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
         "MODAL_SANDBOX_TUNNEL_DOMAIN", "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID",
         "ANTIGRAVITY_CLIENT_SECRET", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY",
-        "MODAL_TOKENS",
+        "MODAL_TOKENS", "CODEX_PROFILE_VOLUME_PREFIX", "CODEX_STATUS_SECRET",
+        "MODAL_SANDBOX_ENDPOINT_URL",
     ):
         val = os.environ.get(key)
         if val and key not in secrets:
@@ -240,6 +241,7 @@ web_app = FastAPI(
     version="1.0.0",
 )
 web_app.include_router(web_router)
+web_app.include_router(codex_router)
 
 
 @web_app.get("/health")
