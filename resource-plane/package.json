@@ -1,0 +1,25 @@
+{
+  "name": "db-host",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @repo/web dev",
+    "build": "pnpm --filter @repo/web build",
+    "start": "pnpm --filter @repo/web start",
+    "deploy:prod": "./deploy.sh",
+    "docker:build": "docker build -t db-host:latest .",
+    "lint": "pnpm --filter @repo/web lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "skills:update": "npx skills update -y",
+    "mcp": "pnpm --filter @repo/web mcp"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.31.0"
+}

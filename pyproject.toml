@@ -42,15 +42,20 @@ docs = [
 
 [project.scripts]
 modal-sandbox = "sandbox.main:main"
+deploy-infra = "sandbox.infra_deploy:main"
 push-repo-env = "scripts.push_repo_env:main"
 pull-repo-env = "scripts.pull_repo_env:main"
 create-db = "scripts.create_db:main"
 create-s3 = "scripts.create_s3:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["sandboxes"]
 include = ["sandbox*", "shared*", "scripts*"]
 
 [tool.setuptools.package-data]
 shared = ["*", "skills/**/*"]
 sandbox = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["sandboxes/tests"]
+pythonpath = ["sandboxes", "."]

@@ -1,0 +1,3 @@
+# Scaffold Next.js App Router Monorepo as DB Host
+
+To transition from TanStack Start to a Next.js 16 App Router architecture, the project was scaffolded as `db-host` using `~/base-template`. The new application adopts a pnpm monorepo layout containing `@repo/theme`, `@repo/types`, and `apps/web`. The control plane retains 100% feature parity with the previous implementation—including automated Docker lifecycle management for PostgreSQL and SeaweedFS, Drizzle ORM metadata storage, HTTP Basic Authentication middleware, Bearer token MCP authentication, in-dashboard SQL scratchpad, S3 object browser, TLS/SSL CA certificate issuance, and dual stdio/HTTP MCP transports.

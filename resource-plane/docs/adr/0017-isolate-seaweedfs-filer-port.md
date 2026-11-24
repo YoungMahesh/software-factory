@@ -1,0 +1,3 @@
+# Isolate SeaweedFS Filer from Host Network
+
+SeaweedFS runs in unified `server` mode with an integrated Filer backing the S3 API gateway. Because the Filer provides an unauthenticated web UI and REST API on port 8888 allowing arbitrary file upload, download, and deletion, exposing port 8888 on the host network completely bypassed per-bucket S3 IAM policies. We isolate port 8888 strictly to internal container networking, making the S3 API (port 8333) the sole external data plane interface and ensuring all object storage operations are authenticated and authorized by discrete Bucket IAM Policies.

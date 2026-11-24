@@ -180,13 +180,46 @@ modal serve sandbox/function.py
 
 ---
 
+## Monorepo Subsystems
+
+Software Factory is organized into two cohesive, self-contained planes:
+
+1. **`sandboxes/` (Execution Plane - Python 3.12+)**:
+   - Modal cloud execution environment orchestration (`modal-sandbox`).
+   - Ephemeral container and VM development environments with SSH, Cloudflare ingress, and AI agent harnesses.
+   - Database and S3 bucket provisioning CLI utilities (`create-db`, `create-s3`).
+   - Automated infrastructure deployment tooling (`modal-sandbox infra deploy` / `deploy-infra`).
+
+2. **`resource-plane/` (Resource Plane - TypeScript & Docker)**:
+   - Developer-focused persistence and control plane console (Next.js 16 App Router, React 19).
+   - Docker-based PostgreSQL 16 container with per-database Resource Roles and TLS Root CA generation.
+   - S3-compatible object storage backed by SeaweedFS with per-bucket IAM credentials.
+   - Model Context Protocol (MCP) server suite (`POST /api/mcp`) for AI coding agents.
+   - Turnkey local Docker compose mode (`docker compose up`) and production VPS deployment (`./deploy.sh`).
+
+### Deploying the Resource Plane to a Linux VPS
+
+Deploy the complete persistent database and storage plane to your target VPS with a single command:
+
+```bash
+# Set your VPS SSH details in .env:
+# RESOURCE_PLANE_SSH_HOST=203.0.113.10
+# RESOURCE_PLANE_SSH_USER=root
+# RESOURCE_PLANE_SSH_KEY=~/.ssh/id_ed25519
+
+# Deploy automatically:
+modal-sandbox infra deploy
+```
+
+---
+
 ## 7. Verification & Automated Tests
 
 All automated tests run hermetically:
 
 ```bash
 # Verify repository standards and Universal File Line Budget (<= 500 lines):
-pytest tests/test_standards.py
+pytest sandboxes/tests/test_standards.py
 
 # Run complete hermetic test suite:
 pytest

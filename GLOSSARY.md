@@ -266,6 +266,22 @@ _Avoid_: GUI sandbox, VNC runner, X11 container
 The browser-accessible HTML5 VNC client served via websockify on the sandbox's default web port (3000) or a custom `--xfce-port`, forwarded securely by Cloudflare Tunnel to provide instant graphical desktop interaction without local VNC client installation.
 _Avoid_: VNC web, noVNC proxy, desktop web UI
 
+**Resource Plane**:
+The persistent persistence and control plane subsystem (`resource-plane/`, formerly `db-host`) hosted on a dedicated Linux VPS or local Docker environment, responsible for provisioning isolated PostgreSQL databases, SeaweedFS S3 object storage buckets, root TLS CA generation, interactive web console, and an MCP server (`POST /api/mcp`).
+_Avoid_: Database host, db server, storage runner, backend container
+
+**ResourcePlaneClient**:
+A deep control plane client module (`sandbox/db_host_client.py` / `sandbox/resource_plane_client.py`) that encapsulates JSON-RPC over HTTP communication with the Resource Plane MCP server, managing admin authentication, project scoping, and root CA certificate caching behind a cohesive transport seam.
+_Avoid_: MCP client, db-host transport, postgres helper, rpc caller
+
+**Execution Plane**:
+The cloud sandbox execution subsystem (`sandboxes/`) running on Modal infrastructure that provisions on-demand, isolated Linux environments with developer and agent tooling.
+_Avoid_: Runner plane, container layer, compute worker
+
+**Resource Plane Deployment Pipeline**:
+The remote infrastructure automation mechanism that uses SSH credentials configured in the environment to connect to a target VPS, verify Docker daemon dependencies, and execute deployment orchestration remotely, strictly decoupled from runtime sandbox access.
+_Avoid_: SSH runner, remote script, vps agent
+
 **DbHostClient**:
 A deep control plane client module (`sandbox/db_host_client.py`) that encapsulates JSON-RPC over HTTP communication with the db-host MCP server, managing admin authentication, project scoping, and root CA certificate caching behind a cohesive transport seam.
 _Avoid_: MCP client, db-host transport, postgres helper, rpc caller

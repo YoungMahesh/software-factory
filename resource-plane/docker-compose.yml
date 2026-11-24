@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: neon-postgres
+    restart: unless-stopped
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: neon-seaweedfs
+    restart: unless-stopped
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:8333:8333"
+    command: "server -s3 -filer -dir=/data -s3.config=/data/s3.json"
+    volumes:
+      - ./.data/seaweedfs:/data
