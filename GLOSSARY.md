@@ -100,15 +100,15 @@ An optional Modal secret collection (`share0`) or environment variable providing
 _Avoid_: Global secret, root secret, default secret
 
 **Test Organization Scope**:
-The GitHub organization configured via `GH_ORG_NAME` in `.env`, within which `test-` prefixed repositories are targeted for automated pipeline verification and ephemeral integration testing without requiring a dedicated testing organization.
+The configured GitHub organization that owns the Test Repository Baseline.
 _Avoid_: Test org, mock org, testing workspace
 
 **Test Repository Baseline**:
-The designated minimal test fixture repository (`test-live-test1` under the configured `GH_ORG_NAME`) used across automated live integration scripts to validate sandbox creation, secret decryption, and workspace initialization.
+The `software-factory` repository under the configured `GH_ORG_NAME` used for Sandbox Live Verification.
 _Avoid_: Default test repo, test mock, dummy repo
 
 **Sandbox Live Verification**:
-An automated, ephemeral integration test procedure that provisions a live Modal sandbox against the Test Repository Baseline (`test-live-test1`), asserts container bootstrap and git clone invariants, exercises modified runner capabilities, and guarantees immediate sandbox termination upon completion.
+An ephemeral integration test against the Test Repository Baseline that checks sandbox startup and exercises changed capabilities. The test sandbox terminates immediately after verification.
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
 **SOPS Decryption**:

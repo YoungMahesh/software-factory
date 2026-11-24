@@ -20,6 +20,7 @@ from shared.image import (
     build_sandbox_image,
     load_ssh_pub_key,
 )
+from sandbox.config import TEST_BASELINE_REPO
 
 
 def resolve_default_org() -> str:
@@ -41,7 +42,6 @@ def resolve_default_org() -> str:
 
 
 DEFAULT_ORG = resolve_default_org()
-DEFAULT_TEST_REPO = "test-live-test1"
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -50,8 +50,8 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--repo",
-        default=DEFAULT_TEST_REPO,
-        help=f"Target repository name (default: {DEFAULT_TEST_REPO})",
+        default=TEST_BASELINE_REPO,
+        help=f"Target repository name (default: {TEST_BASELINE_REPO})",
     )
     parser.add_argument(
         "--vm",
@@ -75,12 +75,6 @@ def create_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
-
-    orgs_env_file = root_dir / "secrets" / "github-orgs.env"
-    if not orgs_env_file.is_file():
-        raise FileNotFoundError(
-            f"Organization credentials not found at {orgs_env_file}. Ensure secrets/github-orgs.env exists."
-        )
 
     if "/" in args.repo:
         target_org, repo_name = args.repo.split("/", 1)
@@ -106,13 +100,7 @@ def main() -> None:
     print(f"   Snapshots Check: {'Yes' if args.snapshots else 'No'}")
     print("================================================================\n")
 
-    # Build image with organization credentials staged
     image = build_sandbox_image()
-    image = image.add_local_file(
-        orgs_env_file,
-        "/root/.secrets/github-orgs.env",
-        copy=True,
-    )
 
     env = {
         "SSH_AUTHORIZED_KEY": pubkey,
@@ -175,15 +163,15 @@ def main() -> None:
         if not ready:
             raise TimeoutError(f"Timed out waiting for repository clone at {target_path}")
 
-        # 2. Assert organization credentials were scrubbed from disk
+        # 2. Assert organization credentials were not staged on disk
         scrub_proc = sandbox.exec(
             "bash", "-c", "test ! -f /root/.secrets/github-orgs.env && test ! -f /root/secrets/github-orgs.env && echo CLEAN || echo LEAKED"
         )
         scrub_out = scrub_proc.stdout.read().strip()
         if "CLEAN" in scrub_out:
-            print("🔒 Security check passed: organization credentials were scrubbed from disk.")
+            print("🔒 Security check passed: no organization credential files were staged.")
         else:
-            raise RuntimeError("Security invariant violated: /root/.secrets/github-orgs.env was not purged!")
+            raise RuntimeError("An organization credential file was found in the sandbox.")
 
         # 3. Assert git branch is valid
         branch_proc = sandbox.exec("bash", "-c", f"cd {target_path} && git symbolic-ref --short HEAD")

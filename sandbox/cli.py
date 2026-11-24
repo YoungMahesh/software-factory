@@ -118,7 +118,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--test",
         dest="testing",
         action="store_true",
-        help="Target repository with test- prefix in default organization (e.g. test-<repo>).",
+        help="Use testing mode. The default organization's software-factory baseline keeps its repository name; other targets get a test- prefix.",
     )
     parser.add_argument(
         "--browser",

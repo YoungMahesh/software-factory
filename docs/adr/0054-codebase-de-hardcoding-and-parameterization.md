@@ -36,7 +36,7 @@ To prepare this repository for an open-source fork, personal configurations and 
    - Update developer CLI helper scripts to use `DEFAULT_ORG="${GH_ORG_NAME:-}"` and remove hardcoded `sFactory0` from usage documentation.
 
 5. **Unified Test Organization Scope**:
-   - Eliminate separate test organization configuration. Integration and live verification tests target the default organization (`GH_ORG_NAME`), using repositories prefixed with `test-` (such as `test-live-test1`).
+   - Eliminate separate test organization configuration. The original convention used repositories prefixed with `test-` in the default organization (`GH_ORG_NAME`). See the [CLI reference](../guides/cli.md#command-options) for the current live verification baseline.
 
 6. **Documentation & Glossary Alignment**:
    - Update `GLOSSARY.md` definitions for **Test Organization Scope**, **Sandbox Git Configuration**, and **Cloudflare Tunnel Domain**.

@@ -274,6 +274,15 @@ class TestSandboxLauncher(unittest.TestCase):
             self.assertEqual(call_env["GH_REPO"], "custom-org/bare-repo")
             self.assertEqual(call_env["GH_ORG"], "custom-org")
 
+            for repo in ("software-factory", "custom-org/software-factory"):
+                with self.subTest(repo=repo):
+                    running = launcher.launch(LaunchRequest(repo=repo, testing=True))
+                    self.assertEqual(mock_create.call_args.kwargs["env"]["GH_REPO"], "custom-org/software-factory")
+                    self.assertEqual(running.app_name, "test-software-factory")
+
+            launcher.launch(LaunchRequest(repo="bare-repo", testing=True))
+            self.assertEqual(mock_create.call_args.kwargs["env"]["GH_REPO"], "custom-org/test-bare-repo")
+
     @patch("modal.Sandbox.create")
     @patch("modal.App.lookup")
     def test_launcher_modal_requires_modal_tokens(self, mock_lookup, mock_create):

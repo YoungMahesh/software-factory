@@ -22,7 +22,7 @@ modal-sandbox [OPTIONS]
 | `--xfce` | flag | `False` | Provision an interactive XFCE 4 desktop and Google Chrome (automatically enforces `--vm`). |
 | `--xfce-port` | integer | `3000` | Port for the noVNC websockify desktop bridge. |
 | `--xfce-password` | string | `None` | Optional password for VNC session authentication (defaults to passwordless). |
-| `--testing` | flag | `False` | Automatically prepend `test-` prefix to repository name in test organization. |
+| `--testing` | flag | `False` | Use testing mode. The `${GH_ORG_NAME}/software-factory` baseline keeps its repository name. Other targets receive a `test-` prefix if needed. |
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
 | `--browser` | flag | `False` | Pre-bake headless Google Chrome for Playwright and MCP tooling. |
 | `--react-native` | flag | `False` | Install Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel. |

@@ -16,6 +16,7 @@ Furthermore, testing previously targeted a separate GitHub organization (`softwa
    - Retire `software-factory-09-test` and `DEFAULT_TEST_ORG`.
    - Standardize default organization to `DEFAULT_ORG = "sFactory0"`.
    - When `--testing` is provided, automatically ensure the repository name carries the `test-` prefix under `sFactory0` (e.g. `sFactory0/test-<repo>`). If the user already provides `test-<repo>`, prevent duplicate prefixing.
+   - The current [Test Repository Baseline](../guides/cli.md#command-options) keeps its repository name in testing mode.
 3. **Purge Legacy Host Secrets Staging and Startup Fallbacks**:
    - Completely remove legacy `secrets/<repo>/fetch.env` and `secrets_org/` folder resolution from `sandbox/main.py`.
    - Stage `secrets/github-orgs.env` exclusively.

@@ -11,6 +11,7 @@ from typing import Any
 TIMEOUT_SECS = 22 * 60 * 60  # 22 hours
 IDLE_TIMEOUT_SECS = 4 * 60 * 60  # 4 hours
 DEFAULT_ORG = os.environ.get("GH_ORG_NAME", "")
+TEST_BASELINE_REPO = "software-factory"
 
 DEFAULT_WEB_PORT = 3000
 DEFAULT_METRO_PORT = 8081

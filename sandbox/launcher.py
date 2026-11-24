@@ -27,7 +27,7 @@ from sandbox.env_store import (
 from sandbox.provenance import resolve_host_git_identity, resolve_host_software_factory_provenance
 from sandbox.config import (
     DEFAULT_METRO_PORT, DEFAULT_ORG, DEFAULT_T3_PORT, DEFAULT_WEB_PORT,
-    IDLE_TIMEOUT_SECS, TIMEOUT_SECS, resolve_factory_credentials, resolve_timezone,
+    IDLE_TIMEOUT_SECS, TEST_BASELINE_REPO, TIMEOUT_SECS, resolve_factory_credentials, resolve_timezone,
 )
 from sandbox.codex_profiles import prepare_profile
 from sandbox.core import LaunchRequest, LaunchResponse, validate_launch_request
@@ -140,6 +140,7 @@ class SandboxLauncher:
         dotenv_file = repo_root / ".env"
         clean_repo = req.repo.strip().rstrip("/") if req.repo else None
         target_repo, org_name, bare_repo = None, None, None
+        testing_baseline = False
 
         creds = resolve_factory_credentials(repo_root=repo_root, mutate_environ=True)
         has_gh_token = bool(creds.gh_token or os.environ.get("GH_TOKEN"))
@@ -154,10 +155,10 @@ class SandboxLauncher:
                 raise FileNotFoundError(
                     f"GitHub credentials (GH_TOKEN) not found in environment or {repo_root / '.env'}."
                 )
+            default_org = os.environ.get("GH_ORG_NAME") or DEFAULT_ORG
             if "/" in clean_repo:
                 org_name, raw_repo = clean_repo.split("/", 1)
             else:
-                default_org = os.environ.get("GH_ORG_NAME") or DEFAULT_ORG
                 if not default_org:
                     raise ValueError(
                         f"Target repository '{clean_repo}' has no owner prefix and GH_ORG_NAME is not set. "
@@ -165,15 +166,19 @@ class SandboxLauncher:
                     )
                 org_name, raw_repo = default_org, clean_repo
 
+            testing_baseline = req.testing and (org_name.casefold(), raw_repo.casefold()) == (
+                default_org.casefold(), TEST_BASELINE_REPO,
+            )
             bare_repo = (
                 raw_repo
-                if (not req.testing or raw_repo.startswith("test-"))
+                if (not req.testing or testing_baseline or raw_repo.startswith("test-"))
                 else f"test-{raw_repo}"
             )
             target_repo = f"{org_name}/{bare_repo}"
 
         random_id = uuid.uuid4().hex[:8]
-        app_name = req.name if req.name else (bare_repo if bare_repo else "sandbox")
+        default_app_name = f"test-{bare_repo}" if testing_baseline else bare_repo
+        app_name = req.name or default_app_name or "sandbox"
         sandbox_name = f"{app_name}-{random_id}"
         self._emit_log(f"🔑 Resolving App '{app_name}' and sandbox instance '{sandbox_name}'...")
 

@@ -120,7 +120,7 @@ modal-sandbox -r my-repo --t3 --browser
 | `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
 | `--vm` | Provision a Linux VM Sandbox with Docker daemon instead of standard container | `False` |
 | `--memory <GB>` | (Deprecated) Configures swapfile allocation (2 × N GB) for VM sandboxes | `1` |
-| `--testing` | Target repository with `test-` prefix in default organization | `False` |
+| `--testing` | Use testing mode. The `${GH_ORG_NAME}/software-factory` baseline keeps its repository name. Other targets receive a `test-` prefix if needed. | `False` |
 | `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
 | `--browser` | Pre-bake headless Google Chrome for browser MCP tooling | `False` |
 | `--react-native` | Install Android SDK/NDK toolchain and Metro tunnel | `False` |
