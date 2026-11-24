@@ -1,6 +1,6 @@
 # Hosted Control Plane & Web Dashboard
 
-Modal Sandboxes includes a serverless web dashboard and REST API implemented using FastAPI and hosted directly on Modal (`sandbox/function.py`).
+Modal Sandboxes includes a serverless web dashboard and REST API implemented using FastAPI and hosted directly on Modal (`sandboxes/sandbox/function.py`).
 
 ## Deploying the Control Plane
 
@@ -51,7 +51,7 @@ To prevent deploying uncommitted or inconsistent local modifications to producti
 
 To bypass this check during rapid local development:
 ```bash
-ALLOW_DIRTY_DEPLOY=1 modal serve sandbox/function.py
+ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py
 ```
 
 ---
@@ -67,7 +67,7 @@ flowchart TD
         HostEnv["Host os.environ"] --> Collector
         GitProv["Host Git Provenance"] --> Collector
         Collector --> ModalSecret["modal.Secret.from_dict(...)"]
-        CLI["modal serve / deploy sandbox/function.py"] --> ModalSecret
+        CLI["modal serve / deploy sandboxes/sandbox/function.py"] --> ModalSecret
     end
 
     subgraph ModalCloud ["Modal Cloud Platform"]
@@ -112,12 +112,12 @@ sequenceDiagram
     autonumber
     actor Dev as Developer / CI
     participant CLI as Modal CLI
-    participant Script as sandbox/function.py
+    participant Script as sandboxes/sandbox/function.py
     participant Platform as Modal Cloud
     participant App as Control Plane Container
 
-    Dev->>CLI: modal serve OR modal deploy sandbox/function.py
-    CLI->>Script: Import sandbox/function.py (modal.is_local() == True)
+    Dev->>CLI: modal serve OR modal deploy sandboxes/sandbox/function.py
+    CLI->>Script: Import sandboxes/sandbox/function.py (modal.is_local() == True)
     Script->>Script: resolve_and_validate_web_credentials() (.env / os.environ)
     alt Missing WEB_UI_USERNAME or WEB_UI_PASSWORD
         Script-->>Dev: Abort with RuntimeError (Missing credentials)
@@ -146,7 +146,7 @@ sequenceDiagram
 
 | Feature / Behavior | Local Development (`modal serve`) | Cloud Production (`modal deploy`) |
 | :--- | :--- | :--- |
-| **Command** | `modal serve sandbox/function.py` | `modal deploy sandbox/function.py` |
+| **Command** | `modal serve sandboxes/sandbox/function.py` | `modal deploy sandboxes/sandbox/function.py` |
 | **Lifecycle** | Ephemeral development session. Automatically terminated on Ctrl+C. | Persistent serverless deployment. Runs continuously in Modal Cloud. |
 | **URL Pattern** | Ephemeral dev URL (e.g. `https://<org>--sandbox-control-plane-fastapi-app-dev.modal.run`). | Permanent production URL (e.g. `https://<org>--sandbox-control-plane-fastapi-app.modal.run`). |
 | **Secret Refresh** | Re-reads `.env` on every hot-reload and local script change. | Secret bundle is frozen at deployment time; `.env` changes require re-running `modal deploy`. |
@@ -157,14 +157,14 @@ sequenceDiagram
 Run live with hot-reloading for local testing and debugging:
 
 ```bash
-modal serve sandbox/function.py
+modal serve sandboxes/sandbox/function.py
 ```
 
 #### Deploy to Modal Cloud (Production Mode)
 Deploy as a persistent, serverless FastAPI endpoint:
 
 ```bash
-modal deploy sandbox/function.py
+modal deploy sandboxes/sandbox/function.py
 ```
 
 Modal will output the permanent public URL of your control plane function (e.g., `https://<org>--sandbox-control-plane-fastapi-app.modal.run`).

@@ -1,6 +1,6 @@
-site_name: Modal Sandboxes
-site_description: Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal.
-site_author: Modal Sandboxes Contributors
+site_name: Software Factory
+site_description: Monorepo platform combining cloud execution environments on Modal with persistent stateful database and object storage infrastructure.
+site_author: Software Factory Contributors
 repo_name: software-factory
 repo_url: https://github.com/sFactory0/software-factory
 docs_dir: docs
@@ -69,12 +69,14 @@ nav:
 - Core Architecture:
   - Architecture Overview: architecture/overview.md
   - Execution Runtimes: architecture/runtimes.md
+  - Resource Plane Persistence: architecture/resource-plane.md
   - Ingress & Connectivity: architecture/ingress.md
   - Filesystem Snapshots: architecture/snapshots.md
   - Secrets & Security: architecture/secrets.md
 - User Guides:
   - CLI Reference: guides/cli.md
   - Hosted Control Plane: guides/control-plane.md
+  - Resource Plane VPS Deployment: guides/resource-plane-deployment.md
   - AI Developer Tooling: guides/ai-tooling.md
   - Deploying Documentation: guides/deploying-documentation.md
 - Architecture Decisions (ADRs):
@@ -148,8 +150,20 @@ nav:
     - '0066: Multi-Tier Git Identity and Env-Store Authorship Separation': adr/0066-multi-tier-git-identity-and-env-store-separation.md
     - '0067: Git Worktree Environment Secret Propagation and Central env.map': adr/0067-git-worktree-environment-propagation-and-central-env-map.md
     - '0068: Migrate Documentation Generator to Zensical': adr/0068-migrate-documentation-generator-to-zensical.md
-    - '0069: Snapshot Workspace Target Directory Persistence and Virtualenv Preservation': adr/0069-snapshot-workspace-target-persistence-and-venv-preservation.md
+    - '0069: Snapshot Workspace Target Persistence and Virtualenv Preservation': adr/0069-snapshot-workspace-target-persistence-and-venv-preservation.md
+    - '0069: Control Plane Deployment Provenance and Clean Working Tree Enforcement': adr/0069-control-plane-deployment-provenance-and-clean-tree-enforcement.md
     - '0070: XFCE Desktop Environment and Google Chrome in VM Sandboxes': adr/0070-xfce-desktop-and-chrome-in-vm-sandboxes.md
+    - '0071: Consolidate Filesystem Snapshot Lifecycle into Deep Snapshot Module': adr/0071-consolidate-filesystem-snapshot-lifecycle.md
+    - '0072: Retire sandbox.core.launch_sandbox Passthrough Seam': adr/0072-retire-sandbox-core-launcher-passthrough.md
+    - '0073: Git Precedence for Host Provenance Resolution and Ambient Environment Isolation': adr/0073-git-precedence-for-host-provenance-resolution.md
+    - '0074: Configurable Sandbox Timezone and Git Localization': adr/0074-configurable-sandbox-timezone-and-git-localization.md
+    - '0075: Retire Standalone Herdr, Pi, OpenCode Server, and Antigravity CLI in Favor of T3 Code Integration': adr/0075-retire-herdr-pi-opencode-agy-in-favor-of-t3.md
+    - '0076: T3 Code v0.1.11 and Official Antigravity CLI Runtime': adr/0076-t3-code-v0-1-11-and-official-antigravity-cli-runtime.md
+    - '0077: Codex Provider and Persistent Credential Profiles': adr/0077-codex-provider-and-persistent-credential-profiles.md
+    - '0078: Create-DB CLI for db-host PostgreSQL Provisioning and Connection Management': adr/0078-create-db-cli-for-db-host-postgres-connections.md
+    - '0079: Create-S3 CLI for db-host S3 Object Storage Provisioning and Management': adr/0079-create-s3-cli-for-db-host-s3-object-storage.md
+    - '0080: Consolidate Control Plane, Vault, Configuration, and Presentation Seams': adr/0080-consolidate-control-plane-and-configuration-seams.md
+    - '0081: Monorepo Architecture for Execution Plane (Modal Sandboxes) and Resource Plane (VPS Persistence)': adr/0081-monorepo-architecture-for-execution-and-resource-planes.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

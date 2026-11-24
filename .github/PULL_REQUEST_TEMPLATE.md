@@ -14,6 +14,6 @@ Briefly describe the change, its rationale, and what issue or feature it resolve
 
 - [ ] My code follows the repository's coding standards.
 - [ ] Universal File Line Budget (ADR 0057 / AGENTS.md): No modified or added Python file exceeds 500 lines.
-- [ ] I have executed `pytest tests/test_standards.py` and all line budgets pass.
+- [ ] I have executed `pytest sandboxes/tests/test_standards.py` and all line budgets pass.
 - [ ] I have run the full hermetic test suite with `pytest` and all unit tests pass cleanly.
 - [ ] I have updated relevant documentation (`readme.md`, `GLOSSARY.md`, ADRs) if applicable.

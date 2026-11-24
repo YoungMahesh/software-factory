@@ -11,7 +11,7 @@ The documentation is authored in Markdown within the `docs/` directory and built
 Deploy the documentation site directly using the Modal CLI:
 
 ```bash
-modal deploy sandbox/docs.py
+modal deploy sandboxes/sandbox/docs.py
 ```
 
 Upon successful deployment, Modal outputs the public URL for your documentation application:
@@ -30,7 +30,7 @@ The container image pre-compiles the documentation during image creation and ser
 For globally distributed edge delivery, documentation can be deployed directly to Cloudflare Pages using the bundled automation script:
 
 ```bash
-./scripts/deploy-docs.sh
+./sandboxes/scripts/deploy-docs.sh
 ```
 
 ### Prerequisites & Configuration
@@ -56,7 +56,7 @@ CLOUDFLARE_PAGES_BRANCH=main
 
 ### How the Cloudflare Deployment Works
 
-The script (`scripts/deploy-docs.sh`) executes the following automated workflow:
+The script (`sandboxes/scripts/deploy-docs.sh`) executes the following automated workflow:
 
 1. **Loads Environment**: Sources variables from `.env` and validates credentials (`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`).
 2. **Detects Docs Engine**: Auto-detects `zensical` (preferred) or `mkdocs` from your local environment or virtualenv.
@@ -77,7 +77,7 @@ The script (`scripts/deploy-docs.sh`) executes the following automated workflow:
 To develop and preview documentation changes in a live ephemeral container on Modal:
 
 ```bash
-modal serve sandbox/docs.py
+modal serve sandboxes/sandbox/docs.py
 ```
 
 Modal provisions an ephemeral container and watches your local filesystem. Any modifications to markdown files in `docs/` or configuration in `mkdocs.yml` automatically bust the image layer cache, re-running `zensical build` and updating your live preview URL.
@@ -101,7 +101,7 @@ The Modal documentation app runs with zero mandatory configuration. You can opti
 DOCS_CUSTOM_DOMAIN=docs.yourdomain.com
 ```
 
-When `DOCS_CUSTOM_DOMAIN` is set, `sandbox/docs.py` automatically binds the domain to the `@modal.asgi_app` endpoint.
+When `DOCS_CUSTOM_DOMAIN` is set, `sandboxes/sandbox/docs.py` automatically binds the domain to the `@modal.asgi_app` endpoint.
 
 ### Cloudflare Pages Custom Domains
 To bind a custom domain to your Cloudflare Pages deployment:
@@ -113,7 +113,7 @@ To bind a custom domain to your Cloudflare Pages deployment:
 
 ## 5. Architecture & Comparison
 
-| Feature | Modal Cloud (`sandbox/docs.py`) | Cloudflare Pages (`scripts/deploy-docs.sh`) |
+| Feature | Modal Cloud (`sandboxes/sandbox/docs.py`) | Cloudflare Pages (`sandboxes/scripts/deploy-docs.sh`) |
 | :--- | :--- | :--- |
 | **Serving Model** | Unauthenticated ASGI Web Function on Modal | Static Asset Hosting on Cloudflare Global Edge CDN |
 | **Compute / Idle** | Scale-to-zero (`min_containers=0`), idle containers spin down | 100% static edge CDN, zero server container instances |

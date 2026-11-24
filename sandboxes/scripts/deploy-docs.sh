@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 PROJECT_NAME="${CLOUDFLARE_PAGES_PROJECT:-modal-sandboxes-docs}"
 BRANCH="${CLOUDFLARE_PAGES_BRANCH:-main}"

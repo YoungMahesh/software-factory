@@ -134,10 +134,44 @@ ghclone my-service
 
 ---
 
+## Resource Plane & VPS Infrastructure Deployment
+
+### `modal-sandbox infra deploy` / `deploy-infra`
+Automates turnkey deployment of the persistent **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js control console) to a remote Linux VPS over SSH.
+
+The deployment command runs completely over native SSH and streaming `tar` via `subprocess` (zero third-party Python dependencies), verifying SSH reachability and remote Docker daemon requirements, synchronizing the `resource-plane/` directory, and launching containers via `./deploy.sh`.
+
+```bash
+# Verify SSH and remote Docker connectivity without deploying:
+modal-sandbox infra deploy --check-only
+
+# Deploy automatically using .env configuration:
+modal-sandbox infra deploy
+
+# Or use the standalone script entrypoint:
+deploy-infra
+
+# Deploy targeting an explicit host and custom key:
+modal-sandbox infra deploy --host 203.0.113.10 --user root --key ~/.ssh/id_ed25519 --remote-dir /opt/resource-plane
+```
+
+#### `infra deploy` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--host` | string | `RESOURCE_PLANE_SSH_HOST` | Target Linux VPS hostname or IP address (falls back to `DB_HOST_SSH_HOST`). |
+| `--user` | string | `RESOURCE_PLANE_SSH_USER` / `root` | Remote SSH user with Docker permissions (falls back to `DB_HOST_SSH_USER`). |
+| `--port` | integer | `RESOURCE_PLANE_SSH_PORT` / `22` | Remote SSH port (falls back to `DB_HOST_SSH_PORT`). |
+| `--key` | path | `RESOURCE_PLANE_SSH_KEY` | Path to private SSH key file (optional if SSH agent or `~/.ssh/id_rsa` is used). |
+| `--remote-dir` | path | `RESOURCE_PLANE_REMOTE_DIR` / `/opt/resource-plane` | Destination path on remote VPS for resource-plane files. |
+| `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
+
+---
+
 ## Database & Storage Provisioning CLI Utilities
 
 ### `create-db`
-Provisions an isolated PostgreSQL database connection on the hosted `db-host` deployment, automatically resolves or creates the associated project, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local project `.env`.
+Provisions an isolated PostgreSQL database connection on the hosted **Resource Plane** deployment, automatically resolves or creates the associated project scope, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local project `.env`.
 
 ```bash
 # Provision or resolve database under current project (derived from Git repo name)
@@ -167,14 +201,14 @@ create-db my-service-db --fail-if-exists
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | (required) | Target PostgreSQL database name to provision or resolve. |
-| `-p, --project` | string | Git repo name / `default` | Project name on db-host. |
-| `--domain` | string | `DB_HOST_DOMAIN` | Domain or URL of the db-host deployment. |
-| `--token` | string | `DB_HOST_ADMIN_TOKEN` | Admin bearer token for MCP server authentication. |
+| `-p, --project` | string | Git repo name / `default` | Project scope on the Resource Plane. |
+| `--domain` | string | `RESOURCE_PLANE_DOMAIN` | Domain or URL of the Resource Plane (falls back to `DB_HOST_DOMAIN`). |
+| `--token` | string | `RESOURCE_PLANE_ADMIN_TOKEN` | Admin bearer token for MCP server authentication (falls back to `DB_HOST_ADMIN_TOKEN`). |
 | `--write-env` | flag | `False` | Inject or update connection URI in local `.env` file. |
 | `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
 | `--env-var` | string | `DATABASE_URL` | Variable name to write in environment file. |
 | `--push-vault` | flag | `False` | Automatically push updated `.env` to central `env-store` vault via `push-repo-env`. |
-| `--ca-path` | path | `~/.config/db-host/ca.crt` | Destination path for cached root CA certificate. |
+| `--ca-path` | path | `~/.config/resource-plane/ca.crt` | Destination path for cached root CA certificate (falls back to `~/.config/db-host/ca.crt`). |
 | `--json` | flag | `False` | Emit raw credentials and connection details as JSON. |
 | `-q, --quiet` | flag | `False` | Output only the PostgreSQL connection URI string. |
 | `--fail-if-exists` | flag | `False` | Exit with error if database already exists instead of reusing existing connection. |
@@ -182,7 +216,7 @@ create-db my-service-db --fail-if-exists
 ---
 
 ### `create-s3`
-Provisions an isolated SeaweedFS S3 object storage bucket on the hosted `db-host` deployment, validates bucket naming rules, retrieves dedicated IAM credentials, and optionally injects standard AWS SDK environment variables into the local project `.env`.
+Provisions an isolated SeaweedFS S3 object storage bucket on the hosted **Resource Plane** deployment, validates bucket naming rules, retrieves dedicated IAM credentials, and optionally injects standard AWS SDK environment variables into the local project `.env`.
 
 ```bash
 # Provision or resolve S3 bucket under current project (derived from Git repo name)
@@ -215,9 +249,9 @@ create-s3 my-bucket --fail-if-exists
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | (required) | Target S3 bucket name (3-63 lowercase alphanumeric and hyphens). |
-| `-p, --project` | string | Git repo name / `default` | Project name on db-host. |
-| `--domain` | string | `DB_HOST_DOMAIN` | Domain or URL of the db-host deployment. |
-| `--token` | string | `DB_HOST_ADMIN_TOKEN` | Admin bearer token for MCP server authentication. |
+| `-p, --project` | string | Git repo name / `default` | Project scope on the Resource Plane. |
+| `--domain` | string | `RESOURCE_PLANE_DOMAIN` | Domain or URL of the Resource Plane (falls back to `DB_HOST_DOMAIN`). |
+| `--token` | string | `RESOURCE_PLANE_ADMIN_TOKEN` | Admin bearer token for MCP server authentication (falls back to `DB_HOST_ADMIN_TOKEN`). |
 | `--write-env` | flag | `False` | Inject or update standard AWS SDK variables in local `.env` file. |
 | `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
 | `--prefix` | string | `""` | Prefix prepended to environment variable names. |

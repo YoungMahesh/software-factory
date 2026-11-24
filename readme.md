@@ -10,11 +10,11 @@ Toolkit for provisioning, managing, and snapshotting isolated cloud execution en
 flowchart TD
     subgraph Client["Control Surfaces"]
         CLI["modal-sandbox CLI"]
-        WebUI["Web Dashboard & REST API<br/>(sandbox/function.py)"]
+        WebUI["Web Dashboard & REST API<br/>(sandboxes/sandbox/function.py)"]
     end
 
     subgraph ModalCloud["Modal Cloud Infrastructure"]
-        Runner["Unified Sandbox Runner<br/>(sandbox/launcher.py)"]
+        Runner["Unified Sandbox Runner<br/>(sandboxes/sandbox/launcher.py)"]
         
         subgraph Sandbox["Modal Sandbox Environment"]
             direction TB
@@ -168,10 +168,10 @@ The control plane can run serverlessly in the cloud on Modal:
 
 ```bash
 # Deploy control plane to Modal Cloud (requires WEB_UI_USERNAME and WEB_UI_PASSWORD in .env):
-modal deploy sandbox/function.py
+modal deploy sandboxes/sandbox/function.py
 
 # Interactive local development serve mode:
-modal serve sandbox/function.py
+modal serve sandboxes/sandbox/function.py
 ```
 
 - **Web Dashboard**: Access `GET /` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) to inspect active sandboxes across workspace profiles, launch fresh repository or standalone sandboxes, capture snapshots, and resume from snapshot images.

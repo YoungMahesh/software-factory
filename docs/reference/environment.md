@@ -43,6 +43,17 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `DEFAULT_TIMEZONE`: Default system and Git timezone applied across sandbox containers, background daemons, and terminal environments (defaults to `Asia/Kolkata` when unspecified).
 - `TZ`: Standard POSIX timezone identifier used as an ambient override or per-repository secret in `env-store` (`<repo>/git.env` or `<repo>/default.env`).
 
+### 10. Resource Plane (Persistence Control Plane: PostgreSQL & S3 Storage)
+- `RESOURCE_PLANE_DOMAIN`: Domain name or HTTPS URL of the hosted Resource Plane deployment (falls back to legacy `DB_HOST_DOMAIN`).
+- `RESOURCE_PLANE_ADMIN_TOKEN`: Admin bearer token for JSON-RPC authentication at `POST /api/mcp` (falls back to legacy `DB_HOST_ADMIN_TOKEN`).
+
+### 11. Resource Plane VPS Deployment Automation (`modal-sandbox infra deploy`)
+- `RESOURCE_PLANE_SSH_HOST`: Target Linux VPS hostname or IP address for automated deployment (falls back to `DB_HOST_SSH_HOST`).
+- `RESOURCE_PLANE_SSH_USER`: SSH user on the target VPS with Docker permissions (defaults to `root`, falls back to `DB_HOST_SSH_USER`).
+- `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`, falls back to `DB_HOST_SSH_PORT`).
+- `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (optional if `ssh-agent` or `~/.ssh/id_rsa` is configured).
+- `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`, falls back to `DB_HOST_REMOTE_DIR`).
+
 ---
 
 ## Resolution Order & Precedence
@@ -51,7 +62,7 @@ Modal Sandboxes resolves environment variables through a deterministic cascade a
 
 ### 1. Host Environment Whitelist
 
-When bundling secrets for Modal injection (`sandbox/function.py` and `sandbox/launcher.py`), the runner does **not** forward the host's entire `os.environ`. Instead, it samples only an explicit whitelist:
+When bundling secrets for Modal injection (`sandboxes/sandbox/function.py` and `sandboxes/sandbox/launcher.py`), the runner does **not** forward the host's entire `os.environ`. Instead, it samples only an explicit whitelist:
 
 `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `GH_TOKEN`, `GH_ORG_NAME`, `CLOUDFLARE_TUNNEL_TOKEN`, `MODAL_SANDBOX_TUNNEL_DOMAIN`, `SSH_AUTHORIZED_KEY`, `OPENCODE_GO_API_KEY`, `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`.
 
@@ -65,7 +76,7 @@ The conflict resolution order depends on the functional role of the credential:
 | :--- | :--- | :--- |
 | **Control Plane Auth** (`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`) | **Host `os.environ` WINS over `.env`** | Allows operators to supply ad-hoc credentials via CLI or CI/CD pipelines without modifying tracked local files. |
 | **Tooling & Service Secrets** (`GH_TOKEN`, `AGE_PRIVATE_KEY`, etc.) | **`.env` file WINS over Host `os.environ`** | Guarantees reproducible local runs from the verified project `.env` file, using host environment variables solely as fallbacks for missing keys. |
-| **Child Sandbox Launching** (`sandbox/launcher.py`) | **`.env` file used exclusively if present** | If `.env` exists on the local machine, `modal.Secret.from_dotenv(".env")` bundles it directly. In container or CI environments lacking `.env`, it falls back to the whitelisted keys in `os.environ`. |
+| **Child Sandbox Launching** (`sandboxes/sandbox/launcher.py`) | **`.env` file used exclusively if present** | If `.env` exists on the local machine, `modal.Secret.from_dotenv(".env")` bundles it directly. In container or CI environments lacking `.env`, it falls back to the whitelisted keys in `os.environ`. |
 
 ### 3. Multi-Source Lookup Hierarchy
 
@@ -83,7 +94,7 @@ flowchart TD
     SecondarySources --> AuthFallback["1. Legacy .secrets/.env & secrets/.env (Auth fallback)"]
     SecondarySources --> ModalConfig["2. ~/.modal.toml (Modal profile tokens)"]
     SecondarySources --> AgeKeyFile["3. ~/.config/sops/age/keys.txt (Age private key)"]
-    SecondarySources --> SSHPubFile["4. shared/ssh-key.pub (SSH public key)"]
+    SecondarySources --> SSHPubFile["4. sandboxes/shared/ssh-key.pub (SSH public key)"]
     SecondarySources --> EnvStore["5. github.com/${GH_ORG_NAME}/env-store (Target repo secrets)"]
     SecondarySources --> RuntimeGen["6. secrets.token_urlsafe(16) (OPENCODE_SERVER_PASSWORD)"]
 ```
@@ -91,9 +102,9 @@ flowchart TD
 1. **Legacy Directory Fallback Files**:
    - `root / ".secrets" / ".env"` and `root / "secrets" / ".env"` are checked if `WEB_UI_USERNAME` or `WEB_UI_PASSWORD` are absent from root `.env`.
 2. **User Configuration Files**:
-   - `~/.modal.toml` (or `$MODAL_CONFIG_PATH`): Parsed by `sandbox/profiles.py` for Modal account workspace profiles.
-   - `~/.config/sops/age/keys.txt`: Parsed by `sandbox/env_store.py` for SOPS Age private keys if not provided via `AGE_PRIVATE_KEY`.
-   - `shared/ssh-key.pub`: Read by `sandbox/launcher.py` if `SSH_AUTHORIZED_KEY` is not explicitly set.
+   - `~/.modal.toml` (or `$MODAL_CONFIG_PATH`): Parsed by `sandboxes/sandbox/profiles.py` for Modal account workspace profiles.
+   - `~/.config/sops/age/keys.txt`: Parsed by `sandboxes/sandbox/env_store.py` for SOPS Age private keys if not provided via `AGE_PRIVATE_KEY`.
+   - `sandboxes/shared/ssh-key.pub`: Read by `sandboxes/sandbox/launcher.py` if `SSH_AUTHORIZED_KEY` is not explicitly set.
 3. **Remote Secret Vault (`env-store`)**:
    - For repository sandboxes (`-r <repo>`), target repository environment configurations are fetched directly from the private `github.com/${GH_ORG_NAME}/env-store` repository using `GH_TOKEN` and decrypted host-side.
 4. **Dynamic Runtime Generation**:
