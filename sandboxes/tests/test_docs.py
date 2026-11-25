@@ -72,9 +72,9 @@ class TestDocsApp(unittest.TestCase):
 
     def test_docs_web_app_factory(self):
         """Invoking docs_web_app via .local() should return a FastAPI instance."""
-        with patch("sandbox.docs.create_docs_app", wraps=create_docs_app) as mock_create:
+        with patch("sandbox.docs.create_docs_app", return_value=self.app) as mock_create:
             fastapi_instance = docs_web_app.local()
-            self.assertIsNotNone(fastapi_instance)
+            self.assertIs(fastapi_instance, self.app)
             mock_create.assert_called_once_with("/root/site")
 
     def test_mkdocs_emoji_extension_configured(self):
