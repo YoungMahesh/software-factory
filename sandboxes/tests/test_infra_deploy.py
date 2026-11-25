@@ -111,12 +111,13 @@ class TestInfraDeploy(unittest.TestCase):
         self.assertIn("SSH private key file not found", str(ctx.exception))
 
     def test_resolve_vps_ssh_config_permission_hardening(self):
-        """Normalizes file mode to 0600 when permissions are too open."""
+        """Normalizes file mode to 0600 and trailing newline on PEM/OpenSSH private keys."""
         loose_key = Path(self.temp_dir.name) / "loose_key"
-        loose_key.write_text("loose-key", encoding="utf-8")
+        loose_key.write_bytes(b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----")
         loose_key.chmod(0o644)
         cfg = resolve_vps_ssh_config(host="test.host", key_path=loose_key)
         self.assertEqual(cfg.key_path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(cfg.key_path.read_bytes().endswith(b"\n"))
 
     def test_resolve_vps_ssh_config_relative_path_resolution(self):
         """Resolves relative key path against resolve_factory_root()."""

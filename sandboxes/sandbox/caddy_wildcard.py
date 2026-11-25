@@ -253,7 +253,7 @@ def sync_caddy_wildcard_runtime(
     caddy_dir: str = DEFAULT_CADDY_DIR,
     container_name: str = DEFAULT_CADDY_CONTAINER,
     source_dir: Path | None = None,
-    timeout: int = 240,
+    timeout: int = 360,
 ) -> tuple[bool, bool, str]:
     """Ensures /opt/caddy uses the caddy-dns/cloudflare build and /opt/caddy/.env token."""
     from sandbox.caddy_deploy import find_caddy_source_dir

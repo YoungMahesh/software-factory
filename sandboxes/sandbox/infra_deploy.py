@@ -88,6 +88,11 @@ def resolve_vps_ssh_config(
         raise FileNotFoundError(f"SSH private key file not found: {resolved_key}")
 
     try:
+        key_bytes = resolved_key.read_bytes()
+        if b"-----BEGIN " in key_bytes and key_bytes.rstrip(b" \t\r\n").endswith(b"PRIVATE KEY-----"):
+            if not key_bytes.endswith(b"\n"):
+                resolved_key.write_bytes(key_bytes.rstrip(b"\r") + b"\n")
+                print(f"🔑 Normalized trailing newline on SSH key: {resolved_key}", file=sys.stderr)
         current_mode = resolved_key.stat().st_mode & 0o777
         if current_mode != 0o600:
             resolved_key.chmod(0o600)
