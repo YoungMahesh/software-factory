@@ -306,6 +306,26 @@ if [ -n "${VAULT_DOTENV_B64:-}" ]; then
     unset VAULT_DOTENV_B64 2>/dev/null || true
 fi
 
+# Auto-cache Resource Plane TLS Root CA certificate when domain is configured
+RP_CA_FILE="/root/.config/resource-plane/ca.crt"
+RP_DOMAIN_VAL="${RESOURCE_PLANE_DOMAIN:-${RESOURCE_PLANE_URL:-${DB_HOST_DOMAIN:-${DB_HOST_URL:-}}}}"
+if [ -n "$RP_DOMAIN_VAL" ] && [ ! -s "$RP_CA_FILE" ]; then
+    RP_BASE="${RP_DOMAIN_VAL%/}"
+    case "$RP_BASE" in
+        http://*|https://*) ;;
+        *) RP_BASE="https://$RP_BASE" ;;
+    esac
+    mkdir -p /root/.config/resource-plane /root/.config/db-host 2>/dev/null || true
+    TMP_CA_FILE="${RP_CA_FILE}.tmp.$$"
+    if curl -fsSL --max-time 5 "${RP_BASE}/api/ca.crt" -o "$TMP_CA_FILE" 2>/dev/null && grep -q "BEGIN CERTIFICATE" "$TMP_CA_FILE" 2>/dev/null; then
+        mv -f "$TMP_CA_FILE" "$RP_CA_FILE"
+        chmod 644 "$RP_CA_FILE" 2>/dev/null || true
+        ln -sf "$RP_CA_FILE" /root/.config/db-host/ca.crt 2>/dev/null || true
+    else
+        rm -f "$TMP_CA_FILE" 2>/dev/null || true
+    fi
+fi
+
 # Configure repository-specific Git authorship from env-store if provided
 if [ -n "${TARGET_GIT_AUTHOR_NAME:-}" ]; then
     git -C "$TARGET_DIR" config --local user.name "$TARGET_GIT_AUTHOR_NAME"
@@ -328,7 +348,7 @@ grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc 2>/dev/null || echo 'ex
 # Workspace Repository ($TARGET_DIR/scripts) > Staged Dot Directory (/root/.scripts) > Pre-baked Image Binary (/usr/local/bin)
 
 # 1. Staged scripts in /root/.scripts or /root/scripts overwrite base image fallbacks
-for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3; do
+for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3 create-app; do
     cmd_py="${cmd//-/_}.py"
     if [ -f "/root/.scripts/$cmd" ] && [ ! -L "/root/.scripts/$cmd" ]; then
         ln -sf "/root/.scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
@@ -348,7 +368,7 @@ done
 # 2. Workspace repository scripts ($TARGET_DIR/scripts) take highest precedence
 if [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR/scripts" ]; then
     echo "🔗 Linking developer tools from $TARGET_DIR/scripts to /usr/local/bin..."
-    for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3; do
+    for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3 create-app; do
         cmd_py="${cmd//-/_}.py"
         if [ -f "$TARGET_DIR/scripts/$cmd" ]; then
             ln -sf "$TARGET_DIR/scripts/$cmd" "/usr/local/bin/$cmd" 2>/dev/null || true
@@ -361,17 +381,18 @@ if [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR/scripts" ]; then
 fi
 
 # Ensure developer CLI tools in /usr/local/bin are executable and symlinked
-chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/create-db /usr/local/bin/create-s3 2>/dev/null || true
+chmod +x /usr/local/bin/agyq /usr/local/bin/ghls /usr/local/bin/ghpr /usr/local/bin/ghclone /usr/local/bin/agyprofile /usr/local/bin/push-repo-env /usr/local/bin/pull-repo-env /usr/local/bin/create-db /usr/local/bin/create-s3 /usr/local/bin/create-app 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile 2>/dev/null || true
 ln -sf /usr/local/bin/agyprofile /usr/local/bin/switch-agy-profile.sh 2>/dev/null || true
 ln -sf /usr/local/bin/push-repo-env /usr/local/bin/push_repo_env.py 2>/dev/null || true
 ln -sf /usr/local/bin/pull-repo-env /usr/local/bin/pull_repo_env.py 2>/dev/null || true
 ln -sf /usr/local/bin/create-db /usr/local/bin/create_db.py 2>/dev/null || true
 ln -sf /usr/local/bin/create-s3 /usr/local/bin/create_s3.py 2>/dev/null || true
+ln -sf /usr/local/bin/create-app /usr/local/bin/create_app.py 2>/dev/null || true
 
 # Ensure convenience symlinks in /root/.scripts point to /usr/local/bin
 mkdir -p /root/.scripts 2>/dev/null || true
-for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3; do
+for cmd in agyq ghls ghpr ghclone agyprofile push-repo-env pull-repo-env create-db create-s3 create-app; do
     if [ -f "/usr/local/bin/$cmd" ]; then
         if [ ! -e "/root/.scripts/$cmd" ] || [ -L "/root/.scripts/$cmd" ]; then
             target_real=$(realpath "/usr/local/bin/$cmd" 2>/dev/null || true)
@@ -387,6 +408,7 @@ ln -sf /usr/local/bin/push-repo-env /root/.scripts/push-repo-env 2>/dev/null || 
 ln -sf /usr/local/bin/pull-repo-env /root/.scripts/pull-repo-env 2>/dev/null || true
 ln -sf /usr/local/bin/create-db /root/.scripts/create-db 2>/dev/null || true
 ln -sf /usr/local/bin/create-s3 /root/.scripts/create-s3 2>/dev/null || true
+ln -sf /usr/local/bin/create-app /root/.scripts/create-app 2>/dev/null || true
 
 # sshd builds a clean environment for login sessions, so image-level PATH alone
 # does not reach interactive shells.

@@ -306,3 +306,11 @@ _Avoid_: Secret fetcher, vault script, env parser, sops helper
 A centralized configuration and credentials discovery module (`sandbox/config.py`) that encapsulates multi-path `.env` resolution, host environment inspection, and Modal secret compilation into cohesive domain models (`FactoryConfiguration` and `FactoryCredentials`).
 _Avoid_: Config parser, dotenv reader, creds loader, secret scanner
 
+**App Template**:
+The canonical starter application blueprint maintained in the factory from which new full-stack web and optional mobile projects are created.
+_Avoid_: Base template, starter kit, boilerplate
+
+**App Scaffolder**:
+The first-party tooling that materializes the App Template into a new application workspace and optionally wires repository creation, persistence resources, secrets, and sandbox launch.
+_Avoid_: Project generator, bootstrap script, create-base-app
+

@@ -1,9 +1,10 @@
 # Architecture Overview
 
-Software Factory provides a unified, two-subsystem monorepo architecture partitioning cloud execution environments from persistent database and storage infrastructure (see [ADR 0081](../adr/0081-monorepo-architecture-for-execution-and-resource-planes.md)):
+Software Factory provides a cohesive monorepo architecture partitioning cloud execution environments, persistent database and storage infrastructure, and the starter application blueprint (see [ADR 0081](../adr/0081-monorepo-architecture-for-execution-and-resource-planes.md) and [ADR 0087](../adr/0087-app-template-and-scaffolder-integration.md)):
 
-1. **Execution Plane (`sandboxes/`)**: Ephemeral, isolated cloud containers and Linux VMs running on [Modal](https://modal.com) with OpenSSH, Cloudflare ingress, and integrated AI developer tooling.
+1. **Execution Plane (`sandboxes/`)**: Ephemeral, isolated cloud containers and Linux VMs running on [Modal](https://modal.com) with OpenSSH, Cloudflare ingress, integrated AI developer tooling, and the Python App Scaffolder (`create-app`).
 2. **Resource Plane (`resource-plane/`)**: Stateful persistence and control plane subsystem hosted on a dedicated Linux VPS or local Docker environment, providing isolated PostgreSQL 16 databases, SeaweedFS S3 object storage buckets, root TLS CA generation, interactive web console, and an MCP server (`POST /api/mcp`).
+3. **App Template (`app-template/`)**: Canonical Next.js 16 + optional Expo React Native starter blueprint materialized by `create-app` (and staged into `/opt/app-template` inside Modal sandboxes).
 
 ---
 

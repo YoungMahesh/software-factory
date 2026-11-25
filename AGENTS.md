@@ -2,9 +2,10 @@
 
 Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal, paired with stateful persistence infrastructure (PostgreSQL 16, SeaweedFS S3, and control console).
 
-Software Factory is partitioned into two cohesive subsystems:
-- **`sandboxes/` (Execution Plane)**: Python Modal sandbox engine, CLI (`modal-sandbox`, `create-db`, `create-s3`, `deploy-infra`), test suites, and agent harnesses. Consult the `modal` skill (`.agents/skills/modal/SKILL.md`) when writing or modifying Modal SDK code.
+Software Factory is partitioned into cohesive subsystems:
+- **`sandboxes/` (Execution Plane)**: Python Modal sandbox engine, CLI (`modal-sandbox`, `create-app`, `create-db`, `create-s3`, `deploy-infra`), test suites, and agent harnesses. Consult the `modal` skill (`.agents/skills/modal/SKILL.md`) when writing or modifying Modal SDK code.
 - **`resource-plane/` (Resource Plane)**: TypeScript/React 19 Next.js 16 console, PostgreSQL 16, SeaweedFS S3, and Model Context Protocol (MCP) server. See [`resource-plane/AGENTS.md`](resource-plane/AGENTS.md) for Resource Plane conventions.
+- **`app-template/` (App Template)**: Canonical Next.js 16 + optional Expo React Native starter blueprint materialized by `create-app` (excluded from root `pnpm-workspace.yaml`, with allowlisted skills tracked in `app-template/skills.json`).
 
 ## Agent skills
 

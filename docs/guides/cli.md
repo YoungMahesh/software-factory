@@ -268,4 +268,58 @@ create-s3 my-bucket --fail-if-exists
 | `-q, --quiet` | flag | `False` | Output only the canonical S3 URI (`s3://<bucket-name>`). |
 | `--fail-if-exists` | flag | `False` | Exit with error if bucket already exists instead of reusing existing credentials. |
 
+---
+
+## Application Scaffolding (`create-app`)
+
+### `create-app` / `modal-sandbox create-app`
+Scaffolds a new full-stack Next.js 16 (and optional Expo React Native) monorepo from the factory's **App Template** (`app-template/`), working identically on host workstations and inside Modal sandboxes (`/opt/app-template`).
+
+```bash
+# Interactive wizard (prompts for template options on TTY)
+create-app my-app
+
+# Scaffold inside an existing Standalone Sandbox workspace
+create-app . -y
+
+# Full-stack web + mobile app with local defaults
+create-app my-app --mobile-app -y
+
+# One-shot cloud creation: GitHub repo + Resource Plane DB + env-store + T3 sandbox launch
+create-app my-app --cloud
+
+# Full cloud flow including an S3 bucket and mobile client
+create-app my-app --mobile-app --cloud --provision-s3
+
+# Equivalent subcommand alias via modal-sandbox
+modal-sandbox create-app my-app --cloud
+```
+
+#### `create-app` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `dir` | string | `my-base-app` | Target directory or project name (supports `.` inside empty/standalone sandbox workspaces). |
+| `--mobile-app / --no-mobile-app` | flag | `False` | Include React Native / Expo mobile client (`apps/mobile`) with parameterized identifiers. |
+| `--db / --no-db` | flag | `True` | Include Drizzle ORM + PostgreSQL setup with portable Resource Plane TLS support. |
+| `--auth / --no-auth` | flag | `True` | Include Better Auth setup with a freshly generated `BETTER_AUTH_SECRET`. |
+| `--skills / --no-skills` | flag | `True` | Include allowlisted agent skills from `app-template/skills.json` and `docs/agents/`. |
+| `--install / --no-install` | flag | `True` | Run `pnpm install` after scaffolding. |
+| `--git / --no-git` | flag | `True` | Initialize Git repository (or reuse existing `.git` in standalone sandboxes) and create initial commit. |
+| `--force` | flag | `False` | Allow scaffolding into a non-empty existing directory. |
+| `-y, --default` | flag | `False` | Skip interactive prompts and apply default template options. |
+| `--cloud` | flag | `False` | Enable `--github`, `--provision-db` (when `--db` is active), `--push-vault`, and `--launch` (`--provision-s3` stays opt-in). |
+| `--github` | flag | `False` | Create repository in `GH_ORG_NAME` (private by default) and push initial commit. |
+| `--public` | flag | `False` | Create public GitHub repository when `--github` is enabled. |
+| `--repo-name` | string | Project name | Override GitHub/`env-store` target repository (`<repo>` or `<owner>/<repo>`). |
+| `--provision-db` | flag | `False` | Provision a Resource Plane PostgreSQL database via `create-db` and write `DATABASE_URL` to `.env`. |
+| `--db-name` | string | Derived | Explicit Resource Plane database name. |
+| `--provision-s3` | flag | `False` | Provision a Resource Plane S3 bucket via `create-s3` and write AWS SDK vars to `.env`. |
+| `--bucket-name` | string | Derived | Explicit Resource Plane S3 bucket name. |
+| `--push-vault` | flag | `False` | Encrypt and push `.env` to Central Environment Store (`env-store`). |
+| `--launch` | flag | `False` | Launch a Modal Sandbox with `--t3` (plus `--react-native` if `--mobile-app`) after scaffolding. |
+| `--vm` | flag | `False` | Launch the sandbox as a full Linux VM (used with `--launch`). |
+| `--no-t3` | flag | `False` | Disable T3 Code when launching with `--launch`. |
+| `--profile` | string | `None` | Modal workspace profile for `--launch`. |
+
 

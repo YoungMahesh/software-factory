@@ -166,6 +166,10 @@ nav:
     - '0081: Monorepo Architecture for Execution Plane (Modal Sandboxes) and Resource Plane (VPS Persistence)': adr/0081-monorepo-architecture-for-execution-and-resource-planes.md
     - '0082: Strict Resource Plane Deployment Configuration and Deployment Idempotency': adr/0082-strict-resource-plane-deployment-configuration-and-idempotency.md
     - '0083: Mandatory Resource Plane SSH Key and In-Repo Secrets Directory': adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md
+    - '0084: Caddy Reverse-Proxy Automation and Resource Plane Production Migration': adr/0084-caddy-reverse-proxy-automation-and-resource-plane-migration.md
+    - '0085: Host Ingress Proxy Standardization in /opt/caddy': adr/0085-host-ingress-proxy-in-opt-caddy.md
+    - '0086: Host Ingress Store (caddy-store) for /opt/caddy Configuration': adr/0086-host-ingress-store-for-opt-caddy.md
+    - '0087: App Template and Python App Scaffolder Integration': adr/0087-app-template-and-scaffolder-integration.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

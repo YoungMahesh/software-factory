@@ -1,0 +1,48 @@
+{
+  "name": "@repo/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "tunnel": "expo start --tunnel",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "prebuild": "expo prebuild",
+    "prebuild:clean": "expo prebuild --clean",
+    "build:apk": "bash scripts/build-apk.sh",
+    "serve:apk": "node scripts/serve-apk.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/theme": "workspace:*",
+    "@repo/types": "workspace:*",
+    "expo": "~58.0.17",
+    "expo-constants": "~58.0.13",
+    "expo-linking": "~58.0.14",
+    "expo-router": "~58.0.25",
+    "expo-splash-screen": "~58.0.11",
+    "expo-status-bar": "~58.0.4",
+    "nativewind": "^4.2.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-reanimated": "^4.7.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-worklets": "0.13.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/react": "~19.3.0",
+    "@types/react-dom": "~19.3.0",
+    "babel-preset-expo": "~58.0.19",
+    "qrcode-terminal": "^0.12.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5",
+    "vitest": "^5.0.0"
+  }
+}

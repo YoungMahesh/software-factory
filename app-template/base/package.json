@@ -1,0 +1,21 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @repo/web dev",
+    "build": "pnpm --filter @repo/web build",
+    "start": "pnpm --filter @repo/web start",
+    "lint": "pnpm --filter @repo/web lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"{{EXTRA_ROOT_SCRIPTS}}
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.31.0"
+}

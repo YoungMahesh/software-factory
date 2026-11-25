@@ -182,12 +182,12 @@ modal serve sandboxes/sandbox/function.py
 
 ## Monorepo Subsystems
 
-Software Factory is organized into two cohesive, self-contained planes:
+Software Factory is organized into three cohesive subsystems:
 
 1. **`sandboxes/` (Execution Plane - Python 3.12+)**:
    - Modal cloud execution environment orchestration (`modal-sandbox`).
    - Ephemeral container and VM development environments with SSH, Cloudflare ingress, and AI agent harnesses.
-   - Database and S3 bucket provisioning CLI utilities (`create-db`, `create-s3`).
+   - Database, S3, and app-scaffolding CLI utilities (`create-db`, `create-s3`, `create-app`).
    - Automated infrastructure deployment tooling (`modal-sandbox infra deploy` / `deploy-infra`).
 
 2. **`resource-plane/` (Resource Plane - TypeScript & Docker)**:
@@ -196,6 +196,10 @@ Software Factory is organized into two cohesive, self-contained planes:
    - S3-compatible object storage backed by SeaweedFS with per-bucket IAM credentials.
    - Model Context Protocol (MCP) server suite (`POST /api/mcp`) for AI coding agents.
    - Turnkey local Docker compose mode (`docker compose up`) and production VPS deployment (`./deploy.sh`).
+
+3. **`app-template/` (App Template - Next.js 16 & Expo React Native)**:
+   - Canonical starter monorepo blueprint (`apps/web`, optional `apps/mobile`, `@repo/theme`, `@repo/types`, Drizzle ORM, Better Auth, and allowlisted agent skills).
+   - Scaffold locally or inside any sandbox via `create-app my-app`, or provision GitHub + Resource Plane DB + `env-store` + T3 sandbox in one shot via `create-app my-app --cloud`.
 
 ### Deploying the Resource Plane to a Linux VPS
 

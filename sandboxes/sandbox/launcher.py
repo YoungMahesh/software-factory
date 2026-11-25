@@ -220,12 +220,7 @@ class SandboxLauncher:
         elif dotenv_file.is_file():
             sandbox_secrets.append(modal.Secret.from_dotenv(dotenv_file))
         else:
-            secret_keys = [
-                "GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY",
-                "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET",
-                "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY", "MODAL_TOKENS",
-                "WEB_UI_USERNAME", "WEB_UI_PASSWORD",
-            ]
+            secret_keys = ("GH_TOKEN", "GH_ORG_NAME", "CLOUDFLARE_TUNNEL_TOKEN", "SSH_AUTHORIZED_KEY", "OPENCODE_GO_API_KEY", "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET", "ANTIGRAVITY_TOKENS", "AGE_PRIVATE_KEY", "MODAL_TOKENS", "WEB_UI_USERNAME", "WEB_UI_PASSWORD", "RESOURCE_PLANE_DOMAIN", "RESOURCE_PLANE_ADMIN_TOKEN", "DB_HOST_DOMAIN", "DB_HOST_ADMIN_TOKEN")
             env_dict = {k: os.environ[k] for k in secret_keys if k in os.environ and os.environ[k]}
             if env_dict:
                 sandbox_secrets.append(modal.Secret.from_dict(env_dict))

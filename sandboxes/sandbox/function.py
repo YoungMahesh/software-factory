@@ -8,7 +8,7 @@ import sys
 from fastapi import Depends, FastAPI, HTTPException, status
 import modal
 
-from shared.image import SOPS_INSTALL_COMMANDS
+from shared.image import SOPS_INSTALL_COMMANDS, stage_app_template_into_image
 from sandbox.config import (
     collect_control_plane_secrets_dict,
     compile_control_plane_secrets,
@@ -137,6 +137,12 @@ image = (
     .add_local_dir(execution_root / "shared", "/root/shared", ignore=["**/__pycache__"])
     .add_local_dir(execution_root / "scripts", "/root/.scripts", ignore=["**/__pycache__"])
     .add_local_dir(sandbox_dir / "static", "/root/sandbox/static")
+)
+image = stage_app_template_into_image(
+    image,
+    template_dir=repo_root / "app-template",
+    factory_root=repo_root,
+    copy=False,
 )
 
 # Secrets are injected via modal.Secret, not staged to filesystem
