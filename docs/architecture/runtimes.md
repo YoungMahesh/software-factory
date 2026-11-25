@@ -8,7 +8,6 @@ Modal Sandboxes supports two execution environments to balance startup speed wit
 | :--- | :--- | :--- | :--- |
 | **Modal Runtime** | Standard (`runtime=None`) | Stable VM (`runtime="vm"`) | Stable VM (`runtime="vm"`) |
 | **CLI Flag** | Default | `--vm` | `--xfce` (implies `--vm`) |
-| **Startup Latency** | ~2–5 seconds | ~10–15 seconds | ~10–15 seconds |
 | **Docker-in-Docker** | No (restricted permissions) | **Yes** (dockerd pre-configured) | **Yes** (dockerd pre-configured) |
 | **Kernel Privileges** | Restricted container namespace | Full Linux kernel privileges | Full Linux kernel privileges |
 | **RAM Configuration** | Burstable `(128, 16384)` MiB | Burstable `(128, 16384)` MiB | Burstable `(128, 16384)` MiB |
@@ -21,11 +20,11 @@ Modal Sandboxes supports two execution environments to balance startup speed wit
 
 ## 1. Standard Container Sandbox
 
-Standard sandboxes run on Modal's lightweight container runtime. They offer sub-second to low-second cold start times and are ideal for the majority of developer workflows, including:
+Standard sandboxes run on Modal's lightweight container runtime. Startup time depends on image caching and repository setup. These sandboxes support:
 
 - Running Python, TypeScript, and Go development tools.
 - Hosting web development servers (Next.js, FastAPI, Vite).
-- Interacting with AI coding agents (T3 Code, OpenCode, Pi).
+- Using T3 Code with Antigravity, OpenCode, and Codex providers.
 - Inspecting code with remote SSH shells.
 
 ```bash
@@ -41,7 +40,7 @@ When `--vm` is specified, the launcher instructs Modal to boot a virtual machine
 
 Key capabilities include:
 - **Docker Daemon**: The VM boots with an active Docker daemon. You can run `docker build`, `docker run`, and `docker compose up` directly inside the sandbox.
-- **Custom System Daemons**: Run background services, database daemons, and system services that require `systemd` or root privileges.
+- **Custom System Daemons**: Run background services and daemons with the VM runtime. Factory startup launches services directly; a full `systemd` boot is not provisioned.
 - **Swap Allocation**: Swapfile memory allocation is managed automatically to handle intensive build tasks.
 
 ```bash
@@ -52,7 +51,7 @@ modal-sandbox --name vm-box --vm
 Inside the VM sandbox:
 
 ```bash
-ssh vm-box "docker --version && docker run hello-world"
+ssh <printed-instance-alias> "docker --version && docker run hello-world"
 ```
 
 ---
@@ -67,7 +66,7 @@ Passing `--xfce` automatically enforces VM Sandbox mode (`vm=True`) because grap
 
 ```mermaid
 graph TD
-    Browser["User Web Browser"] -->|"HTTPS / WSS (3000.mahesh0.dev)"| CFTunnel["Cloudflare Tunnel (cloudflared)"]
+    Browser["User Web Browser"] -->|"HTTPS / WSS (configured tunnel domain)"| CFTunnel["Cloudflare Tunnel (cloudflared)"]
     subgraph Modal VM Sandbox ["Modal VM Sandbox (--vm --xfce)"]
         CFTunnel -->|"HTTP / WS localhost:3000"| WebSockify["websockify Bridge (port 3000)"]
         WebSockify -->|"TCP localhost:5901"| TigerVNC["TigerVNC Xvnc (Display :1)"]
@@ -89,4 +88,10 @@ graph TD
 modal-sandbox --name desktop-box --xfce
 ```
 
-Once launched, navigating to the Cloudflare Tunnel URL (default `https://3000.mahesh0.dev`) immediately opens an interactive, responsive desktop session directly inside your browser.
+For the default desktop port 3000, configure a Cloudflare tunnel token and route before using its hostname. A custom `--xfce-port` also receives a Modal HTTPS endpoint. You can use SSH forwarding when public ingress is unnecessary. See [ingress](ingress.md) for transport details.
+
+## Python dependency installation
+
+The base image includes Python 3.12. `--modal` enables workspace virtualenv creation, Modal profile setup, and installation from the target repository's `requirements.txt`; it requires valid `MODAL_TOKENS`. A fresh Software Factory repository launch installs `.[dev,docs]` through that requirements file, including Zensical. Ordinary standalone launches do not automatically create a virtualenv.
+
+Snapshot restores preserve the existing workspace and virtualenv and skip dependency installation. Install updated requirements manually when restoring an older image. See [snapshots](snapshots.md).

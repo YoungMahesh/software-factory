@@ -14,7 +14,7 @@ modal-sandbox infra deploy
 deploy-infra
 ```
 
-The deployment automation operates entirely over SSH using native `subprocess` and `tar` (zero third-party Python dependencies), verifying remote requirements, synchronizing the `resource-plane/` directory, and executing the production startup script remotely.
+The deployment automation operates entirely over SSH using native `subprocess` and `tar`, verifying remote requirements, synchronizing the `resource-plane/` directory, and executing the production startup script remotely.
 
 ### Prerequisites
 
@@ -47,10 +47,10 @@ RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 
 #### SSH Key Storage and Central Vault (`env-store`)
 
-Because OpenSSH private keys are multi-line PEM files, they cannot be stored directly inside a `.env` file without breaking dotenv and SOPS unmarshalling. Under [ADR 0083](../adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md):
+Keep the multi-line SSH private key in a separate file; the factory configuration parser handles single-line values rather than embedding multi-line keys in `.env`. Under [ADR 0083](../adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md):
 
 1. **In-Repo Placement**: Save the private key to `.secrets/resource_plane_ssh` (extensionless per Linux conventions). The `.secrets/` directory is excluded in `.gitignore`.
-2. **Automatic Permission Hardening**: `modal-sandbox infra deploy` validates that the key exists and automatically enforces `chmod 0600` if file permissions are overly permissive.
+2. **Automatic Permission Hardening**: `modal-sandbox infra deploy` validates that the key exists and normalizes its permissions to `0600` and adds a missing trailing newline to a recognized private-key file.
 3. **Synchronize to `env-store`**: Push the key to the central secret vault with the `--allow-binary` flag:
    ```bash
    push-repo-env -e .secrets/resource_plane_ssh -d resource_plane_ssh --allow-binary
@@ -92,11 +92,15 @@ The pipeline executes the following stages automatically:
 ```text
 ✅ Resource Plane successfully deployed to VPS!
    Dashboard / Web UI: http://203.0.113.10:3000
-   PostgreSQL Port:   54320 (or configured host port)
+   PostgreSQL Port:   <read the remote .env / Compose binding>
    SeaweedFS S3 Port: 8333
 
    ✓ Synchronized RESOURCE_PLANE_DOMAIN, RESOURCE_PLANE_ADMIN_TOKEN to .env
 ```
+
+Fresh production setup generates `.env` with PostgreSQL port **5432**, web port 3000, and S3 port 8333. Existing installations may use 54320 or other ports. The deployment CLI banner has a legacy 54320 label; read the remote `.env`, Compose bindings, and issued connection details for the actual port.
+
+Before distributing database credentials, set `PUBLIC_POSTGRES_HOST` in the remote `/opt/resource-plane/.env` to the hostname or IP used by clients, then rerun deployment so certificate SANs and connection details match. Its generated default is `localhost`. Preserve the generated passwords and tokens when editing this file.
 
 ### Step 3: Configure Host Ingress Proxy & HTTPS (`modal-sandbox infra caddy`)
 
@@ -118,7 +122,7 @@ modal-sandbox infra caddy --domain db-host.example.com
 modal-sandbox infra caddy --bootstrap --wildcard --domain db-host.example.com
 
 # Or upgrade an existing /opt/caddy stack in-place to caddy-dns/cloudflare + wildcard ingress:
-modal-sandbox infra caddy --wildcard --base-domain sf.mahesh0.dev
+modal-sandbox infra caddy --wildcard --base-domain apps.example.com
 
 # Verify running container, network attachment, and Caddyfile validity:
 modal-sandbox infra caddy --check-only
@@ -126,7 +130,7 @@ modal-sandbox infra caddy --check-only
 
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
-- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` exclusively to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, and imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips.
+- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, and imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips.
 
 #### Persisting and Restoring `/opt/caddy` via Host Ingress Store (`caddy-store`)
 
@@ -151,17 +155,18 @@ modal-sandbox infra caddy restore --prune
 ```
 
 - **Fresh-VPS Network Filtering**: If `docker-compose.override.yml` declares `external: true` networks for co-located apps not yet deployed on a new VPS, `restore` / `--bootstrap --from-store` filters them to networks already present on the host (reporting any skipped networks). Re-run `modal-sandbox infra caddy restore` after deploying those co-located stacks to attach their networks.
-- **Safety & Rollback**: `restore` validates `conf/` with `caddy validate` before reloading or applying compose overrides and rolls back automatically on validation failure. `caddy_data`/`caddy_config` ACME volumes are excluded so certificates re-issue cleanly once DNS switches.
+- **Validation and recovery**: Managed changes validate and activate Caddy under a lock. Failed activation attempts rollback; interrupted changes leave `/opt/caddy/.factory-ingress-pending` for recovery by the next mutating ingress operation. Preserve that journal if recovery reports an error.
+- **Backup scope**: Caddy Store captures declarative configuration, not the VPS application data, `/opt/caddy/.env` DNS token, app ownership registry, or `caddy_data` / `caddy_config` ACME volumes. Ownership receipts in app routes can help restore identity, but do not restore application source or data. Restore secrets separately and allow certificates to reissue after DNS switches.
 
 ---
 
 ## 3. Configuring Execution Sandboxes to Use the Deployed Resource Plane
 
-`deploy-infra` automatically populates the required connection variables in your root `.env`. If you used `--no-sync-env` or manage `.env` manually, ensure the following are set:
+`deploy-infra` fills missing connection variables in your root `.env` and preserves existing nonempty values. After adding HTTPS, set `RESOURCE_PLANE_DOMAIN` to the HTTPS hostname. For direct local HTTP testing use an explicit URL such as `http://127.0.0.1:3000`; a bare hostname is normalized to HTTPS by clients. If you used `--no-sync-env` or manage `.env` manually, ensure the following are set:
 
 ```env
-# Domain name or IP pointing to the Resource Plane deployment
-RESOURCE_PLANE_DOMAIN=203.0.113.10
+# HTTPS URL of the Resource Plane deployment
+RESOURCE_PLANE_DOMAIN=https://resources.example.com
 # Admin bearer token configured in resource-plane/.env
 RESOURCE_PLANE_ADMIN_TOKEN=your-generated-admin-token
 ```
@@ -178,17 +183,35 @@ create-s3 app-assets --write-env
 
 ---
 
-## 4. Local Evaluation Mode (`docker compose up`)
+## Local development
 
-For local testing or development without a remote VPS:
+For local development, use the Next.js server plus its Docker Auto-Bootstrapper. From the monorepo root:
 
 ```bash
-cd resource-plane
-cp .env.example .env
-docker compose up -d
+pnpm install
+cd resource-plane/apps/web
 ```
 
-This starts all three services locally:
-- Web Dashboard: `http://localhost:3000`
-- PostgreSQL: `localhost:54320`
-- SeaweedFS S3: `http://localhost:8333`
+Create `.env.local` in this web application directory:
+
+```env
+CONTROL_PLANE_USERNAME=admin
+CONTROL_PLANE_PASSWORD=replace-with-a-strong-local-password
+ADMIN_TOKEN=replace-with-a-random-local-mcp-token
+```
+
+```bash
+pnpm dev
+```
+
+Open `http://localhost:3000`. Resource operations trigger Docker service initialization and migrations. Master database/storage credentials are generated into `.env.local` when missing. Dashboard authentication requires the password configured above. Development data defaults to `resource-plane/apps/web/.data/`; PostgreSQL prefers 5432 and can fall back to 54320, while S3 uses 8333. Inspect `/api/health` and issued credentials for selected ports.
+
+The default `resource-plane/docker-compose.yml` defines only PostgreSQL and SeaweedFS, not the web service or the full TLS/S3 initialization workflow. `docker compose up` alone is not a complete console quickstart. For a complete local production-style stack, run `./deploy.sh` from `resource-plane/` on a host with Docker, rather than copying its incomplete `.env.example` into a production `.env`.
+
+## Network exposure and backups
+
+Allow SSH for the deployment host and public HTTP/HTTPS for Caddy. Expose the configured PostgreSQL port only to clients that need it. Route console and S3 traffic through Caddy for HTTPS; their direct ports speak HTTP. Keep internal filer port 8888 private. Production Compose publishes listeners on `0.0.0.0` unless `HOST_BIND_IP` is configured, so host firewall policy must match the intended exposure.
+
+Back up `/opt/resource-plane/.env` and `.data/` separately from caddy-store, including database, S3, and CA state. Use logical PostgreSQL backups or a consistent stopped/filesystem snapshot procedure. Keep the Caddy DNS token and certificate volumes in a separate sensitive backup process.
+
+Continue to [application creation and deployment](applications.md) to deploy apps using the database, buckets, and wildcard ingress. The [Resource Plane README](https://github.com/sFactory0/software-factory/blob/main/resource-plane/README.md) covers MCP connections and operational commands.

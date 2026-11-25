@@ -1,4 +1,4 @@
-# DB Host Control Plane
+# Resource Plane
 
 A developer-focused local cloud console and MCP server for provisioning isolated PostgreSQL databases and S3-compatible object storages backed by Docker.
 
@@ -47,7 +47,7 @@ The Model Context Protocol endpoint exposing management-plane tools to AI agents
 _Avoid_: Agent gateway, AI proxy
 
 **System Database**:
-The internal `db_host_control_plane` (or `neon_control_plane`) database hosted on the managed PostgreSQL container where project metadata, resource definitions, and generated credentials are stored.
+The internal database holding Resource Plane project metadata, resource definitions, and generated credentials, separate from project databases.
 _Avoid_: Metadata store, state db, config store
 
 **SQL Scratchpad**:

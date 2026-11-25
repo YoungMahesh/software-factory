@@ -1,63 +1,59 @@
-# Quickstart (Zero-Config in 60s)
+# Launch Your First Sandbox
 
-Launch a clean standalone cloud development sandbox with zero external configuration beyond the standard Modal CLI.
+Complete [setup](prerequisites.md) first, including Modal authentication. SSH access also requires the private key matching the launch host's `sandboxes/shared/ssh-key.pub`.
 
-## Launching Your First Sandbox
-
-Run the `modal-sandbox` CLI with a chosen sandbox name:
+## Launch and connect
 
 ```bash
-modal-sandbox --name my-first-sandbox
+modal-sandbox --name dev-box --no-cloudflare
 ```
 
-Upon execution, the runner performs the following steps automatically:
+The launcher creates a sandbox instance with a generated suffix, such as `dev-box-a1b2c3d4`, under the Modal App `dev-box`. Startup initializes an empty Git workspace at `/root/dev-box-a1b2c3d4` and starts SSH on internal port 2222. Python virtualenv setup is enabled separately by `--modal`.
 
-1. **Builds / Caches Image Layers**: Reuses prebaked Ubuntu images with Python 3.11, OpenSSH, and developer utilities.
-2. **Generates SSH Keys**: Configures an OpenSSH server on port 2222 inside the container and injects your connection profile into `~/.ssh/config`.
-3. **Starts Ingress Tunnel**: Establishes a Cloudflare Tunnel forwarding port 3000 to the web.
-4. **Initializes Workspace**: Sets up `/root/my-first-sandbox` with an empty Git repository and default Python virtual environment.
-
-Output resembles:
-
-```text
-Provisioning Modal Sandbox: my-first-sandbox...
-SSH configured: ssh my-first-sandbox
-Web Ingress: https://<tunnel-id>.trycloudflare.com -> port 3000
-Sandbox running (ID: sb-xxxxxxxx)
-```
-
----
-
-## Connecting via SSH
-
-You can connect directly using the alias written to `~/.ssh/config`:
+Use the instance alias printed in the connection summary:
 
 ```bash
-ssh my-first-sandbox
-```
+# Replace this sample alias with the one from your launch output.
+ssh dev-box-a1b2c3d4
 
-Or connect via the Modal CLI's native interactive shell:
-
-```bash
+# Or use the sandbox ID with your authenticated Modal client.
 modal shell <sandbox-id>
 ```
 
----
+The CLI registers the generated SSH alias in `~/.ssh/config` unless `--no-ssh-config` is set. The hosted dashboard displays connection details; launching through the dashboard does not edit your laptop's SSH configuration.
 
-## Testing Web Ingress
+## Run a web server
 
-Every sandbox includes a web ingress tunnel routed to container port `3000`. Test it by starting a simple HTTP server inside the sandbox:
+Start a server inside the sandbox, then forward it through SSH from your local machine:
 
 ```bash
-ssh my-first-sandbox "python3 -m http.server 3000 --directory /root/my-first-sandbox"
+ssh dev-box-a1b2c3d4 'python3 -m http.server 3000 --directory /root'
 ```
 
-Open the printed `trycloudflare.com` URL in your browser to view your sandbox files served live over HTTPS.
+In a second local terminal:
 
----
+```bash
+ssh -N -L 3000:127.0.0.1:3000 dev-box-a1b2c3d4
+```
 
-## Next Steps
+Open `http://localhost:3000`. For public HTTPS, configure a Cloudflare tunnel token and route, then launch without `--no-cloudflare`; see [ingress](../architecture/ingress.md). Startup does not create a credential-free quick tunnel.
 
-- Learn about [Dual Execution Runtimes](../architecture/runtimes.md) (Standard Container vs Linux VM).
-- Explore [Capturing and Resuming Snapshots](../architecture/snapshots.md).
-- View all available options in the [CLI Reference](../guides/cli.md).
+## Launch a repository with T3 Code
+
+With GitHub access configured:
+
+```bash
+modal-sandbox --repo my-org/my-repo --t3 --no-cloudflare
+```
+
+T3 Code uses its own Modal HTTPS endpoint and pairing URL. `--t3` also enables browser tooling; provider authentication is described in [AI tooling](../guides/ai-tooling.md).
+
+## Stop the sandbox
+
+Use its dashboard termination action, or run the management utility from the factory checkout:
+
+```bash
+python sandboxes/scripts/manage_sandboxes.py --all-apps --terminate <sandbox-id>
+```
+
+Continue with [runtimes](../architecture/runtimes.md), [snapshots](../architecture/snapshots.md), [application scaffolding](../guides/applications.md), or the [CLI reference](../guides/cli.md).

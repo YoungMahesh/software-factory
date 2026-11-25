@@ -14,7 +14,7 @@ modal-sandbox [OPTIONS]
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `-n, --name` | string | `None` | Instance and Modal App name (required for standalone runs). |
+| `-n, --name` | string | `None` | Modal App name for standalone runs; the instance gets a generated suffix. Mutually exclusive with `--repo`. |
 | `-r, --repo` | string | `None` | Target GitHub repository (`<owner>/<repo>` or shorthand `<repo>`). |
 | `-b, --github-branch` | string | `main` | Git branch to clone and checkout. |
 | `--full-clone` | flag | `False` | Perform a full Git clone (default is shallow clone with depth 50). |
@@ -26,8 +26,8 @@ modal-sandbox [OPTIONS]
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
 | `--browser` | flag | `False` | Pre-bake headless Google Chrome for Playwright and MCP tooling. |
 | `--react-native` | flag | `False` | Install Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel. |
-| `--modal` | flag | `False` | Install Modal SDK and client credentials inside sandbox virtualenv. |
-| `--no-cloudflare` | flag | `False` | Disable default Cloudflare Tunnel ingress on port 3000. |
+| `--modal` | flag | `False` | Create the sandbox virtualenv, install Modal and requirements.txt, and configure profiles from required `MODAL_TOKENS`. |
+| `--no-cloudflare` | flag | `False` | Disable Cloudflare application ingress; without a tunnel token startup also skips initialization. |
 | `--no-ssh-config` | flag | `False` | Do not automatically append SSH connection details to `~/.ssh/config`. |
 | `--sops` | flag | `False` | Retain Age private key in `~/.config/sops` for interactive debugging. |
 | `--remote` | flag | `False` | Delegate sandbox execution to the hosted Modal control plane function. |
@@ -35,6 +35,18 @@ modal-sandbox [OPTIONS]
 | `--from-snapshot <img-id>` | string | `None` | Launch a fresh sandbox from an existing filesystem snapshot image ID. |
 | `--snapshot-ttl <days>` | integer | `30` | Snapshot retention period in days (used with `--snapshot`). |
 | `--terminate` | flag | `False` | Terminate the sandbox immediately after taking a snapshot. |
+| `--endpoint-url` | URL | `MODAL_SANDBOX_ENDPOINT_URL` | Hosted control plane URL; only valid with `--remote`. |
+| `--snapshot-timeout` | integer | `180` | Capture timeout in seconds; only valid with `--snapshot`, must be positive. |
+| `--profile` | string | `None` | Modal workspace profile for launch and in-sandbox tooling. |
+| `--t3-port` | integer | `3775` | T3 server port, used with `--t3`. |
+| `--t3-ssh-host` | string | Instance name | Override SSH alias used by T3 and CLI connection registration; requires `--t3`. |
+| `--t3-usage-volume` | string | `t3code-usage-v1` | History/transcript volume; requires `--t3`, incompatible with `--no-t3-persist`. |
+| `--no-t3-persist` | flag | `False` | Disable T3 history/transcript synchronization; requires `--t3`. |
+| `--metro-port` | integer | `8081` | Metro port, used with `--react-native`. |
+| `--memory` | integer | `None` | Deprecated: with `--vm`, sets swap to twice this value in GB; does not set VM RAM. |
+
+`--testing` also accepts `--test`, and `--t3` accepts `--t3code`. `--t3` implies browser tooling. Capture-only flags cannot be combined with launch configuration. `--name` and `--repo` are mutually exclusive; restoring without `--repo` requires `--name`. See [setup](../getting-started/prerequisites.md) for SSH keys and [ingress](../architecture/ingress.md) for tunnel prerequisites.
+
 
 ---
 
@@ -132,6 +144,17 @@ Pulls and decrypts environment secrets from the `env-store` vault into the local
 pull-repo-env [-r <repo>] [-o <org>] [-d .env] [--optional]
 ```
 
+#### `pull-repo-env` Options
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `-r, --repo` | Git origin repository | Vault repository scope. |
+| `-o, --org` | Detected owner / `GH_ORG_NAME` | Organization hosting env-store. |
+| `-t, --token` | GitHub credential resolution | Explicit GitHub access token. |
+| `-k, --key` | Age key resolution | Explicit Age decryption key. |
+| `-d, --dest` | `.env` | Root environment destination; other mapped files use manifest destinations. |
+| `--optional`, `--ignore-missing` | `False` | Exit successfully when secrets are unavailable. |
+
 ### `ghclone`
 Clones a target repository and automatically pulls decrypted secrets and Git authorship into the cloned directory via `pull-repo-env`.
 
@@ -146,7 +169,7 @@ ghclone my-service
 ### `modal-sandbox infra deploy` / `deploy-infra`
 Automates turnkey deployment of the persistent **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js control console) to a remote Linux VPS over SSH.
 
-The deployment command runs completely over native SSH and streaming `tar` via `subprocess` (zero third-party Python dependencies), verifying SSH reachability and remote Docker daemon requirements, synchronizing the `resource-plane/` directory, and launching containers via `./deploy.sh`.
+The deployment command runs completely over native SSH and streaming `tar` via `subprocess`, verifying SSH reachability and remote Docker daemon requirements, synchronizing the `resource-plane/` directory, and launching containers via `./deploy.sh`.
 
 ```bash
 # Verify SSH and remote Docker connectivity without deploying:
@@ -349,3 +372,64 @@ deploy-app down my-app --purge
 ```
 
 
+
+#### `deploy-app` Options
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `target` | Current directory | Local app directory, repository name, or `down` subcommand. |
+| `--repo` | Inferred from local Git when possible | Repository identity; without a local target, use GitHub + env-store source mode. |
+| `-b, --branch` | `main` | Git branch in GitHub source mode. |
+| `--subdomain` | Repository slug | Hosted App label under the base domain. |
+| `--base-domain` | `APPS_BASE_DOMAIN` | Override wildcard base domain. |
+| `--cf-dns-token` | Factory DNS token variables | Token used if wildcard setup is needed. |
+| `--skip-migrate` | `False` | Skip automatic Drizzle migration. |
+| `--down` | `False` | Stop the app and remove its Caddy route; alias for `down <target>`. |
+| `--purge` | `False` | With teardown, also remove the remote app directory and ownership record. |
+| `--sync` | `False` | Back up Caddy configuration to caddy-store after route updates. |
+| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy Store profile, rather than a Modal workspace profile. |
+| `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS connection overrides; explicit private key required. |
+
+Run from the deployment host. A sandbox developer can push code and environment files, then use `deploy-app --repo owner/name` on that host. See [application deployment](applications.md) for prerequisites, ownership checks, and failure recovery.
+
+## Host Ingress Management (`modal-sandbox infra caddy` / `setup-caddy`)
+
+```bash
+modal-sandbox infra caddy --bootstrap --domain resources.example.com
+modal-sandbox infra caddy --wildcard --base-domain apps.example.com
+modal-sandbox infra caddy --check-only
+modal-sandbox infra caddy backup --profile staging
+modal-sandbox infra caddy restore --profile staging --prune
+modal-sandbox infra caddy --bootstrap --from-store
+```
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `--domain` | Unset | Resource Plane console/MCP hostname. |
+| `--s3-domain` | Unset | Optional HTTPS hostname for S3. |
+| `--upstream` | `db-host-web:3000` | Console proxy upstream. |
+| `--s3-upstream` | `neon-seaweedfs:8333` | S3 proxy upstream. |
+| `--bootstrap` | `False` | Provision the canonical `/opt/caddy` Compose stack. |
+| `--email` | Unset | Optional ACME email for bootstrap. |
+| `--wildcard` | `False` | Configure the Cloudflare DNS-01 wildcard certificate. |
+| `--base-domain` | `APPS_BASE_DOMAIN` | Hosted App base domain. |
+| `--cf-dns-token` | Factory DNS token variables | DNS-01 token. |
+| `--from-store` | `False` | Restore caddy-store during bootstrap; requires `--bootstrap`. |
+| `--sync` | `False` | Back up configuration after route changes. |
+| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy Store profile folder. |
+| `--check-only` | `False` | Inspect Caddy without changing configuration. |
+| `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS SSH connection overrides. |
+
+`backup` and `restore` also accept `--profile` and SSH overrides; `restore --prune` removes extra local site files. See [deployment and restore](resource-plane-deployment.md) for required files, DNS, and network behavior.
+
+### Caddy Store backup and restore options
+
+| Option | Purpose |
+| :--- | :--- |
+| `-o, --org` | GitHub organization owning caddy-store. |
+| `-t, --token` | GitHub access token override. |
+| `--dir` | Write a local inspection copy. |
+| `--from-dir` | Use local configuration instead of reading from VPS (backup) or caddy-store (restore). |
+| `--bootstrap` | With `restore`, provision `/opt/caddy` before restoring. |
+| `--prune` | With `restore`, remove extra configuration files while retaining the main Caddyfile. |
+| `--profile`, `--host`, `--user`, `--port`, `--key` | Caddy Store profile and deployment SSH overrides. |

@@ -1,6 +1,6 @@
-# Modal Sandboxes
+# Software Factory
 
-Isolated cloud development and execution environments running on Modal with developer and agent tooling.
+Cloud development environments, persistent application resources, and the application starter shared across the factory.
 
 ## Language
 
@@ -13,7 +13,7 @@ A lightweight container sandbox on Modal running directly on the container runti
 _Avoid_: Basic sandbox, container VM
 
 **Standalone Sandbox**:
-A Modal sandbox execution environment provisioned without a Target Repository (`-r/--repo`), launched under a constant Modal App named via `--name` with an empty Git repository and default `.gitignore` initialized under `/root/<sandbox-name>`, and configured to run without cloning a remote target repository.
+A development sandbox with an empty Git workspace and no Target Repository clone. Its instance identity is distinct from the requested application name.
 _Avoid_: Empty sandbox, blank runner, scratch container
 
 **Standalone Quickstart**:
@@ -88,15 +88,15 @@ A secure HTTPS tunnel forwarding traffic directly to the React Native or Expo Me
 _Avoid_: Metro proxy, bundler forward, mobile tunnel
 
 **Modal Development Tooling**:
-A runtime development environment within the sandbox combining a pre-baked Python 3 runtime, an automated virtual environment (`.venv`) pre-installed with the Modal SDK and project dependencies, and opt-in Modal Client Credentials (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` / `~/.modal.toml`) for developing and running Modal workloads from within the sandbox.
+The opt-in Python development environment and authenticated Modal access provided inside a sandbox.
 _Avoid_: Python tooling, python runner, modal env
 
 **Factory Environment Configuration**:
-The unified, uncommitted environment file (`.env`) at the workspace root (templated by `.env.example`) providing all control plane authentication, database credentials, single-organization GitHub access tokens, ingress tokens, and AI tooling credentials, injected into Modal sandboxes and control plane functions as native process environment variables.
+The local factory settings and credentials used to configure control plane deployment and sandbox launches.
 _Avoid_: Config file, root env, secret bundle
 
-**Shared Workspace Secret**:
-An optional Modal secret collection (`share0`) or environment variable providing `AGE_PRIVATE_KEY` for SOPS bootstrap, strictly invoked when a cloned target repository provides an In-Repo Secret Manifest (`.secrets/env.map`).
+**Shared Workspace Secret (Retired)**:
+A retired shared credential source used by earlier sandbox provisioning. Current provisioning resolves factory configuration and the Central Environment Store.
 _Avoid_: Global secret, root secret, default secret
 
 **Test Organization Scope**:
@@ -112,50 +112,50 @@ An ephemeral integration test against the Test Repository Baseline that checks s
 _Avoid_: Manual live test, smoke run, sandbox healthcheck
 
 **SOPS Decryption**:
-A bootstrap mechanism during sandbox initialization that uses `AGE_PRIVATE_KEY` to decrypt repository credentials when an In-Repo Secret Manifest (`env.map`) is present in the cloned target repository.
+The recovery of plaintext repository secrets from encrypted vault files using an authorized Age key. It occurs on the machine fetching the secrets, including the launch host during sandbox provisioning.
 _Avoid_: Sops setup, age injection, secret script
 
 **Tooling Setup Script**:
-A portable script (`scripts/setup.sh`) staged into the sandbox at `/root/scripts/setup.sh` that provisions opt-in tooling credentials (`--modal`, `--t3`) from environment variables into user configuration directories, running identically on host workstations and inside sandboxes.
+The factory utility that configures credentials and account profiles for selected development tools.
 _Avoid_: Repo setup script, secret decrypter, install script
 
 **Modal Sandbox SSH Key**:
-The dedicated SSH key pair used to authenticate into running sandboxes. The public key is tracked in version control at `shared/ssh-key.pub` (or overridden via `SSH_AUTHORIZED_KEY` in `.env`) and injected into the container's `/root/.ssh/authorized_keys`, while the private key is maintained out-of-band by developers at `~/.ssh/modal-sandbox` (mode 0600) and never tracked or committed.
+The dedicated client key pair used to authenticate SSH access to development sandboxes. Operators select the authorized public key and maintain the matching private key separately.
 _Avoid_: Default SSH key, id_ed25519, root SSH key
 
 **Antigravity OAuth Token**:
-The authenticated session credential for the Antigravity CLI and T3 Code provider instances, configured via the `ANTIGRAVITY_TOKENS` JSON profile array in `.env` and provisioned dynamically to `~/.gemini/antigravity-cli/profiles/` and `~/.t3/userdata/providers/antigravity/` by `scripts/setup.sh --t3`.
+The authenticated account credential used by the Antigravity provider and its account profiles.
 _Avoid_: Gemini token, antigravity auth token, cli token
 
 **Shared Agent Configuration**:
-Common editor and AI agent configuration files tracked in the repository root `shared/` directory (`shared/opencode.json`, `shared/t3-keybindings.json`) and mounted into sandboxes at runtime.
+Factory-maintained editor and agent settings included in development sandbox images.
 _Avoid_: Sandbox config, local config, runner settings
 
 **Shared Agent Skills**:
 Factory-maintained agent skills available across workspaces in every fresh sandbox. A sandbox resumed from a Filesystem Snapshot retains the skill set captured in that snapshot.
 
 **Sandbox Shell Aliases**:
-A curated collection of interactive shell shortcuts for Docker and Git operations tracked in `shared/aliases.bash`, staged into sandboxes at `/root/.bash_aliases`, and automatically sourced in `~/.bashrc` across all sandbox runtime modes.
+Factory-maintained interactive shortcuts for common Docker and Git operations inside sandboxes.
 _Avoid_: Terminal shortcuts, bash aliases script, developer helpers
 
 **Sandbox Git Configuration**:
-Declarative global Git configuration tracked in `shared/gitconfig`, staged into the Shared Base Image at `/root/.gitconfig`, providing default branch initialization (`main`) and GitHub credential helpers (`gh auth git-credential`). Multi-tier user authorship is resolved dynamically: `DEFAULT_GIT_NAME` and `DEFAULT_GIT_EMAIL` provide default identity fallback applied globally, while repository-specific overrides (`GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`) are stored decoupled in `<repo>/git.env` within the `env-store` vault and applied purely via `git config --local user.name` and `user.email`. Synthetic fallback identities are never injected.
+The shared Git defaults and repository-specific authorship applied inside development sandboxes.
 _Avoid_: Dynamic git config, inline git config, hardcoded git config
 
 **Sandbox Timezone Configuration**:
-Declarative and runtime timezone localization configured globally via `DEFAULT_TIMEZONE` in `.env` (defaulting to `Asia/Kolkata` for Indian Standard Time), with ambient `TZ` fallback and repository-level overrides via `env-store`. Staged into sandbox containers at `/etc/localtime`, `/etc/timezone`, `/etc/environment`, and `~/.bashrc`, accompanied by declarative `[log] date = format-local:%a %b %d %H:%M:%S %Y %z` in `shared/gitconfig` so both git commit creation and git log presentation consistently render in the sandbox's designated timezone.
+The selected timezone used by a sandbox and its development tools, with factory defaults and optional repository-specific overrides.
 _Avoid_: Hardcoded UTC, container clock hack, inline tz
 
 **Cloudflare Tunnel Domain**:
-The public hostname routed by Cloudflare Tunnel to container port 3000, configured via `MODAL_SANDBOX_TUNNEL_DOMAIN` (or `CLOUDFLARE_TUNNEL_DOMAIN`), announced during sandbox readiness output or defaulting to a port readiness notice when unconfigured.
+The public application hostname associated with a configured sandbox Cloudflare tunnel. Displaying the hostname does not establish its DNS or routing.
 _Avoid_: Static tunnel URL, hardcoded tunnel domain
 
 **Modal Client Credentials**:
-The authenticated multi-account client credentials configured via `MODAL_TOKENS` in `.env` (a JSON array of profile objects) or written to `~/.modal.toml` via `scripts/setup.sh --modal` (mode 0600), allowing the Modal CLI and SDK to manage cloud resources across workspaces within the sandbox.
+The account profile credentials that authorize Modal operations from a launch host or an enabled sandbox development environment.
 _Avoid_: Modal token, modal config, modal credentials
 
 **OpenCode Credentials**:
-API keys and service tokens (`OPENCODE_GO_API_KEY`) provided via `.env` and written inside the sandbox to `~/.config/opencode/opencode.env` (mode 0600) via `scripts/setup.sh --opencode`.
+The provider keys and service tokens used by OpenCode within the T3 Code integration.
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 **Shared Base Image**:
@@ -167,20 +167,16 @@ A pre-baked, headless Google Chrome instance installed by the `--browser` flag a
 _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
-A background ingress service (`cloudflared`) pre-baked into the Shared Base Image and installed as a service by default in the sandbox, authenticated via `CLOUDFLARE_TUNNEL_TOKEN` provided by the Factory Environment Configuration (`.env`), securely routing external traffic directly to local web ports without requiring open inbound firewall ports.
+The authenticated application ingress connecting a sandbox web service to a configured public hostname.
 _Avoid_: Cloudflare proxy, cloudflare daemon, cf tunnel
 
 **Universal File Line Budget**:
-A repository-wide size constraint requiring every production source file and executable automated test file to contain no more than 500 physical lines (`wc -l`).
+The maximum physical line count for production code and executable Python tests in the Execution Plane, with the exemptions defined by repository standards.
 _Avoid_: File size limit, code line limit, test budget, 500-line rule
 
 **Centralized Organization Credentials**:
 The single-organization GitHub access configuration defined via `GH_TOKEN` and `GH_ORG_NAME` in the Factory Environment Configuration (`.env`), replacing legacy multi-file secret bundles (`secrets/github-orgs.env`).
 _Avoid_: Org token file, github orgs secret, project fetch secret
-
-**Factory Environment Configuration**:
-The consolidated configuration domain model and parser (`sandbox/config.py`) that resolves, validates, and serializes organization secrets (`GH_TOKEN`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`), repository identifiers, and service flags into child sandbox containers.
-_Avoid_: Runner env, container config, sandbox dotenv
 
 **Central Environment Store**:
 A dedicated private GitHub repository (`env-store` under `${GH_ORG_NAME}`) that securely houses SOPS-encrypted environment files and directory mappings organized by target repository name, serving as the centralized secret vault for public and private workspaces without polluting open-source codebases.
@@ -199,31 +195,31 @@ The automated mechanism powered by Git's global `post-checkout` hook (`core.hook
 _Avoid_: Worktree env copying, manual worktree env, worktree secret sync
 
 **Host-Side Secret Injection**:
-The provisioning seam in `SandboxLauncher` that retrieves encrypted environment secrets from the Central Environment Store (`env-store`), decrypts them in host or control-plane memory using `AGE_PRIVATE_KEY`, and mounts them directly as native process environment variables (`modal.Secret.from_dict()`) into the sandbox, guaranteeing master private keys and vault credentials never enter the container.
+The provisioning step that decrypts repository vault data on the launch host and supplies it to a sandbox. Factory credentials can also be propagated into that sandbox.
 _Avoid_: Container decryption, in-sandbox sops, startup decryption
 
 **Modal Secret Injection**:
-The programmatic mechanism (`modal.Secret.from_dict()`) that securely serializes in-memory key-value pairs into encrypted cloud-managed secrets that are decrypted exclusively in container RAM (`/proc/1/environ`) by the worker supervisor, leaving zero secret artifacts on disk or in filesystem snapshots.
+The delivery of sensitive values to a runtime through Modal Secrets. Tools can persist the delivered values in files, so injection does not imply credential-free snapshots.
 _Avoid_: Secret mounting, file-based secrets, container secret staging, disk secrets
 
 **Host Environment Whitelist**:
-The strict, explicit set of recognized configuration keys sampled from the host's `os.environ` during secret collection, preventing unvetted host environment variables (such as shell history, AWS tokens, or unrelated API keys) from being bundled into Modal container environments.
+The explicit set of ambient host configuration keys accepted as fallbacks during secret collection. Factory environment files have a separate propagation path.
 _Avoid_: Environment dump, full env export, host env pass-through
 
 **In-Repo Secret Manifest (Legacy)**:
-The transitional repository-tracked directory (`.secrets/`) containing SOPS-encrypted environment secret files and an `env.map` configuration file mapping encrypted source secrets to workspace destination paths (e.g. `app.env=.env`), decrypted during sandbox startup, maintained for backward compatibility and superseded by the Central Environment Store (`env-store`).
+A retired repository-local mapping of encrypted files to workspace destinations, superseded by the Central Environment Store manifest.
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
-A cloud-deployed Modal application (`sandbox-control-plane` in `sandbox/function.py`) serving both a FastAPI REST API (`/launch`, `/snapshot`, `/health`) and the embedded Sandbox Web Dashboard SPA (`/` and `/api/*`) authenticated via unified HTTP Basic Auth (`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`), allowing external clients, the local CLI (`--remote`), and web browsers to inspect, provision, and manage sandboxes and snapshots across workspace profiles.
+The cloud-hosted API and dashboard for provisioning and managing development sandboxes and their snapshots. It is separate from the Resource Plane persistence console.
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:
-A responsive single-page web management dashboard served by `sandbox/web.py` integrated into the Hosted Sandbox Control Plane (deployed via `modal deploy` or `modal serve sandbox/function.py`), protected by HTTP Basic Authentication, enabling real-time visual inspection, search and filtering, and termination of active sandboxes, as well as browsing, capturing, and deleting filesystem snapshots across configured Modal workspace profiles.
+The browser interface of the Hosted Sandbox Control Plane for viewing, launching, terminating, and snapshotting development sandboxes and managing snapshot registry records.
 _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
 
 **Snapshot Registry**:
-A distributed catalog and metadata registry (`sandbox/snapshots.py`) tracking captured filesystem snapshots (including image ID, sandbox provenance, size, tags, and timestamps) backed by a named `modal.Dict` (`sandbox-snapshots`) with an automatic local JSON filesystem fallback (`~/.modal/sandbox-snapshots.json`).
+The catalog of captured filesystem image identifiers and their associated sandbox metadata. Removing a catalog entry does not delete the retained image.
 _Avoid_: Snapshot catalog, snapshot db, snapshot list, modal dict store
 
 **Snapshot Lifecycle**:
@@ -263,15 +259,15 @@ A Modal sandbox execution environment configured with an XFCE 4 desktop environm
 _Avoid_: GUI sandbox, VNC runner, X11 container
 
 **noVNC Web Ingress**:
-The browser-accessible HTML5 VNC client served via websockify on the sandbox's default web port (3000) or a custom `--xfce-port`, forwarded securely by Cloudflare Tunnel to provide instant graphical desktop interaction without local VNC client installation.
+The browser access path for interacting with a sandbox graphical desktop through noVNC.
 _Avoid_: VNC web, noVNC proxy, desktop web UI
 
 **Resource Plane**:
-The persistent persistence and control plane subsystem (`resource-plane/`, formerly `db-host`) hosted on a dedicated Linux VPS or local Docker environment, responsible for provisioning isolated PostgreSQL databases, SeaweedFS S3 object storage buckets, root TLS CA generation, interactive web console, and an MCP server (`POST /api/mcp`).
+The persistence subsystem that manages application databases, object storage, their credentials, and a web console and management API.
 _Avoid_: Database host, db server, storage runner, backend container
 
 **ResourcePlaneClient**:
-A deep control plane client module (`sandbox/db_host_client.py` / `sandbox/resource_plane_client.py`) that encapsulates JSON-RPC over HTTP communication with the Resource Plane MCP server, managing admin authentication, project scoping, and root CA certificate caching behind a cohesive transport seam.
+The factory client for Resource Plane management operations, including project scope, credential retrieval, and database certificate discovery.
 _Avoid_: MCP client, db-host transport, postgres helper, rpc caller
 
 **Execution Plane**:

@@ -1,116 +1,85 @@
 # Environment Variables Reference
 
-Modal Sandboxes uses a unified `.env` file for local development and control plane operations (templated in [`.env.example`](https://github.com/sFactory0/software-factory/blob/main/.env.example)).
+Factory configuration starts with the repository root `.env`; copy the tracked [`.env.example`](https://github.com/sFactory0/software-factory/blob/main/.env.example) when configuring integrations. Resource Plane server credentials belong to its own runtime environment, described below.
 
-## Configuration Variables
+## Factory and sandbox variables
 
-### 1. Control Plane & Dashboard Authentication
-- `WEB_UI_USERNAME`: Username for HTTP Basic Authentication on the web dashboard and REST API routes (`POST /launch`, `POST /snapshot`) (default: `admin`).
-- `WEB_UI_PASSWORD`: Password for HTTP Basic Authentication on the web dashboard and REST API routes (`POST /launch`, `POST /snapshot`).
+| Variable | Purpose and default |
+| :--- | :--- |
+| `WEB_UI_USERNAME`, `WEB_UI_PASSWORD` | Both required for hosted sandbox dashboard and API Basic authentication; no implicit username default |
+| `MODAL_TOKENS` | JSON array of Modal profile objects, each with `name`, `token_id`, `token_secret`, and optional `active`; required for `--modal` |
+| `MODAL_CONFIG_PATH` | Optional path to host Modal configuration instead of `~/.modal.toml` |
+| `GH_TOKEN`, `GH_ORG_NAME` | GitHub access and default organization for shorthand repository names; writes to GitHub or `env-store` need appropriate write access |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Credential for an already configured sandbox application tunnel; absent token means startup skips the tunnel |
+| `MODAL_SANDBOX_TUNNEL_DOMAIN` | Display hostname for the application tunnel; does not create DNS or configure the tunnel |
+| `SSH_AUTHORIZED_KEY` | Bootstrap input populated by the launcher's `sandboxes/shared/ssh-key.pub`; configure the launcher's public-key file to change the key |
+| `OPENCODE_GO_API_KEY` | OpenCode provider key used by T3 Code |
+| `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS` | Antigravity OAuth configuration and account profiles |
+| `AGE_PRIVATE_KEY` | Age private key for repository vault decryption; `SOPS_AGE_KEY` is a host resolver fallback, as is `~/.config/sops/age/keys.txt` in vault helpers |
+| `DEFAULT_GIT_NAME`, `DEFAULT_GIT_EMAIL` | Fallback sandbox Git authorship; repository-specific authorship comes from `env-store/<repo>/git.env` |
+| `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
+| `MODAL_SANDBOX_ENDPOINT_URL` | Hosted control plane base URL for CLI `--remote`; `--endpoint-url` overrides it |
+| `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
+| `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
+| `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |
+| `DOCS_CUSTOM_DOMAIN` | Optional custom domain for the Modal documentation app |
 
-### 2. Modal Cloud Authentication
-- `MODAL_TOKENS`: JSON array string containing multi-account Modal profile objects with credentials (`token_id`, `token_secret`, optional `active`).
+Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Child sandboxes receive scoped status access rather than the signing secret. See [AI tooling](../guides/ai-tooling.md#codex-login-profiles).
 
-### 3. Source Control & GitHub
-- `GH_TOKEN`: GitHub Personal Access Token with repository read/clone permissions.
-- `GH_ORG_NAME`: Default GitHub organization name (e.g., `sFactory0`). When passing shorthand `-r <repo>`, the runner clones `https://github.com/${GH_ORG_NAME}/${repo}`.
+## Resource Plane clients and deployment
 
-### 4. Remote Ingress & SSH
-- `CLOUDFLARE_TUNNEL_TOKEN`: Cloudflare Tunnel credential token for custom ingress domains.
-- `MODAL_SANDBOX_TUNNEL_DOMAIN`: Optional custom hostname display format (e.g. `3000.yourdomain.com`).
-- `SSH_AUTHORIZED_KEY`: Optional explicit SSH public key string to authorize in addition to `shared/ssh-key.pub`.
+| Variable | Purpose and default |
+| :--- | :--- |
+| `RESOURCE_PLANE_DOMAIN` | Resource Plane hostname or URL; client fallback `DB_HOST_DOMAIN` |
+| `RESOURCE_PLANE_ADMIN_TOKEN` | Client bearer token matching the Resource Plane server's `ADMIN_TOKEN`; fallback `DB_HOST_ADMIN_TOKEN` |
+| `RESOURCE_PLANE_SSH_HOST` | Required VPS hostname/IP for deployment |
+| `RESOURCE_PLANE_SSH_USER` | Deployment SSH user, default `root` |
+| `RESOURCE_PLANE_SSH_PORT` | SSH port, default `22` |
+| `RESOURCE_PLANE_SSH_KEY` | Required explicit private key path, normally `.secrets/resource_plane_ssh`; no ambient SSH key fallback |
+| `RESOURCE_PLANE_REMOTE_DIR` | Resource Plane deployment directory, default `/opt/resource-plane` |
+| `CADDY_STORE_PROFILE` | Logical folder in the private `caddy-store` repository, default `default`; Caddy and deploy-app `--profile` overrides it |
+| `APPS_BASE_DOMAIN` | Base domain for Hosted Apps, such as `apps.example.com` |
+| `CLOUDFLARE_DNS_API_TOKEN` | DNS-01 token for Caddy wildcard certificates, falling back to `CLOUDFLARE_API_TOKEN`; remotely stored in `/opt/caddy/.env` |
 
-### 5. AI Tooling Providers
-- `OPENCODE_GO_API_KEY`: API key for OpenCode Go provider.
-- `ANTIGRAVITY_CLIENT_ID`: OAuth client ID for Google Antigravity.
-- `ANTIGRAVITY_CLIENT_SECRET`: OAuth client secret for Google Antigravity.
-- `ANTIGRAVITY_TOKENS`: JSON array string containing Antigravity user profile credentials.
+`create-db` caches the public root CA at `~/.config/resource-plane/ca.crt`, reusing the legacy `~/.config/db-host` directory when it exists. `--ca-path` selects an explicit path. The generated app supports `RESOURCE_PLANE_CA_CERT` for a portable CA path; `deploy-app` stages the certificate at `/app/.certs/ca.crt` inside its container.
 
-### 6. Encryption & SOPS
-- `AGE_PRIVATE_KEY`: Age private key (`AGE-SECRET-KEY-...`) used by SOPS to decrypt repository environment secrets.
+## Resource Plane server variables
 
-### 7. Software Factory Provenance (In-Sandbox & Control Plane)
-- `SOFTWARE_FACTORY_COMMIT`: Full 40-character Git commit SHA of the `software-factory` checkout from which the sandbox was created.
-- `SOFTWARE_FACTORY_COMMIT_SHORT`: 7-character short commit SHA.
-- `SOFTWARE_FACTORY_REF`: Git branch or tag name of the `software-factory` checkout (e.g. `main`).
-- `SOFTWARE_FACTORY_DIRTY`: Boolean indicator (`"1"` or `"0"`) signaling whether the host checkout had uncommitted modifications at the time of sandbox creation.
+These configure the Next.js persistence console, not the hosted sandbox dashboard:
 
-### 8. Git Identity (Default Authorship Fallback)
-- `DEFAULT_GIT_NAME`: Default Git author and committer name applied globally across sandbox containers when repository-specific authorship is not specified.
-- `DEFAULT_GIT_EMAIL`: Default Git author and committer email address applied globally across sandbox containers when repository-specific authorship is not specified.
+| Variable | Purpose |
+| :--- | :--- |
+| `CONTROL_PLANE_USERNAME`, `CONTROL_PLANE_PASSWORD` | Resource Plane Basic authentication; `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD` take precedence when supplied |
+| `ADMIN_TOKEN` | Resource Plane MCP server bearer token; `NEON_ADMIN_TOKEN` is a server fallback |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL master credentials |
+| `SEAWEEDFS_ADMIN_ACCESS_KEY`, `SEAWEEDFS_ADMIN_SECRET_KEY` | SeaweedFS administration credentials |
+| `PUBLIC_POSTGRES_HOST` | Hostname/IP used in issued database credentials and certificate SANs |
+| `POSTGRES_PORT`, `WEB_PORT`, `S3_PORT` | Production published ports; freshly generated production `.env` uses `5432`, `3000`, `8333` |
+| `HOST_BIND_IP` | Published listener address; production default `0.0.0.0`, development Compose default `127.0.0.1` |
 
-### 9. Timezone & Localization
-- `DEFAULT_TIMEZONE`: Default system and Git timezone applied across sandbox containers, background daemons, and terminal environments (defaults to `Asia/Kolkata` when unspecified).
-- `TZ`: Standard POSIX timezone identifier used as an ambient override or per-repository secret in `env-store` (`<repo>/git.env` or `<repo>/default.env`).
+Production `resource-plane/deploy.sh` generates `.env` on first use and preserves it thereafter. Local Next.js development resolves its environment in `resource-plane/apps/web/`, with generated credentials written to `.env.local` there. The existing `resource-plane/.env.example` is not a complete production credential template; use the deployment script for first production setup.
 
-### 10. Resource Plane (Persistence Control Plane: PostgreSQL & S3 Storage)
-- `RESOURCE_PLANE_DOMAIN`: Domain name or HTTPS URL of the hosted Resource Plane deployment (falls back to legacy `DB_HOST_DOMAIN`).
-- `RESOURCE_PLANE_ADMIN_TOKEN`: Admin bearer token for JSON-RPC authentication at `POST /api/mcp` (falls back to legacy `DB_HOST_ADMIN_TOKEN`).
+## Documentation publishing variables
 
-### 11. Resource Plane VPS Deployment Automation (`modal-sandbox infra deploy`)
-- `RESOURCE_PLANE_SSH_HOST`: Target Linux VPS hostname or IP address for automated deployment (required).
-- `RESOURCE_PLANE_SSH_USER`: SSH user on the target VPS with Docker permissions (defaults to `root`).
-- `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`).
-- `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (required; canonically placed in `.secrets/resource_plane_ssh` and ignored by git). Ambient SSH fallbacks are disabled.
-- `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`).
-- `CADDY_STORE_PROFILE`: Logical VPS profile folder inside the canonical private `github.com/${GH_ORG_NAME}/caddy-store` repository (defaults to `default`). Overridable per command via `--profile`.
+The Cloudflare Pages script uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, plus optional `CLOUDFLARE_PAGES_PROJECT` (default `modal-sandboxes-docs`) and `CLOUDFLARE_PAGES_BRANCH` (default `main`). See [documentation deployment](../guides/deploying-documentation.md).
 
-### 12. Hosted Apps & Wildcard Ingress (`/opt/caddy` + `deploy-app`)
-- `APPS_BASE_DOMAIN`: Root DNS domain (e.g., `sf.mahesh0.dev`) whose wildcard TLS certificate covers Hosted App subdomains (`<repo>.<APPS_BASE_DOMAIN>`).
-- `CLOUDFLARE_DNS_API_TOKEN`: Cloudflare API token with `Zone:DNS:Edit` used by Caddy DNS-01 to issue and renew the single wildcard certificate (stored remotely in `/opt/caddy/.env` outside `caddy-store`; falls back to `CLOUDFLARE_API_TOKEN`).
+## Provenance
 
----
+The launcher records `SOFTWARE_FACTORY_COMMIT`, `SOFTWARE_FACTORY_COMMIT_SHORT`, `SOFTWARE_FACTORY_REF`, and `SOFTWARE_FACTORY_DIRTY`. In a host checkout Git supplies provenance; a deployed control plane can propagate its captured provenance. These values identify the factory version that launched the sandbox, independently of the application's own Git history.
 
-## Resolution Order & Precedence
+## Resolution and propagation
 
-Modal Sandboxes resolves environment variables through a deterministic cascade across configuration files, host environment variables, and remote secret vaults.
+Lookup rules differ between loading factory credentials and sending values to a child sandbox:
 
-### 1. Host Environment Whitelist
+| Stage | Resolution |
+| :--- | :--- |
+| Factory configuration | Root `.env`, then missing keys from legacy `.secrets/.env` and `secrets/.env`; parsed values generally precede host fallbacks |
+| Hosted dashboard authentication | Nonempty host `WEB_UI_USERNAME` / `WEB_UI_PASSWORD` precede values from candidate files; both must resolve |
+| Hosted control plane deployment | Parse all root `.env` keys, apply dashboard authentication and Git provenance, then fill missing keys from `CONTROL_PLANE_SECRET_KEYS` in `sandboxes/sandbox/config.py` |
+| Child sandbox with root `.env` | Inject that file's values; the explicit `CODEX_STATUS_SECRET` filter excludes the status signing key when present |
+| Child sandbox without root `.env` | Forward selected GitHub, Cloudflare, SSH, provider, Age, Modal, dashboard, and Resource Plane environment keys listed in `sandboxes/sandbox/launcher.py` |
+| Repository vault | Fetch and decrypt `env-store/<repo>/env.map` and mapped files, then add the repository bundle and Git identity |
 
-When bundling secrets for Modal injection (`sandboxes/sandbox/function.py` and `sandboxes/sandbox/launcher.py`), the runner does **not** forward the host's entire `os.environ`. Instead, it samples only an explicit whitelist:
+The control plane's host fallback list also includes Codex profile and status settings and the remote endpoint URL. The child launcher has a separate fallback list, so these lists must not be treated as interchangeable. An explicit allowlist restricts ambient host fallbacks; it does not restrict all keys in a factory `.env`.
 
-`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `GH_TOKEN`, `GH_ORG_NAME`, `CLOUDFLARE_TUNNEL_TOKEN`, `MODAL_SANDBOX_TUNNEL_DOMAIN`, `SSH_AUTHORIZED_KEY`, `OPENCODE_GO_API_KEY`, `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS`, `AGE_PRIVATE_KEY`, `MODAL_TOKENS`.
-
-> **Why a whitelist?** Sweeping the entire host environment would bundle sensitive host credentials (such as AWS keys, personal API tokens, SSH agent variables, or shell history) and leak them into remote container environments.
-
-### 2. Precedence Rules: `.env` vs. Host `os.environ`
-
-The conflict resolution order depends on the functional role of the credential:
-
-| Credential Type | Precedence Rule | Rationale |
-| :--- | :--- | :--- |
-| **Control Plane Auth** (`WEB_UI_USERNAME`, `WEB_UI_PASSWORD`) | **Host `os.environ` WINS over `.env`** | Allows operators to supply ad-hoc credentials via CLI or CI/CD pipelines without modifying tracked local files. |
-| **Tooling & Service Secrets** (`GH_TOKEN`, `AGE_PRIVATE_KEY`, etc.) | **`.env` file WINS over Host `os.environ`** | Guarantees reproducible local runs from the verified project `.env` file, using host environment variables solely as fallbacks for missing keys. |
-| **Child Sandbox Launching** (`sandboxes/sandbox/launcher.py`) | **`.env` file used exclusively if present** | If `.env` exists on the local machine, `modal.Secret.from_dotenv(".env")` bundles it directly. In container or CI environments lacking `.env`, it falls back to the whitelisted keys in `os.environ`. |
-
-### 3. Multi-Source Lookup Hierarchy
-
-If a configuration value is not resolved in the primary `.env` file or host environment, the runner consults secondary sources:
-
-```mermaid
-flowchart TD
-    Start["Variable Lookup"] --> CheckDotEnv{".env File?"}
-    CheckDotEnv -- Yes --> ReadDotEnv["Read .env Key"]
-    CheckDotEnv -- No --> CheckEnv{Host os.environ?}
-    
-    CheckEnv -- Yes (Whitelisted) --> ReadEnv["Read os.environ Key"]
-    CheckEnv -- No --> SecondarySources{"Check Secondary Sources"}
-    
-    SecondarySources --> AuthFallback["1. Legacy .secrets/.env & secrets/.env (Auth fallback)"]
-    SecondarySources --> ModalConfig["2. ~/.modal.toml (Modal profile tokens)"]
-    SecondarySources --> AgeKeyFile["3. ~/.config/sops/age/keys.txt (Age private key)"]
-    SecondarySources --> SSHPubFile["4. sandboxes/shared/ssh-key.pub (SSH public key)"]
-    SecondarySources --> EnvStore["5. github.com/${GH_ORG_NAME}/env-store (Target repo secrets)"]
-    SecondarySources --> RuntimeGen["6. secrets.token_urlsafe(16) (OPENCODE_SERVER_PASSWORD)"]
-```
-
-1. **Legacy Directory Fallback Files**:
-   - `root / ".secrets" / ".env"` and `root / "secrets" / ".env"` are checked if `WEB_UI_USERNAME` or `WEB_UI_PASSWORD` are absent from root `.env`.
-2. **User Configuration Files**:
-   - `~/.modal.toml` (or `$MODAL_CONFIG_PATH`): Parsed by `sandboxes/sandbox/profiles.py` for Modal account workspace profiles.
-   - `~/.config/sops/age/keys.txt`: Parsed by `sandboxes/sandbox/env_store.py` for SOPS Age private keys if not provided via `AGE_PRIVATE_KEY`.
-   - `sandboxes/shared/ssh-key.pub`: Read by `sandboxes/sandbox/launcher.py` if `SSH_AUTHORIZED_KEY` is not explicitly set.
-3. **Remote Secret Vault (`env-store`)**:
-   - For repository sandboxes (`-r <repo>`), target repository environment configurations are fetched directly from the private `github.com/${GH_ORG_NAME}/env-store` repository using `GH_TOKEN` and decrypted host-side.
-4. **Dynamic Runtime Generation**:
-   - Ephemeral passwords like `OPENCODE_SERVER_PASSWORD` are generated cryptographically at launch using `secrets.token_urlsafe(16)` and injected directly into the target sandbox.
+GitHub helpers may additionally resolve `GITHUB_TOKEN` or authenticated `gh` access; profile management may read `~/.modal.toml`. Scope credentials in the factory `.env` for the sandboxes it will launch. See [credential lifecycle](../architecture/secrets.md) for files created after injection and snapshot implications.

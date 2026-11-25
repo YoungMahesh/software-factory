@@ -75,6 +75,7 @@ nav:
   - Secrets & Security: architecture/secrets.md
 - User Guides:
   - CLI Reference: guides/cli.md
+  - Application Creation & Deployment: guides/applications.md
   - Hosted Control Plane: guides/control-plane.md
   - Resource Plane VPS Deployment: guides/resource-plane-deployment.md
   - AI Developer Tooling: guides/ai-tooling.md

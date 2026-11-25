@@ -1,6 +1,6 @@
-# Contributing to Modal Sandboxes
+# Contributing to Software Factory
 
-Thank you for your interest in contributing to Modal Sandboxes! We welcome contributions to improve the developer experience, expand agent tooling support, and streamline cloud execution environments on Modal.
+Thank you for your interest in contributing to Software Factory! We welcome contributions to improve the developer experience, expand agent tooling support, and streamline cloud execution environments on Modal.
 
 ---
 
@@ -8,7 +8,7 @@ Thank you for your interest in contributing to Modal Sandboxes! We welcome contr
 
 ### Prerequisites
 
-- Python 3.11 or 3.12
+- Python 3.11+
 - [Modal CLI](https://modal.com/docs/guide) installed and authenticated (`modal setup`)
 - Git
 
@@ -17,14 +17,14 @@ Thank you for your interest in contributing to Modal Sandboxes! We welcome contr
 Clone the repository and set up a virtual environment:
 
 ```bash
-git clone https://github.com/<your-org>/modal-sandboxes.git
-cd modal-sandboxes
+git clone https://github.com/sFactory0/software-factory.git
+cd software-factory
 
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install package in editable mode with development dependencies:
-pip install -e ".[dev]"
+# Install the package, test tools, and documentation dependencies:
+python -m pip install -r requirements.txt
 ```
 
 Verify your installation:
@@ -53,10 +53,10 @@ To maintain long-term maintainability and readability, every contributor and age
 
 ### Universal File Line Budget (ADR 0027 / AGENTS.md)
 
-- **Strict Limit**: Every production Python file and automated test file (`.py`) must **not exceed 500 physical lines** (`wc -l`).
-- **Enforcement**: Validated automatically by `tests/test_standards.py`.
+- **Strict Limit**: Every production code file and executable Python test file in `sandboxes/` must **not exceed 500 physical lines** (`wc -l`).
+- **Enforcement**: Validated automatically by `sandboxes/tests/test_standards.py`.
 - **Decomposition Pattern**: When a module approaches 500 lines, decompose it into a deep directory module with internal private helpers behind a concise public interface (`__init__.py`). Do not introduce shallow or pass-through abstractions.
-- **Exemptions**: Shell scripts (`.sh`), JSON fixtures, and environment templates are exempt.
+- **Exemptions**: Shell scripts (`.sh`), external static fixtures, environment templates, and `resource-plane/` are exempt.
 
 ### Deep Module Boundaries
 
@@ -79,7 +79,12 @@ pytest sandboxes/tests/test_standards.py
 
 # Run the complete hermetic test suite:
 pytest
+
+# Build and validate documentation:
+zensical build --strict
 ```
+
+The docs CI job installs the documentation extras and runs the site build and reference contract checks, so missing Zensical cannot silently skip the build there.
 
 All tests must pass cleanly without regressions.
 
@@ -100,7 +105,7 @@ modal-sandbox --name test-verify-box
 > [!IMPORTANT]
 > Ensure any live test sandboxes are terminated immediately after verification to prevent unnecessary cloud resource consumption:
 > ```bash
-> python sandboxes/scripts/manage_sandboxes.py
+> python sandboxes/scripts/manage_sandboxes.py --all-apps --terminate <sandbox-id>
 > ```
 
 ---
@@ -111,3 +116,11 @@ modal-sandbox --name test-verify-box
 2. **Commit Messages**: Use conventional commits (e.g., `feat:`, `fix:`, `docs:`, `refactor:`, `test:`).
 3. **Architecture Decisions**: If introducing architectural changes, new dependencies, or irreversible trade-offs, record an Architecture Decision Record under `docs/adr/` following the existing format.
 4. **Documentation**: Keep `readme.md`, `GLOSSARY.md`, and inline docstrings updated alongside code modifications.
+
+## Subsystem development
+
+Install JavaScript dependencies with `pnpm install` from the monorepo root. Resource Plane development runs with `pnpm --dir resource-plane dev`; configure its web-local environment and Docker access as described in its README. Run its tests with `pnpm --dir resource-plane test`.
+
+`app-template/` is a blueprint excluded from this workspace. Generate a temporary app with `create-app` to run its app commands. The root Python requirements include documentation tools; runtime-only installations can still use `python -m pip install -e .`.
+
+Keep current guides aligned with CLI parsers, environment resolution, MCP registrations, and startup behavior. Historical ADRs describe past decisions and should retain their context; current guides should link to later amendments when behavior has changed.

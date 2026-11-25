@@ -1,258 +1,112 @@
-# Modal Sandboxes
+# Software Factory
 
-Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal with SSH, Cloudflare Tunnel ingress, and integrated AI developer tooling.
+Provision Modal development sandboxes, manage persistent PostgreSQL and S3 resources, and scaffold applications from a shared starter template.
 
----
+| Subsystem | Purpose |
+| :--- | :--- |
+| `sandboxes/` | Python CLI, hosted sandbox control plane, images, snapshots, and deployment tools |
+| `resource-plane/` | Next.js 16 / React 19 console and MCP API, PostgreSQL 16, and SeaweedFS S3 |
+| `app-template/` | Next.js 16 starter with optional Expo mobile client, database, authentication, and agent skills |
 
-## Architecture Overview
+## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Client["Control Surfaces"]
-        CLI["modal-sandbox CLI"]
-        WebUI["Web Dashboard & REST API<br/>(sandboxes/sandbox/function.py)"]
-    end
-
-    subgraph ModalCloud["Modal Cloud Infrastructure"]
-        Runner["Unified Sandbox Runner<br/>(sandboxes/sandbox/launcher.py)"]
-        
-        subgraph Sandbox["Modal Sandbox Environment"]
-            direction TB
-            Runtime["Runtime: Standard Container or Linux VM (Docker)"]
-            Workspace["Workspace (/root/<name>)<br/>Git Repository & Python Virtual Environment"]
-            
-            subgraph Services["Network Ingress & Services"]
-                SSH["OpenSSH Server (Port 2222)"]
-                Tunnel["Cloudflare Ingress (Port 3000)"]
-                AgentTools["AI Dev Tooling:<br/>T3 Code (3775), OpenCode (4096),<br/>Antigravity Daemon, Herdr, Pi Agent"]
-            end
-        end
-
-        Volume["Persistent Modal Volumes<br/>(t3code-usage-v1, Gradle Caches)"]
-        Snapshots["Filesystem Snapshots<br/>(modal.Image Copy-on-Write)"]
-    end
-
-    CLI --> Runner
-    WebUI --> Runner
-    Runner --> Sandbox
-    Sandbox -.-> Volume
-    Sandbox -.-> Snapshots
+flowchart LR
+    CLI["CLI"] --> Launcher["Sandbox launcher"]
+    Dashboard["Hosted sandbox control plane"] --> Launcher
+    Launcher --> Sandbox["Modal container or VM<br/>SSH, T3 Code, optional Cloudflare ingress"]
+    Template["app-template/"] --> Scaffold["create-app"]
+    Scaffold --> App["Application repository"]
+    App --> Deploy["deploy-app over SSH"]
+    Deploy --> VPS["VPS: Hosted Apps + /opt/caddy"]
+    Sandbox --> Resources["Resource Plane<br/>Console, MCP, PostgreSQL, S3"]
+    App --> Resources
 ```
 
----
+## Install
 
-## 1. Quickstart (Zero-Config in 60s)
-
-Launch a clean standalone cloud development sandbox with zero external configuration beyond the standard Modal CLI:
+Use Python 3.11+ on Linux, macOS, or WSL2, with Git and OpenSSH installed:
 
 ```bash
-# 1. Clone repository and install in editable mode
-git clone https://github.com/<org>/modal-sandboxes.git
-cd modal-sandboxes
+git clone https://github.com/sFactory0/software-factory.git
+cd software-factory
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
-
-# 2. Authenticate with Modal (one-time setup)
+python -m pip install -r requirements.txt
 modal setup
-
-# 3. Launch your first standalone sandbox
-modal-sandbox --name my-first-sandbox
 ```
 
-Upon launch, `modal-sandbox` provisions the environment, configures OpenSSH keys, injects SSH configuration into your `~/.ssh/config`, and launches a Cloudflare web ingress tunnel on port 3000.
+`requirements.txt` installs the package with `dev` and `docs` extras, including pytest and Zensical. For just the runtime CLI, use `python -m pip install -e .`.
 
-Connect immediately via SSH:
+## Launch a sandbox
 
 ```bash
-ssh my-first-sandbox
-# Or open an interactive shell via Modal CLI:
-modal shell <sandbox-id>
+# Standalone workspace, without Cloudflare ingress
+modal-sandbox --name dev-box --no-cloudflare
+
+# Repository workspace with T3 Code (also enables browser tooling)
+modal-sandbox --repo my-org/my-repo --t3
+
+# VM with Docker, or an interactive XFCE desktop
+modal-sandbox --name vm-box --vm --no-cloudflare
+modal-sandbox --name desktop-box --xfce
 ```
 
----
+Repository launches require `GH_TOKEN`; shorthand repository names also require `GH_ORG_NAME`. Copy [`.env.example`](.env.example) to `.env` when configuring integrations.
 
-## 2. Feature & Credential Tiers
+The launcher reads [`sandboxes/shared/ssh-key.pub`](sandboxes/shared/ssh-key.pub). SSH requires the matching private key at `~/.ssh/modal-sandbox`. It does not generate a client key pair for you. To use a different pair, update the public-key file on the launch host; redeploy the hosted control plane after changing its files. You can also use `modal shell <sandbox-id>` with your authenticated Modal client.
 
-Configure credentials via `.env` (copy from [`.env.example`](.env.example)) only when opting into advanced integrations:
+Each launch creates an instance such as `dev-box-a1b2c3d4`. Use the **printed SSH alias**, including the generated suffix, rather than the requested app name. The standalone workspace is `/root/<instance-name>`; repository workspaces use `/root/<repo>`.
 
-| Feature Tier | CLI Flag | Required Credentials (`.env`) | What It Provides |
-| :--- | :--- | :--- | :--- |
-| **Standalone Sandbox** | `--name <name>` | None (`modal setup` only) | Clean, isolated workspace with SSH, bash, Git, and Python virtual environment. |
-| **Target Repository** | `-r <repo>` | `GH_TOKEN`, `GH_ORG_NAME` | Clones target GitHub repository directly into `/root/<repo>` on launch. |
-| **Web Ingress (Port 3000)** | Default | None (optional `MODAL_SANDBOX_TUNNEL_DOMAIN`) | Pre-configured Cloudflare Tunnel on port 3000. Disable via `--no-cloudflare`. |
-| **Linux VM Sandbox** | `--vm` | None | Full virtualization with custom kernel privileges, Docker daemon, and swapfile. |
-| **T3 Code Server** | `--t3` | None | Background agent harness with encrypted web pairing URL and ASCII QR code. |
-| **React Native / Android** | `--react-native` | None | Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel (port 8081). |
-| **Headless Chrome** | `--browser` | None | Pre-baked Google Chrome for Playwright, Puppeteer, and Chrome DevTools MCP servers. |
-| **Modal Inside Sandbox** | `--modal` | `MODAL_TOKENS` | Virtual environment pre-installed with Modal SDK, configured with multi-account profiles (`~/.modal.toml`) from `.env`. |
+Cloudflare application ingress requires `CLOUDFLARE_TUNNEL_TOKEN` and a tunnel route configured for port 3000. Without a token, startup skips the tunnel. `MODAL_SANDBOX_TUNNEL_DOMAIN` controls the displayed hostname; it does not provision DNS or a tunnel. T3 Code has a separate Modal HTTPS endpoint.
 
----
+See [setup](docs/getting-started/prerequisites.md), [quickstart](docs/getting-started/quickstart.md), and the [CLI reference](docs/guides/cli.md).
 
-## 3. CLI Usage (`modal-sandbox`)
-
-The **Modal Sandbox CLI** provides full control over container and VM provisioning:
+## Snapshots
 
 ```bash
-# Standalone development box:
-modal-sandbox --name dev-box
-
-# Repository sandbox with shallow clone:
-modal-sandbox -r my-repo
-
-# Full clone with complete git history on custom branch:
-modal-sandbox -r my-repo -b feature-branch --full-clone
-
-# Full Linux VM with Docker daemon:
-modal-sandbox -r my-repo --vm
-
-# Sandbox with complete AI developer tooling:
-modal-sandbox -r my-repo --t3 --browser
+modal-sandbox --snapshot <sandbox-id> --snapshot-ttl 30 --terminate
+modal-sandbox --from-snapshot <image-id> --name resumed-box
 ```
 
-### CLI Options Reference
+Snapshots preserve files, including any credentials written to the filesystem. Treat them as sensitive. Resumption skips repository cloning and package installation, so an older snapshot does not automatically acquire new dependencies. See [snapshots](docs/architecture/snapshots.md) and [secrets](docs/architecture/secrets.md).
 
-| Flag | Description | Default |
-| :--- | :--- | :--- |
-| `-n, --name` | Instance and Modal App name (required for standalone runs) | None |
-| `-r, --repo` | Target GitHub repository (`<owner>/<repo>` or shorthand `<repo>`) | None |
-| `-b, --github-branch` | Git branch to checkout | `main` |
-| `--full-clone` | Fetch complete commit history (default is shallow depth 50) | `False` |
-| `--vm` | Provision a Linux VM Sandbox with Docker daemon instead of standard container | `False` |
-| `--memory <GB>` | (Deprecated) Configures swapfile allocation (2 × N GB) for VM sandboxes | `1` |
-| `--testing` | Use testing mode. The `${GH_ORG_NAME}/software-factory` baseline keeps its repository name. Other targets receive a `test-` prefix if needed. | `False` |
-| `--t3` | Launch T3 Code server with pairing token and web tunnel | `False` |
-| `--browser` | Pre-bake headless Google Chrome for browser MCP tooling | `False` |
-| `--react-native` | Install Android SDK/NDK toolchain and Metro tunnel | `False` |
-| `--modal` | Provision Modal SDK and multi-account client credentials inside sandbox | `False` |
-| `--profile <name>` | Modal workspace profile to launch in and set as active in sandbox | None |
-| `--no-cloudflare` | Disable default Cloudflare Tunnel ingress on port 3000 | `False` |
-| `--no-ssh-config` | Do not automatically append SSH connection details to `~/.ssh/config` | `False` |
-| `--sops` | Retain Age private key in `~/.config/sops` for debugging | `False` |
-| `--remote` | Delegate sandbox execution to the hosted Modal control plane function | `False` |
+## Hosted sandbox control plane
 
----
-
-## 4. Filesystem Snapshots
-
-Capture copy-on-write root filesystem images of running sandboxes for near-instant cold starts:
+Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in the factory environment, then deploy from a clean checkout:
 
 ```bash
-# Capture snapshot from an active sandbox (retains for 30 days by default):
-modal-sandbox --snapshot <sandbox-id> [--snapshot-ttl 30] [--terminate]
-
-# Resume/launch directly from a snapshot image:
-modal-sandbox --from-snapshot <image-id> --name resumed-app [--vm]
-```
-
----
-
-## 5. Access & Ingress
-
-- **SSH**: Uses tracked public key [`shared/ssh-key.pub`](shared/ssh-key.pub) (overridable via `SSH_AUTHORIZED_KEY` in `.env`) and private key `~/.ssh/modal-sandbox`. On launch, connection details are automatically appended to `~/.ssh/config` (skip with `--no-ssh-config`):
-  ```bash
-  ssh <instance_name>
-  # Or with explicit port/key:
-  ssh -i ~/.ssh/modal-sandbox -p <port> root@<host>
-  # Or via Modal CLI:
-  modal shell <sandbox-id>
-  ```
-- **Web Ingress (Port 3000)**: Pre-configured Cloudflare Tunnel routes external HTTPS traffic (customizable via `MODAL_SANDBOX_TUNNEL_DOMAIN`) to container `localhost:3000`.
-- **T3 Code Server**: Pairing URL and ASCII QR code printed on launch when `--t3` is passed.
-
----
-
-## 6. Hosted Control Plane & Web Dashboard
-
-The control plane can run serverlessly in the cloud on Modal:
-
-```bash
-# Deploy control plane to Modal Cloud (requires WEB_UI_USERNAME and WEB_UI_PASSWORD in .env):
 modal deploy sandboxes/sandbox/function.py
-
-# Interactive local development serve mode:
-modal serve sandboxes/sandbox/function.py
 ```
 
-- **Web Dashboard**: Access `GET /` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) to inspect active sandboxes across workspace profiles, launch fresh repository or standalone sandboxes, capture snapshots, and resume from snapshot images.
-- **Web REST API**: Authenticated via HTTP Basic Authentication (`POST /api/sandboxes`, `POST /api/snapshots/{image_id}/launch`, `POST /api/sandboxes/{sandbox_id}/terminate`, `POST /api/sandboxes/{sandbox_id}/snapshot`).
-- **Headless API**: Access `POST /launch` and `POST /snapshot` with HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`).
+The dashboard can launch, list, terminate, snapshot, and resume sandboxes across configured profiles. The CLI can use it through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md).
 
----
+## Persistence and applications
 
-## Monorepo Subsystems
-
-Software Factory is organized into three cohesive subsystems:
-
-1. **`sandboxes/` (Execution Plane - Python 3.12+)**:
-   - Modal cloud execution environment orchestration (`modal-sandbox`).
-   - Ephemeral container and VM development environments with SSH, Cloudflare ingress, and AI agent harnesses.
-   - Database, S3, and app-scaffolding CLI utilities (`create-db`, `create-s3`, `create-app`).
-   - Automated infrastructure deployment tooling (`modal-sandbox infra deploy` / `deploy-infra`).
-
-2. **`resource-plane/` (Resource Plane - TypeScript & Docker)**:
-   - Developer-focused persistence and control plane console (Next.js 16 App Router, React 19).
-   - Docker-based PostgreSQL 16 container with per-database Resource Roles and TLS Root CA generation.
-   - S3-compatible object storage backed by SeaweedFS with per-bucket IAM credentials.
-   - Model Context Protocol (MCP) server suite (`POST /api/mcp`) for AI coding agents.
-   - Turnkey local Docker compose mode (`docker compose up`) and production VPS deployment (`./deploy.sh`).
-
-3. **`app-template/` (App Template - Next.js 16 & Expo React Native)**:
-   - Canonical starter monorepo blueprint (`apps/web`, optional `apps/mobile`, `@repo/theme`, `@repo/types`, Drizzle ORM, Better Auth, and allowlisted agent skills).
-   - Scaffold locally or inside any sandbox via `create-app my-app`, or provision GitHub + Resource Plane DB + `env-store` + T3 sandbox in one shot via `create-app my-app --cloud`.
-
-### Deploying the Resource Plane to a Linux VPS
-
-Deploy the complete persistent database and storage plane to your target VPS with a single command:
+Run VPS deployment commands from the host with its explicit `RESOURCE_PLANE_SSH_KEY`:
 
 ```bash
-# Set your VPS SSH details in .env:
-# RESOURCE_PLANE_SSH_HOST=203.0.113.10
-# RESOURCE_PLANE_SSH_USER=root
-# RESOURCE_PLANE_SSH_KEY=~/.ssh/id_ed25519
-
-# Deploy automatically:
+modal-sandbox infra deploy --check-only
 modal-sandbox infra deploy
+modal-sandbox infra caddy --bootstrap --domain resources.example.com
+
+create-db app-db --write-env
+create-s3 app-assets --write-env
+create-app my-app --cloud
 ```
 
----
+Use [Resource Plane deployment](docs/guides/resource-plane-deployment.md) for SSH, local development, Caddy, and backups. Use [application creation and deployment](docs/guides/applications.md) for template options, cloud prerequisites, wildcard HTTPS, redeployment, and teardown.
 
-## 7. Verification & Automated Tests
+Other installed commands include `deploy-infra`, `setup-caddy`, `push-repo-env`, `pull-repo-env`, and `deploy-app`. The [CLI reference](docs/guides/cli.md) describes their options.
 
-All automated tests run hermetically:
+## Verification and documentation
 
 ```bash
-# Verify repository standards and Universal File Line Budget (<= 500 lines):
-pytest sandboxes/tests/test_standards.py
-
-# Run complete hermetic test suite:
 pytest
-```
-
----
-
-## 8. Documentation Website
-
-The documentation website is built with [Zensical](https://zensical.org/) (the high-performance Rust successor to Material for MkDocs) with full backward compatibility for `mkdocs.yml`:
-
-```bash
-# Install documentation dependencies
-pip install -e ".[docs]"
-
-# Live development server with instant differential reload
-zensical serve
-
-# Build static HTML site
 zensical build --strict
+zensical serve
 ```
 
----
+For a fresh Software Factory repository sandbox with Modal tooling enabled, startup installs `requirements.txt`, including documentation dependencies. `--modal` requires valid `MODAL_TOKENS`. Existing or resumed sandboxes can install the current requirements manually.
 
-## 9. Contributing & Community
-
-We welcome contributions! Please review our community guides before submitting pull requests:
-
-- [Contributing Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Architecture Decision Records (ADRs)](docs/adr/)
+The [documentation homepage](docs/index.md) links the guides and architecture references. [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md), [code of conduct](CODE_OF_CONDUCT.md), and [ADRs](docs/adr/index.md) describe project practices and decision history.

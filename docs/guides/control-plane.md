@@ -1,210 +1,75 @@
-# Hosted Control Plane & Web Dashboard
+# Hosted Sandbox Control Plane
 
-Modal Sandboxes includes a serverless web dashboard and REST API implemented using FastAPI and hosted directly on Modal (`sandboxes/sandbox/function.py`).
+The sandbox control plane is a FastAPI dashboard and REST API hosted on Modal by `sandboxes/sandbox/function.py`. It launches development sandboxes through the same launcher used by the local CLI. It is separate from the Resource Plane persistence console.
 
-## Deploying the Control Plane
+## Configuration and deployment
 
-### 1. Requirements in `.env`
-
-The control plane reads configuration from process environment variables and falls back to your local `.env` file (templated in [`.env.example`](https://github.com/sFactory0/software-factory/blob/main/.env.example) at repository root; see the [Environment Variables Reference](../reference/environment.md)).
-
-#### A. Mandatory Control Plane Authentication
-Required by `resolve_and_validate_web_credentials()` at deploy/serve time. A `RuntimeError` is raised if either variable is missing:
+Install the factory requirements, authenticate the launch host with Modal, and set both required dashboard credentials in the factory root `.env` or process environment:
 
 ```env
 WEB_UI_USERNAME=admin
-WEB_UI_PASSWORD=secure-password-here
+WEB_UI_PASSWORD=replace-with-a-strong-password
 ```
 
-#### B. Repository Sandbox Provisioning Credentials
-Validated by `validate_deployment_credentials()` during deployment. While standalone sandboxes can launch without GitHub credentials, provisioning repository-backed sandboxes (`POST /api/sandboxes` or `POST /launch`) requires repository access:
+There is no implicit dashboard username. Missing credentials stop deploy/serve. Repository launches also require `GH_TOKEN`, with `GH_ORG_NAME` for shorthand names. Deployment warns about missing GitHub or Age credentials; `MODAL_ENFORCE_AUTH=1` makes missing GitHub access a deployment error. Standalone launches do not require GitHub access.
 
-```env
-# GitHub Personal Access Token with repo read/clone permissions
-GH_TOKEN=ghp_your_github_token_here
+Configure provider tokens, `MODAL_TOKENS`, vault decryption, and ingress credentials for the capabilities you intend to expose. `--modal` inside child sandboxes requires valid `MODAL_TOKENS`. The launcher's SSH public key comes from the staged `shared/ssh-key.pub`; operators must provide users with its matching private key separately. See [setup](../getting-started/prerequisites.md) and [environment variables](../reference/environment.md).
 
-# Default GitHub organization for shorthand repository targets (-r <repo>)
-GH_ORG_NAME=sFactory0
-```
-
-#### C. Optional Tooling, Ingress & Decryption Secrets
-If defined in `.env` or set in host `os.environ`, these secrets are automatically bundled and forwarded into child sandboxes:
-
-```env
-# Ingress and SSH
-CLOUDFLARE_TUNNEL_TOKEN=
-MODAL_SANDBOX_TUNNEL_DOMAIN=
-SSH_AUTHORIZED_KEY=
-
-# AI Coding Providers
-OPENCODE_GO_API_KEY=
-ANTIGRAVITY_CLIENT_ID=
-ANTIGRAVITY_CLIENT_SECRET=
-ANTIGRAVITY_TOKENS='[]'
-
-# SOPS Decryption for Target Repository Secrets (ADR 0027)
-AGE_PRIVATE_KEY=
-```
-
-#### D. Clean Working Tree Enforcement (ADR 0069)
-To prevent deploying uncommitted or inconsistent local modifications to production, `validate_clean_working_tree()` verifies that the host Git working tree has no uncommitted changes before deployment. If uncommitted changes exist, deployment halts immediately with a `RuntimeError`.
-
-To bypass this check during rapid local development:
-```bash
-ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py
-```
-
----
-
-### 2. Secret Resolution & Injection Architecture
-
-Secrets are collected on the host machine at deployment time, encrypted into a Modal Secret object, and injected as process environment variables inside the serverless container.
-
-```mermaid
-flowchart TD
-    subgraph Host ["Local Workstation / CI/CD"]
-        DotEnv[".env File"] --> Collector["collect_control_plane_secrets()"]
-        HostEnv["Host os.environ"] --> Collector
-        GitProv["Host Git Provenance"] --> Collector
-        Collector --> ModalSecret["modal.Secret.from_dict(...)"]
-        CLI["modal serve / deploy sandboxes/sandbox/function.py"] --> ModalSecret
-    end
-
-    subgraph ModalCloud ["Modal Cloud Platform"]
-        ModalSecret --> EncryptedVault["Modal Secret Vault"]
-        EncryptedVault --> ContainerEnv["Container Process Environment (os.environ)"]
-    end
-
-    subgraph ControlPlaneContainer ["Control Plane Container (FastAPI)"]
-        ContainerEnv --> BasicAuth["check_authentication()<br/>WEB_UI_USERNAME / PASSWORD"]
-        ContainerEnv --> VersionRoute["api_get_version()<br/>SOFTWARE_FACTORY_COMMIT"]
-        ContainerEnv --> Launcher["launch_sandbox()<br/>GH_TOKEN, AGE_PRIVATE_KEY, etc."]
-    end
-
-    subgraph ChildSandbox ["Spawned Child Sandboxes"]
-        Launcher --> ChildSecret["modal.Secret.from_dict()"]
-        ChildSecret --> ChildEnv["In-Sandbox Environment"]
-    end
-
-    BasicAuth --> Endpoints["/ /health /api/* /launch /snapshot"]
-```
-
-1. **Host-Side Collection (`modal.is_local() == True`)**:
-   - `resolve_and_validate_web_credentials()` inspects `os.environ`, `.env`, `.secrets/.env`, and `secrets/.env`.
-   - `validate_clean_working_tree()` verifies that no uncommitted Git changes exist (unless `ALLOW_DIRTY_DEPLOY=1`).
-   - `collect_control_plane_secrets()` parses `.env`, captures Git provenance metadata via `resolve_host_software_factory_provenance()`, and merges host environment overrides.
-   - Secrets are encapsulated into `modal.Secret.from_dict(...)`.
-2. **Modal Cloud Injection (`modal.is_local() == False`)**:
-   - Modal decrypts the secret bundle and populates `os.environ` inside the container.
-3. **Child Sandbox Propagation**:
-   - When `launch_sandbox()` is invoked via the Web UI or REST API, `SandboxLauncher` retrieves `GH_TOKEN`, `AGE_PRIVATE_KEY`, and ingress tokens directly from container `os.environ` and injects them into child sandboxes via `modal.Secret.from_dict()`.
-
-> For technical details regarding KMS envelope encryption, worker RAM decryption, secret lifetimes, and filesystem snapshot guarantees, see the [Secrets & Security Architecture](../architecture/secrets.md). For resolution precedence and host environment whitelisting, refer to the [Environment Variables Reference](../reference/environment.md).
-
----
-
-### 3. Operational Modes: Serve vs. Deploy
-
-The control plane can run in two distinct operational modes:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Dev as Developer / CI
-    participant CLI as Modal CLI
-    participant Script as sandboxes/sandbox/function.py
-    participant Platform as Modal Cloud
-    participant App as Control Plane Container
-
-    Dev->>CLI: modal serve OR modal deploy sandboxes/sandbox/function.py
-    CLI->>Script: Import sandboxes/sandbox/function.py (modal.is_local() == True)
-    Script->>Script: resolve_and_validate_web_credentials() (.env / os.environ)
-    alt Missing WEB_UI_USERNAME or WEB_UI_PASSWORD
-        Script-->>Dev: Abort with RuntimeError (Missing credentials)
-    end
-    Script->>Script: validate_deployment_credentials() (GH_TOKEN warning/enforce)
-    Script->>Script: validate_clean_working_tree() (clean git tree check)
-    alt Uncommitted local edits detected
-        Script-->>Dev: Abort with RuntimeError (Clean tree required)
-    end
-    Script->>Script: collect_control_plane_secrets()
-    Script-->>CLI: modal.App(secrets=[modal.Secret.from_dict(...)])
-    CLI->>Platform: Upload app definition, image build, and encrypted secrets
-
-    alt modal serve
-        Platform-->>CLI: Development URL (*-dev.modal.run) + Start file watcher
-        CLI-->>Dev: Live logs streamed to console (hot-reloads on edits)
-    else modal deploy
-        Platform-->>CLI: Permanent URL (*.modal.run) published
-        CLI-->>Dev: Deployed successfully (persistent, scales to zero)
-    end
-
-    Dev->>App: GET / or POST /api/sandboxes (Basic Auth)
-    App->>App: check_authentication(os.environ)
-    App-->>Dev: 200 OK / Dashboard HTML / JSON
-```
-
-| Feature / Behavior | Local Development (`modal serve`) | Cloud Production (`modal deploy`) |
-| :--- | :--- | :--- |
-| **Command** | `modal serve sandboxes/sandbox/function.py` | `modal deploy sandboxes/sandbox/function.py` |
-| **Lifecycle** | Ephemeral development session. Automatically terminated on Ctrl+C. | Persistent serverless deployment. Runs continuously in Modal Cloud. |
-| **URL Pattern** | Ephemeral dev URL (e.g. `https://<org>--sandbox-control-plane-fastapi-app-dev.modal.run`). | Permanent production URL (e.g. `https://<org>--sandbox-control-plane-fastapi-app.modal.run`). |
-| **Secret Refresh** | Re-reads `.env` on every hot-reload and local script change. | Secret bundle is frozen at deployment time; `.env` changes require re-running `modal deploy`. |
-| **Log Output** | Interactive streaming logs directly in local terminal. | Persistent log aggregation in Modal Cloud Dashboard and `modal app logs`. |
-| **Scaling** | Active only while terminal process runs. | Automatically scales to zero when idle (`min_containers=0`) and warms up on demand. |
-
-#### Local Development (Serve Mode)
-Run live with hot-reloading for local testing and debugging:
-
-```bash
-modal serve sandboxes/sandbox/function.py
-```
-
-#### Deploy to Modal Cloud (Production Mode)
-Deploy as a persistent, serverless FastAPI endpoint:
+Deploy from a clean checkout:
 
 ```bash
 modal deploy sandboxes/sandbox/function.py
 ```
 
-Modal will output the permanent public URL of your control plane function (e.g., `https://<org>--sandbox-control-plane-fastapi-app.modal.run`).
+For development with local edits:
 
----
+```bash
+ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py
+```
 
-## Web Dashboard (`GET /`)
+The deployed control plane receives captured factory configuration and Git provenance. Edit `.env` and redeploy to update production secrets or staged files; modifying a local checkout does not update an already deployed app. The dashboard shows the deployed commit, and `GET /api/version` returns provenance.
 
-Access `GET /` in any modern web browser. You will be prompted for HTTP Basic Authentication (`WEB_UI_USERNAME` and `WEB_UI_PASSWORD`).
+## Launch through the dashboard or CLI
 
-Key Dashboard features:
-- **Deployment Git Provenance**: View the deployed Git commit hash in the top navigation header (`git: <short-hash>`) to instantly verify which codebase version is running in Modal Cloud (see [ADR 0069](../adr/0069-control-plane-deployment-provenance-and-clean-tree-enforcement.md)).
-- **Active Sandbox Discovery**: View all running and paused sandboxes across all registered Modal apps (see [ADR 0047](../adr/0047-cross-app-sandbox-discovery-in-control-plane-web-ui.md)).
-- **One-Click Launch**: Launch fresh standalone sandboxes or clone target GitHub repositories directly from the web interface.
-- **Snapshot Registry**: Inspect captured filesystem snapshots and launch new sandboxes from existing snapshot images.
-- **Instance Management**: Terminate running sandboxes and view connection parameters.
+The dashboard can launch standalone or repository sandboxes, inspect running instances across apps/profiles, terminate instances, capture filesystem snapshots, and resume snapshots.
 
----
+Each instance has a generated suffix, such as `dev-box-a1b2c3d4`, even when its Modal App is named `dev-box`. Use the displayed SSH host, port, and generated alias. Dashboard launch does not write to the browser user's local `~/.ssh/config`. The remote CLI can register those details locally:
 
-## REST API Reference
+```bash
+modal-sandbox --remote --endpoint-url https://<control-plane-url> \
+  --name dev-box --no-cloudflare
+```
 
-The control plane exposes programmatic REST endpoints for automation:
+Set `MODAL_SANDBOX_ENDPOINT_URL` to omit `--endpoint-url`. The remote CLI authenticates with the same `WEB_UI_USERNAME` / `WEB_UI_PASSWORD` as the dashboard.
 
-### Authentication
-- All control plane endpoints (both browser UI routes under `/`, `/api/` and headless automation endpoints `/launch`, `/snapshot`) use standard HTTP Basic Authentication with `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`:
-  `Authorization: Basic <base64(WEB_UI_USERNAME:WEB_UI_PASSWORD)>`
-- CLI commands running with `--remote` automatically authenticate using `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`.
+Cloudflare application ingress requires a configured tunnel token. The enabled flag or displayed hostname alone does not mean that a tunnel was initialized. T3 has its own Modal HTTPS endpoint; see [ingress](../architecture/ingress.md).
 
-### Key Endpoints
+## API routes
 
-| Method | Endpoint | Auth | Description |
+| Method | Route | Authentication | Purpose |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | Basic | Interactive web management dashboard. |
-| `GET` | `/health` | None | Service liveness probe. |
-| `GET` | `/api/version` | Basic | Get control plane deployment Git provenance metadata. |
-| `GET` | `/api/profiles` | Basic | List configured Modal workspace profiles. |
-| `GET` | `/api/sandboxes` | Basic | List active sandboxes across Modal applications. |
-| `POST` | `/api/sandboxes` | Basic | Launch a new sandbox with custom flags and repository targets. |
-| `POST` | `/api/sandboxes/{id}/terminate` | Basic | Terminate an active sandbox. |
-| `POST` | `/api/sandboxes/{id}/snapshot` | Basic | Capture a filesystem snapshot of a sandbox. |
-| `POST` | `/api/snapshots/{image_id}/launch` | Basic | Launch a fresh sandbox from a snapshot image. |
-| `POST` | `/launch` | Basic | Headless sandbox provisioning endpoint. |
-| `POST` | `/snapshot` | Basic | Headless snapshot capture endpoint. |
+| `GET` | `/` | Basic | Dashboard |
+| `GET` | `/health` | None | Control plane liveness |
+| `GET` | `/api/version` | Basic | Deployed factory provenance |
+| `GET` | `/api/profiles` | Basic | Modal workspace profiles |
+| `GET` | `/api/sandboxes` | Basic | Active sandbox discovery |
+| `POST` | `/api/sandboxes` | Basic | Launch with dashboard payload (`mode`, repo/name, options) |
+| `POST` | `/api/sandboxes/stream` | Basic | Launch with SSE progress events (`log`, `done`, or `error`) |
+| `POST` | `/api/sandboxes/{id}/terminate` | Basic | Terminate an instance |
+| `POST` | `/api/sandboxes/{id}/snapshot` | Basic | Capture snapshot with name, TTL, timeout, and optional termination |
+| `GET` | `/api/snapshots` | Basic | List snapshot registry records |
+| `DELETE` | `/api/snapshots/{image_id}` | Basic | Delete registry record; leaves the underlying image intact |
+| `POST` | `/api/snapshots/{image_id}/launch` | Basic | Restore an image with launch options |
+| `POST` | `/launch` | Basic | Headless `LaunchRequest` provisioning |
+| `POST` | `/snapshot` | Basic | Headless snapshot capture |
+| `GET` | `/api/codex/profiles` | Scoped bearer credential | Codex login pool status |
+
+For headless calls, `/launch` accepts `repo` or standalone `name`, plus the launch fields defined in `sandboxes/sandbox/core.py`. The dashboard `/api/sandboxes` payload adds a `mode` (`repo` or `standalone`) and supports its own subset of launch fields. `/snapshot` takes `sandbox_id`, optional `ttl_days` (30), `timeout` (180 seconds), and `terminate` (false).
+
+The source request models and FastAPI `/openapi.json` schema provide field-level details. Do not interchange Resource Plane MCP bearer tokens with sandbox dashboard Basic credentials or the scoped Codex status credential.
+
+## Credentials, snapshots, and service lifecycle
+
+The control plane reads the factory root `.env`, resolves authentication and provenance, and fills selected missing values from the host environment. Child sandbox propagation has a separate path; it may include factory secrets even for standalone launches. See [resolution rules](../reference/environment.md#resolution-and-propagation).
+
+`modal serve` is tied to the development session. `modal deploy` publishes a persistent app that can scale to zero; launched sandboxes have their own lifecycle. Filesystem snapshots retain files written by startup or tools, including credential files. Review [secrets](../architecture/secrets.md) and [snapshots](../architecture/snapshots.md) before sharing or retaining them.

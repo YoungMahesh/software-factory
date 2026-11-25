@@ -1,81 +1,58 @@
 # Resource Plane Architecture
 
-The **Resource Plane** (`resource-plane/`) is the stateful persistence and control plane subsystem of Software Factory. Hosted on a dedicated Linux VPS or local Docker environment, it provides isolated PostgreSQL databases, SeaweedFS S3 object storage buckets, root TLS certificate generation, an interactive web dashboard, and Model Context Protocol (MCP) tool endpoints for AI coding agents.
+The Resource Plane provides persistent PostgreSQL databases and S3 buckets for applications developed in Modal sandboxes or on workstations. It runs as a Next.js 16 / React 19 console with a management MCP API, plus PostgreSQL 16 and SeaweedFS containers.
 
----
-
-## Subsystem Architecture
+## Topology
 
 ```mermaid
-flowchart TD
-    subgraph ExecutionPlane["Execution Plane (Modal Sandboxes)"]
-        Sandbox["modal.Sandbox Containers / VMs"]
-        RPClient["ResourcePlaneClient<br/>(sandbox/db_host_client.py)"]
-        CreateDB["create-db CLI"]
-        CreateS3["create-s3 CLI"]
-    end
-
-    subgraph ResourcePlaneVPS["Resource Plane Host (Linux VPS / Docker Host)"]
-        WebConsole["Next.js 16 Web Console & MCP Server<br/>(:3000 /api/mcp)"]
-        Postgres["PostgreSQL 16 Cluster<br/>(:54320 with TLS)"]
-        SeaweedFS["SeaweedFS S3 Engine<br/>(:8333 S3 API, :8888 Filer)"]
-        CertAuthority["Root CA Certificate Authority<br/>(certs.ts -> /api/ca.crt)"]
-        Drizzle["Drizzle ORM & System DB<br/>(Metadata: projects, databases, buckets)"]
-    end
-
-    CreateDB --> RPClient
-    CreateS3 --> RPClient
-    RPClient -- "JSON-RPC 2.0 (POST /api/mcp)" --> WebConsole
-    RPClient -- "Fetch Root CA (GET /api/ca.crt)" --> WebConsole
-    Sandbox -- "TLS Encrypted Connection (:54320)" --> Postgres
-    Sandbox -- "S3 API Requests (:8333)" --> SeaweedFS
-
-    WebConsole --> Drizzle
-    WebConsole --> CertAuthority
-    WebConsole --> Postgres
-    WebConsole --> SeaweedFS
+flowchart LR
+    Browser["Browser"] -->|"HTTPS + Basic auth"| Caddy["/opt/caddy"]
+    Agent["Factory CLI or MCP client"] -->|"HTTPS + bearer token"| Caddy
+    Caddy --> Console["db-host-web:3000"]
+    Console --> SystemDB["PostgreSQL<br/>neon_control_plane metadata"]
+    Console --> S3["SeaweedFS S3:8333"]
+    App["Application"] -->|"TLS + database role"| Postgres["PostgreSQL published port"]
+    App -->|"HTTPS + bucket credentials"| Caddy
+    Caddy --> S3
 ```
 
----
+Production runs `web`, `postgres`, and `seaweedfs` from `docker-compose.prod.yml` on the external `dbhost-network`. Caddy is a sibling stack at `/opt/caddy`; the Resource Plane defaults to `/opt/resource-plane`. Local development runs the Next.js process on the host and lets its bootstrapper manage service containers through the Docker socket.
 
-## Core Components
+The default `docker-compose.yml` contains only PostgreSQL and SeaweedFS. It does not launch the console or perform the full production preflight. Follow [deployment](../guides/resource-plane-deployment.md) for complete local or production setup.
 
-### 1. Web Console & MCP Server (`apps/web`)
-A Next.js 16 App Router (React 19, Tailwind CSS) web application serving two roles:
-- **Interactive Persistence Console (`GET /`)**: Protected by HTTP Basic Authentication (`BASIC_AUTH_USER` / `BASIC_AUTH_PASS`), enabling developers to view projects, inspect provisioned databases and S3 buckets, run SQL scratchpad queries, browse object buckets, and download the root CA certificate.
-- **Model Context Protocol (MCP) Server (`POST /api/mcp`)**: A JSON-RPC 2.0 endpoint protected by `RESOURCE_PLANE_ADMIN_TOKEN` (or legacy `DB_HOST_ADMIN_TOKEN`). Exposes automated tool primitives for AI agents and CLI clients:
-  - `ensure_project`: Creates or resolves tenant project scopes.
-  - `provision_database`: Allocates isolated PostgreSQL databases and role credentials.
-  - `provision_bucket`: Allocates SeaweedFS S3 buckets with dedicated IAM credentials.
-  - `list_projects`, `list_databases`, `list_buckets`: Read-only introspection tools.
+## Authentication and API
 
-### 2. PostgreSQL 16 & Resource Role Isolation
-Relational database storage is powered by official PostgreSQL 16 with cryptographic and permission boundaries:
-- **Per-Database Role Isolation**: Every provisioned database receives a dedicated unprivileged PostgreSQL user role (`role_<project>_<dbname>`) restricted exclusively to its assigned database.
-- **Encrypted In-Transit (TLS)**: Connections on public port `54320` require SSL/TLS (`sslmode=verify-ca` or `verify-full`). Server certificates are dynamically generated and signed by the internal Root CA.
-- **System Metadata Separation**: Operational metadata (projects, API tokens, provisioned entities) is housed in an internal `system_db` separate from tenant databases.
+The Resource Plane console uses `BASIC_AUTH_USERNAME` / `BASIC_AUTH_PASSWORD`, falling back to `CONTROL_PLANE_USERNAME` / `CONTROL_PLANE_PASSWORD`. These are separate from the hosted sandbox dashboard's `WEB_UI_*` credentials. Production setup generates a dashboard password; local development must explicitly configure one to require Basic authentication.
 
-### 3. SeaweedFS S3 Object Storage
-High-performance distributed object storage compatible with the AWS S3 API:
-- **Dedicated Bucket IAM**: Each bucket provisioned via MCP receives unique Access Key and Secret Key pairs, preventing cross-bucket access.
-- **Standard S3 Compatibility**: Seamlessly integrates with AWS SDKs (Python `boto3`, Node `@aws-sdk/client-s3`, AWS CLI) by specifying endpoint `https://<resource-plane-domain>:8333` (or port-forwarded/proxied hostname).
-- **Internal Filer**: SeaweedFS master and volume servers manage storage blocks while isolating internal administrative filer ports (`8888`) from public access.
+`POST /api/mcp` and the compatibility `POST /mcp` route use the server's `ADMIN_TOKEN` (fallback `NEON_ADMIN_TOKEN`). Factory clients supply that value through `RESOURCE_PLANE_ADMIN_TOKEN` or the legacy `DB_HOST_ADMIN_TOKEN`.
 
-### 4. Root CA Certificate Authority
-The Resource Plane includes a self-contained Certificate Authority service (`services/certs.ts`):
-- Generates a local root private key and self-signed Root CA certificate (`ca.crt`).
-- Issues TLS server certificates for the PostgreSQL listener.
-- Publishes the public root certificate at unauthenticated endpoint `GET /api/ca.crt`, allowing `ResourcePlaneClient` (`sandbox/db_host_client.py`) to automatically download and cache it locally (`~/.config/resource-plane/ca.crt`).
+The server in `apps/web/mcp/server.ts` registers these eight tools:
 
----
+| Tool | Purpose |
+| :--- | :--- |
+| `list_projects` | List project scopes |
+| `create_project` | Create a project |
+| `create_database` | Create a database with a dedicated role |
+| `list_databases` | List a project's databases |
+| `get_database_credentials` | Retrieve a database connection and credentials |
+| `create_object_storage` | Create an S3 bucket with dedicated credentials |
+| `list_object_storages` | List a project's buckets |
+| `get_storage_credentials` | Retrieve bucket access and endpoint details |
 
-## Security & Transport Boundaries
+The HTTP route handles JSON-RPC POST requests; it does not expose a GET SSE stream. A separate stdio entrypoint is available through `pnpm --filter @repo/web mcp`. Public `GET /api/ca.crt` serves the PostgreSQL root CA; `GET /api/health` reports PostgreSQL and SeaweedFS status without Basic authentication.
 
-Software Factory enforces a strict separation between deployment and runtime transports (see [ADR 0081](../adr/0081-monorepo-architecture-for-execution-and-resource-planes.md)):
+## Database and storage isolation
 
-| Access Boundary | Transport & Protocol | Credentials Used | Isolation Guarantee |
-| :--- | :--- | :--- | :--- |
-| **Infrastructure Deployment** | SSH (`port 22`) via native `ssh` / `tar` | Host SSH private key (`RESOURCE_PLANE_SSH_KEY`) | Executed strictly from host developer workstation or deployment CI; SSH keys are **never** bundled or injected into Modal Sandboxes. |
-| **Control Plane API (MCP)** | HTTPS (`port 3000`, `POST /api/mcp`) | Bearer token (`RESOURCE_PLANE_ADMIN_TOKEN`) | Ephemeral sandboxes and CLI utilities interact exclusively over HTTP JSON-RPC; no filesystem or container access to the host VPS. |
-| **Database Connections** | TLS TCP (`port 54320`) | Discrete DB Role credentials + cached `ca.crt` | Each sandbox connects only to its assigned database with scoped privileges. |
-| **Object Storage Access** | S3 HTTP/HTTPS (`port 8333`) | Discrete S3 IAM Access/Secret Keys | Access is scoped strictly to the target bucket. |
+The System Database is `neon_control_plane`. Project databases have individual roles and passwords, with names generated from the database name and a random suffix. Public PostgreSQL access uses TLS and client connection strings with `sslmode=verify-full` and a root CA certificate. Configure `PUBLIC_POSTGRES_HOST` to match the hostname or IP used by clients.
+
+SeaweedFS provides per-bucket IAM access and secret keys. Port 8333 serves the S3 HTTP API; public HTTPS requires a configured proxy hostname. Its internal filer port 8888 is not published by the Compose stacks.
+
+## Ports and storage
+
+Fresh production setup writes `POSTGRES_PORT=5432`, `WEB_PORT=3000`, and `S3_PORT=8333` to its `.env`. Existing installations can use other values, including PostgreSQL port 54320. Read the actual Compose binding and generated connection details rather than assuming one external PostgreSQL port. The bare production Compose file's public-port metadata fallback differs from its binding fallback; running `deploy.sh` produces explicit settings for both.
+
+Production data lives under `/opt/resource-plane/.data/`, including `postgres/`, `seaweedfs/`, and `certs/`. Host development defaults to `.data/` relative to the web process working directory (`resource-plane/apps/web/`). Caddy certificates and configuration have their own volumes and backup lifecycle.
+
+## Deployment boundary
+
+Host deployment commands use `RESOURCE_PLANE_SSH_KEY` over SSH. Runtime clients use MCP bearer tokens, database roles, and bucket keys. Keep deployment keys on the deployment host; avoid mapping them into application repositories through `env-store`. See [secrets](secrets.md) for actual injection and filesystem behavior.

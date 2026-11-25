@@ -1,73 +1,52 @@
-# Filesystem Snapshots & Persistence
+# Filesystem Snapshots and Persistence
 
-Modal Sandboxes provides instant filesystem snapshotting and resumption powered by Modal's copy-on-write image infrastructure (see [ADR 0024](../adr/0024-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0024](../adr/0045-sandbox-runner-web-ui-and-snapshot-registry.md)).
+The factory captures sandbox root filesystem state as a Modal Image and can launch another sandbox from that image. This preserves files and installed packages, while startup restarts services; it does not resume running processes. See the [Modal snapshot guide](https://modal.com/docs/guide/sandbox-snapshots) for platform behavior.
 
-## How Snapshots Work
-
-When you capture a snapshot of a running sandbox:
-1. Modal commits the modified container filesystem into a persistent `modal.Image` identifier (`im-xxxxxxxx`).
-2. The image preserves all file changes in `/root`, installed system packages, virtualenv dependencies, and agent state.
-3. The image is retained for a configurable TTL (default 30 days).
-4. You can launch a brand-new sandbox from this snapshot in seconds, picking up right where you left off.
-
-```mermaid
-sequenceDiagram
-    participant Dev as Developer / CLI
-    participant Runner as Sandbox Runner
-    participant Modal as Modal Cloud
-    participant Storage as Snapshot Registry
-
-    Dev->>Runner: modal-sandbox --snapshot sb-1234
-    Runner->>Modal: sandbox.snapshot_filesystem()
-    Modal-->>Runner: image_id (im-xxxx)
-    Runner->>Storage: Record metadata (name, time, repo)
-    Runner-->>Dev: Snapshot captured: im-xxxx
-
-    Note over Dev,Storage: Later: Resume from Snapshot
-
-    Dev->>Runner: modal-sandbox --from-snapshot im-xxxx --name resumed-box
-    Runner->>Modal: modal.Image.from_id("im-xxxx")
-    Modal-->>Runner: Instant Warm Start
-    Runner-->>Dev: Sandbox resumed: ssh resumed-box
-```
-
----
-
-## 1. Capturing a Snapshot
-
-Capture the current state of a running sandbox by ID:
+## Capture
 
 ```bash
-modal-sandbox --snapshot sb-xxxxxxxx --snapshot-ttl 30
+modal-sandbox --snapshot <sandbox-id> --snapshot-ttl 30 --snapshot-timeout 180
+
+# Terminate the source only after capture succeeds.
+modal-sandbox --snapshot <sandbox-id> --terminate
 ```
 
-To automatically shut down the sandbox after capturing the snapshot:
+The factory default retention is 30 days, and capture timeout is 180 seconds. Both values must be positive. `--snapshot-ttl`, `--snapshot-timeout`, and `--terminate` are capture-only options; do not combine capture with launch flags such as `--repo`, `--name`, or `--vm`.
+
+The snapshot module records metadata in the named Modal Dict `sandbox-snapshots`, with a local fallback at `~/.modal/sandbox-snapshots.json`. The hosted dashboard can list records, resume images, and delete registry records. Deleting a registry record does not delete the underlying image or its retained data.
+
+## Resume
 
 ```bash
-modal-sandbox --snapshot sb-xxxxxxxx --terminate
+modal-sandbox --from-snapshot <image-id> --name resumed-box
+
+# Reuse VM capabilities and T3 services when appropriate for the saved image.
+modal-sandbox --from-snapshot <image-id> --name resumed-box --vm --t3
 ```
 
----
+Use `--name` for a standalone restore or `--repo` for a repository launch, never both. The image must already contain the tools required by the selected flags; restoring does not rebuild it with new tooling layers.
 
-## 2. Resuming from a Snapshot
-
-Launch a fresh container from the captured image ID:
+Startup resolves the saved workspace markers and preserves the existing virtualenv. It skips repository cloning and package installation. Updating `requirements.txt` in the factory therefore affects fresh launches, while a resumed sandbox needs a manual install to acquire new dependencies:
 
 ```bash
-modal-sandbox --from-snapshot im-xxxxxxxx --name resumed-dev
+# Run inside the restored Software Factory checkout and its virtualenv.
+python -m pip install -r requirements.txt
 ```
 
-You can also resume a snapshot into a full Linux VM environment by adding `--vm`:
+Select service flags needed by the restored workspace and review the resulting connection details. Each new sandbox has a new generated instance name and connection alias.
 
-```bash
-modal-sandbox --from-snapshot im-xxxxxxxx --name resumed-dev --vm
-```
+## Persistent volumes
 
----
+| Data | Storage |
+| :--- | :--- |
+| T3 history, provider transcripts, and usage caches | `t3code-usage-v1` mounted at `/root/.t3-storage`; startup hydrates supported local files and runs a synchronization daemon |
+| Codex saved authentication | Assigned profile volume mounted at `/root/.codex-profile`, configured independently from T3 history |
+| Gradle cache and wrapper | `gradle-caches` at `/root/.gradle/caches` and `gradle-wrapper` at `/root/.gradle/wrapper` with `--react-native` |
 
-## 3. Persistent Volumes
+T3 persistence is enabled with `--t3` by default. Set `--t3-usage-volume <name>` to choose the history volume, or `--no-t3-persist` to disable history synchronization. This volume is not a backup of arbitrary repository files or worktrees. Preserve source changes in Git or a filesystem snapshot. Codex profile assignment has its own configuration; see [AI tooling](../guides/ai-tooling.md).
 
-In addition to filesystem snapshots, Modal Sandboxes attaches persistent Modal Volumes for data that must survive beyond container lifecycles:
+## Credential handling
 
-- **`t3code-usage-v1`**: Automatically mounted to `/root/.t3/usage` when `--t3` is passed, persisting AI agent transcript histories, analytics, and usage records.
-- **Gradle Caches**: Cached Android SDK components and build artifacts when `--react-native` is passed.
+Snapshots can retain `.env`, `.git/env-vault/`, shell exports, provider authentication files, and other credentials written to the root filesystem. Capture performs no credential sanitization. Treat snapshot access as sensitive and review [the credential lifecycle](secrets.md) before sharing images. Persistent volumes also retain their data after a sandbox terminates.
+
+Related decisions: [ADR 0024](../adr/0024-filesystem-snapshots-in-unified-sandbox-runner.md), [ADR 0048](../adr/0048-antigravity-acp-credential-preservation-in-filesystem-snapshots.md), [ADR 0069](../adr/0069-snapshot-workspace-target-persistence-and-venv-preservation.md), and [ADR 0071](../adr/0071-consolidate-filesystem-snapshot-lifecycle.md).

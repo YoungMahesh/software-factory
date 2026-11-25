@@ -1,6 +1,8 @@
 # Architectural Decision Records (ADRs)
 
-Architectural decisions documenting the evolution, design invariants, and runtime model of the Modal Cloud Sandbox Platform.
+Historical decisions documenting the evolution of Software Factory. These records describe the context and implementation at the time of each decision; an accepted historical record is not a current setup guide.
+
+For current behavior, use the [architecture overview](../architecture/overview.md), [CLI reference](../guides/cli.md), and [credential lifecycle](../architecture/secrets.md). In particular, the vault workflow is amended by [0057](0057-central-env-store-and-host-side-secret-injection.md) and [0065](0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md); retired standalone agents are covered by [0075](0075-retire-herdr-pi-opencode-agy-in-favor-of-t3.md), with the official Antigravity runtime introduced by [0076](0076-t3-code-v0-1-11-and-official-antigravity-cli-runtime.md). The monorepo and application workflow are extended by [0081](0081-monorepo-architecture-for-execution-and-resource-planes.md), [0087](0087-app-template-and-scaffolder-integration.md), and [0088](0088-wildcard-host-ingress-and-hosted-app-deployment.md).
 
 ## Decision Index
 

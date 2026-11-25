@@ -1,149 +1,57 @@
-# Secrets & Security Architecture
+# Secrets and Credential Lifecycle
 
-Modal Sandboxes enforces a defense-in-depth model for managing API keys, SSH credentials, and environment variables across local terminals, cloud control planes, and running sandboxes.
+Software Factory passes configuration through Modal Secrets and then configures tools inside the sandbox. Some of those tools require credentials on disk. Treat a running sandbox, its filesystem snapshots, and its credential volumes as sensitive environments.
 
-## Credential Tiers
+## Launch-time injection
 
-| Tier | Required Secrets | In-Sandbox Scope | Use Case |
-| :--- | :--- | :--- | :--- |
-| **Tier 0: Standalone Sandbox** | None (`modal setup` only) | No external secrets injected | Basic development, quick tests, public tools |
-| **Tier 1: Repository Clones** | `GH_TOKEN`, `GH_ORG_NAME` | Git clone and GitHub CLI access | Working on private/organization GitHub repos |
-| **Tier 2: Ingress & Cloudflare** | Optional `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel authentication | Stable custom web domains |
-| **Tier 3: AI Tooling** | `ANTIGRAVITY_TOKENS`, `OPENCODE_GO_API_KEY` | Provider API access | Running autonomous or paired coding agents |
-| **Tier 4: Encrypted Repo Secrets** | `AGE_PRIVATE_KEY` (Host-side only) | Decrypted variables in process environment | Running target applications requiring `.env` |
+The implementation is in `sandboxes/sandbox/config.py`, `sandboxes/sandbox/launcher.py`, and `sandboxes/shared/startup.sh`.
 
----
+- The hosted control plane collects the factory root `.env`, required dashboard credentials, provenance, and selected host environment fallbacks at deployment time. Changes to deployed credentials require redeployment.
+- A child launch with a factory `.env` generally passes that file through `modal.Secret.from_dotenv()`. When the file contains `CODEX_STATUS_SECRET`, the launcher builds a filtered dictionary excluding that signing key.
+- Without a factory `.env`, the launcher forwards a selected set of host environment keys. This includes GitHub, Age, Modal, ingress, provider, dashboard, and Resource Plane credentials; see [environment resolution](../reference/environment.md#resolution-and-propagation).
+- Repository secrets are fetched and decrypted from `env-store` on the launch host, then sent to the sandbox as environment values and encoded file bundles.
 
-## 1. Modal Secret Injection & Runtime Decryption
+A standalone launch requires no GitHub credentials, but it can still receive configured factory secrets through the same injection path. Standalone mode does not guarantee an empty credential environment.
 
-All runtime credentials are injected into Modal cloud containers using native Modal Secrets (`modal.Secret.from_dict()` or `modal.Secret.from_dotenv()`), eliminating plaintext files from container image filesystems (see [ADR 0053](../adr/0053-consolidate-secrets-to-single-dotenv-and-retire-legacy-staging.md)).
+Modal documents [Secrets as environment injection](https://modal.com/docs/guide/secrets). Application behavior after injection determines whether values also reach disk; this project does not promise RAM-only handling or immediate erasure from platform storage after termination.
 
-```mermaid
-flowchart TD
-    subgraph ClientHost ["Host Machine (modal CLI / Python)"]
-        Dict["Python dict: {'KEY': 'VAL'}"] --> FromDict["modal.Secret.from_dict(d)"]
-        FromDict --> AppHydration["App Serialization / RPC"]
-    end
+## Where credentials persist
 
-    subgraph ModalCloud ["Modal Cloud Platform"]
-        AppHydration -- "TLS / gRPC" --> SecretCreate["SecretCreate API"]
-        SecretCreate --> AnonSecret["Anonymous Secret (se-xxxxxx)<br/>Encrypted with Cloud KMS at Rest"]
-    end
+| Credential or data | Sandbox storage and behavior |
+| :--- | :--- |
+| Repository environment files | Mapped destinations such as `.env` and `apps/web/.env`, written with mode `0600` |
+| Decrypted vault cache | Repository common Git directory under `env-vault/`; directory mode `0700`, files `0600` |
+| GitHub token | Used for cloning and tooling; startup also writes it into `/root/.bashrc` and `/etc/environment` |
+| Antigravity and OpenCode provider credentials | Provider configuration and authentication files; Antigravity credentials may be preserved in filesystem snapshots |
+| Modal profiles with `--modal` | `/root/.modal.toml`, populated from `MODAL_TOKENS` |
+| Age key | Can enter the sandbox through factory injection. Normal startup removes temporary SOPS state and unsets `AGE_PRIVATE_KEY`; `--sops` deliberately retains it in configuration and shell files |
+| Codex saved login | With an assigned profile, a dedicated Modal Volume mounted at `/root/.codex-profile`; otherwise local sandbox state |
+| T3 history and transcripts | Copied between local state and the `t3code-usage-v1` volume mounted at `/root/.t3-storage` when persistence is enabled |
 
-    subgraph WorkerNode ["Modal Worker Runtime (gVisor / Firecracker)"]
-        AnonSecret -- "Internal TLS RPC" --> Supervisor["Container Supervisor"]
-        Supervisor --> MemDecrypt["Decrypt in RAM Only"]
-        MemDecrypt --> ContainerProc["Container Process os.environ (/proc/1/environ)"]
-    end
-```
+Removing an environment variable from a shell does not erase copies already written to files, child processes, logs, snapshots, or volumes. `0600` restricts file access; it does not exclude a file from a filesystem snapshot.
 
-### How `modal.Secret.from_dict()` Operates Under the Hood:
+## Filesystem snapshots
 
-1. **In-Memory Serialization**: The local CLI serializes the key-value dictionary into a Protocol Buffer payload transmitted over TLS to Modal's `SecretCreate` API.
-2. **Anonymous Handle Generation**: Rather than creating a named, dashboard-visible secret entity, Modal generates an ephemeral, anonymous secret handle (e.g. `se-xxxxxxxxxxxx`).
-3. **KMS Envelope Encryption at Rest**: Secrets stored in Modal's cloud metadata store are encrypted at rest using Cloud Key Management Service (KMS) envelope encryption.
-4. **RAM-Only Worker Decryption**: When a container boots on a worker host, the supervisor fetches the secret over internal RPC, decrypts the keys strictly into volatile memory (RAM), and binds them to the initial process environment block (`/proc/1/environ`).
-5. **Zero Disk Footprint**: At no point are secret values written to container image layers, build caches, or virtual disks.
+[Modal filesystem snapshots](https://modal.com/docs/guide/sandbox-snapshots) preserve filesystem state. They do not resume running processes. Files written by startup or an agent can include `.env`, the Git vault cache, shell exports, provider credentials, and retained SOPS or Modal configuration.
 
----
+**A filesystem snapshot is not automatically safe to share.** The factory does not sanitize credential files before capture. Limit access as you would for the original sandbox, and use an independently prepared, inspected image when a credential-free environment is required. Mounted volumes have a separate lifecycle; terminating a sandbox does not remove saved Codex logins or T3 history from those volumes.
 
-## 2. Secret Storage, Retention & Lifecycle Matrix
+Resumption injects launch configuration again and reuses existing files. Fresh injection does not remove credentials already present in the image. See [snapshot behavior](snapshots.md) for restore and persistence details.
 
-The lifetime of secrets injected into Modal Cloud depends on the execution surface:
+## Central Environment Store (`env-store`)
 
-| Invocation / Surface | Secret Type | Storage Location | Retention Lifetime | Destruction Event |
-| :--- | :--- | :--- | :--- | :--- |
-| **`modal deploy sandbox/function.py`** | Anonymous `modal.Secret` | Modal Cloud KMS Vault | Persistent with deployed Modal App | When app is redeployed (`modal deploy`) or stopped (`modal app stop`) |
-| **`modal serve sandbox/function.py`** | Anonymous `modal.Secret` | Modal Cloud KMS Vault | Ephemeral development session | Automatically destroyed on terminal exit (Ctrl+C) |
-| **`modal-sandbox` / `Sandbox.create()`** | Anonymous `modal.Secret` | Modal Cloud KMS Vault | Ephemeral per sandbox execution | Purged immediately when sandbox terminates or reaches timeout |
-| **Worker Host Execution** | Process `os.environ` | Container RAM (`/proc/1/environ`) | Runtime duration of container process | Purged on container shutdown; never written to swap or disk |
+The organization's private `env-store` repository holds SOPS-encrypted files under `<repo>/`, using Age recipients. `<repo>/env.map` maps vault filenames to workspace destinations, for example `web.env=apps/web/.env`. Legacy manifests inside application repositories are retired; see [ADR 0057](../adr/0057-central-env-store-and-host-side-secret-injection.md) and [ADR 0065](../adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md).
 
----
+`push-repo-env` encrypts and pushes mapped files. `pull-repo-env` decrypts them into local destinations, and `ghclone` invokes the pull workflow after cloning. Manual pulls need usable GitHub access and an Age key on the machine performing the pull. Host-side decryption does not imply that `GH_TOKEN` and `AGE_PRIVATE_KEY` are excluded from child sandbox injection.
 
-## 3. Filesystem Snapshot Security Guarantee
+## Worktree propagation
 
-Modal Sandboxes provides point-in-time filesystem snapshots via `sandbox.snapshot_filesystem()` (see [ADR 0024](../adr/0024-filesystem-snapshots-in-unified-sandbox-runner.md) and [ADR 0048](../adr/0048-antigravity-acp-credential-preservation-in-filesystem-snapshots.md)).
+Startup caches decrypted files in the repository's common Git directory under `env-vault/`. The global `/root/.git-hooks/post-checkout` hook copies mapped files into newly created worktrees with restricted permissions, without overwriting existing destination files. This lets worktrees reuse the initial secret bundle after normal startup has scrubbed the Age key; see [ADR 0067](../adr/0067-git-worktree-environment-propagation-and-central-env-map.md).
 
-```mermaid
-flowchart LR
-    subgraph ContainerRuntime ["Running Sandbox Container"]
-        RAM["Process Memory (RAM)<br/>os.environ (GH_TOKEN, etc.)"]
-        Disk["Filesystem Storage<br/>(/root, /usr, /etc)"]
-    end
+The cache is outside tracked Git content, but remains plaintext on the sandbox filesystem and can be captured by a filesystem snapshot. Changes to a worktree's `.env` do not automatically update the vault or other worktrees.
 
-    subgraph SnapshotMechanism ["Snapshot Process"]
-        Disk -->|Captured| SnapImage["modal.Image Snapshot<br/>(Reusable Image Layer)"]
-        RAM -.->|EXCLUDED| SnapImage
-    end
-```
+## VPS deployment boundary
 
-- **Clean Layer Separation**: Modal filesystem snapshots capture only copy-on-write disk changes. Because credentials exist strictly in process memory (`os.environ`), **no injected secrets are baked into snapshot image layers**.
-- **Safe Snapshot Sharing**: Image snapshots can be published, registered, or used to spin up fresh sandboxes across team members without leaking credentials. When a new sandbox resumes from a snapshot image, fresh secrets are re-injected dynamically via `modal.Secret.from_dict()`.
+Infrastructure and Hosted App deployment use an explicit SSH private key on the deployment host. Keep the key in an ignored file such as `.secrets/resource_plane_ssh`, rather than embedding it in `.env`. Normal runtime database and storage clients use the Resource Plane API, database roles, and bucket credentials.
 
----
-
-## 4. Host-Side Vault Decryption (`env-store`)
-
-Target repositories often require application environment variables (database connection strings, third-party API keys). Under [ADR 0027](../adr/0057-central-env-store-and-host-side-secret-injection.md), Modal Sandboxes decouples application secrets from public git repositories:
-
-```mermaid
-flowchart TD
-    subgraph GitHubVault ["Private GitHub Repository (env-store)"]
-        VaultFile["env-store/<repo>/default.env<br/>(SOPS-Encrypted with Age Public Key)"]
-    end
-
-    subgraph HostRunner ["Host CLI or Control Plane Container"]
-        VaultFile -- "GitHub API (GH_TOKEN)" --> HostFetch["Fetch Encrypted Blob"]
-        HostFetch --> HostDecrypt["sops decrypt via AGE_PRIVATE_KEY in RAM"]
-        HostDecrypt --> DictSecret["modal.Secret.from_dict(vault_env)"]
-    end
-
-    subgraph ChildSandbox ["Spawned Sandbox"]
-        DictSecret --> ChildRAM["In-Sandbox Process os.environ"]
-    end
-```
-
-1. **Centralized Vault**: Encrypted files live in the organization's private `github.com/${GH_ORG_NAME}/env-store` repository.
-2. **Host-Side Decryption**: `SandboxLauncher` retrieves the encrypted file via the GitHub Contents API and decrypts it host-side in memory using `AGE_PRIVATE_KEY`.
-3. **Container Isolation**: `AGE_PRIVATE_KEY` and the GitHub API tokens used to access `env-store` **never enter the sandbox container**.
-4. **Developer Tooling & In-Sandbox Clones**: For manual or in-sandbox repository clones, `ghclone` automatically delegates to `pull-repo-env` to retrieve and decrypt secrets from `env-store` into `$TARGET_DIR/.env`. Legacy in-repo `.secrets/env.map` manifests are completely retired (see [ADR 0065](../adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md)).
-
----
-
-## 5. In-Container Filesystem Materialization
-
-While serverless scripts read configuration from `os.environ`, frontend and backend toolchains (Next.js, Vite, Prisma, Docker Compose) require a physical `.env` file on disk.
-
-During sandbox bootstrapping in `shared/startup.sh`:
-1. Injected environment variables are materialized into `/root/<workspace-name>/.env`.
-2. File permissions are strictly clamped to `chmod 0600` (readable and writable only by the root container user).
-3. The root `.gitignore` is guarded to ensure local `.env` files can never be committed to Git.
-
----
-
-## 6. Git Worktree Secret Propagation & Vault Cache (.git/env-vault/)
-
-When creating new chat sessions in isolated Git worktrees within T3 Code Web UI, Git worktrees do not check out untracked files like `.env`. Because `AGE_PRIVATE_KEY` is scrubbed from the sandbox environment after initial boot, worktrees cannot pull or decrypt secrets on the fly (see [ADR 0067](../adr/0067-git-worktree-environment-propagation-and-central-env-map.md)).
-
-```mermaid
-flowchart TD
-    subgraph StartupBoot ["Sandbox Startup (startup.sh)"]
-        Bundle["VAULT_ENV_BUNDLE_B64 / VAULT_DOTENV_B64"] --> WorkspaceFiles["Materialize into TARGET_DIR (.env, apps/web/.env)"]
-        Bundle --> VaultCache["Cache into TARGET_DIR/.git/env-vault/<br/>(env.map, default.env, web.env)"]
-    end
-
-    subgraph T3WorktreeCreation ["T3 Code Web UI (New Thread / Worktree)"]
-        T3UI["User creates chat in new worktree"] --> GitWorktreeAdd["git worktree add ..."]
-        GitWorktreeAdd --> PostCheckoutHook["Global post-checkout Hook<br/>(/root/.git-hooks/post-checkout)"]
-    end
-
-    subgraph WorktreePropagation ["Secret Propagation"]
-        PostCheckoutHook --> ReadVault["Read git common dir /env-vault/"]
-        ReadVault --> CopyFiles["Copy mapped files into new worktree (chmod 0600)"]
-    end
-```
-
-1. **Vault Cache Outside Git**: Decrypted secrets and mapping manifests are staged inside `$TARGET_DIR/.git/env-vault/`. Because Git never tracks files within `.git/`, these files require zero `.gitignore` maintenance and are co-located with the repository lifecycle.
-2. **Global Hook Registration**: `/root/.gitconfig` configures `[core] hooksPath = /root/.git-hooks`. Every `git worktree add` automatically triggers the propagation hook.
-3. **Non-Destructive Copies**: Files are physically copied into the new worktree with restricted `0600` permissions. Existing files in active worktrees are never overwritten.
-4. **Monorepo Mapping & Zero-Config Fallback**: `env-store/<repo>/env.map` defines source-to-destination mappings for monorepos (e.g. `web.env=apps/web/.env`). Repositories without `env.map` automatically default to `default.env=.env` or discover root `.env*` files.
+A file mapped into a target repository through `env-store` will be materialized there. Do not map deployment SSH keys into ordinary application sandboxes if you want to maintain the host deployment boundary.

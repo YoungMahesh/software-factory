@@ -14,8 +14,8 @@ Modal Sandboxes provide pre-configured integrations for autonomous coding agent 
 ## 1. T3 Code Server (`--t3`)
 
 Passing `--t3` provisions the T3 Code server inside the sandbox:
-- Starts `t3code` server on internal port `3775`.
-- Mounts persistent Modal volume `t3code-usage-v1` to retain session history, worktrees, and conversation states.
+- Starts the T3 Code server (`t3 serve`) on internal port `3775`.
+- Mounts `t3code-usage-v1` at `/root/.t3-storage` and synchronizes supported conversation state, provider transcripts, and usage caches. Arbitrary repository files and worktrees require Git or filesystem snapshots.
 - Generates an encrypted pairing URL and prints an ASCII QR code in your terminal on launch.
 - Scan the QR code or click the pairing URL to connect your desktop app, browser, or mobile device directly to the sandbox.
 
@@ -26,7 +26,7 @@ modal-sandbox -r my-repo --t3
 ### Integrated Providers in T3 Code
 
 When `--t3` is enabled, the sandbox automatically provisions provider backends:
-- **Antigravity Provider**: Bundled managed ACP server (`agy_acp_server.par`) provisioned dynamically from `ANTIGRAVITY_TOKENS` via `scripts/setup.sh --t3`.
+- **Antigravity Provider**: Official Antigravity CLI runtime staged under `/root/.t3/tools/antigravity-acp/linux-x64`; startup configures accounts from `ANTIGRAVITY_TOKENS`. The older PAR runtime is historical (see [ADR 0076](../adr/0076-t3-code-v0-1-11-and-official-antigravity-cli-runtime.md)).
 - **OpenCode Provider**: Pre-baked `/root/.opencode/bin/opencode` binary with configuration and `OPENCODE_GO_API_KEY` injected into `~/.config/opencode/opencode.env`.
 - **Codex Provider**: Pre-installed Codex CLI on newly built T3 images. Use `codexprofile login` to sign in through ChatGPT.
 - **Developer Command Utilities**: System-wide `agyq` (direct Gemini query CLI) and `agyprofile` (account profile switcher) are available in `/usr/local/bin`.
@@ -35,6 +35,10 @@ When `--t3` is enabled, the sandbox automatically provisions provider backends:
 > Standalone launch flags (`--agy`, `--opencode`, `--pi`, `--herdr`) have been retired in favor of native T3 Code orchestration (see [ADR 0075](../adr/0075-retire-herdr-pi-opencode-agy-in-favor-of-t3.md)).
 
 ---
+
+### Persistence and connection options
+
+Use `--t3-port` to change the server port and `--t3-ssh-host` to select the SSH alias used in editor links. `--t3-usage-volume <name>` selects the history volume; `--no-t3-persist` disables history synchronization. These require `--t3`, and the last two options are mutually exclusive. Codex credential profiles are configured independently of T3 history persistence.
 
 ### Codex login profiles
 
