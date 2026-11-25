@@ -50,7 +50,7 @@ class TestDbHostClient(unittest.TestCase):
         self.assertEqual(config.base_url, "https://test.domain.com")
 
     def test_resolve_db_host_config_from_env(self):
-        with patch.dict("os.environ", {"DB_HOST_DOMAIN": "env.domain.com", "DB_HOST_ADMIN_TOKEN": "envtok"}):
+        with patch.dict("os.environ", {"DB_HOST_DOMAIN": "env.domain.com", "DB_HOST_ADMIN_TOKEN": "envtok"}, clear=True):
             config = resolve_db_host_config()
             self.assertEqual(config.domain, "env.domain.com")
             self.assertEqual(config.admin_token, "envtok")

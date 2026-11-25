@@ -218,8 +218,11 @@ def run_sandbox_launch(
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "infra":
-        from sandbox.infra_deploy import main as infra_main
         args = sys.argv[2:]
+        if args and args[0] == "caddy":
+            from sandbox.caddy_deploy import main as caddy_main
+            sys.exit(caddy_main(args[1:]))
+        from sandbox.infra_deploy import main as infra_main
         sys.exit(infra_main(args[1:] if args[:1] == ["deploy"] else args))
 
     parser = create_parser()
