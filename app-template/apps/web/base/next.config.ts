@@ -4,6 +4,7 @@ import { loadWorkspaceEnv } from "./lib/env";
 loadWorkspaceEnv();
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   transpilePackages: ["@repo/theme", "@repo/types"],
 };
 

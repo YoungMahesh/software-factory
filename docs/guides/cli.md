@@ -321,5 +321,31 @@ modal-sandbox create-app my-app --cloud
 | `--vm` | flag | `False` | Launch the sandbox as a full Linux VM (used with `--launch`). |
 | `--no-t3` | flag | `False` | Disable T3 Code when launching with `--launch`. |
 | `--profile` | string | `None` | Modal workspace profile for `--launch`. |
+| `--deploy` | flag | `False` | Deploy the scaffolded Hosted App to `/root/<repo-name>` on the VPS with wildcard HTTPS. |
+| `--subdomain` | string | Repo slug | Override subdomain label under `APPS_BASE_DOMAIN` when used with `--deploy`. |
+| `--base-domain` | string | `APPS_BASE_DOMAIN` | Override `APPS_BASE_DOMAIN` when used with `--deploy`. |
+| `--skip-migrate` | flag | `False` | Skip automatic Drizzle database migration when used with `--deploy`. |
+
+---
+
+## Deploying Hosted Apps (`deploy-app`)
+
+### `deploy-app` / `modal-sandbox deploy-app`
+Deploys a scaffolded app from the host workstation over SSH (`RESOURCE_PLANE_SSH_KEY`) to `/root/<repo-name>` on the Resource Plane VPS, runs its container on `dbhost-network`, and exposes `https://<repo-name>.<APPS_BASE_DOMAIN>` through Caddy's wildcard TLS block without per-app Let's Encrypt calls.
+
+```bash
+# Deploy current local app directory to /root/<repo-name>
+deploy-app
+
+# Deploy an explicit local directory with a custom subdomain
+deploy-app ./my-app --subdomain preview
+
+# Deploy an app pushed from a Modal Sandbox (clones/pulls GitHub + env-store)
+deploy-app --repo my-app
+
+# Stop containers and remove Caddy route (--purge also removes /root/<repo-name>)
+deploy-app down my-app
+deploy-app down my-app --purge
+```
 
 

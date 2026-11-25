@@ -114,12 +114,19 @@ modal-sandbox infra caddy --bootstrap --email ops@example.com \
 # Subsequent route updates (or when /opt/caddy is already running):
 modal-sandbox infra caddy --domain db-host.example.com
 
+# Provision /opt/caddy on a brand-new VPS with a single wildcard certificate for APPS_BASE_DOMAIN:
+modal-sandbox infra caddy --bootstrap --wildcard --domain db-host.example.com
+
+# Or upgrade an existing /opt/caddy stack in-place to caddy-dns/cloudflare + wildcard ingress:
+modal-sandbox infra caddy --wildcard --base-domain sf.mahesh0.dev
+
 # Verify running container, network attachment, and Caddyfile validity:
 modal-sandbox infra caddy --check-only
 ```
 
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
+- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` exclusively to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, and imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips.
 
 #### Persisting and Restoring `/opt/caddy` via Host Ingress Store (`caddy-store`)
 

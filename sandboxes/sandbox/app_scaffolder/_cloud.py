@@ -41,6 +41,10 @@ class CloudWiringOptions:
     t3: bool = True
     profile: str | None = None
     mobile_app: bool = False
+    deploy: bool = False
+    subdomain: str | None = None
+    base_domain: str | None = None
+    skip_migrate: bool = False
 
 
 @dataclass
@@ -52,6 +56,7 @@ class CloudWiringResult:
     s3_info: S3BucketInfo | None = None
     vault_pushed: bool = False
     launch_response: LaunchResponse | None = None
+    deploy_result: Any = None
 
 
 def sanitize_db_name(project_name: str) -> str:
@@ -213,6 +218,7 @@ def wire_cloud_resources(
     push_vault_fn: Any = None,
     launch_fn: Any = None,
     github_fn: Any = None,
+    deploy_fn: Any = None,
 ) -> CloudWiringResult:
     """Executes requested cloud provisioning steps after local App Template scaffolding."""
     creds = resolve_factory_credentials(repo_root=repo_root or resolve_factory_root(), mutate_environ=True)
@@ -297,5 +303,19 @@ def wire_cloud_resources(
         )
         launched = launcher(req, register_ssh_config=True)
         result.launch_response = launched.to_response() if hasattr(launched, "to_response") else launched[1]
+
+    if options.deploy:
+        from sandbox.app_deploy import AppDeployRequest, deploy_app
+
+        deploy_impl = deploy_fn or deploy_app
+        deploy_req = AppDeployRequest(
+            target=str(project_dir),
+            repo=bare_repo,
+            subdomain=options.subdomain,
+            base_domain=options.base_domain,
+            skip_migrate=options.skip_migrate,
+            profile=options.profile,
+        )
+        result.deploy_result = deploy_impl(deploy_req, repo_root=repo_root)
 
     return result

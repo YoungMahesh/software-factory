@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+**/node_modules
+.next
+**/.next
+.expo
+**/.expo
+apps/mobile/android
+apps/mobile/ios
+.env
+.env.*
+!.env.example
+.certs

@@ -221,6 +221,10 @@ def main():
         from scripts.create_app import main as create_app_main
         sys.exit(create_app_main(sys.argv[2:]))
 
+    if len(sys.argv) > 1 and sys.argv[1] == "deploy-app":
+        from scripts.deploy_app import main as deploy_app_main
+        sys.exit(deploy_app_main(sys.argv[2:]))
+
     if len(sys.argv) > 1 and sys.argv[1] == "infra":
         args = sys.argv[2:]
         if args and args[0] == "caddy":

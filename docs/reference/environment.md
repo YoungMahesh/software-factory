@@ -55,6 +55,10 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`).
 - `CADDY_STORE_PROFILE`: Logical VPS profile folder inside the canonical private `github.com/${GH_ORG_NAME}/caddy-store` repository (defaults to `default`). Overridable per command via `--profile`.
 
+### 12. Hosted Apps & Wildcard Ingress (`/opt/caddy` + `deploy-app`)
+- `APPS_BASE_DOMAIN`: Root DNS domain (e.g., `sf.mahesh0.dev`) whose wildcard TLS certificate covers Hosted App subdomains (`<repo>.<APPS_BASE_DOMAIN>`).
+- `CLOUDFLARE_DNS_API_TOKEN`: Cloudflare API token with `Zone:DNS:Edit` used by Caddy DNS-01 to issue and renew the single wildcard certificate (stored remotely in `/opt/caddy/.env` outside `caddy-store`; falls back to `CLOUDFLARE_API_TOKEN`).
+
 ---
 
 ## Resolution Order & Precedence

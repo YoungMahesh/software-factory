@@ -51,6 +51,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vm", action="store_true", help="Launch sandbox as a full Linux VM (used with --launch).")
     parser.add_argument("--no-t3", action="store_true", help="Disable T3 Code when launching sandbox with --launch.")
     parser.add_argument("--profile", default=None, help="Modal workspace profile to use with --launch.")
+    parser.add_argument("--deploy", action="store_true", help="Deploy the scaffolded app live to the Resource Plane VPS (/root/<repo-name>) with wildcard HTTPS.")
+    parser.add_argument("--subdomain", default=None, help="Override subdomain label when used with --deploy.")
+    parser.add_argument("--base-domain", default=None, help="Override APPS_BASE_DOMAIN when used with --deploy.")
+    parser.add_argument("--skip-migrate", action="store_true", help="Skip automatic database migration when used with --deploy.")
     return parser
 
 
@@ -140,6 +144,10 @@ def _resolve_options(args: argparse.Namespace, argv: list[str]) -> tuple[AppScaf
         t3=not args.no_t3,
         profile=args.profile,
         mobile_app=mobile_app,
+        deploy=bool(args.deploy),
+        subdomain=args.subdomain,
+        base_domain=args.base_domain,
+        skip_migrate=bool(args.skip_migrate),
     )
     return scaffold_req, cloud_opts
 
@@ -165,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
             cloud_opts.provision_s3,
             cloud_opts.push_vault,
             cloud_opts.launch,
+            cloud_opts.deploy,
         ])
         if has_cloud:
             cloud_res = wire_cloud_resources(res.project_name, res.project_dir, cloud_opts)
@@ -178,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("✓ Pushed .env secrets to Central Environment Store (env-store)")
             if cloud_res.launch_response is not None:
                 display_launch_summary(cloud_res.launch_response)
+            if cloud_res.deploy_result is not None:
+                print(f"✓ Deployed Hosted App: {cloud_res.deploy_result.url} ({cloud_res.deploy_result.remote_dir})")
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

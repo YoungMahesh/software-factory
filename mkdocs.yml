@@ -170,6 +170,7 @@ nav:
     - '0085: Host Ingress Proxy Standardization in /opt/caddy': adr/0085-host-ingress-proxy-in-opt-caddy.md
     - '0086: Host Ingress Store (caddy-store) for /opt/caddy Configuration': adr/0086-host-ingress-store-for-opt-caddy.md
     - '0087: App Template and Python App Scaffolder Integration': adr/0087-app-template-and-scaffolder-integration.md
+    - '0088: Wildcard Host Ingress and Hosted App Deployment': adr/0088-wildcard-host-ingress-and-hosted-app-deployment.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

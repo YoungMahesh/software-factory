@@ -190,20 +190,39 @@ def _bootstrap_restore_vps(
     if filtered_override is not None:
         to_write["docker-compose.override.yml"] = filtered_override
 
-    compose_payload = build_tar_gz_bytes(
-        {"docker-compose.yml": (src / "docker-compose.yml").read_text(encoding="utf-8"), **to_write}
+    extra_runtime: dict[str, str] = {"docker-compose.yml": (src / "docker-compose.yml").read_text(encoding="utf-8")}
+    if (src / "Dockerfile").is_file():
+        extra_runtime["Dockerfile"] = (src / "Dockerfile").read_text(encoding="utf-8")
+    root = resolve_factory_root()
+    dotenv = parse_env_file(root / ".env") if (root / ".env").is_file() else {}
+    cf_token = (
+        os.environ.get("CLOUDFLARE_DNS_API_TOKEN")
+        or dotenv.get("CLOUDFLARE_DNS_API_TOKEN")
+        or os.environ.get("CLOUDFLARE_API_TOKEN")
+        or dotenv.get("CLOUDFLARE_API_TOKEN")
     )
+    needs_build = "conf/sites/apps-wildcard.caddy" in to_write
+    if needs_build and cf_token and cf_token.strip():
+        extra_runtime[".env"] = f"CLOUDFLARE_DNS_API_TOKEN={cf_token.strip()}\n"
+
+    compose_payload = build_tar_gz_bytes({**extra_runtime, **to_write})
     p_write = subprocess.run(
-        build_ssh_cmd(vps_config, f"mkdir -p '{cfg.caddy_dir}/conf/sites' && tar -xzf - -C '{cfg.caddy_dir}'"),
+        build_ssh_cmd(
+            vps_config,
+            f"mkdir -p '{cfg.caddy_dir}/conf/sites' '{cfg.caddy_dir}/conf/apps' && "
+            f"tar -xzf - -C '{cfg.caddy_dir}' && "
+            f"([ -f '{cfg.caddy_dir}/.env' ] && chmod 600 '{cfg.caddy_dir}/.env' || true)",
+        ),
         input=compose_payload, timeout=45, capture_output=True, check=False,
     )
     if p_write.returncode != 0:
         err = p_write.stderr.decode("utf-8", errors="replace").strip()
         return CaddyStoreResult(False, resolved_profile, f"Failed writing {cfg.caddy_dir}: {err}")
 
+    up_cmd = f"cd '{cfg.caddy_dir}' && docker compose up -d --build" if (needs_build and (src / "Dockerfile").is_file()) else f"cd '{cfg.caddy_dir}' && docker compose up -d"
     up_res = subprocess.run(
-        build_ssh_cmd(vps_config, f"cd '{cfg.caddy_dir}' && docker compose up -d"),
-        timeout=120, capture_output=True, text=True, check=False,
+        build_ssh_cmd(vps_config, up_cmd),
+        timeout=240 if needs_build else 120, capture_output=True, text=True, check=False,
     )
     if up_res.returncode != 0:
         return CaddyStoreResult(

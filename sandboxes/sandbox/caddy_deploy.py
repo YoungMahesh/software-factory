@@ -1,8 +1,8 @@
 """Reverse-proxy automation module for Host Ingress Proxy (/opt/caddy) on Linux VPS.
 
-Automates fresh-host /opt/caddy bootstrapping, Caddy status probing,
-Docker network attachment, idempotent modular site routing, config validation,
-and zero-downtime Caddy reloads.
+Automates fresh-host /opt/caddy bootstrapping, wildcard DNS-01 TLS setup,
+Caddy status probing, Docker network attachment, idempotent modular site routing,
+config validation, and zero-downtime Caddy reloads.
 """
 
 from __future__ import annotations
@@ -12,11 +12,27 @@ import base64
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 from typing import Sequence
 
+from sandbox.caddy_wildcard import (
+    DEFAULT_CADDY_CONTAINER,
+    DEFAULT_CADDY_DIR,
+    DEFAULT_CADDY_NETWORK,
+    DEFAULT_S3_UPSTREAM,
+    DEFAULT_WEB_UPSTREAM,
+    SITES_IMPORT_PATTERN,
+    caddyfile_imports_sites,
+    ensure_wildcard_caddy,
+    format_caddy_route,
+    is_subdomain_of,
+    parse_caddyfile_domains,
+    render_base_caddyfile,
+    render_resource_plane_site,
+    resolve_apps_base_domain,
+    resolve_cloudflare_dns_token,
+)
 from sandbox.config import parse_env_file, resolve_factory_root
 from sandbox.infra_deploy import (
     VpsSshConfig,
@@ -25,18 +41,9 @@ from sandbox.infra_deploy import (
     resolve_vps_ssh_config,
 )
 
-DEFAULT_CADDY_DIR = "/opt/caddy"
 DEFAULT_CADDYFILE_PATH = "/opt/caddy/conf/Caddyfile"
 DEFAULT_CADDY_SITES_DIR = "/opt/caddy/conf/sites"
 DEFAULT_RESOURCE_PLANE_SITE_PATH = "/opt/caddy/conf/sites/resource-plane.caddy"
-DEFAULT_CADDY_CONTAINER = "caddy"
-DEFAULT_CADDY_NETWORK = "dbhost-network"
-DEFAULT_WEB_UPSTREAM = "db-host-web:3000"
-DEFAULT_S3_UPSTREAM = "neon-seaweedfs:8333"
-SITES_IMPORT_PATTERN = re.compile(
-    r"^\s*import\s+(?:/etc/caddy/sites/\*\.caddy|sites/\*\.caddy)\s*$",
-    re.MULTILINE,
-)
 
 
 @dataclass
@@ -170,49 +177,6 @@ def ensure_caddy_network(vps_config: VpsSshConfig, caddy_config: CaddyConfig | N
     return False, f"Failed to attach Caddy to network '{cfg.network}'."
 
 
-def render_base_caddyfile(email: str | None = None) -> str:
-    """Renders root Caddyfile containing global options and sites import."""
-    global_block = f"{{\n\temail {email.strip()}\n}}\n" if email and email.strip() else "{\n}\n"
-    return f"{global_block}\nimport /etc/caddy/sites/*.caddy\n"
-
-
-def format_caddy_route(domain: str, upstream: str) -> str:
-    """Formats a standard Caddy reverse_proxy site block."""
-    return f"{domain.strip().lower()} {{\n\treverse_proxy {upstream}\n}}\n"
-
-
-def render_resource_plane_site(
-    domain: str,
-    upstream: str = DEFAULT_WEB_UPSTREAM,
-    s3_domain: str | None = None,
-    s3_upstream: str = DEFAULT_S3_UPSTREAM,
-) -> str:
-    """Renders the declarative Resource Plane site configuration file."""
-    blocks = ["# Managed by modal-sandbox infra caddy\n", format_caddy_route(domain, upstream)]
-    if s3_domain and s3_domain.strip():
-        blocks.append("\n" + format_caddy_route(s3_domain, s3_upstream))
-    return "".join(blocks)
-
-
-def caddyfile_imports_sites(caddyfile_content: str) -> bool:
-    """Checks whether Caddyfile imports modular /etc/caddy/sites/*.caddy files."""
-    stripped = "\n".join(line.split("#", 1)[0] for line in caddyfile_content.splitlines())
-    return bool(SITES_IMPORT_PATTERN.search(stripped))
-
-
-def parse_caddyfile_domains(caddyfile_content: str) -> list[str]:
-    """Parses site block domain names from Caddyfile text."""
-    domains: list[str] = []
-    for line in caddyfile_content.splitlines():
-        cleaned = line.split("#", 1)[0].strip()
-        if not cleaned or cleaned.startswith("{") or cleaned.startswith("}"):
-            continue
-        match = re.match(r"^([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}(?::\d+)?)\s*\{?", cleaned)
-        if match:
-            domains.append(match.group(1))
-    return domains
-
-
 def bootstrap_caddy(
     vps_config: VpsSshConfig,
     email: str | None = None,
@@ -228,7 +192,7 @@ def bootstrap_caddy(
         net_ok, net_msg = ensure_caddy_network(vps_config, cfg)
         if not net_ok:
             return False, net_msg
-        _ssh_exec(vps_config, f"mkdir -p '{cfg.sites_dir}'", 15, "Failed creating sites directory")
+        _ssh_exec(vps_config, f"mkdir -p '{cfg.sites_dir}' '{cfg.caddy_dir}/conf/apps'", 15, "Failed creating sites directory")
         return True, f"Caddy container '{cfg.container_name}' is already running at {cfg.caddy_dir}."
 
     ports_ok, ports_msg = check_ports_available(vps_config)
@@ -253,7 +217,7 @@ def bootstrap_caddy(
         if not cf_ok:
             return False, cf_msg
 
-    up_script = f"mkdir -p '{cfg.sites_dir}' && cd '{cfg.caddy_dir}' && docker compose up -d"
+    up_script = f"mkdir -p '{cfg.sites_dir}' '{cfg.caddy_dir}/conf/apps' && cd '{cfg.caddy_dir}' && docker compose up -d"
     res, up_err = _ssh_exec(vps_config, up_script, timeout, "Failed starting /opt/caddy stack")
     if res is None:
         return False, up_err
@@ -336,19 +300,25 @@ def reload_caddy(vps_config: VpsSshConfig, caddy_config: CaddyConfig | None = No
 
 
 def setup_reverse_proxy(
-    vps_config: VpsSshConfig,
-    domain: str | None = None,
-    upstream: str = DEFAULT_WEB_UPSTREAM,
-    s3_domain: str | None = None,
-    s3_upstream: str = DEFAULT_S3_UPSTREAM,
-    bootstrap: bool = False,
-    email: str | None = None,
-    caddy_config: CaddyConfig | None = None,
+    vps_config: VpsSshConfig, domain: str | None = None, upstream: str = DEFAULT_WEB_UPSTREAM,
+    s3_domain: str | None = None, s3_upstream: str = DEFAULT_S3_UPSTREAM,
+    bootstrap: bool = False, email: str | None = None, caddy_config: CaddyConfig | None = None,
+    *, base_domain: str | None = None, cf_dns_token: str | None = None, wildcard: bool = False,
 ) -> tuple[bool, str]:
-    """High-level orchestration: optionally bootstraps /opt/caddy, connects network, writes site file, and reloads."""
+    """High-level orchestration: optionally bootstraps /opt/caddy, sets up wildcard TLS, writes site config, and reloads."""
     cfg = caddy_config or CaddyConfig()
-
-    if bootstrap:
+    wc_msg, active_base = "", None
+    if wildcard or (base_domain and base_domain.strip()):
+        active_base = resolve_apps_base_domain(base_domain)
+        resolved_cf = resolve_cloudflare_dns_token(cf_dns_token)
+        wc_ok, wc_msg = ensure_wildcard_caddy(
+            vps_config, active_base, resolved_cf, bootstrap=bootstrap, email=email,
+            caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
+        )
+        if not wc_ok:
+            return False, f"Wildcard Caddy setup failed: {wc_msg}"
+        bootstrap = False
+    elif bootstrap:
         boot_ok, boot_msg = bootstrap_caddy(vps_config, email=email, caddy_config=cfg)
         if not boot_ok:
             return False, f"Caddy bootstrap failed: {boot_msg}"
@@ -360,29 +330,35 @@ def setup_reverse_proxy(
     net_ok, net_msg = ensure_caddy_network(vps_config, cfg)
     if not net_ok:
         return False, f"Caddy network attachment failed: {net_msg}"
-
     if not domain or not domain.strip():
-        return True, f"Host Ingress Proxy at {cfg.caddy_dir} is running and attached to '{cfg.network}'."
+        return True, wc_msg or f"Host Ingress Proxy at {cfg.caddy_dir} is running and attached to '{cfg.network}'."
+
+    clean_domain = domain.strip()
+    if active_base and is_subdomain_of(clean_domain, active_base) and not s3_domain:
+        from sandbox.app_deploy._caddy import ensure_app_caddy_route
+        rp_ok, rp_msg = ensure_app_caddy_route(
+            vps_config, "resource-plane", clean_domain, upstream,
+            caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
+        )
+        return (rp_ok, f"{wc_msg} {rp_msg}".strip() if wc_msg else rp_msg)
 
     site_ok, changed, site_msg = ensure_caddy_site_config(
-        vps_config,
-        domain=domain.strip(),
-        upstream=upstream,
-        s3_domain=s3_domain.strip() if s3_domain else None,
-        s3_upstream=s3_upstream,
-        caddy_config=cfg,
+        vps_config, domain=clean_domain, upstream=upstream,
+        s3_domain=s3_domain.strip() if s3_domain else None, s3_upstream=s3_upstream, caddy_config=cfg,
     )
     if not site_ok:
         return False, f"Site configuration failed: {site_msg}"
 
     s3_msg = f" and S3 route '{s3_domain}'" if s3_domain else ""
     if not changed:
-        return True, f"Reverse-proxy for '{domain}'{s3_msg} is already up to date (reload skipped)."
+        base_msg = f"Reverse-proxy for '{clean_domain}'{s3_msg} is already up to date (reload skipped)."
+        return True, f"{wc_msg} {base_msg}".strip() if wc_msg else base_msg
 
     reload_ok, reload_msg = reload_caddy(vps_config, cfg)
     if not reload_ok:
         return False, f"Route updated, but reload failed: {reload_msg}"
-    return True, f"Reverse-proxy successfully configured for '{domain}'{s3_msg}. {reload_msg}"
+    done_msg = f"Reverse-proxy successfully configured for '{clean_domain}'{s3_msg}. {reload_msg}"
+    return True, f"{wc_msg} {done_msg}".strip() if wc_msg else done_msg
 
 
 def build_caddy_parser() -> argparse.ArgumentParser:
@@ -396,6 +372,9 @@ def build_caddy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--upstream", default=DEFAULT_WEB_UPSTREAM, help=f"Upstream web target (default: {DEFAULT_WEB_UPSTREAM}).")
     parser.add_argument("--s3-upstream", default=DEFAULT_S3_UPSTREAM, help=f"Upstream S3 target (default: {DEFAULT_S3_UPSTREAM}).")
     parser.add_argument("--bootstrap", action="store_true", help=f"Provision {DEFAULT_CADDY_DIR} via Docker Compose on a fresh VPS.")
+    parser.add_argument("--wildcard", action="store_true", help="Provision or upgrade /opt/caddy with Cloudflare DNS-01 wildcard cert for APPS_BASE_DOMAIN.")
+    parser.add_argument("--base-domain", default=None, help="App Base Domain for wildcard cert (defaults to APPS_BASE_DOMAIN).")
+    parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 API token (defaults to CLOUDFLARE_DNS_API_TOKEN or CLOUDFLARE_API_TOKEN).")
     parser.add_argument("--email", default=None, help="Optional ACME email written during --bootstrap.")
     parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from caddy-store instead of an empty Caddyfile.")
     parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to caddy-store after configuring routes.")
@@ -415,9 +394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from sandbox.caddy_store import run_caddy_store_subcommand
         return run_caddy_store_subcommand(arg_list[0], arg_list[1:])
 
-    parser = build_caddy_parser()
-    args = parser.parse_args(arg_list)
-
+    args = build_caddy_parser().parse_args(arg_list)
     if args.email and not args.bootstrap:
         print("❌ --email can only be used together with --bootstrap.", file=sys.stderr)
         return 1
@@ -426,13 +403,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     root = resolve_factory_root()
-    env_file = root / ".env"
-    file_env = parse_env_file(env_file) if env_file.exists() else {}
-
+    file_env = parse_env_file(root / ".env") if (root / ".env").exists() else {}
     try:
-        vps_config = resolve_vps_ssh_config(
-            host=args.host, user=args.user, port=args.port, key_path=args.key, dotenv=file_env,
-        )
+        vps_config = resolve_vps_ssh_config(host=args.host, user=args.user, port=args.port, key_path=args.key, dotenv=file_env)
     except (ValueError, FileNotFoundError) as exc:
         print(f"❌ Configuration error: {exc}", file=sys.stderr)
         return 1
@@ -458,17 +431,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             s3_domain=args.s3_domain, s3_upstream=args.s3_upstream, sync=args.sync, caddy_cfg=caddy_cfg,
         )
 
+    wants_wildcard = bool(args.wildcard or args.base_domain)
+    env_base = args.base_domain or os.environ.get("APPS_BASE_DOMAIN") or file_env.get("APPS_BASE_DOMAIN")
+    env_cf = (args.cf_dns_token or os.environ.get("CLOUDFLARE_DNS_API_TOKEN") or file_env.get("CLOUDFLARE_DNS_API_TOKEN")
+              or os.environ.get("CLOUDFLARE_API_TOKEN") or file_env.get("CLOUDFLARE_API_TOKEN"))
+    auto_wildcard = bool(args.bootstrap and env_base and env_base.strip() and env_cf and env_cf.strip())
     domain = args.domain or os.environ.get("RESOURCE_PLANE_DOMAIN") or file_env.get("RESOURCE_PLANE_DOMAIN")
-    if (not domain or not domain.strip()) and not args.bootstrap:
-        print("❌ Missing domain. Provide --domain, set RESOURCE_PLANE_DOMAIN in .env, or pass --bootstrap.", file=sys.stderr)
+    if (not domain or not domain.strip()) and not args.bootstrap and not wants_wildcard:
+        print("❌ Missing domain. Provide --domain, set RESOURCE_PLANE_DOMAIN in .env, or pass --bootstrap / --wildcard.", file=sys.stderr)
         return 1
 
-    target_desc = f"domain '{domain.strip()}'" if domain and domain.strip() else "bootstrap only"
+    setup_kwargs: dict[str, object] = {}
+    if wants_wildcard or auto_wildcard:
+        try:
+            setup_kwargs = {
+                "wildcard": True,
+                "base_domain": resolve_apps_base_domain(args.base_domain, dotenv=file_env),
+                "cf_dns_token": resolve_cloudflare_dns_token(args.cf_dns_token, dotenv=file_env),
+            }
+        except ValueError as exc:
+            print(f"❌ {exc}", file=sys.stderr)
+            return 1
+
+    target_desc = f"domain '{domain.strip()}'" if domain and domain.strip() else ("wildcard" if setup_kwargs else "bootstrap only")
     print(f"🔒 Configuring Host Ingress Proxy (/opt/caddy) on {vps_config.user}@{vps_config.host} ({target_desc})...")
     success, message = setup_reverse_proxy(
         vps_config=vps_config, domain=domain.strip() if domain else None, upstream=args.upstream,
         s3_domain=args.s3_domain.strip() if args.s3_domain else None, s3_upstream=args.s3_upstream,
-        bootstrap=args.bootstrap, email=args.email, caddy_config=caddy_cfg,
+        bootstrap=args.bootstrap, email=args.email, caddy_config=caddy_cfg, **setup_kwargs,
     )
     if not success:
         print(f"❌ {message}", file=sys.stderr)
