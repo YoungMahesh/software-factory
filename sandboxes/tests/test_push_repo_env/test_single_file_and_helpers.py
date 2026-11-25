@@ -1,4 +1,4 @@
-"""Unit tests for the push_repo_env script."""
+"""Unit tests for push_repo_env helpers, git authorship, and single-file push."""
 
 import os
 from pathlib import Path
@@ -12,7 +12,6 @@ from scripts.push_repo_env import (
     commit_to_env_store,
     detect_repo_name,
     ensure_gitignore,
-    fetch_github_file,
     main,
     push_repo_env,
     push_repo_git_identity,
@@ -20,7 +19,7 @@ from scripts.push_repo_env import (
 )
 
 
-class TestPushRepoEnv(unittest.TestCase):
+class TestPushRepoEnvSingleFile(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.repo_dir = Path(self.temp_dir.name)
@@ -106,15 +105,15 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertEqual(res.commit_sha, "commit_sha_123")
         mock_encrypt.assert_called_once()
         self.assertEqual(mock_commit.call_count, 2)
-        # Call 1: encrypted default.env
         self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/default.env")
-        # Call 2: env.map manifest
         self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"default.env = .env\n")
 
+    @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
     @patch("scripts.push_repo_env.run_sops_encrypt")
-    def test_push_repo_env_custom_env_without_dest_fails(self, mock_encrypt, mock_commit):
+    def test_push_repo_env_custom_env_without_dest_fails(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = None
         custom_env = self.repo_dir / ".env.local"
         custom_env.write_text("API_KEY=hello\n")
 
@@ -132,6 +131,98 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertIn("-d/--dest", res.message)
         mock_encrypt.assert_not_called()
         mock_commit.assert_not_called()
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_subpath_dotenv_unmapped_requires_dest(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = "default.env = .env\n"
+        web_env = self.repo_dir / "apps" / "web" / ".env"
+        web_env.parent.mkdir(parents=True)
+        web_env.write_text("PORT=3000\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=web_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            dest_name=None,
+        )
+
+        self.assertFalse(res.success)
+        self.assertIn("-d/--dest", res.message)
+        mock_encrypt.assert_not_called()
+        mock_commit.assert_not_called()
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_single_file_resolves_from_env_map(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = "default.env = .env\nweb.env = apps/web/.env\nlocal.env = .env.local\n"
+        mock_commit.return_value = "sha_web"
+        web_env = self.repo_dir / "apps" / "web" / ".env"
+        web_env.parent.mkdir(parents=True)
+        web_env.write_text("PORT=3000\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=Path("./apps/web/.env"),
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            dest_name=None,
+        )
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.target_path, "my-app/web.env")
+        self.assertEqual(mock_commit.call_count, 1)
+        self.assertEqual(mock_commit.call_args.kwargs["path"], "my-app/web.env")
+        self.assertEqual(mock_encrypt.call_args.kwargs.get("filename_override"), "web.env")
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_single_file_ambiguous_env_map_fails(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = "web.env = apps/web/.env\nweb2.env = apps/web/.env\n"
+        web_env = self.repo_dir / "apps" / "web" / ".env"
+        web_env.parent.mkdir(parents=True)
+        web_env.write_text("PORT=3000\n")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=web_env,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+        )
+
+        self.assertFalse(res.success)
+        self.assertIn("Multiple entries in env.map", res.message)
+        mock_encrypt.assert_not_called()
+
+    @patch("scripts.push_repo_env.fetch_github_file")
+    @patch("scripts.push_repo_env.commit_to_env_store")
+    @patch("scripts.push_repo_env.run_sops_encrypt")
+    def test_push_repo_env_single_file_mapped_binary_allowed_implicitly(self, mock_encrypt, mock_commit, mock_fetch):
+        mock_fetch.return_value = "resource_plane_ssh = .secrets/resource_plane_ssh\n"
+        mock_commit.return_value = "sha_ssh"
+        key_file = self.repo_dir / ".secrets" / "resource_plane_ssh"
+        key_file.parent.mkdir(parents=True)
+        key_file.write_text("PRIVATE KEY")
+
+        res = push_repo_env(
+            repo_dir=self.repo_dir,
+            env_file=key_file,
+            repo_name="my-app",
+            org_name="sFactory0",
+            gh_token="ghp_test",
+            allow_binary=False,
+        )
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.target_path, "my-app/resource_plane_ssh")
+        mock_encrypt.assert_called_once()
 
     @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -156,9 +247,7 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertEqual(res.target_path, "my-app/local.env")
         mock_encrypt.assert_called_once()
         self.assertEqual(mock_commit.call_count, 2)
-        # Call 1: encrypted local.env
         self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/local.env")
-        # Call 2: env.map
         self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"local.env = .env.local\n")
 
@@ -229,8 +318,7 @@ class TestPushRepoEnv(unittest.TestCase):
 
         self.assertTrue(res.success)
         mock_encrypt.assert_called_once()
-        call_kwargs = mock_encrypt.call_args.kwargs
-        self.assertEqual(call_kwargs.get("filename_override"), "local.env")
+        self.assertEqual(mock_encrypt.call_args.kwargs.get("filename_override"), "local.env")
 
     @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -278,7 +366,6 @@ class TestPushRepoEnv(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        # Commit should only be called once for default.env; env.map commit skipped because identical
         self.assertEqual(mock_commit.call_count, 1)
 
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -301,8 +388,7 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertEqual(res.target_path, "my-app/git.env")
         mock_encrypt.assert_called_once()
         mock_commit.assert_called_once()
-        call_kwargs = mock_commit.call_args.kwargs
-        self.assertEqual(call_kwargs["path"], "my-app/git.env")
+        self.assertEqual(mock_commit.call_args.kwargs["path"], "my-app/git.env")
 
     @patch("subprocess.run")
     def test_push_repo_git_identity_missing_fails(self, mock_run):
@@ -322,16 +408,19 @@ class TestPushRepoEnv(unittest.TestCase):
         self.assertIn("Git author name and email are required", res.message)
 
     @patch("scripts.push_repo_env.push_repo_env")
-    def test_main_cli_custom_env_without_dest_rejected(self, mock_push):
+    def test_main_cli_custom_env_without_dest_delegates_to_env_map_lookup(self, mock_push):
+        mock_push.return_value = MagicMock(success=True, declined_all=False, pushed_files=[], target_path="repo/local.env", commit_sha="123", org_name="sFactory0")
         with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
-            self.assertNotEqual(ctx.exception.code, 0)
-        mock_push.assert_not_called()
+            self.assertEqual(ctx.exception.code, 0)
+        mock_push.assert_called_once()
+        self.assertEqual(mock_push.call_args.kwargs["env_file"], Path(".env.local"))
+        self.assertIsNone(mock_push.call_args.kwargs["dest_name"])
 
     @patch("scripts.push_repo_env.push_repo_env")
     def test_main_cli_custom_env_with_dest_accepted(self, mock_push):
-        mock_push.return_value = MagicMock(success=True, target_path="repo/default.env", commit_sha="123", org_name="sFactory0")
+        mock_push.return_value = MagicMock(success=True, declined_all=False, pushed_files=[], target_path="repo/default.env", commit_sha="123", org_name="sFactory0")
         with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local", "-d", "default.env"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
@@ -341,7 +430,7 @@ class TestPushRepoEnv(unittest.TestCase):
 
     @patch("scripts.push_repo_env.push_repo_env")
     def test_main_cli_allow_binary_flag_passed(self, mock_push):
-        mock_push.return_value = MagicMock(success=True, target_path="repo/local.custom", commit_sha="123", org_name="sFactory0")
+        mock_push.return_value = MagicMock(success=True, declined_all=False, pushed_files=[], target_path="repo/local.custom", commit_sha="123", org_name="sFactory0")
         with patch.object(sys, "argv", ["push_repo_env.py", "-e", ".env.local", "-d", "local.custom", "--allow-binary"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
@@ -349,6 +438,10 @@ class TestPushRepoEnv(unittest.TestCase):
         mock_push.assert_called_once()
         self.assertTrue(mock_push.call_args.kwargs["allow_binary"])
 
-
-if __name__ == "__main__":
-    unittest.main()
+    @patch("scripts.push_repo_env.push_repo_env")
+    def test_main_cli_all_with_env_rejected(self, mock_push):
+        with patch.object(sys, "argv", ["push_repo_env.py", "--all", "-e", ".env"]):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertNotEqual(ctx.exception.code, 0)
+        mock_push.assert_not_called()

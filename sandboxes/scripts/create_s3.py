@@ -165,9 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.push_vault:
             print("🔐 Pushing updated secrets to central env-store...")
-            cmd = ["push-repo-env"]
-            if str(env_file_path) != ".env":
-                cmd.extend(["-e", str(env_file_path), "-d", env_file_path.name])
+            cmd = ["push-repo-env", "-e", str(env_file_path)]
             res = subprocess.run(cmd, check=False)
             if res.returncode != 0:
                 print("Warning: push-repo-env exited with non-zero status.", file=sys.stderr)

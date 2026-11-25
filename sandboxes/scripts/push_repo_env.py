@@ -23,6 +23,7 @@ from sandbox.env_store import (
     DEFAULT_AGE_RECIPIENT,
     DEFAULT_KEY_FILE,
     DEFAULT_VAULT_REPO,
+    PushFileOutcome,
     PushResult,
     commit_to_env_store,
     detect_repo_name,
@@ -46,6 +47,7 @@ def push_repo_env(
     dest_name: str | None = None,
     vault_repo: str = DEFAULT_VAULT_REPO,
     allow_binary: bool = False,
+    push_all: bool = False,
     **kwargs: Any,
 ) -> PushResult:
     kwargs.setdefault("encrypt_fn", run_sops_encrypt)
@@ -61,6 +63,7 @@ def push_repo_env(
         dest_name=dest_name,
         vault_repo=vault_repo,
         allow_binary=allow_binary,
+        push_all=push_all,
         **kwargs,
     )
 
@@ -145,14 +148,20 @@ def main() -> None:
             "-e",
             "--env",
             type=Path,
-            default=Path(".env"),
-            help="Path to local source .env file (default: .env).",
+            default=None,
+            help="Path to a single local source environment file to push (if omitted, checks env.map).",
         )
         parser.add_argument(
             "-d",
             "--dest",
             default=None,
-            help="Destination file name in vault (required if -e is not .env; defaults to default.env when -e is .env).",
+            help="Destination file name in vault (for single-file push; defaults to mapped env.map name or default.env for root .env).",
+        )
+        parser.add_argument(
+            "--all",
+            action="store_true",
+            default=False,
+            help="Push all existing local files mapped in env.map without interactive confirmation.",
         )
         parser.add_argument(
             "--recipient",
@@ -167,10 +176,8 @@ def main() -> None:
         )
         args = parser.parse_args()
 
-        if args.env.name != ".env" and not args.dest:
-            parser.error(
-                f"When -e/--env is not '.env' ('{args.env}'), you must also pass -d/--dest to define the destination in env-store."
-            )
+        if args.all and (args.env is not None or args.dest is not None):
+            parser.error("--all cannot be combined with -e/--env or -d/--dest.")
 
         cwd = Path.cwd()
         res = push_repo_env(
@@ -182,20 +189,34 @@ def main() -> None:
             recipient=args.recipient,
             dest_name=args.dest,
             allow_binary=args.allow_binary,
+            push_all=args.all,
         )
 
-    if res.success:
+    if getattr(res, "declined_all", False):
+        print("ℹ️ No files selected to push.")
+        sys.exit(0)
+    elif res.success:
         org_display = (
             res.org_name
             or getattr(args, "org", None)
             or os.environ.get("GH_ORG_NAME")
             or "env-store"
         )
-        print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/env-store.")
-        print(f"   Commit SHA: {res.commit_sha}")
+        pushed_files = getattr(res, "pushed_files", None) or []
+        if len(pushed_files) > 1:
+            print(f"✅ Successfully encrypted and stored {len(pushed_files)} files in {org_display}/env-store:")
+            for item in pushed_files:
+                print(f"   • {item.rel_path} -> {item.target_path} (SHA: {item.commit_sha})")
+        else:
+            print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/env-store.")
+            print(f"   Commit SHA: {res.commit_sha}")
         print("🚀 Future modal-sandbox launches will automatically inject these settings!")
         sys.exit(0)
     else:
+        for item in getattr(res, "pushed_files", None) or []:
+            print(f"✅ Stored {item.rel_path} -> {item.target_path} (SHA: {item.commit_sha})")
+        for item in getattr(res, "failed_files", None) or []:
+            print(f"❌ Failed {item.rel_path} -> {item.target_path}: {item.message}", file=sys.stderr)
         print(f"❌ Failed to push: {res.message}", file=sys.stderr)
         sys.exit(1)
 

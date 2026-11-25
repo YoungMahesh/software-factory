@@ -386,7 +386,42 @@ class TestCreateS3Cli(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(env_file.exists())
             self.assertIn('AWS_ACCESS_KEY_ID="KEY"', env_file.read_text())
-            mock_sub.assert_called_once()
+            mock_sub.assert_called_once_with(["push-repo-env", "-e", str(env_file)], check=False)
+
+    @patch("scripts.create_s3.create_s3_bucket")
+    def test_cli_main_write_env_subpath_and_push_vault(self, mock_create):
+        mock_info = S3BucketInfo(
+            id="st-1",
+            bucket_name="vault-bucket",
+            project_name="cli-proj",
+            project_id="p-1",
+            access_key_id="KEY",
+            secret_access_key="SECRET",
+            endpoint="http://db-host.mahesh0.dev:8333",
+            region="us-east-1",
+            already_existed=False,
+            s3_uri="s3://vault-bucket",
+            formatted_env="",
+            formatted_aws_cli="",
+            formatted_node_sdk="",
+            formatted_boto3="",
+        )
+        mock_create.return_value = mock_info
+
+        env_file = self.tmp_path / "apps" / "web" / ".env"
+
+        with patch("subprocess.run") as mock_sub:
+            mock_sub.return_value = MagicMock(returncode=0)
+            exit_code = main([
+                "vault-bucket",
+                "--write-env",
+                "--env-file", str(env_file),
+                "--push-vault",
+                "--domain", "test.dev",
+                "--token", "tok",
+            ])
+            self.assertEqual(exit_code, 0)
+            mock_sub.assert_called_once_with(["push-repo-env", "-e", str(env_file)], check=False)
 
     def test_cli_main_invalid_name_error(self):
         with patch("sys.stderr.write"):

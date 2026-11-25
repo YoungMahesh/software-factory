@@ -298,6 +298,39 @@ class TestCreateDbCli(unittest.TestCase):
         self.assertIn('DATABASE_URL="postgresql://u_demo:pwd@db-host.test:54320/demo_db', env_file.read_text())
 
     @patch("scripts.create_db.create_database_connection")
+    def test_cli_main_write_env_and_push_vault_passes_env_flag(self, mock_create):
+        ca_path = self.tmp_path / "ca.crt"
+        env_file = self.tmp_path / "apps" / "web" / ".env"
+
+        mock_create.return_value = DatabaseConnectionInfo(
+            name="demo_db",
+            username="u_demo",
+            password="pwd",
+            host="db-host.test",
+            port=DEFAULT_PORT,
+            connection_string="postgresql://u_demo:pwd@db-host.test:54320/demo_db",
+            ca_cert_path=ca_path,
+            project_name="demo-proj",
+            project_id="proj-123",
+            already_existed=False,
+        )
+
+        with patch("subprocess.run") as mock_sub:
+            mock_sub.return_value = MagicMock(returncode=0)
+            exit_code = main([
+                "demo_db",
+                "--domain", "db-host.test",
+                "--token", "test-token",
+                "--write-env",
+                "--env-file", str(env_file),
+                "--push-vault",
+                "--json",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        mock_sub.assert_called_once_with(["push-repo-env", "-e", str(env_file)], check=False)
+
+    @patch("scripts.create_db.create_database_connection")
     def test_cli_main_quiet_flag(self, mock_create):
         mock_create.return_value = DatabaseConnectionInfo(
             name="demo_db",

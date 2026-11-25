@@ -1,14 +1,9 @@
-"""Central Environment Store push and secret encryption logic.
-
-Handles encrypting local environment secrets with SOPS using recipient Age keys,
-committing encrypted payloads to github.com/${GH_ORG_NAME}/env-store using the
-GitHub Contents REST API, and managing the env.map mapping manifest.
-"""
+"""Transport, SOPS encryption, GitHub commit, and Git identity helpers for env-store push."""
 
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -19,30 +14,39 @@ from typing import Any
 import urllib.error
 import urllib.request
 
-from sandbox.env_store import (
-    DEFAULT_VAULT_REPO,
-    SOPS_SUPPORTED_EXTENSIONS,
-    detect_repo_name,
-    fetch_github_file,
-    get_file_extension,
-    is_sops_supported_format,
-    resolve_gh_token,
-    update_env_map_content,
-)
-
-
 DEFAULT_AGE_RECIPIENT = "age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj"
+
+
+class NonInteractivePromptError(RuntimeError):
+    """Raised when interactive confirmation is required on a non-TTY stdin."""
+
+
+@dataclass
+class PushFileOutcome:
+    """Outcome for an individual file within an env-store push operation."""
+
+    vault_name: str
+    rel_path: str
+    target_path: str
+    success: bool
+    commit_sha: str | None = None
+    message: str = ""
 
 
 @dataclass
 class PushResult:
     """Outcome of an env-store push operation."""
+
     success: bool
     repo_name: str
     target_path: str
     commit_sha: str | None = None
     message: str = ""
     org_name: str | None = None
+    pushed_files: list[PushFileOutcome] = field(default_factory=list)
+    skipped_files: list[str] = field(default_factory=list)
+    failed_files: list[PushFileOutcome] = field(default_factory=list)
+    declined_all: bool = False
 
 
 def ensure_gitignore(repo_dir: Path) -> bool:
@@ -156,90 +160,26 @@ def _encrypt_and_commit(
             tmp_enc_path.unlink()
 
 
-def push_repo_env(
+def _resolve_repo_context(
     repo_dir: Path,
-    env_file: Path | None = None,
-    repo_name: str | None = None,
-    org_name: str | None = None,
-    gh_token: str | None = None,
-    recipient: str | None = None,
-    dest_name: str | None = None,
-    vault_repo: str = DEFAULT_VAULT_REPO,
-    allow_binary: bool = False,
-    encrypt_fn: Any = None,
-    commit_fn: Any = None,
-    fetch_fn: Any = None,
-) -> PushResult:
-    """Encrypts local .env, commits to env-store vault, and automatically updates env.map."""
-    src = env_file or (repo_dir / ".env")
-    if not src.is_file():
-        return PushResult(False, repo_name or "", "", message=f"Source .env file not found: {src}")
-    if not dest_name:
-        if src.name == ".env":
-            dest_name = "default.env"
-        else:
-            return PushResult(
-                False,
-                repo_name or "",
-                "",
-                message=(
-                    f"When source environment file is not '.env' ('{src.name}'), you must also pass -d/--dest "
-                    "to define the destination in env-store."
-                ),
-            )
+    repo_name: str | None,
+    org_name: str | None,
+    gh_token: str | None,
+    recipient: str | None,
+) -> tuple[str, str | None, str | None, str, str | None]:
+    """Resolves repo, org, GitHub token, and Age recipient, returning optional error message."""
+    from sandbox.env_store import detect_repo_name, resolve_gh_token
 
     det_org, det_name = detect_repo_name(repo_dir)
     final_repo = repo_name or det_name
     final_org = org_name or det_org or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
     token = resolve_gh_token(gh_token)
     recip = recipient or DEFAULT_AGE_RECIPIENT
-
     if not final_org:
-        return PushResult(False, final_repo, "", message="GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>.")
+        return final_repo, None, token, recip, "GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>."
     if not token:
-        return PushResult(False, final_repo, "", message="GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token.")
-
-    if not is_sops_supported_format(dest_name) and not allow_binary:
-        ext = get_file_extension(dest_name) or "(no extension)"
-        valid = ", ".join(sorted(SOPS_SUPPORTED_EXTENSIONS))
-        return PushResult(
-            False,
-            final_repo,
-            "",
-            message=f"Destination file '{dest_name}' has unsupported extension '{ext}'. Supported formats: {valid}. Pass --allow-binary to allow encrypting arbitrary or binary files.",
-        )
-
-    ensure_gitignore(repo_dir)
-    vault_path = f"{final_repo}/{dest_name}"
-    sha = _encrypt_and_commit(src, final_org, vault_repo, vault_path, token, recip, encrypt_fn=encrypt_fn, commit_fn=commit_fn, filename_override=dest_name)
-
-    # Maintain env.map manifest in env-store
-    fetch_f = fetch_fn or fetch_github_file
-    com_f = commit_fn or commit_to_env_store
-    map_path = f"{final_repo}/env.map"
-    raw_map = fetch_f(final_org, vault_repo, map_path, token=token)
-
-    try:
-        rel_dest = str(src.resolve().relative_to(repo_dir.resolve()))
-    except ValueError:
-        rel_dest = src.name
-
-    new_map = update_env_map_content(raw_map, dest_name, rel_dest)
-    if raw_map is None and dest_name != "default.env":
-        if fetch_f(final_org, vault_repo, f"{final_repo}/default.env", token=token):
-            new_map = update_env_map_content(new_map, "default.env", ".env")
-
-    if new_map != (raw_map or ""):
-        com_f(
-            owner=final_org,
-            env_repo=vault_repo,
-            path=map_path,
-            content_bytes=new_map.encode("utf-8"),
-            token=token,
-            commit_message=f"chore({final_repo}): update env.map manifest",
-        )
-
-    return PushResult(True, final_repo, vault_path, commit_sha=sha, message="Pushed successfully.", org_name=final_org)
+        return final_repo, final_org, None, recip, "GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token."
+    return final_repo, final_org, token, recip, None
 
 
 def push_repo_git_identity(
@@ -250,21 +190,17 @@ def push_repo_git_identity(
     org_name: str | None = None,
     gh_token: str | None = None,
     recipient: str | None = None,
-    vault_repo: str = DEFAULT_VAULT_REPO,
+    vault_repo: str | None = None,
     encrypt_fn: Any = None,
     commit_fn: Any = None,
 ) -> PushResult:
     """Encrypts repository-specific Git authorship and commits to <repo>/git.env in env-store."""
-    det_org, det_name = detect_repo_name(repo_dir)
-    final_repo = repo_name or det_name
-    final_org = org_name or det_org or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
-    token = resolve_gh_token(gh_token)
-    recip = recipient or DEFAULT_AGE_RECIPIENT
+    from sandbox.env_store import DEFAULT_VAULT_REPO
 
-    if not final_org:
-        return PushResult(False, final_repo, "", message="GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>.")
-    if not token:
-        return PushResult(False, final_repo, "", message="GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass -t/--token.")
+    target_vault_repo = vault_repo or DEFAULT_VAULT_REPO
+    final_repo, final_org, token, recip, err = _resolve_repo_context(repo_dir, repo_name, org_name, gh_token, recipient)
+    if err or not final_org or not token:
+        return PushResult(False, final_repo, "", message=err or "Missing repository credentials.")
 
     final_name = name or os.environ.get("GIT_AUTHOR_NAME")
     final_email = email or os.environ.get("GIT_AUTHOR_EMAIL")
@@ -290,7 +226,7 @@ def push_repo_git_identity(
         sha = _encrypt_and_commit(
             tmp_src_path,
             final_org,
-            vault_repo,
+            target_vault_repo,
             vault_path,
             token,
             recip,

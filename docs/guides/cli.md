@@ -79,16 +79,21 @@ modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 ## Central Environment Store CLI Utilities
 
 ### `push-repo-env`
-Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace. Automatically creates and updates `<repo>/env.map` so destination mappings are immediately discoverable by `pull-repo-env` and git worktree propagation.
+Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace. Checks `<repo>/env.map` in `env-store` before pushing so monorepo `.env` files at paths other than `.env` are discovered and synchronized cleanly.
 
 ```bash
-# Push default project application environment secrets (.env -> <repo>/default.env)
-# Automatically creates/maintains default.env = .env in <repo>/env.map
+# Sync all local files listed in <repo>/env.map (plus unmapped root .env -> default.env)
+# Prompts [y/N] per file when multiple or non-root paths exist; auto-pushes when only root .env exists
 push-repo-env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Push custom environment secrets (e.g. .env.local -> <repo>/local.env)
-# NOTE: -d/--dest is REQUIRED whenever -e is not .env
-# Automatically updates <repo>/env.map mapping local.env = .env.local
+# Non-interactive sync of all existing local files listed in <repo>/env.map
+push-repo-env --all [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
+
+# Push a single mapped file (reuses existing vault filename from <repo>/env.map automatically)
+push-repo-env -e apps/web/.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
+
+# Register and push a new custom or subpath environment file (e.g. .env.local -> <repo>/local.env)
+# NOTE: -d/--dest is REQUIRED when -e is not yet in env.map and is not repo-root .env
 push-repo-env -e .env.local -d local.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
 # Push repository-specific Git authorship to <repo>/git.env
@@ -102,8 +107,10 @@ push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <
 | `-r, --repo` | string | Origin remote | Target repository name. |
 | `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
 | `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
-| `-e, --env` | path | `.env` | Path to local source environment file. |
-| `-d, --dest` | string | `default.env` | Destination filename in vault. **Required if `-e` is not `.env`**. Automatically creates or updates `<repo>/env.map` in `env-store` mapping to the relative workspace path. |
+| `-e, --env` | path | — | Push a single local source environment file (if omitted, checks `<repo>/env.map`). |
+| `-d, --dest` | string | Mapped or `default.env` | Destination filename in vault for single-file push. **Required for new unmapped files other than repo-root `.env`**. Automatically creates or updates `<repo>/env.map` in `env-store`. |
+| `--all` | flag | `False` | Push all existing local files mapped in `<repo>/env.map` (plus unmapped root `.env`) without prompting. Mutually exclusive with `-e` and `-d`. |
+| `--allow-binary` | flag | `False` | Allow encrypting new destination files with unknown/binary extensions (existing `env.map` entries are allowed implicitly). |
 | `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
 
 #### `push-repo-env git` Options

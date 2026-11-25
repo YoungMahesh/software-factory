@@ -372,6 +372,7 @@ class EnvStoreVault:
         repo_name: str | None = None,
         dest_name: str | None = None,
         allow_binary: bool = False,
+        push_all: bool = False,
     ) -> PushResult:
         """Encrypts and pushes local environment secrets to env-store."""
         return push_repo_env(
@@ -383,6 +384,7 @@ class EnvStoreVault:
             dest_name=dest_name,
             vault_repo=self.vault_repo,
             allow_binary=allow_binary,
+            push_all=push_all,
         )
 
 
@@ -402,6 +404,7 @@ def detect_repo_name(repo_dir: Path | str | None = None) -> tuple[str | None, st
 
 from sandbox.env_store_push import (
     DEFAULT_AGE_RECIPIENT,
+    PushFileOutcome,
     PushResult,
     commit_to_env_store,
     ensure_gitignore,
