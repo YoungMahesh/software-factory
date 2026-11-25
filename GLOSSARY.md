@@ -282,6 +282,10 @@ _Avoid_: Runner plane, container layer, compute worker
 The remote infrastructure automation mechanism that uses SSH credentials configured in the environment to connect to a target VPS, verify Docker daemon dependencies, and execute deployment orchestration remotely, strictly decoupled from runtime sandbox access.
 _Avoid_: SSH runner, remote script, vps agent
 
+**Host Ingress Proxy**:
+The shared reverse-proxy service running on a VPS alongside the Resource Plane that owns host HTTP/HTTPS ports, manages public ACME TLS certificates, and routes external domain traffic to the Resource Plane and any co-located host applications.
+_Avoid_: App proxy, caddy server, edge proxy, reverse-proxy container
+
 **In-Repo Secrets Directory**:
 An uncommitted, Git-ignored directory at the repository root (`.secrets/`) used to store local credentials and private keys that cannot be stored in `.env`, synchronized to the central environment store via `push-repo-env` and `pull-repo-env`.
 _Avoid_: Local keys, private folder, uncommitted secrets, key cache

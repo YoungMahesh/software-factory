@@ -242,7 +242,9 @@ class TestInfraDeploy(unittest.TestCase):
         result = sync_resource_plane_to_vps(self.sample_config)
         self.assertTrue(result)
         self.assertEqual(mock_popen.call_count, 2)
-        self.assertIn("--exclude=.env", mock_popen.call_args_list[0].args[0])
+        tar_args = mock_popen.call_args_list[0].args[0]
+        self.assertIn("--exclude=.env", tar_args)
+        self.assertIn("--exclude=caddy", tar_args)
 
     @patch("subprocess.run")
     def test_execute_remote_deploy_stream(self, mock_run):

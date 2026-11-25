@@ -88,7 +88,7 @@ The pipeline executes the following stages automatically:
 4. **Idempotent Container Orchestration**: Executes `./deploy.sh` remotely, ensuring the `dbhost-network` Docker bridge network exists, starting/rebuilding containers via Docker Compose, applying migrations, and polling the health endpoint.
 5. **Deterministic Credential Synchronization**: Automatically retrieves the remote `ADMIN_TOKEN` and writes `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env` (preserving any existing values, or bypassed via `--no-sync-env`).
 
-Output on completion:
+   Output on completion:
 ```text
 ✅ Resource Plane successfully deployed to VPS!
    Dashboard / Web UI: http://203.0.113.10:3000
@@ -97,6 +97,29 @@ Output on completion:
 
    ✓ Synchronized RESOURCE_PLANE_DOMAIN, RESOURCE_PLANE_ADMIN_TOKEN to .env
 ```
+
+### Step 3: Configure Host Ingress Proxy & HTTPS (`modal-sandbox infra caddy`)
+
+Point your DNS A record (`RESOURCE_PLANE_DOMAIN`, and optionally an S3 subdomain) at the VPS IP, then configure Caddy at `/opt/caddy`:
+
+```bash
+# On a fresh VPS (provisions /opt/caddy via Docker Compose + dbhost-network):
+modal-sandbox infra caddy --bootstrap --domain db-host.example.com
+
+# Optional ACME email during initial bootstrap and optional S3 domain:
+modal-sandbox infra caddy --bootstrap --email ops@example.com \
+  --domain db-host.example.com \
+  --s3-domain s3.example.com
+
+# Subsequent route updates (or when /opt/caddy is already running):
+modal-sandbox infra caddy --domain db-host.example.com
+
+# Verify running container, network attachment, and Caddyfile validity:
+modal-sandbox infra caddy --check-only
+```
+
+- `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
+- Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
 
 ---
 

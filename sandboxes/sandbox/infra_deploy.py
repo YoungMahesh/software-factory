@@ -192,6 +192,7 @@ def sync_resource_plane_to_vps(
         "--exclude=.data",
         "--exclude=.env",
         "--exclude=.next",
+        "--exclude=caddy",
         "-C",
         str(parent_dir),
         folder_name,

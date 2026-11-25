@@ -174,7 +174,7 @@ Refer to [`GLOSSARY.md`](file:///root/.t3/worktrees/db-host/t3-2aa2bdaa/GLOSSARY
 
 Deploying DB Host Control Plane to a production server (VPS or cloud instance) with Docker pre-installed is executed with a **single automated command**.
 
-No Node.js, pnpm, systemd, or reverse proxy configuration is required on the host. The entire stack (Control Plane Next.js web application, PostgreSQL 16 with enforced TLS encryption, and SeaweedFS S3 storage) is containerized and orchestrated via Docker Compose.
+No Node.js, pnpm, systemd, or manual reverse proxy configuration is required on the host. The core stack (Control Plane Next.js web application, PostgreSQL 16 with enforced TLS encryption, and SeaweedFS S3 storage) runs via Docker Compose at `/opt/resource-plane`, and the optional Host Ingress Proxy stack for public HTTPS (`resource-plane/caddy/`) is provisioned as a sibling stack at `/opt/caddy` via `modal-sandbox infra caddy --bootstrap --domain <domain>`.
 
 ### Single-Command Quickstart
 
