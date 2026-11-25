@@ -51,7 +51,7 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `RESOURCE_PLANE_SSH_HOST`: Target Linux VPS hostname or IP address for automated deployment (required).
 - `RESOURCE_PLANE_SSH_USER`: SSH user on the target VPS with Docker permissions (defaults to `root`).
 - `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`).
-- `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (optional if `ssh-agent` or `~/.ssh/id_rsa` is configured).
+- `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (required; canonically placed in `.secrets/resource_plane_ssh` and ignored by git). Ambient SSH fallbacks are disabled.
 - `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`).
 
 ---

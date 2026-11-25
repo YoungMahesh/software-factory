@@ -27,9 +27,9 @@ DEFAULT_SSH_USER = "root"
 class VpsSshConfig:
     """Configuration required to connect and deploy to a target VPS."""
     host: str
+    key_path: Path
     user: str = DEFAULT_SSH_USER
     port: int = DEFAULT_SSH_PORT
-    key_path: Path | None = None
     remote_dir: str = DEFAULT_REMOTE_DIR
 
 
@@ -73,7 +73,28 @@ def resolve_vps_ssh_config(
         or os.environ.get("RESOURCE_PLANE_SSH_KEY")
         or file_env.get("RESOURCE_PLANE_SSH_KEY")
     )
-    resolved_key = Path(raw_key).expanduser().resolve() if raw_key else None
+    if not raw_key or not str(raw_key).strip():
+        raise ValueError(
+            "Missing required SSH key. Set RESOURCE_PLANE_SSH_KEY in .env or provide --key."
+        )
+
+    key_p = Path(raw_key).expanduser()
+    if not key_p.is_absolute():
+        resolved_key = (resolve_factory_root() / key_p).resolve()
+    else:
+        resolved_key = key_p.resolve()
+
+    if not resolved_key.is_file():
+        raise FileNotFoundError(f"SSH private key file not found: {resolved_key}")
+
+    try:
+        current_mode = resolved_key.stat().st_mode & 0o777
+        if current_mode != 0o600:
+            resolved_key.chmod(0o600)
+            print(f"🔒 Normalized permissions on SSH key to 0600: {resolved_key}", file=sys.stderr)
+    except OSError:
+        pass
+
     resolved_remote_dir = (
         remote_dir
         or os.environ.get("RESOURCE_PLANE_REMOTE_DIR")
@@ -92,10 +113,14 @@ def resolve_vps_ssh_config(
 
 def build_ssh_cmd(config: VpsSshConfig, remote_cmd: str | None = None) -> list[str]:
     """Constructs the base SSH command list honoring port, key, and user options."""
-    cmd = ["ssh", "-p", str(config.port)]
-    if config.key_path:
-        cmd.extend(["-i", str(config.key_path)])
-    cmd.append(f"{config.user}@{config.host}")
+    cmd = [
+        "ssh",
+        "-p",
+        str(config.port),
+        "-i",
+        str(config.key_path),
+        f"{config.user}@{config.host}",
+    ]
     if remote_cmd:
         cmd.append(remote_cmd)
     return cmd
@@ -369,7 +394,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
     parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")
     parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
-    parser.add_argument("--key", help="Path to private SSH key file (defaults to RESOURCE_PLANE_SSH_KEY env var).")
+    parser.add_argument("--key", help="Path to private SSH key file (required or RESOURCE_PLANE_SSH_KEY env var).")
     parser.add_argument("--remote-dir", help="Target directory on remote VPS (defaults to /opt/resource-plane).")
     parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize credentials to local .env.")
     parser.add_argument("--check-only", action="store_true", help="Only verify SSH and Docker connectivity without deploying.")
@@ -390,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
             remote_dir=args.remote_dir,
             dotenv=parse_env_file(resolve_factory_root() / ".env"),
         )
-    except ValueError as exc:
+    except (ValueError, FileNotFoundError) as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 1
 

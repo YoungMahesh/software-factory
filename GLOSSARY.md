@@ -282,6 +282,10 @@ _Avoid_: Runner plane, container layer, compute worker
 The remote infrastructure automation mechanism that uses SSH credentials configured in the environment to connect to a target VPS, verify Docker daemon dependencies, and execute deployment orchestration remotely, strictly decoupled from runtime sandbox access.
 _Avoid_: SSH runner, remote script, vps agent
 
+**In-Repo Secrets Directory**:
+An uncommitted, Git-ignored directory at the repository root (`.secrets/`) used to store local credentials and private keys that cannot be stored in `.env`, synchronized to the central environment store via `push-repo-env` and `pull-repo-env`.
+_Avoid_: Local keys, private folder, uncommitted secrets, key cache
+
 **DbHostClient**:
 A deep control plane client module (`sandbox/db_host_client.py`) that encapsulates JSON-RPC over HTTP communication with the db-host MCP server, managing admin authentication, project scoping, and root CA certificate caching behind a cohesive transport seam.
 _Avoid_: MCP client, db-host transport, postgres helper, rpc caller

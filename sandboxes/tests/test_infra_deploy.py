@@ -32,19 +32,34 @@ class TestInfraDeploy(unittest.TestCase):
     """Test suite for infra_deploy configuration, commands, and orchestration."""
 
     def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.dummy_key = Path(self.temp_dir.name) / "test_key"
+        self.dummy_key.write_text("fake-ssh-key-content", encoding="utf-8")
+        self.dummy_key.chmod(0o600)
+
         self.sample_config = VpsSshConfig(
             host="vps.example.com",
             user="admin",
             port=2222,
-            key_path=Path("/tmp/test_key"),
+            key_path=self.dummy_key,
             remote_dir="/srv/resource-plane",
         )
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_infra_deploy_check_only_reads_checkout_env(self):
         argv = ["modal-sandbox", "infra", "deploy", "--check-only"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".env").write_text("RESOURCE_PLANE_SSH_HOST=fixture.invalid\n")
+            fake_key = root / ".secrets" / "resource_plane_ssh"
+            fake_key.parent.mkdir(parents=True, exist_ok=True)
+            fake_key.write_text("fake-key", encoding="utf-8")
+            fake_key.chmod(0o600)
+            (root / ".env").write_text(
+                "RESOURCE_PLANE_SSH_HOST=fixture.invalid\n"
+                "RESOURCE_PLANE_SSH_KEY=.secrets/resource_plane_ssh\n"
+            )
             with (
                 patch("sys.argv", argv),
                 patch.dict(os.environ, {}, clear=True),
@@ -57,6 +72,7 @@ class TestInfraDeploy(unittest.TestCase):
 
         self.assertEqual(exit_context.exception.code, 0)
         self.assertEqual(ssh.call_args.args[0].host, "fixture.invalid")
+        self.assertEqual(ssh.call_args.args[0].key_path, fake_key.resolve())
 
     def test_resolve_vps_ssh_config_from_args(self):
         """Resolves configuration directly from explicit arguments."""
@@ -64,21 +80,57 @@ class TestInfraDeploy(unittest.TestCase):
             host="myhost.test",
             user="ubuntu",
             port=2200,
-            key_path="/tmp/key",
+            key_path=self.dummy_key,
             remote_dir="/var/resource-plane",
         )
         self.assertEqual(cfg.host, "myhost.test")
         self.assertEqual(cfg.user, "ubuntu")
         self.assertEqual(cfg.port, 2200)
-        self.assertEqual(cfg.key_path, Path("/tmp/key").resolve())
+        self.assertEqual(cfg.key_path, self.dummy_key.resolve())
         self.assertEqual(cfg.remote_dir, "/var/resource-plane")
 
     def test_resolve_vps_ssh_config_missing_host_raises(self):
         """Raises ValueError when host is not provided in args or environment."""
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError) as ctx:
-                resolve_vps_ssh_config()
+                resolve_vps_ssh_config(key_path=self.dummy_key)
             self.assertIn("Missing VPS SSH host", str(ctx.exception))
+
+    def test_resolve_vps_ssh_config_missing_key_raises(self):
+        """Raises ValueError when SSH key is not provided in args or environment."""
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(ValueError) as ctx:
+                resolve_vps_ssh_config(host="test.host")
+            self.assertIn("Missing required SSH key", str(ctx.exception))
+
+    def test_resolve_vps_ssh_config_nonexistent_key_raises(self):
+        """Raises FileNotFoundError when configured SSH key file does not exist."""
+        nonexistent = Path(self.temp_dir.name) / "does_not_exist"
+        with self.assertRaises(FileNotFoundError) as ctx:
+            resolve_vps_ssh_config(host="test.host", key_path=nonexistent)
+        self.assertIn("SSH private key file not found", str(ctx.exception))
+
+    def test_resolve_vps_ssh_config_permission_hardening(self):
+        """Normalizes file mode to 0600 when permissions are too open."""
+        loose_key = Path(self.temp_dir.name) / "loose_key"
+        loose_key.write_text("loose-key", encoding="utf-8")
+        loose_key.chmod(0o644)
+        cfg = resolve_vps_ssh_config(host="test.host", key_path=loose_key)
+        self.assertEqual(cfg.key_path.stat().st_mode & 0o777, 0o600)
+
+    def test_resolve_vps_ssh_config_relative_path_resolution(self):
+        """Resolves relative key path against resolve_factory_root()."""
+        root = Path(self.temp_dir.name) / "mock_root"
+        root.mkdir()
+        secrets_dir = root / ".secrets"
+        secrets_dir.mkdir()
+        rel_key = secrets_dir / "resource_plane_ssh"
+        rel_key.write_text("rel-key", encoding="utf-8")
+        rel_key.chmod(0o600)
+
+        with patch("sandbox.infra_deploy.resolve_factory_root", return_value=root):
+            cfg = resolve_vps_ssh_config(host="test.host", key_path=".secrets/resource_plane_ssh")
+            self.assertEqual(cfg.key_path, rel_key.resolve())
 
     def test_resolve_vps_ssh_config_from_env(self):
         """Resolves configuration from RESOURCE_PLANE_SSH_* environment variables."""
@@ -86,6 +138,7 @@ class TestInfraDeploy(unittest.TestCase):
             "RESOURCE_PLANE_SSH_HOST": "envhost.test",
             "RESOURCE_PLANE_SSH_USER": "deploy",
             "RESOURCE_PLANE_SSH_PORT": "22022",
+            "RESOURCE_PLANE_SSH_KEY": str(self.dummy_key),
             "RESOURCE_PLANE_REMOTE_DIR": "/custom/path",
         }
         with patch.dict(os.environ, env, clear=True):
@@ -93,6 +146,7 @@ class TestInfraDeploy(unittest.TestCase):
             self.assertEqual(cfg.host, "envhost.test")
             self.assertEqual(cfg.user, "deploy")
             self.assertEqual(cfg.port, 22022)
+            self.assertEqual(cfg.key_path, self.dummy_key.resolve())
             self.assertEqual(cfg.remote_dir, "/custom/path")
 
     def test_resolve_vps_ssh_config_legacy_db_host_ignored(self):
@@ -100,6 +154,7 @@ class TestInfraDeploy(unittest.TestCase):
         env = {
             "DB_HOST_SSH_HOST": "legacyhost.test",
             "DB_HOST_SSH_USER": "legacyuser",
+            "RESOURCE_PLANE_SSH_KEY": str(self.dummy_key),
         }
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaises(ValueError) as ctx:
@@ -107,19 +162,22 @@ class TestInfraDeploy(unittest.TestCase):
             self.assertIn("Missing VPS SSH host", str(ctx.exception))
 
     def test_build_ssh_cmd(self):
-        """Verifies SSH command structure with and without key and remote command."""
+        """Verifies SSH command structure with key and remote command."""
         cmd = build_ssh_cmd(self.sample_config)
-        self.assertEqual(cmd, ["ssh", "-p", "2222", "-i", "/tmp/test_key", "admin@vps.example.com"])
+        self.assertEqual(
+            cmd,
+            ["ssh", "-p", "2222", "-i", str(self.dummy_key), "admin@vps.example.com"],
+        )
 
         cmd_with_remote = build_ssh_cmd(self.sample_config, "uptime")
         self.assertEqual(
             cmd_with_remote,
-            ["ssh", "-p", "2222", "-i", "/tmp/test_key", "admin@vps.example.com", "uptime"],
+            ["ssh", "-p", "2222", "-i", str(self.dummy_key), "admin@vps.example.com", "uptime"],
         )
 
-        simple_cfg = VpsSshConfig(host="simple.test")
+        simple_cfg = VpsSshConfig(host="simple.test", key_path=self.dummy_key)
         simple_cmd = build_ssh_cmd(simple_cfg)
-        self.assertEqual(simple_cmd, ["ssh", "-p", "22", "root@simple.test"])
+        self.assertEqual(simple_cmd, ["ssh", "-p", "22", "-i", str(self.dummy_key), "root@simple.test"])
 
     @patch("subprocess.run")
     def test_check_ssh_connection_success(self, mock_run):
@@ -238,7 +296,7 @@ class TestInfraDeploy(unittest.TestCase):
         mock_ssh.return_value = True
         mock_docker.return_value = (True, "Docker OK")
 
-        code = main(["--host", "test.vps", "--check-only"])
+        code = main(["--host", "test.vps", "--key", str(self.dummy_key), "--check-only"])
         self.assertEqual(code, 0)
         mock_ssh.assert_called_once()
         mock_docker.assert_called_once()
@@ -366,6 +424,6 @@ class TestInfraDeploy(unittest.TestCase):
         mock_sync.return_value = True
         mock_exec.return_value = (0, "Success output")
 
-        code = main(["--host", "vps.example.com", "--no-sync-env"])
+        code = main(["--host", "vps.example.com", "--key", str(self.dummy_key), "--no-sync-env"])
         self.assertEqual(code, 0)
         mock_token.assert_not_called()

@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 
 .playwright-mcp
+.secrets/
 
 launch.sh
 llm-response.md

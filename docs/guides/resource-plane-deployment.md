@@ -33,7 +33,7 @@ Add your VPS connection details to your local `.env` file:
 RESOURCE_PLANE_SSH_HOST=203.0.113.10
 RESOURCE_PLANE_SSH_USER=root
 RESOURCE_PLANE_SSH_PORT=22
-RESOURCE_PLANE_SSH_KEY=~/.ssh/id_ed25519
+RESOURCE_PLANE_SSH_KEY=.secrets/resource_plane_ssh
 RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 ```
 
@@ -42,8 +42,20 @@ RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 | `RESOURCE_PLANE_SSH_HOST` | *(Required)* | IP address or hostname of the target Linux VPS. |
 | `RESOURCE_PLANE_SSH_USER` | `root` | SSH user with permissions to run Docker. |
 | `RESOURCE_PLANE_SSH_PORT` | `22` | Remote SSH port. |
-| `RESOURCE_PLANE_SSH_KEY` | `None` | Path to private SSH key file (optional if `ssh-agent` or `~/.ssh/id_rsa` is active). |
+| `RESOURCE_PLANE_SSH_KEY` | *(Required)* | Path to private SSH key file (canonically placed in `.secrets/resource_plane_ssh`). Ambient fallbacks are disabled. |
 | `RESOURCE_PLANE_REMOTE_DIR` | `/opt/resource-plane` | Destination folder on the remote VPS. |
+
+#### SSH Key Storage and Central Vault (`env-store`)
+
+Because OpenSSH private keys are multi-line PEM files, they cannot be stored directly inside a `.env` file without breaking dotenv and SOPS unmarshalling. Under [ADR 0083](../adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md):
+
+1. **In-Repo Placement**: Save the private key to `.secrets/resource_plane_ssh` (extensionless per Linux conventions). The `.secrets/` directory is excluded in `.gitignore`.
+2. **Automatic Permission Hardening**: `modal-sandbox infra deploy` validates that the key exists and automatically enforces `chmod 0600` if file permissions are overly permissive.
+3. **Synchronize to `env-store`**: Push the key to the central secret vault with the `--allow-binary` flag:
+   ```bash
+   push-repo-env -e .secrets/resource_plane_ssh -d resource_plane_ssh --allow-binary
+   ```
+   When pulling secrets via `pull-repo-env`, the key is automatically restored to `.secrets/resource_plane_ssh` with `0600` permissions.
 
 ---
 

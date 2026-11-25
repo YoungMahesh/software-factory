@@ -164,6 +164,8 @@ nav:
     - '0079: Create-S3 CLI for db-host S3 Object Storage Provisioning and Management': adr/0079-create-s3-cli-for-db-host-s3-object-storage.md
     - '0080: Consolidate Control Plane, Vault, Configuration, and Presentation Seams': adr/0080-consolidate-control-plane-and-configuration-seams.md
     - '0081: Monorepo Architecture for Execution Plane (Modal Sandboxes) and Resource Plane (VPS Persistence)': adr/0081-monorepo-architecture-for-execution-and-resource-planes.md
+    - '0082: Strict Resource Plane Deployment Configuration and Deployment Idempotency': adr/0082-strict-resource-plane-deployment-configuration-and-idempotency.md
+    - '0083: Mandatory Resource Plane SSH Key and In-Repo Secrets Directory': adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md
