@@ -286,6 +286,10 @@ _Avoid_: SSH runner, remote script, vps agent
 The shared reverse-proxy service running on a VPS alongside the Resource Plane that owns host HTTP/HTTPS ports, manages public ACME TLS certificates, and routes external domain traffic to the Resource Plane and any co-located host applications.
 _Avoid_: App proxy, caddy server, edge proxy, reverse-proxy container
 
+**Host Ingress Store**:
+A dedicated private GitHub repository (`caddy-store` under `${GH_ORG_NAME}`) holding plaintext Host Ingress Proxy configuration (`/opt/caddy/conf/` and `docker-compose.override.yml`) organized by logical VPS profile folders.
+_Avoid_: Caddy backup, proxy store, caddy-store env, caddy vault
+
 **In-Repo Secrets Directory**:
 An uncommitted, Git-ignored directory at the repository root (`.secrets/`) used to store local credentials and private keys that cannot be stored in `.env`, synchronized to the central environment store via `push-repo-env` and `pull-repo-env`.
 _Avoid_: Local keys, private folder, uncommitted secrets, key cache

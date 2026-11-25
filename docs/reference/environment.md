@@ -53,6 +53,7 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`).
 - `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (required; canonically placed in `.secrets/resource_plane_ssh` and ignored by git). Ambient SSH fallbacks are disabled.
 - `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`).
+- `CADDY_STORE_PROFILE`: Logical VPS profile folder inside the canonical private `github.com/${GH_ORG_NAME}/caddy-store` repository (defaults to `default`). Overridable per command via `--profile`.
 
 ---
 

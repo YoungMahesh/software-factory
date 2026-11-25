@@ -397,6 +397,9 @@ def build_caddy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--s3-upstream", default=DEFAULT_S3_UPSTREAM, help=f"Upstream S3 target (default: {DEFAULT_S3_UPSTREAM}).")
     parser.add_argument("--bootstrap", action="store_true", help=f"Provision {DEFAULT_CADDY_DIR} via Docker Compose on a fresh VPS.")
     parser.add_argument("--email", default=None, help="Optional ACME email written during --bootstrap.")
+    parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from caddy-store instead of an empty Caddyfile.")
+    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to caddy-store after configuring routes.")
+    parser.add_argument("--profile", default=None, help="Logical VPS profile folder in caddy-store (defaults to CADDY_STORE_PROFILE or 'default').")
     parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
     parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")
     parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
@@ -406,12 +409,20 @@ def build_caddy_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entrypoint for Host Ingress Proxy setup."""
+    """CLI entrypoint for Host Ingress Proxy setup and caddy-store sync."""
+    arg_list = list(sys.argv[1:] if argv is None else argv)
+    if arg_list and arg_list[0] in ("backup", "restore"):
+        from sandbox.caddy_store import run_caddy_store_subcommand
+        return run_caddy_store_subcommand(arg_list[0], arg_list[1:])
+
     parser = build_caddy_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arg_list)
 
     if args.email and not args.bootstrap:
         print("❌ --email can only be used together with --bootstrap.", file=sys.stderr)
+        return 1
+    if args.from_store and not args.bootstrap:
+        print("❌ --from-store requires --bootstrap (or use 'modal-sandbox infra caddy restore').", file=sys.stderr)
         return 1
 
     root = resolve_factory_root()
@@ -440,6 +451,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"✓ {val_msg}" if val_ok else f"❌ {val_msg}")
         return 0 if (net_ok and val_ok) else 1
 
+    if args.bootstrap and args.from_store:
+        from sandbox.caddy_store import run_bootstrap_from_store
+        return run_bootstrap_from_store(
+            vps_config, profile=args.profile, domain=args.domain, upstream=args.upstream,
+            s3_domain=args.s3_domain, s3_upstream=args.s3_upstream, sync=args.sync, caddy_cfg=caddy_cfg,
+        )
+
     domain = args.domain or os.environ.get("RESOURCE_PLANE_DOMAIN") or file_env.get("RESOURCE_PLANE_DOMAIN")
     if (not domain or not domain.strip()) and not args.bootstrap:
         print("❌ Missing domain. Provide --domain, set RESOURCE_PLANE_DOMAIN in .env, or pass --bootstrap.", file=sys.stderr)
@@ -448,20 +466,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     target_desc = f"domain '{domain.strip()}'" if domain and domain.strip() else "bootstrap only"
     print(f"🔒 Configuring Host Ingress Proxy (/opt/caddy) on {vps_config.user}@{vps_config.host} ({target_desc})...")
     success, message = setup_reverse_proxy(
-        vps_config=vps_config,
-        domain=domain.strip() if domain else None,
-        upstream=args.upstream,
-        s3_domain=args.s3_domain.strip() if args.s3_domain else None,
-        s3_upstream=args.s3_upstream,
-        bootstrap=args.bootstrap,
-        email=args.email,
-        caddy_config=caddy_cfg,
+        vps_config=vps_config, domain=domain.strip() if domain else None, upstream=args.upstream,
+        s3_domain=args.s3_domain.strip() if args.s3_domain else None, s3_upstream=args.s3_upstream,
+        bootstrap=args.bootstrap, email=args.email, caddy_config=caddy_cfg,
     )
-    if success:
-        print(f"✓ {message}")
-        return 0
-    print(f"❌ {message}", file=sys.stderr)
-    return 1
+    if not success:
+        print(f"❌ {message}", file=sys.stderr)
+        return 1
+    print(f"✓ {message}")
+    if args.sync:
+        from sandbox.caddy_store import maybe_sync_after_deploy
+        return maybe_sync_after_deploy(vps_config, args.profile)
+    return 0
 
 
 if __name__ == "__main__":

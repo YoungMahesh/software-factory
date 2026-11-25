@@ -121,6 +121,31 @@ modal-sandbox infra caddy --check-only
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
 
+#### Persisting and Restoring `/opt/caddy` via Host Ingress Store (`caddy-store`)
+
+Declarative `/opt/caddy` files (`conf/Caddyfile`, `conf/sites/*.caddy`, nested `conf/` includes, and `docker-compose.override.yml`) are persisted in the private `github.com/${GH_ORG_NAME}/caddy-store` repository organized by logical VPS profile folder (`CADDY_STORE_PROFILE`, default `default`):
+
+```bash
+# Idempotently capture live /opt/caddy/conf/ and docker-compose.override.yml into caddy-store:
+modal-sandbox infra caddy backup
+
+# Optional profile override (e.g., staging vs default production VPS):
+modal-sandbox infra caddy backup --profile staging
+
+# Update Resource Plane route and immediately sync /opt/caddy to caddy-store:
+modal-sandbox infra caddy --domain db-host.example.com --sync
+
+# Provision /opt/caddy on a brand-new VPS and restore all stored routes + Caddyfile + active networks:
+modal-sandbox infra caddy --bootstrap --from-store
+
+# Idempotently converge an existing running VPS from caddy-store (--prune removes extra local *.caddy files):
+modal-sandbox infra caddy restore
+modal-sandbox infra caddy restore --prune
+```
+
+- **Fresh-VPS Network Filtering**: If `docker-compose.override.yml` declares `external: true` networks for co-located apps not yet deployed on a new VPS, `restore` / `--bootstrap --from-store` filters them to networks already present on the host (reporting any skipped networks). Re-run `modal-sandbox infra caddy restore` after deploying those co-located stacks to attach their networks.
+- **Safety & Rollback**: `restore` validates `conf/` with `caddy validate` before reloading or applying compose overrides and rolls back automatically on validation failure. `caddy_data`/`caddy_config` ACME volumes are excluded so certificates re-issue cleanly once DNS switches.
+
 ---
 
 ## 3. Configuring Execution Sandboxes to Use the Deployed Resource Plane

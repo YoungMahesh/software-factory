@@ -264,6 +264,46 @@ class TestCaddyDeploy(unittest.TestCase):
         ret = caddy_main(["--check-only", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
         self.assertEqual(ret, 0)
 
+    def test_cli_rejects_from_store_without_bootstrap(self):
+        ret = caddy_main(["--from-store", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
+        self.assertEqual(ret, 1)
+
+    @patch("sandbox.caddy_store.run_caddy_store_subcommand")
+    def test_cli_dispatches_backup_and_restore_subcommands(self, mock_sub):
+        mock_sub.return_value = 0
+        self.assertEqual(caddy_main(["backup", "--profile", "prod"]), 0)
+        mock_sub.assert_called_with("backup", ["--profile", "prod"])
+        self.assertEqual(caddy_main(["restore", "--prune"]), 0)
+        mock_sub.assert_called_with("restore", ["--prune"])
+
+    @patch("sandbox.caddy_deploy.resolve_vps_ssh_config")
+    @patch("sandbox.caddy_store._cli.restore_caddy_from_store")
+    @patch("sandbox.caddy_deploy.setup_reverse_proxy")
+    def test_cli_bootstrap_from_store_does_not_clobber_without_explicit_domain(
+        self, mock_setup, mock_restore, mock_cfg
+    ):
+        mock_cfg.return_value = self.vps_config
+        mock_restore.return_value = MagicMock(success=True, message="Restored")
+        with patch.dict("os.environ", {"RESOURCE_PLANE_DOMAIN": "env.example.com"}):
+            ret = caddy_main(["--bootstrap", "--from-store", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
+        self.assertEqual(ret, 0)
+        mock_restore.assert_called_once()
+        mock_setup.assert_not_called()
+
+    @patch("sandbox.caddy_deploy.resolve_vps_ssh_config")
+    @patch("sandbox.caddy_deploy.setup_reverse_proxy")
+    @patch("sandbox.caddy_store._cli.backup_caddy_to_store")
+    def test_cli_domain_with_sync_triggers_backup(self, mock_backup, mock_setup, mock_cfg):
+        mock_cfg.return_value = self.vps_config
+        mock_setup.return_value = (True, "Updated")
+        mock_backup.return_value = MagicMock(success=True, message="Synced")
+        ret = caddy_main([
+            "--domain", "db.example.com", "--sync", "--profile", "prod",
+            "--host", "1.2.3.4", "--key", str(self.dummy_key),
+        ])
+        self.assertEqual(ret, 0)
+        mock_backup.assert_called_once_with(self.vps_config, profile="prod")
+
 
 if __name__ == "__main__":
     unittest.main()
