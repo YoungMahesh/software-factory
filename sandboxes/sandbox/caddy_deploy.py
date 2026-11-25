@@ -8,7 +8,6 @@ config validation, and zero-downtime Caddy reloads.
 from __future__ import annotations
 
 import argparse
-import base64
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -34,6 +33,7 @@ from sandbox.caddy_wildcard import (
     resolve_cloudflare_dns_token,
 )
 from sandbox.config import parse_env_file, resolve_factory_root
+from sandbox.host_ingress import apply_configuration, prepare_runtime
 from sandbox.infra_deploy import (
     VpsSshConfig,
     build_ssh_cmd,
@@ -84,30 +84,6 @@ def _ssh_exec(vps_config: VpsSshConfig, remote_cmd: str, timeout: int, error_pre
         return _run_ssh(vps_config, remote_cmd, timeout=timeout), ""
     except (subprocess.TimeoutExpired, OSError) as exc:
         return None, f"{error_prefix}: {exc}"
-
-
-def _read_remote_text(vps_config: VpsSshConfig, path: str, timeout: int) -> tuple[bool, str]:
-    """Reads remote file text if present, returning empty string when missing."""
-    res, err = _ssh_exec(vps_config, f"cat '{path}' 2>/dev/null || true", timeout, f"Failed to read {path}")
-    if res is None:
-        return False, err
-    if res.returncode != 0:
-        return False, f"Could not read {path}."
-    return True, res.stdout
-
-
-def _write_remote_file_b64(vps_config: VpsSshConfig, remote_path: str, content: str, timeout: int = 20) -> tuple[bool, str]:
-    """Atomically writes a UTF-8 file on the remote VPS via base64."""
-    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
-    parent = str(Path(remote_path).parent)
-    write_script = (
-        f"mkdir -p '{parent}' && printf '%s' '{encoded}' | base64 -d > '{remote_path}.tmp' && "
-        f"mv '{remote_path}.tmp' '{remote_path}'"
-    )
-    res, err = _ssh_exec(vps_config, write_script, timeout, f"Failed writing {remote_path}")
-    if res is None:
-        return False, err
-    return (True, f"Updated {remote_path}.") if res.returncode == 0 else (False, f"Failed writing {remote_path}: {res.stderr.strip()}")
 
 
 def check_caddy_running(vps_config: VpsSshConfig, caddy_config: CaddyConfig | None = None, timeout: int = 15) -> tuple[bool, str]:
@@ -182,52 +158,16 @@ def bootstrap_caddy(
     email: str | None = None,
     caddy_config: CaddyConfig | None = None,
     source_dir: Path | None = None,
-    timeout: int = 120,
+    timeout: int = 360,
 ) -> tuple[bool, str]:
-    """Provisions /opt/caddy on a fresh VPS and starts the Caddy container."""
+    """Prepares the complete canonical build context and starts or upgrades Caddy."""
     cfg = caddy_config or CaddyConfig()
-
-    running, _ = check_caddy_running(vps_config, cfg)
-    if running:
-        net_ok, net_msg = ensure_caddy_network(vps_config, cfg)
-        if not net_ok:
-            return False, net_msg
-        _ssh_exec(vps_config, f"mkdir -p '{cfg.sites_dir}' '{cfg.caddy_dir}/conf/apps'", 15, "Failed creating sites directory")
-        return True, f"Caddy container '{cfg.container_name}' is already running at {cfg.caddy_dir}."
-
-    ports_ok, ports_msg = check_ports_available(vps_config)
-    if not ports_ok:
-        return False, ports_msg
-
-    net_ok, net_msg = ensure_docker_network(vps_config, cfg.network)
-    if not net_ok:
-        return False, net_msg
-
-    src = source_dir or find_caddy_source_dir()
-    ok, msg = _write_remote_file_b64(vps_config, f"{cfg.caddy_dir}/docker-compose.yml", (src / "docker-compose.yml").read_text(encoding="utf-8"))
-    if not ok:
-        return False, msg
-
-    check_cf, cf_err = _ssh_exec(vps_config, f"test -f '{cfg.caddyfile_path}' && echo exists || echo missing", 15, "Failed probing Caddyfile")
-    if check_cf is None:
-        return False, cf_err
-    if check_cf.stdout.strip() == "missing" or (email and email.strip()):
-        cf_content = render_base_caddyfile(email) if (email and email.strip()) else (src / "conf" / "Caddyfile").read_text(encoding="utf-8")
-        cf_ok, cf_msg = _write_remote_file_b64(vps_config, cfg.caddyfile_path, cf_content)
-        if not cf_ok:
-            return False, cf_msg
-
-    up_script = f"mkdir -p '{cfg.sites_dir}' '{cfg.caddy_dir}/conf/apps' && cd '{cfg.caddy_dir}' && docker compose up -d"
-    res, up_err = _ssh_exec(vps_config, up_script, timeout, "Failed starting /opt/caddy stack")
-    if res is None:
-        return False, up_err
-    if res.returncode != 0:
-        return False, f"Failed to start /opt/caddy stack: {res.stderr.strip() or res.stdout.strip()}"
-
-    ok, run_msg = check_caddy_running(vps_config, cfg)
-    if not ok:
-        return False, f"Caddy compose started, but health probe failed: {run_msg}"
-    return True, f"Bootstrapped Host Ingress Proxy at {cfg.caddy_dir} ({run_msg})"
+    result = prepare_runtime(
+        vps_config, source_dir=source_dir, bootstrap=True, email=email,
+        caddy_dir=cfg.caddy_dir, container_name=cfg.container_name,
+        network=cfg.network, timeout=timeout,
+    )
+    return result.success, result.message
 
 
 def validate_caddy(vps_config: VpsSshConfig, caddy_config: CaddyConfig | None = None, timeout: int = 30) -> tuple[bool, str]:
@@ -248,41 +188,18 @@ def ensure_caddy_site_config(
     s3_domain: str | None = None,
     s3_upstream: str = DEFAULT_S3_UPSTREAM,
     caddy_config: CaddyConfig | None = None,
-    timeout: int = 20,
+    timeout: int = 90,
 ) -> tuple[bool, bool, str]:
-    """Idempotently writes and validates Resource Plane site config in sites/."""
+    """Applies and activates the Resource Plane route, recovering on failure."""
     cfg = caddy_config or CaddyConfig()
-
-    cf_ok, cf_content = _read_remote_text(vps_config, cfg.caddyfile_path, timeout)
-    if not cf_ok:
-        return False, False, cf_content
-    if not caddyfile_imports_sites(cf_content):
-        return False, False, f"Remote Caddyfile at {cfg.caddyfile_path} does not contain 'import /etc/caddy/sites/*.caddy'."
-
-    desired = render_resource_plane_site(domain, upstream, s3_domain, s3_upstream)
-    site_ok, existing = _read_remote_text(vps_config, cfg.site_path, timeout)
-    if not site_ok:
-        return False, False, existing
-    if existing == desired:
-        return True, False, f"Site config '{cfg.site_path}' is already up to date."
-
-    encoded = base64.b64encode(desired.encode("utf-8")).decode("ascii")
-    update_script = (
-        f"mkdir -p '{cfg.sites_dir}' && "
-        f"if [ -f '{cfg.site_path}' ]; then cp '{cfg.site_path}' '{cfg.site_path}.bak'; else rm -f '{cfg.site_path}.bak'; fi && "
-        f"printf '%s' '{encoded}' | base64 -d > '{cfg.site_path}' && "
-        f"if ! docker exec {cfg.container_name} caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then "
-        f"  err=$(docker exec {cfg.container_name} caddy validate --config /etc/caddy/Caddyfile 2>&1 || true); "
-        f"  if [ -f '{cfg.site_path}.bak' ]; then mv '{cfg.site_path}.bak' '{cfg.site_path}'; else rm -f '{cfg.site_path}'; fi; "
-        f"  echo \"VALIDATION_ERR:$err\" >&2; exit 1; "
-        f"fi && rm -f '{cfg.site_path}.bak'"
+    relative_path = Path(cfg.site_path).relative_to(cfg.caddy_dir).as_posix()
+    result = apply_configuration(
+        vps_config,
+        {relative_path: render_resource_plane_site(domain, upstream, s3_domain, s3_upstream)},
+        require_sites_import=True, caddy_dir=cfg.caddy_dir,
+        container_name=cfg.container_name, network=cfg.network, timeout=timeout,
     )
-    w_res, w_err = _ssh_exec(vps_config, update_script, timeout, "Failed to update remote site config")
-    if w_res is None:
-        return False, False, w_err
-    if w_res.returncode == 0:
-        return True, True, f"Updated '{cfg.site_path}' for '{domain}' -> '{upstream}'."
-    return False, False, f"Failed to update '{cfg.site_path}': {w_res.stderr.strip()}"
+    return result.success, result.changed, result.message
 
 
 def reload_caddy(vps_config: VpsSshConfig, caddy_config: CaddyConfig | None = None, timeout: int = 30) -> tuple[bool, str]:
@@ -354,10 +271,7 @@ def setup_reverse_proxy(
         base_msg = f"Reverse-proxy for '{clean_domain}'{s3_msg} is already up to date (reload skipped)."
         return True, f"{wc_msg} {base_msg}".strip() if wc_msg else base_msg
 
-    reload_ok, reload_msg = reload_caddy(vps_config, cfg)
-    if not reload_ok:
-        return False, f"Route updated, but reload failed: {reload_msg}"
-    done_msg = f"Reverse-proxy successfully configured for '{clean_domain}'{s3_msg}. {reload_msg}"
+    done_msg = f"Reverse-proxy successfully configured for '{clean_domain}'{s3_msg}. {site_msg}"
     return True, f"{wc_msg} {done_msg}".strip() if wc_msg else done_msg
 
 

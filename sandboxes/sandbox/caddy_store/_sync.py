@@ -5,13 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
-import subprocess
 from typing import Any
-import uuid
 
 from sandbox.config import parse_env_file, resolve_factory_root
 from sandbox.env_store import resolve_gh_token
-from sandbox.infra_deploy import VpsSshConfig, build_ssh_cmd
+from sandbox.infra_deploy import VpsSshConfig
+from sandbox.host_ingress import apply_configuration, prepare_runtime
 
 from ._compose_filter import filter_compose_override_networks
 from ._github import (
@@ -27,8 +26,6 @@ from ._github import (
 )
 from ._vps import (
     DEFAULT_CADDY_DIR,
-    apply_files_to_vps,
-    build_tar_gz_bytes,
     fetch_vps_caddy_files,
     list_remote_docker_networks,
     read_local_caddy_dir,
@@ -169,79 +166,24 @@ def _bootstrap_restore_vps(
     skipped_nets: list[str],
     resolved_profile: str,
     owner_label: str,
+    prune: bool,
 ) -> CaddyStoreResult:
-    from sandbox.caddy_deploy import (
-        check_ports_available,
-        ensure_docker_network,
-        find_caddy_source_dir,
-        validate_caddy,
-    )
-
-    ports_ok, ports_msg = check_ports_available(vps_config)
-    if not ports_ok:
-        return CaddyStoreResult(False, resolved_profile, ports_msg)
-    net_ok, net_msg = ensure_docker_network(vps_config, cfg.network)
-    if not net_ok:
-        return CaddyStoreResult(False, resolved_profile, net_msg)
-
-    src = find_caddy_source_dir()
-    to_write = {k: v for k, v in store_files.items() if k.startswith("conf/")}
-    to_write.setdefault("conf/Caddyfile", (src / "conf" / "Caddyfile").read_text(encoding="utf-8"))
+    files = {path: content for path, content in store_files.items() if path.startswith("conf/")}
     if filtered_override is not None:
-        to_write["docker-compose.override.yml"] = filtered_override
-
-    extra_runtime: dict[str, str] = {"docker-compose.yml": (src / "docker-compose.yml").read_text(encoding="utf-8")}
-    if (src / "Dockerfile").is_file():
-        extra_runtime["Dockerfile"] = (src / "Dockerfile").read_text(encoding="utf-8")
-    root = resolve_factory_root()
-    dotenv = parse_env_file(root / ".env") if (root / ".env").is_file() else {}
-    cf_token = (
-        os.environ.get("CLOUDFLARE_DNS_API_TOKEN")
-        or dotenv.get("CLOUDFLARE_DNS_API_TOKEN")
-        or os.environ.get("CLOUDFLARE_API_TOKEN")
-        or dotenv.get("CLOUDFLARE_API_TOKEN")
+        files["docker-compose.override.yml"] = filtered_override
+    delete = []
+    if filtered_override is None and ("docker-compose.override.yml" in store_files or prune):
+        delete.append("docker-compose.override.yml")
+    result = prepare_runtime(
+        vps_config, files=files, delete=delete, prune=prune, bootstrap=True,
+        require_cloudflare="conf/sites/apps-wildcard.caddy" in files,
+        caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
     )
-    needs_build = "conf/sites/apps-wildcard.caddy" in to_write
-    if needs_build and cf_token and cf_token.strip():
-        extra_runtime[".env"] = f"CLOUDFLARE_DNS_API_TOKEN={cf_token.strip()}\n"
-
-    compose_payload = build_tar_gz_bytes({**extra_runtime, **to_write})
-    p_write = subprocess.run(
-        build_ssh_cmd(
-            vps_config,
-            f"mkdir -p '{cfg.caddy_dir}/conf/sites' '{cfg.caddy_dir}/conf/apps' && "
-            f"tar -xzf - -C '{cfg.caddy_dir}' && "
-            f"([ -f '{cfg.caddy_dir}/.env' ] && chmod 600 '{cfg.caddy_dir}/.env' || true)",
-        ),
-        input=compose_payload, timeout=45, capture_output=True, check=False,
-    )
-    if p_write.returncode != 0:
-        err = p_write.stderr.decode("utf-8", errors="replace").strip()
-        return CaddyStoreResult(False, resolved_profile, f"Failed writing {cfg.caddy_dir}: {err}")
-
-    up_cmd = f"cd '{cfg.caddy_dir}' && docker compose up -d --build" if (needs_build and (src / "Dockerfile").is_file()) else f"cd '{cfg.caddy_dir}' && docker compose up -d"
-    up_res = subprocess.run(
-        build_ssh_cmd(vps_config, up_cmd),
-        timeout=240 if needs_build else 120, capture_output=True, text=True, check=False,
-    )
-    if up_res.returncode != 0:
-        return CaddyStoreResult(
-            False, resolved_profile, f"Failed starting {cfg.caddy_dir}: {up_res.stderr.strip() or up_res.stdout.strip()}"
-        )
-
-    val_ok, val_msg = validate_caddy(vps_config, cfg)
-    if not val_ok:
-        return CaddyStoreResult(
-            False, resolved_profile, f"Bootstrapped {cfg.caddy_dir}, but validation failed: {val_msg}",
-            skipped_networks=skipped_nets,
-        )
     return CaddyStoreResult(
-        True,
-        resolved_profile,
-        f"Bootstrapped and restored {cfg.caddy_dir} from '{owner_label}' (profile '{resolved_profile}').{_format_skip_note(skipped_nets)}",
-        changed=True,
-        skipped_networks=skipped_nets,
-        files_written=sorted(to_write),
+        result.success, resolved_profile,
+        f"{result.message} Store '{owner_label}', profile '{resolved_profile}'.{_format_skip_note(skipped_nets)}",
+        changed=result.changed, skipped_networks=skipped_nets,
+        files_written=result.files_written, files_deleted=result.files_deleted,
     )
 
 
@@ -256,107 +198,27 @@ def _converge_running_vps(
     owner_label: str,
     prune: bool,
 ) -> CaddyStoreResult:
-    from sandbox.caddy_deploy import ensure_caddy_network, reload_caddy, validate_caddy
-
-    net_ok, net_msg = ensure_caddy_network(vps_config, cfg)
-    if not net_ok:
-        return CaddyStoreResult(False, resolved_profile, net_msg)
-
-    current_files = fetch_vps_caddy_files(vps_config, caddy_dir=cfg.caddy_dir)
-    conf_to_write = {
-        rel: content for rel, content in store_files.items()
-        if rel.startswith("conf/") and current_files.get(rel) != content
-    }
-    conf_to_prune = (
-        sorted(rel for rel in current_files if rel.startswith("conf/") and rel != "conf/Caddyfile" and rel not in store_files)
-        if prune
-        else []
-    )
-    override_write: str | None = None
-    override_delete = False
+    files = {path: content for path, content in store_files.items() if path.startswith("conf/")}
+    delete = []
     if filtered_override is not None:
-        if current_files.get("docker-compose.override.yml") != filtered_override:
-            override_write = filtered_override
-    elif "docker-compose.override.yml" in current_files and (has_store_override or prune):
-        override_delete = True
-
-    if not conf_to_write and not conf_to_prune and override_write is None and not override_delete:
-        return CaddyStoreResult(
-            True,
-            resolved_profile,
-            f"Host Ingress Proxy at {cfg.caddy_dir} is already up to date with profile '{resolved_profile}' (idempotent no-op).{_format_skip_note(skipped_nets)}",
-            changed=False,
-            skipped_networks=skipped_nets,
+        files["docker-compose.override.yml"] = filtered_override
+    elif has_store_override or prune:
+        delete.append("docker-compose.override.yml")
+    if "conf/sites/apps-wildcard.caddy" in files:
+        result = prepare_runtime(
+            vps_config, files=files, delete=delete, prune=prune, require_cloudflare=True,
+            caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
         )
-
-    bak_dir = f"/tmp/caddy-restore-bak-{uuid.uuid4().hex[:8]}"
-    subprocess.run(
-        build_ssh_cmd(
-            vps_config,
-            f"mkdir -p '{bak_dir}' && ([ -d '{cfg.caddy_dir}/conf' ] && cp -a '{cfg.caddy_dir}/conf' '{bak_dir}/conf' || true) && "
-            f"([ -f '{cfg.caddy_dir}/docker-compose.override.yml' ] && cp -a '{cfg.caddy_dir}/docker-compose.override.yml' '{bak_dir}/docker-compose.override.yml' || true)",
-        ),
-        timeout=20, capture_output=True, check=False,
-    )
-
-    def _rollback() -> None:
-        subprocess.run(
-            build_ssh_cmd(
-                vps_config,
-                f"if [ -d '{bak_dir}/conf' ]; then rm -rf '{cfg.caddy_dir}/conf' && cp -a '{bak_dir}/conf' '{cfg.caddy_dir}/conf'; fi; "
-                f"if [ -f '{bak_dir}/docker-compose.override.yml' ]; then cp -a '{bak_dir}/docker-compose.override.yml' '{cfg.caddy_dir}/docker-compose.override.yml'; "
-                f"else rm -f '{cfg.caddy_dir}/docker-compose.override.yml'; fi; rm -rf '{bak_dir}'",
-            ),
-            timeout=30, capture_output=True, check=False,
+    else:
+        result = apply_configuration(
+            vps_config, files, delete=delete, prune=prune,
+            caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
         )
-
-    try:
-        if conf_to_write or conf_to_prune:
-            apply_files_to_vps(vps_config, conf_to_write, conf_to_prune, caddy_dir=cfg.caddy_dir)
-            val_ok, val_msg = validate_caddy(vps_config, cfg)
-            if not val_ok:
-                _rollback()
-                return CaddyStoreResult(
-                    False, resolved_profile, f"Validation failed (rolled back): {val_msg}", skipped_networks=skipped_nets
-                )
-
-        if override_write is not None or override_delete:
-            apply_files_to_vps(
-                vps_config,
-                {"docker-compose.override.yml": override_write} if override_write is not None else {},
-                ["docker-compose.override.yml"] if override_delete else [],
-                caddy_dir=cfg.caddy_dir,
-            )
-            up_res = subprocess.run(
-                build_ssh_cmd(vps_config, f"cd '{cfg.caddy_dir}' && docker compose up -d"),
-                timeout=120, capture_output=True, text=True, check=False,
-            )
-            if up_res.returncode != 0:
-                _rollback()
-                subprocess.run(build_ssh_cmd(vps_config, f"cd '{cfg.caddy_dir}' && docker compose up -d"), timeout=120, capture_output=True, check=False)
-                return CaddyStoreResult(
-                    False, resolved_profile, f"Docker Compose network convergence failed (rolled back): {up_res.stderr.strip() or up_res.stdout.strip()}"
-                )
-        else:
-            rel_ok, rel_msg = reload_caddy(vps_config, cfg)
-            if not rel_ok:
-                _rollback()
-                return CaddyStoreResult(
-                    False, resolved_profile, f"Reload failed (rolled back): {rel_msg}", skipped_networks=skipped_nets
-                )
-    finally:
-        subprocess.run(build_ssh_cmd(vps_config, f"rm -rf '{bak_dir}'"), timeout=15, capture_output=True, check=False)
-
-    written = sorted(list(conf_to_write) + (["docker-compose.override.yml"] if override_write is not None else []))
-    deleted = sorted(conf_to_prune + (["docker-compose.override.yml"] if override_delete else []))
     return CaddyStoreResult(
-        True,
-        resolved_profile,
-        f"Restored {len(written)} updated and {len(deleted)} removed file(s) from '{owner_label}' (profile '{resolved_profile}') to {cfg.caddy_dir}.{_format_skip_note(skipped_nets)}",
-        changed=True,
-        skipped_networks=skipped_nets,
-        files_written=written,
-        files_deleted=deleted,
+        result.success, resolved_profile,
+        f"{result.message} Store '{owner_label}', profile '{resolved_profile}'.{_format_skip_note(skipped_nets)}",
+        changed=result.changed, skipped_networks=skipped_nets,
+        files_written=result.files_written, files_deleted=result.files_deleted,
     )
 
 
@@ -417,7 +279,7 @@ def restore_caddy_from_store(
                 False, resolved_profile, f"{run_msg} Re-run with --bootstrap to provision {caddy_dir}."
             )
         return _bootstrap_restore_vps(
-            vps_config, cfg, store_files, filtered_override, skipped_nets, resolved_profile, owner_label
+            vps_config, cfg, store_files, filtered_override, skipped_nets, resolved_profile, owner_label, prune
         )
 
     return _converge_running_vps(

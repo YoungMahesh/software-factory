@@ -314,19 +314,12 @@ _Avoid_: Base template, starter kit, boilerplate
 The first-party tooling that materializes the App Template into a new application workspace and optionally wires repository creation, persistence resources, secrets, and sandbox launch.
 _Avoid_: Project generator, bootstrap script, create-base-app
 
-**App Base Domain**:
-The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers subdomains assigned to Hosted Apps on the VPS.
-_Avoid_: Root domain, tunnel domain, resource plane domain
-
-**Hosted App**:
-A scaffolded application deployed alongside the Resource Plane on the VPS (`/root/<repo-name>`) and exposed on a subdomain of the App Base Domain through the Host Ingress Proxy.
-_Avoid_: Live app, production sandbox, VPS app
 
 **App Base Domain**:
 The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers subdomains assigned to Hosted Apps on the VPS.
 _Avoid_: Root domain, tunnel domain, resource plane domain
 
 **Hosted App**:
-A scaffolded application deployed alongside the Resource Plane on the VPS (`/root/<repo-name>`) and exposed on a subdomain of the App Base Domain through the Host Ingress Proxy.
+A scaffolded application deployed alongside the Resource Plane on the VPS (`/root/<repo-name>`) and exposed on a subdomain of the App Base Domain through the Host Ingress Proxy. Each Hosted App owns its deployment directory, container identity, and route. Redeployment and teardown must identify the same app, and distinct apps cannot share those claims.
 _Avoid_: Live app, production sandbox, VPS app
 

@@ -6,6 +6,7 @@ import base64
 import os
 from pathlib import Path
 import subprocess
+import shlex
 import sys
 
 from sandbox.caddy_deploy import ensure_docker_network
@@ -21,6 +22,7 @@ from sandbox.caddy_wildcard import (
 from sandbox.config import parse_env_file, resolve_factory_credentials, resolve_factory_root
 from sandbox.db_host_client import get_or_download_ca_cert, normalize_base_url
 from sandbox.env_store import resolve_gh_token, resolve_sandbox_bundle
+from sandbox.source_transfer import stream_source_archive
 from sandbox.infra_deploy import (
     VpsSshConfig,
     build_ssh_cmd,
@@ -29,7 +31,8 @@ from sandbox.infra_deploy import (
     resolve_vps_ssh_config,
 )
 
-from ._caddy import check_app_route_collision, ensure_app_caddy_route, remove_app_caddy_route
+from ._caddy import ensure_app_caddy_route, remove_app_caddy_route
+from ._ownership import claim_hosted_app
 from ._config import (
     AppDeployRequest,
     AppDeployResult,
@@ -66,14 +69,10 @@ def sync_local_app_to_vps(
         ".",
     ]
     ssh_cmd = build_ssh_cmd(vps_config, f"mkdir -p '{remote_dir}' && tar -xzf - -C '{remote_dir}'")
-    p_tar = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    p_ssh = subprocess.Popen(ssh_cmd, stdin=p_tar.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if p_tar.stdout:
-        p_tar.stdout.close()
-    _, ssh_err = p_ssh.communicate(timeout=timeout)
-    p_tar.wait(timeout=10)
-    if p_ssh.returncode != 0:
-        raise RuntimeError(f"Failed syncing '{local_dir}' to {remote_dir}: {ssh_err.decode('utf-8', errors='replace').strip()}")
+    try:
+        stream_source_archive(tar_cmd, ssh_cmd, timeout=timeout)
+    except (RuntimeError, OSError) as exc:
+        raise RuntimeError(f"Failed syncing '{local_dir}' to {remote_dir}: {exc}") from exc
 
 
 def sync_github_app_on_vps(
@@ -89,19 +88,23 @@ def sync_github_app_on_vps(
     basic_b64 = base64.b64encode(f"x-access-token:{gh_token}".encode("utf-8")).decode("ascii")
     clean_url = f"https://github.com/{owner}/{bare_repo}.git"
     auth_cfg = f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic_b64}"
-    script = (
-        f"set -e; "
-        f"if [ -d '{remote_dir}/.git' ]; then "
-        f"  git -C '{remote_dir}' remote set-url origin '{clean_url}'; "
-        f"  git -C '{remote_dir}' -c credential.helper= -c '{auth_cfg}' fetch origin '{branch}' --depth 50; "
-        f"  git -C '{remote_dir}' checkout -B '{branch}' 'FETCH_HEAD'; "
-        f"elif [ -e '{remote_dir}' ] && [ -n \"$(ls -A '{remote_dir}' 2>/dev/null)\" ]; then "
-        f"  echo 'Remote directory {remote_dir} exists and is not a git clone.' >&2; exit 1; "
-        f"else "
-        f"  rm -rf '{remote_dir}' && "
-        f"  git -c credential.helper= -c '{auth_cfg}' clone --depth 50 --branch '{branch}' --single-branch '{clean_url}' '{remote_dir}'; "
-        f"fi"
-    )
+    directory = shlex.quote(remote_dir)
+    branch_arg = shlex.quote(branch)
+    url_arg = shlex.quote(clean_url)
+    auth_arg = shlex.quote(auth_cfg)
+    script = f"""set -e
+if [ -d {directory}/.git ]; then
+    git -C {directory} remote set-url origin {url_arg}
+    git -C {directory} -c credential.helper= -c {auth_arg} fetch origin {branch_arg} --depth 50
+    git -C {directory} checkout -B {branch_arg} FETCH_HEAD
+elif [ -e {directory} ] && [ -n "$(ls -A {directory} 2>/dev/null)" ]; then
+    echo 'Remote directory exists and is not a git clone.' >&2
+    exit 1
+else
+    rm -rf {directory}
+    git -c credential.helper= -c {auth_arg} clone --depth 50 --branch {branch_arg} --single-branch {url_arg} {directory}
+fi
+"""
     res = _ssh_run(vps_config, script, timeout=timeout)
     if res.returncode != 0:
         raise RuntimeError(f"Failed cloning/pulling {owner}/{bare_repo} on VPS: {res.stderr.strip() or res.stdout.strip()}")
@@ -208,11 +211,8 @@ def deploy_app(
         raise ValueError("Remote --repo deploy requires GH_ORG_NAME and GH_TOKEN configured.")
 
     _, fqdn = resolve_app_domain(target.app_slug, base_domain, req.subdomain)
-    remote_dir = f"{req.remote_base_dir.rstrip('/')}/{target.bare_repo}"
+    remote_dir = target.remote_directory(req.remote_base_dir)
     container_name = f"{target.app_slug}-web"
-
-    print(f"🚀 Deploying Hosted App '{target.bare_repo}' to {vps_config.user}@{vps_config.host}:{remote_dir}")
-    print(f"   Public URL: https://{fqdn}")
 
     if not check_ssh_connection(vps_config):
         raise RuntimeError(f"Cannot connect via SSH to {vps_config.user}@{vps_config.host}:{vps_config.port}.")
@@ -220,121 +220,129 @@ def deploy_app(
     if not docker_ok:
         raise RuntimeError(docker_msg)
 
-    cf_token = _maybe_ensure_wildcard_ready(vps_config, base_domain, req.cf_dns_token, dotenv)
-    col_ok, col_msg = check_app_route_collision(vps_config, target.app_slug, fqdn)
-    if not col_ok:
-        raise ValueError(col_msg)
-
-    _, existing_remote_env = _read_remote(vps_config, f"{remote_dir}/.env")
-    base_env = _resolve_base_env(
-        target.source_mode, target.local_dir, target.bare_repo, target.org_name, gh_token, existing_remote_env
-    )
-    remote_env = build_remote_app_env(base_env, fqdn=fqdn, container_name=container_name)
-
-    if target.source_mode == "local":
-        assert target.local_dir is not None
-        print(f"==> Syncing local workspace '{target.local_dir}' -> '{remote_dir}'...")
-        sync_local_app_to_vps(vps_config, target.local_dir, remote_dir)
-    else:
-        assert target.org_name is not None and gh_token is not None
-        print(f"==> Syncing GitHub repository '{target.org_name}/{target.bare_repo}' -> '{remote_dir}'...")
-        sync_github_app_on_vps(vps_config, target.org_name, target.bare_repo, req.branch, remote_dir, gh_token)
-
-    compose_check = _ssh_run(vps_config, f"test -f '{remote_dir}/docker-compose.yml' && echo ok || echo missing", timeout=15)
-    if compose_check.stdout.strip() != "ok":
-        raise RuntimeError(
-            f"Missing '{remote_dir}/docker-compose.yml'. Scaffold with updated app-template or add docker-compose.yml."
+    with claim_hosted_app(vps_config, target, remote_dir, domain=fqdn) as ownership:
+        remote_dir = ownership.remote_dir
+        print(f"🚀 Deploying Hosted App '{target.bare_repo}' to {vps_config.user}@{vps_config.host}:{remote_dir}")
+        print(f"   Public URL: https://{fqdn}")
+        cf_token = _maybe_ensure_wildcard_ready(vps_config, base_domain, req.cf_dns_token, dotenv)
+        env_ok, existing_remote_env = _read_remote(vps_config, f"{remote_dir}/.env")
+        if not env_ok:
+            raise RuntimeError(existing_remote_env)
+        base_env = _resolve_base_env(
+            target.source_mode, target.local_dir, target.bare_repo, target.org_name, gh_token, existing_remote_env
         )
+        remote_env = build_remote_app_env(base_env, fqdn=fqdn, container_name=container_name)
 
-    ok_env, msg_env = _write_remote_b64(vps_config, f"{remote_dir}/.env", serialize_dotenv(remote_env), mode="0600")
-    if not ok_env:
-        raise RuntimeError(msg_env)
+        ownership.ensure_locked()
+        if target.source_mode == "local":
+            assert target.local_dir is not None
+            print(f"==> Syncing local workspace '{target.local_dir}' -> '{remote_dir}'...")
+            sync_local_app_to_vps(vps_config, target.local_dir, remote_dir)
+        else:
+            assert target.org_name is not None and gh_token is not None
+            print(f"==> Syncing GitHub repository '{target.org_name}/{target.bare_repo}' -> '{remote_dir}'...")
+            sync_github_app_on_vps(vps_config, target.org_name, target.bare_repo, req.branch, remote_dir, gh_token)
 
-    rp_domain = (
-        os.environ.get("RESOURCE_PLANE_DOMAIN")
-        or dotenv.get("RESOURCE_PLANE_DOMAIN")
-        or os.environ.get("DB_HOST_DOMAIN")
-        or dotenv.get("DB_HOST_DOMAIN")
-    )
-    stage_remote_ca_cert(vps_config, remote_dir, rp_domain, local_dir=target.local_dir)
-
-    net_ok, net_msg = ensure_docker_network(vps_config, DEFAULT_CADDY_NETWORK)
-    if not net_ok:
-        raise RuntimeError(net_msg)
-
-    print("==> Building Hosted App container...")
-    build_res = subprocess.run(
-        build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' build"),
-        timeout=600, capture_output=False, check=False,
-    )
-    if build_res.returncode != 0:
-        raise RuntimeError(f"Docker build failed in '{remote_dir}' (exit code {build_res.returncode}).")
-
-    migrated = False
-    if not req.skip_migrate:
-        mig_probe = _ssh_run(
-            vps_config,
-            f"if [ -d '{remote_dir}/apps/web/drizzle' ] && ls '{remote_dir}/apps/web/drizzle'/*.sql >/dev/null 2>&1; then echo yes; else echo no; fi",
-            timeout=15,
-        )
-        if mig_probe.stdout.strip() == "yes":
-            print("==> Applying Drizzle database migrations...")
-            mig_res = subprocess.run(
-                build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' --profile migrate run --rm migrate"),
-                timeout=300, capture_output=False, check=False,
+        compose_check = _ssh_run(vps_config, f"test -f '{remote_dir}/docker-compose.yml' && echo ok || echo missing", timeout=15)
+        if compose_check.stdout.strip() != "ok":
+            raise RuntimeError(
+                f"Missing '{remote_dir}/docker-compose.yml'. Scaffold with updated app-template or add docker-compose.yml."
             )
-            if mig_res.returncode != 0:
-                raise RuntimeError(f"Database migration failed in '{remote_dir}' (exit code {mig_res.returncode}).")
-            migrated = True
 
-    print("==> Starting Hosted App container...")
-    up_res = subprocess.run(
-        build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' up -d --remove-orphans"),
-        timeout=180, capture_output=False, check=False,
-    )
-    if up_res.returncode != 0:
-        raise RuntimeError(f"Failed starting containers in '{remote_dir}' (exit code {up_res.returncode}).")
+        ownership.ensure_locked()
+        ok_env, msg_env = _write_remote_b64(vps_config, f"{remote_dir}/.env", serialize_dotenv(remote_env), mode="0600")
+        if not ok_env:
+            raise RuntimeError(msg_env)
 
-    health_script = (
-        f"for i in $(seq 1 30); do "
-        f"  st=$(docker inspect -f '{{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}{{{{.State.Status}}}}{{{{end}}}}' '{container_name}' 2>/dev/null || true); "
-        f"  if [ \"$st\" = 'healthy' ] || [ \"$st\" = 'running' ]; then echo ok; exit 0; fi; "
-        f"  sleep 1; "
-        f"done; "
-        f"docker compose -f '{remote_dir}/docker-compose.yml' -p '{target.app_slug}' logs --tail=40 >&2; exit 1"
-    )
-    h_res = _ssh_run(vps_config, health_script, timeout=45)
-    if h_res.returncode != 0 or "ok" not in h_res.stdout:
-        raise RuntimeError(f"Container '{container_name}' failed readiness check:\n{h_res.stderr.strip()}")
+        rp_domain = (
+            os.environ.get("RESOURCE_PLANE_DOMAIN")
+            or dotenv.get("RESOURCE_PLANE_DOMAIN")
+            or os.environ.get("DB_HOST_DOMAIN")
+            or dotenv.get("DB_HOST_DOMAIN")
+        )
+        stage_remote_ca_cert(vps_config, remote_dir, rp_domain, local_dir=target.local_dir)
 
-    print(f"==> Wiring Caddy wildcard route https://{fqdn} -> {container_name}:3000...")
-    route_ok, route_msg = ensure_app_caddy_route(
-        vps_config,
-        target.app_slug,
-        fqdn,
-        f"{container_name}:3000",
-        base_domain=base_domain,
-        cf_dns_token=cf_token,
-    )
-    if not route_ok:
-        raise RuntimeError(route_msg)
-    print(f"   ✓ {route_msg}")
+        net_ok, net_msg = ensure_docker_network(vps_config, DEFAULT_CADDY_NETWORK)
+        if not net_ok:
+            raise RuntimeError(net_msg)
 
-    if req.sync_caddy_store:
-        from sandbox.caddy_store import maybe_sync_after_deploy
-        if maybe_sync_after_deploy(vps_config, req.profile) != 0:
-            print("⚠️  Warning: caddy-store sync failed.", file=sys.stderr)
+        ownership.ensure_locked()
+        print("==> Building Hosted App container...")
+        build_res = subprocess.run(
+            build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' build"),
+            timeout=600, capture_output=False, check=False,
+        )
+        if build_res.returncode != 0:
+            raise RuntimeError(f"Docker build failed in '{remote_dir}' (exit code {build_res.returncode}).")
 
-    return AppDeployResult(
-        repo_name=target.bare_repo,
-        app_slug=target.app_slug,
-        remote_dir=remote_dir,
-        domain=fqdn,
-        url=f"https://{fqdn}",
-        container_name=container_name,
-        source_mode=target.source_mode,
-        migrated=migrated,
-    )
+        migrated = False
+        if not req.skip_migrate:
+            mig_probe = _ssh_run(
+                vps_config,
+                f"if [ -d '{remote_dir}/apps/web/drizzle' ] && ls '{remote_dir}/apps/web/drizzle'/*.sql >/dev/null 2>&1; then echo yes; else echo no; fi",
+                timeout=15,
+            )
+            if mig_probe.stdout.strip() == "yes":
+                print("==> Applying Drizzle database migrations...")
+                mig_res = subprocess.run(
+                    build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' --profile migrate run --rm migrate"),
+                    timeout=300, capture_output=False, check=False,
+                )
+                if mig_res.returncode != 0:
+                    raise RuntimeError(f"Database migration failed in '{remote_dir}' (exit code {mig_res.returncode}).")
+                migrated = True
+
+        ownership.ensure_locked()
+        print("==> Starting Hosted App container...")
+        up_res = subprocess.run(
+            build_ssh_cmd(vps_config, f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' up -d --remove-orphans"),
+            timeout=180, capture_output=False, check=False,
+        )
+        if up_res.returncode != 0:
+            raise RuntimeError(f"Failed starting containers in '{remote_dir}' (exit code {up_res.returncode}).")
+
+        health_script = (
+            f"for i in $(seq 1 30); do "
+            f"  st=$(docker inspect -f '{{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}{{{{.State.Status}}}}{{{{end}}}}' '{container_name}' 2>/dev/null || true); "
+            f"  if [ \"$st\" = 'healthy' ] || [ \"$st\" = 'running' ]; then echo ok; exit 0; fi; "
+            f"  sleep 1; "
+            f"done; "
+            f"docker compose -f '{remote_dir}/docker-compose.yml' -p '{target.app_slug}' logs --tail=40 >&2; exit 1"
+        )
+        h_res = _ssh_run(vps_config, health_script, timeout=45)
+        if h_res.returncode != 0 or "ok" not in h_res.stdout:
+            raise RuntimeError(f"Container '{container_name}' failed readiness check:\n{h_res.stderr.strip()}")
+
+        ownership.ensure_locked()
+        print(f"==> Wiring Caddy wildcard route https://{fqdn} -> {container_name}:3000...")
+        route_ok, route_msg = ensure_app_caddy_route(
+            vps_config,
+            target.app_slug,
+            fqdn,
+            f"{container_name}:3000",
+            base_domain=base_domain,
+            cf_dns_token=cf_token,
+            ownership=ownership.metadata,
+        )
+        if not route_ok:
+            raise RuntimeError(route_msg)
+        print(f"   ✓ {route_msg}")
+
+        if req.sync_caddy_store:
+            from sandbox.caddy_store import maybe_sync_after_deploy
+            if maybe_sync_after_deploy(vps_config, req.profile) != 0:
+                print("⚠️  Warning: caddy-store sync failed.", file=sys.stderr)
+
+        return AppDeployResult(
+            repo_name=target.bare_repo,
+            app_slug=target.app_slug,
+            remote_dir=remote_dir,
+            domain=fqdn,
+            url=f"https://{fqdn}",
+            container_name=container_name,
+            source_mode=target.source_mode,
+            migrated=migrated,
+        )
 
 
 def teardown_app(
@@ -352,33 +360,42 @@ def teardown_app(
     )
     default_org = os.environ.get("GH_ORG_NAME") or dotenv.get("GH_ORG_NAME")
     target = resolve_deploy_target(req.target, req.repo, cwd=cwd, default_org=default_org)
-    remote_dir = f"{req.remote_base_dir.rstrip('/')}/{target.bare_repo}"
+    remote_dir = target.remote_directory(req.remote_base_dir)
 
     if not check_ssh_connection(vps_config):
         raise RuntimeError(f"Cannot connect via SSH to {vps_config.user}@{vps_config.host}:{vps_config.port}.")
 
-    down_script = (
-        f"if [ -f '{remote_dir}/docker-compose.yml' ]; then "
-        f"  cd '{remote_dir}' && docker compose -p '{target.app_slug}' down; "
-        f"fi; "
-        + (f"rm -rf '{remote_dir}'; " if purge else "")
-    )
-    res = _ssh_run(vps_config, down_script, timeout=120)
-    if res.returncode != 0:
-        raise RuntimeError(f"Failed stopping '{remote_dir}': {res.stderr.strip()}")
+    with claim_hosted_app(vps_config, target, remote_dir, create=False) as ownership:
+        remote_dir = ownership.remote_dir
+        ownership.ensure_locked()
+        down_script = (
+            f"set -e; if [ -f '{remote_dir}/docker-compose.yml' ]; then "
+            f"cd '{remote_dir}' && docker compose -p '{target.app_slug}' down; fi"
+        )
+        res = _ssh_run(vps_config, down_script, timeout=120)
+        if res.returncode != 0:
+            raise RuntimeError(f"Failed stopping '{remote_dir}': {res.stderr.strip()}")
 
-    rm_ok, rm_msg = remove_app_caddy_route(vps_config, target.app_slug)
-    if not rm_ok:
-        raise RuntimeError(rm_msg)
+        ownership.ensure_locked()
+        rm_ok, rm_msg = remove_app_caddy_route(vps_config, target.app_slug)
+        if not rm_ok:
+            raise RuntimeError(rm_msg)
 
-    if req.sync_caddy_store:
-        from sandbox.caddy_store import maybe_sync_after_deploy
-        maybe_sync_after_deploy(vps_config, req.profile)
+        if purge:
+            ownership.ensure_locked()
+            res = _ssh_run(vps_config, f"rm -rf '{remote_dir}'", timeout=30)
+            if res.returncode != 0:
+                raise RuntimeError(f"Failed purging '{remote_dir}': {res.stderr.strip()}")
+            ownership.forget()
 
-    return AppTeardownResult(
-        repo_name=target.bare_repo,
-        app_slug=target.app_slug,
-        remote_dir=remote_dir,
-        purged=purge,
-        message=f"Stopped Hosted App '{target.bare_repo}'. {rm_msg}",
-    )
+        if req.sync_caddy_store:
+            from sandbox.caddy_store import maybe_sync_after_deploy
+            maybe_sync_after_deploy(vps_config, req.profile)
+
+        return AppTeardownResult(
+            repo_name=target.bare_repo,
+            app_slug=target.app_slug,
+            remote_dir=remote_dir,
+            purged=purge,
+            message=f"Stopped Hosted App '{target.bare_repo}'. {rm_msg}",
+        )

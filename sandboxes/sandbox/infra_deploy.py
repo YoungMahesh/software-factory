@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 from sandbox.config import parse_env_file, resolve_factory_root
+from sandbox.source_transfer import stream_source_archive
 
 
 DEFAULT_REMOTE_DIR = "/opt/resource-plane"
@@ -207,25 +208,9 @@ def sync_resource_plane_to_vps(
     ssh_extract_cmd = build_ssh_cmd(config, remote_extract_script)
 
     try:
-        p_tar = subprocess.Popen(tar_create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        p_ssh = subprocess.Popen(
-            ssh_extract_cmd,
-            stdin=p_tar.stdout,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        if p_tar.stdout:
-            p_tar.stdout.close()
-
-        ssh_out, ssh_err = p_ssh.communicate(timeout=timeout)
-        p_tar.wait(timeout=10)
-
-        if p_ssh.returncode != 0:
-            err_msg = ssh_err.decode("utf-8", errors="replace")
-            print(f"❌ Failed to transfer files to VPS: {err_msg}", file=sys.stderr)
-            return False
+        stream_source_archive(tar_create_cmd, ssh_extract_cmd, timeout=timeout)
         return True
-    except (subprocess.TimeoutExpired, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         print(f"❌ File synchronization to VPS failed: {exc}", file=sys.stderr)
         return False
 

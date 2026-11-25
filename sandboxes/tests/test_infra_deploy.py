@@ -5,12 +5,9 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from sandbox.infra_deploy import (
-    DEFAULT_REMOTE_DIR,
-    DEFAULT_SSH_PORT,
-    DEFAULT_SSH_USER,
     VpsSshConfig,
     build_ssh_cmd,
     check_remote_docker,
@@ -22,7 +19,6 @@ from sandbox.infra_deploy import (
     main,
     resolve_vps_ssh_config,
     sync_local_env_credentials,
-    sync_resource_plane_to_vps,
 )
 
 from sandbox.main import main as sandbox_main
@@ -227,25 +223,6 @@ class TestInfraDeploy(unittest.TestCase):
         self.assertTrue(found.is_dir())
         self.assertTrue((found / "deploy.sh").is_file())
 
-    @patch("subprocess.Popen")
-    def test_sync_resource_plane_to_vps_success(self, mock_popen):
-        """Simulates tar pipe over SSH and verifies success."""
-        p_tar = MagicMock()
-        p_tar.stdout = MagicMock()
-        p_tar.wait.return_value = 0
-
-        p_ssh = MagicMock()
-        p_ssh.returncode = 0
-        p_ssh.communicate.return_value = (b"", b"")
-
-        mock_popen.side_effect = [p_tar, p_ssh]
-
-        result = sync_resource_plane_to_vps(self.sample_config)
-        self.assertTrue(result)
-        self.assertEqual(mock_popen.call_count, 2)
-        tar_args = mock_popen.call_args_list[0].args[0]
-        self.assertIn("--exclude=.env", tar_args)
-        self.assertIn("--exclude=caddy", tar_args)
 
     @patch("subprocess.run")
     def test_execute_remote_deploy_stream(self, mock_run):

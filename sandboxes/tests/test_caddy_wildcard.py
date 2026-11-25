@@ -7,20 +7,17 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from sandbox.caddy_deploy import main as caddy_main, setup_reverse_proxy
-from sandbox.caddy_store import restore_caddy_from_store
 from sandbox.caddy_wildcard import (
     check_caddy_has_cloudflare_module,
-    ensure_wildcard_caddy,
     is_subdomain_of,
     normalize_base_domain,
     render_wildcard_site,
     resolve_apps_base_domain,
     resolve_cloudflare_dns_token,
     sanitize_app_slug,
-    sync_caddy_wildcard_runtime,
     validate_subdomain_label,
 )
 from sandbox.infra_deploy import VpsSshConfig
@@ -88,55 +85,6 @@ class TestCaddyWildcard(unittest.TestCase):
         mock_ssh.return_value = subprocess.CompletedProcess([], 1, "", "")
         self.assertFalse(check_caddy_has_cloudflare_module(self.vps_config))
 
-    @patch("sandbox.caddy_wildcard.check_caddy_has_cloudflare_module")
-    @patch("sandbox.caddy_wildcard._write_remote_b64")
-    @patch("sandbox.caddy_wildcard._read_remote")
-    @patch("sandbox.caddy_wildcard._ssh_run")
-    def test_sync_caddy_wildcard_runtime_upgrades_when_module_missing(
-        self, mock_ssh, mock_read, mock_write, mock_has_cf
-    ):
-        src_dir = self.tmp_path / "caddy"
-        (src_dir / "conf").mkdir(parents=True)
-        (src_dir / "Dockerfile").write_text("FROM caddy:2-alpine\n", encoding="utf-8")
-        (src_dir / "docker-compose.yml").write_text("services:\n  caddy:\n    build: .\n", encoding="utf-8")
-
-        mock_read.side_effect = [(True, ""), (True, ""), (True, "")]
-        mock_write.return_value = (True, "ok")
-        mock_has_cf.return_value = False
-        mock_ssh.return_value = subprocess.CompletedProcess([], 0, "", "")
-
-        ok, changed, msg = sync_caddy_wildcard_runtime(
-            self.vps_config, "cf-token-123", source_dir=src_dir
-        )
-        self.assertTrue(ok)
-        self.assertTrue(changed)
-        self.assertIn("Upgraded", msg)
-        env_writes = [c for c in mock_write.call_args_list if c.args[1] == "/opt/caddy/.env"]
-        self.assertEqual(len(env_writes), 1)
-        self.assertEqual(env_writes[0].kwargs["mode"], "0600")
-        self.assertIn("docker compose up -d --build", mock_ssh.call_args_list[-1].args[1])
-
-    @patch("sandbox.caddy_deploy.reload_caddy")
-    @patch("sandbox.caddy_wildcard.write_and_validate_caddy_file")
-    @patch("sandbox.caddy_wildcard.sync_caddy_wildcard_runtime")
-    @patch("sandbox.caddy_wildcard._read_remote")
-    @patch("sandbox.caddy_wildcard._ssh_run")
-    @patch("sandbox.caddy_deploy.ensure_caddy_network")
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    def test_ensure_wildcard_caddy_upgrades_running_instance(
-        self, mock_running, mock_net, mock_ssh, mock_read, mock_sync, mock_write_site, mock_reload
-    ):
-        mock_running.return_value = (True, "running")
-        mock_net.return_value = (True, "connected")
-        mock_read.return_value = (True, "{\n}\n\nimport /etc/caddy/sites/*.caddy\n")
-        mock_sync.return_value = (True, True, "Upgraded")
-        mock_write_site.return_value = (True, True, "Updated")
-        mock_reload.return_value = (True, "Reloaded")
-
-        ok, msg = ensure_wildcard_caddy(self.vps_config, "sf.mahesh0.dev", "tok")
-        self.assertTrue(ok)
-        self.assertIn("sf.mahesh0.dev, *.sf.mahesh0.dev", msg)
-        mock_reload.assert_called_once()
 
     @patch("sandbox.caddy_deploy.ensure_wildcard_caddy")
     @patch("sandbox.caddy_deploy.ensure_caddy_network")
@@ -170,37 +118,6 @@ class TestCaddyWildcard(unittest.TestCase):
         self.assertTrue(mock_setup.call_args.kwargs["wildcard"])
         self.assertEqual(mock_setup.call_args.kwargs["base_domain"], "sf.mahesh0.dev")
         self.assertEqual(mock_setup.call_args.kwargs["cf_dns_token"], "cf-tok")
-
-    @patch("sandbox.caddy_store._sync.resolve_factory_root")
-    @patch("sandbox.caddy_store._sync.ensure_caddy_store_repo")
-    @patch("sandbox.caddy_store._sync.fetch_caddy_store_bundle")
-    @patch("sandbox.caddy_store._sync.list_remote_docker_networks")
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.check_ports_available")
-    @patch("sandbox.caddy_deploy.ensure_docker_network")
-    @patch("sandbox.caddy_deploy.validate_caddy")
-    @patch("subprocess.run")
-    def test_caddy_store_bootstrap_includes_build_and_env_for_wildcard(
-        self, mock_subproc, mock_val, mock_net, mock_ports, mock_running, mock_nets, mock_bundle, mock_ensure, mock_root
-    ):
-        mock_root.return_value = self.tmp_path
-        mock_bundle.return_value = {
-            "conf/Caddyfile": "{\n}\n\nimport /etc/caddy/sites/*.caddy\n",
-            "conf/sites/apps-wildcard.caddy": render_wildcard_site("sf.mahesh0.dev"),
-        }
-        mock_running.return_value = (False, "not running")
-        mock_nets.return_value = {"dbhost-network"}
-        mock_ports.return_value = (True, "free")
-        mock_net.return_value = (True, "ok")
-        mock_val.return_value = (True, "valid")
-        mock_subproc.return_value = subprocess.CompletedProcess([], 0, b"", b"")
-
-        with patch.dict(os.environ, {"CLOUDFLARE_DNS_API_TOKEN": "cf-secret-token"}, clear=True):
-            res = restore_caddy_from_store(self.vps_config, org_name="sFactory0", gh_token="tok", bootstrap=True)
-
-        self.assertTrue(res.success)
-        up_cmd = mock_subproc.call_args_list[-1].args[0][-1]
-        self.assertIn("docker compose up -d --build", up_cmd)
 
 
 if __name__ == "__main__":

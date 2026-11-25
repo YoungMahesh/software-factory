@@ -9,6 +9,7 @@ import re
 import subprocess
 import urllib.parse
 
+from sandbox.host_ingress import apply_configuration, prepare_runtime
 from sandbox.infra_deploy import VpsSshConfig, build_ssh_cmd
 
 DEFAULT_CADDY_DIR = "/opt/caddy"
@@ -199,34 +200,17 @@ def write_and_validate_caddy_file(
     desired: str,
     *,
     container_name: str = DEFAULT_CADDY_CONTAINER,
-    timeout: int = 30,
+    timeout: int = 90,
 ) -> tuple[bool, bool, str]:
-    """Atomically writes a Caddy conf file, validates with caddy validate, and rolls back on error."""
-    ok_cur, existing = _read_remote(vps_config, remote_path, timeout=timeout)
-    if not ok_cur:
-        return False, False, existing
-    if existing == desired:
-        return True, False, f"'{remote_path}' is already up to date."
-
-    encoded = base64.b64encode(desired.encode("utf-8")).decode("ascii")
-    parent = str(Path(remote_path).parent)
-    script = (
-        f"mkdir -p '{parent}' && "
-        f"if [ -f '{remote_path}' ]; then cp '{remote_path}' '{remote_path}.bak'; else rm -f '{remote_path}.bak'; fi && "
-        f"printf '%s' '{encoded}' | base64 -d > '{remote_path}' && "
-        f"if ! docker exec {container_name} caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then "
-        f"  err=$(docker exec {container_name} caddy validate --config /etc/caddy/Caddyfile 2>&1 || true); "
-        f"  if [ -f '{remote_path}.bak' ]; then mv '{remote_path}.bak' '{remote_path}'; else rm -f '{remote_path}'; fi; "
-        f"  echo \"VALIDATION_ERR:$err\" >&2; exit 1; "
-        f"fi && rm -f '{remote_path}.bak'"
+    """Applies and activates a Caddy conf file, restoring prior state on failure."""
+    caddy_dir, separator, relative_path = remote_path.partition("/conf/")
+    if not separator:
+        raise ValueError("Caddy configuration files must be under the Host Ingress Proxy conf directory.")
+    result = apply_configuration(
+        vps_config, {f"conf/{relative_path}": desired},
+        caddy_dir=caddy_dir, container_name=container_name, timeout=timeout,
     )
-    try:
-        res = _ssh_run(vps_config, script, timeout=timeout)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return False, False, f"Failed updating {remote_path}: {exc}"
-    if res.returncode != 0:
-        return False, False, f"Failed updating {remote_path}: {res.stderr.strip() or res.stdout.strip()}"
-    return True, True, f"Updated '{remote_path}'."
+    return result.success, result.changed, result.message
 
 
 def check_caddy_has_cloudflare_module(
@@ -255,50 +239,13 @@ def sync_caddy_wildcard_runtime(
     source_dir: Path | None = None,
     timeout: int = 360,
 ) -> tuple[bool, bool, str]:
-    """Ensures /opt/caddy uses the caddy-dns/cloudflare build and /opt/caddy/.env token."""
-    from sandbox.caddy_deploy import find_caddy_source_dir
-
-    src = source_dir or find_caddy_source_dir()
-    dockerfile_path = src / "Dockerfile"
-    compose_path = src / "docker-compose.yml"
-    if not dockerfile_path.is_file():
-        return False, False, f"Missing Caddy Dockerfile at {dockerfile_path}."
-
-    desired_df = dockerfile_path.read_text(encoding="utf-8")
-    desired_dc = compose_path.read_text(encoding="utf-8")
-    desired_env = f"CLOUDFLARE_DNS_API_TOKEN={cf_dns_token.strip()}\n"
-
-    ok_df, cur_df = _read_remote(vps_config, f"{caddy_dir}/Dockerfile")
-    ok_dc, cur_dc = _read_remote(vps_config, f"{caddy_dir}/docker-compose.yml")
-    ok_env, cur_env = _read_remote(vps_config, f"{caddy_dir}/.env")
-    if not ok_df or not ok_dc or not ok_env:
-        return False, False, cur_df if not ok_df else (cur_dc if not ok_dc else cur_env)
-
-    has_cf = check_caddy_has_cloudflare_module(vps_config, container_name=container_name)
-    needs_rebuild = cur_df != desired_df or cur_dc != desired_dc or cur_env != desired_env or not has_cf
-
-    for path, cur, desired, mode in (
-        (f"{caddy_dir}/Dockerfile", cur_df, desired_df, None),
-        (f"{caddy_dir}/docker-compose.yml", cur_dc, desired_dc, None),
-        (f"{caddy_dir}/.env", cur_env, desired_env, "0600"),
-    ):
-        if cur != desired:
-            ok, msg = _write_remote_b64(vps_config, path, desired, mode=mode)
-            if not ok:
-                return False, False, msg
-
-    _ssh_run(vps_config, f"mkdir -p '{caddy_dir}/conf/sites' '{caddy_dir}/conf/apps'", timeout=15)
-    if not needs_rebuild:
-        return True, False, "Caddy wildcard runtime and Cloudflare DNS token are up to date."
-
-    build_flag = "--build " if (cur_df != desired_df or not has_cf) else ""
-    try:
-        res = _ssh_run(vps_config, f"cd '{caddy_dir}' && docker compose up -d {build_flag}".strip(), timeout=timeout)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return False, False, f"Failed rebuilding/restarting {caddy_dir}: {exc}"
-    if res.returncode != 0:
-        return False, False, f"Failed rebuilding/restarting {caddy_dir}: {res.stderr.strip() or res.stdout.strip()}"
-    return True, True, "Upgraded /opt/caddy with caddy-dns/cloudflare and /opt/caddy/.env."
+    """Converges the canonical build context and wildcard DNS credential."""
+    result = prepare_runtime(
+        vps_config, source_dir=source_dir, cf_dns_token=cf_dns_token,
+        require_cloudflare=True, caddy_dir=caddy_dir,
+        container_name=container_name, timeout=timeout,
+    )
+    return result.success, result.changed, result.message
 
 
 def ensure_wildcard_caddy(
@@ -313,82 +260,13 @@ def ensure_wildcard_caddy(
     network: str = DEFAULT_CADDY_NETWORK,
     source_dir: Path | None = None,
 ) -> tuple[bool, str]:
-    """Configures /opt/caddy with caddy-dns/cloudflare and a single wildcard cert block."""
-    from sandbox.caddy_deploy import (
-        CaddyConfig,
-        check_caddy_running,
-        check_ports_available,
-        ensure_caddy_network,
-        ensure_docker_network,
-        find_caddy_source_dir,
-        reload_caddy,
-    )
-
+    """Converges wildcard runtime and configuration in one recoverable change."""
     clean_base = normalize_base_domain(base_domain)
     clean_token = resolve_cloudflare_dns_token(cf_dns_token)
-    cfg = CaddyConfig(caddy_dir=caddy_dir, container_name=container_name, network=network)
-    wildcard_path = f"{caddy_dir}/conf/sites/apps-wildcard.caddy"
-
-    running, _ = check_caddy_running(vps_config, cfg)
-    if not running:
-        if not bootstrap:
-            return False, f"Caddy container '{container_name}' is not running. Re-run with --bootstrap."
-        ports_ok, ports_msg = check_ports_available(vps_config)
-        if not ports_ok:
-            return False, ports_msg
-        net_ok, net_msg = ensure_docker_network(vps_config, network)
-        if not net_ok:
-            return False, net_msg
-
-        src = source_dir or find_caddy_source_dir()
-        cf_probe = _ssh_run(vps_config, f"test -f '{caddy_dir}/conf/Caddyfile' && echo exists || echo missing", timeout=15)
-        if cf_probe.returncode != 0:
-            return False, f"Failed probing {caddy_dir}/conf/Caddyfile: {cf_probe.stderr.strip()}"
-        if cf_probe.stdout.strip() == "missing" or (email and email.strip()):
-            cf_content = render_base_caddyfile(email) if (email and email.strip()) else (src / "conf" / "Caddyfile").read_text(encoding="utf-8")
-            ok_cf, msg_cf = _write_remote_b64(vps_config, f"{caddy_dir}/conf/Caddyfile", cf_content)
-            if not ok_cf:
-                return False, msg_cf
-        ok_wc, msg_wc = _write_remote_b64(vps_config, wildcard_path, render_wildcard_site(clean_base))
-        if not ok_wc:
-            return False, msg_wc
-
-        rt_ok, _, rt_msg = sync_caddy_wildcard_runtime(
-            vps_config, clean_token, caddy_dir=caddy_dir, container_name=container_name, source_dir=src
-        )
-        if not rt_ok:
-            return False, rt_msg
-        run_ok, run_msg = check_caddy_running(vps_config, cfg)
-        if not run_ok:
-            return False, f"Caddy wildcard bootstrap failed health check: {run_msg}"
-        return True, f"Bootstrapped wildcard Caddy ingress for '{clean_base}, *.{clean_base}' at {caddy_dir}."
-
-    net_ok, net_msg = ensure_caddy_network(vps_config, cfg)
-    if not net_ok:
-        return False, net_msg
-
-    ok_cf, cf_content = _read_remote(vps_config, f"{caddy_dir}/conf/Caddyfile")
-    if not ok_cf:
-        return False, cf_content
-    if not caddyfile_imports_sites(cf_content):
-        return False, f"Remote Caddyfile at {caddy_dir}/conf/Caddyfile does not import sites/*.caddy."
-
-    rt_ok, rt_changed, rt_msg = sync_caddy_wildcard_runtime(
-        vps_config, clean_token, caddy_dir=caddy_dir, container_name=container_name, source_dir=source_dir
+    result = prepare_runtime(
+        vps_config, source_dir=source_dir, bootstrap=bootstrap, email=email,
+        files={"conf/sites/apps-wildcard.caddy": render_wildcard_site(clean_base)},
+        cf_dns_token=clean_token, require_cloudflare=True, caddy_dir=caddy_dir,
+        container_name=container_name, network=network,
     )
-    if not rt_ok:
-        return False, rt_msg
-
-    _ssh_run(vps_config, f"mkdir -p '{caddy_dir}/conf/apps'", timeout=15)
-    site_ok, site_changed, site_msg = write_and_validate_caddy_file(
-        vps_config, wildcard_path, render_wildcard_site(clean_base), container_name=container_name
-    )
-    if not site_ok:
-        return False, site_msg
-    if not rt_changed and not site_changed:
-        return True, f"Wildcard Caddy ingress for '{clean_base}, *.{clean_base}' is already up to date."
-
-    rel_ok, rel_msg = reload_caddy(vps_config, cfg)
-    if not rel_ok:
-        return False, f"Wildcard site updated, but Caddy reload failed: {rel_msg}"
-    return True, f"Configured wildcard Caddy ingress for '{clean_base}, *.{clean_base}'. {rel_msg}"
+    return result.success, result.message

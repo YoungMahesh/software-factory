@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import urllib.parse
@@ -72,6 +72,19 @@ class DeployTarget:
     org_name: str | None = None
     local_dir: Path | None = None
 
+    def __post_init__(self) -> None:
+        for label, value in (("repository", self.bare_repo), ("owner", self.org_name)):
+            if value is not None and (
+                not re.fullmatch(r"[A-Za-z0-9_.-]+", value) or value in {".", ".."}
+            ):
+                raise ValueError(f"Invalid Hosted App {label}: {value!r}")
+
+    def remote_directory(self, base_dir: str) -> str:
+        base = PurePosixPath(base_dir)
+        if not base.is_absolute() or ".." in base.parts or any(char in base_dir for char in ("'", "\n", "\r", "\0")):
+            raise ValueError("Hosted App remote base directory must be an absolute, unambiguous path.")
+        return (base / self.bare_repo).as_posix()
+
 
 def parse_git_github_repo(project_dir: Path) -> tuple[str, str] | None:
     """Extracts (owner, repo_name) from git remote origin if it points to GitHub."""
@@ -123,7 +136,7 @@ def resolve_deploy_target(
                 raise ValueError("Refusing to deploy the software-factory monorepo itself as a Hosted App.")
             git_pair = parse_git_github_repo(cand)
             if repo:
-                org, bare = _parse_repo_spec(repo, default_org)
+                org, bare = _parse_repo_spec(repo, default_org or (git_pair[0] if git_pair else None))
             elif git_pair:
                 org, bare = git_pair
             else:

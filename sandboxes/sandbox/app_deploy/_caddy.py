@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 import subprocess
 
 from sandbox.caddy_wildcard import (
@@ -13,21 +14,23 @@ from sandbox.caddy_wildcard import (
     _ssh_run,
     ensure_wildcard_caddy,
     sanitize_app_slug,
-    write_and_validate_caddy_file,
 )
+from sandbox.host_ingress import apply_configuration
 from sandbox.infra_deploy import VpsSshConfig
 
 DEFAULT_CADDY_APPS_DIR = "/opt/caddy/conf/apps"
 APP_HOST_MATCHER_RE = re.compile(r"^\s*@\S+\s+host\s+([A-Za-z0-9.-]+)\s*$", re.MULTILINE)
 
 
-def render_app_route(app_slug: str, fqdn: str, upstream: str) -> str:
+def render_app_route(app_slug: str, fqdn: str, upstream: str, *, ownership: dict | None = None) -> str:
     """Renders a host-matched Caddy handle snippet imported inside the wildcard block."""
     clean_slug = sanitize_app_slug(app_slug)
     matcher_id = clean_slug.replace("-", "_")
     clean_host = fqdn.strip().lower()
-    return (
-        f"# Managed by deploy-app (app: {clean_slug})\n"
+    header = f"# Managed by deploy-app (app: {clean_slug})\n"
+    if ownership is not None:
+        header += f"# Hosted App ownership: {json.dumps(ownership, sort_keys=True)}\n"
+    return header + (
         f"@app_{matcher_id} host {clean_host}\n"
         f"handle @app_{matcher_id} {{\n"
         f"\treverse_proxy {upstream.strip()}\n"
@@ -91,9 +94,10 @@ def ensure_app_caddy_route(
     caddy_dir: str = DEFAULT_CADDY_DIR,
     container_name: str = DEFAULT_CADDY_CONTAINER,
     network: str = DEFAULT_CADDY_NETWORK,
+    ownership: dict | None = None,
 ) -> tuple[bool, str]:
     """Adds or updates an app snippet under /opt/caddy/conf/apps/ inside the wildcard block."""
-    from sandbox.caddy_deploy import CaddyConfig, check_caddy_running, ensure_caddy_network, reload_caddy
+    from sandbox.caddy_deploy import CaddyConfig, check_caddy_running, ensure_caddy_network
 
     cfg = CaddyConfig(caddy_dir=caddy_dir, container_name=container_name, network=network)
     running, run_msg = check_caddy_running(vps_config, cfg)
@@ -127,19 +131,18 @@ def ensure_app_caddy_route(
         return False, col_msg
 
     clean_slug = sanitize_app_slug(app_slug)
-    route_path = f"{apps_dir}/{clean_slug}.caddy"
-    route_ok, changed, route_msg = write_and_validate_caddy_file(
-        vps_config, route_path, render_app_route(clean_slug, fqdn, upstream), container_name=container_name
+    route_path = f"conf/apps/{clean_slug}.caddy"
+    result = apply_configuration(
+        vps_config, {route_path: render_app_route(clean_slug, fqdn, upstream, ownership=ownership)},
+        route=(route_path, fqdn), caddy_dir=caddy_dir,
+        container_name=container_name, network=network,
     )
-    if not route_ok:
-        return False, route_msg
-    if not changed:
+    if not result.success:
+        return False, result.message
+    if not result.changed:
         return True, f"Caddy route for 'https://{fqdn}' -> '{upstream}' is already up to date."
 
-    rel_ok, rel_msg = reload_caddy(vps_config, cfg)
-    if not rel_ok:
-        return False, f"App route updated, but reload failed: {rel_msg}"
-    return True, f"Configured wildcard Caddy route 'https://{fqdn}' -> '{upstream}'. {rel_msg}"
+    return True, f"Configured wildcard Caddy route 'https://{fqdn}' -> '{upstream}'. {result.message}"
 
 
 def remove_app_caddy_route(
@@ -151,30 +154,9 @@ def remove_app_caddy_route(
     network: str = DEFAULT_CADDY_NETWORK,
 ) -> tuple[bool, str]:
     """Removes a Hosted App's snippet from /opt/caddy/conf/apps/ and reloads Caddy."""
-    from sandbox.caddy_deploy import CaddyConfig, check_caddy_running, reload_caddy
-
     clean_slug = sanitize_app_slug(app_slug)
-    route_path = f"{caddy_dir}/conf/apps/{clean_slug}.caddy"
-    cfg = CaddyConfig(caddy_dir=caddy_dir, container_name=container_name, network=network)
-
-    running, _ = check_caddy_running(vps_config, cfg)
-    ok_cur, existing = _read_remote(vps_config, route_path)
-    if not ok_cur:
-        return False, existing
-    if not existing:
-        return True, f"No Caddy route found at '{route_path}' (already clean)."
-
-    try:
-        res = _ssh_run(vps_config, f"rm -f '{route_path}'", timeout=20)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return False, f"Failed removing {route_path}: {exc}"
-    if res.returncode != 0:
-        return False, f"Failed removing {route_path}: {res.stderr.strip()}"
-
-    if not running:
-        return True, f"Removed '{route_path}' (Caddy not running; reload skipped)."
-
-    rel_ok, rel_msg = reload_caddy(vps_config, cfg)
-    if not rel_ok:
-        return False, f"Removed '{route_path}', but reload failed: {rel_msg}"
-    return True, f"Removed '{route_path}'. {rel_msg}"
+    result = apply_configuration(
+        vps_config, {}, delete=[f"conf/apps/{clean_slug}.caddy"], offline=True,
+        caddy_dir=caddy_dir, container_name=container_name, network=network,
+    )
+    return result.success, result.message

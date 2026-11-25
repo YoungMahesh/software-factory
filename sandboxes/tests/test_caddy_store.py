@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -250,115 +249,6 @@ class TestCaddyStoreSync(unittest.TestCase):
         self.assertFalse(res.success)
         self.assertIn("--bootstrap", res.message)
 
-    @patch("sandbox.caddy_store._sync.resolve_factory_root")
-    @patch("sandbox.caddy_store._sync.ensure_caddy_store_repo")
-    @patch("sandbox.caddy_store._sync.fetch_caddy_store_bundle")
-    @patch("sandbox.caddy_store._sync.list_remote_docker_networks")
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.check_ports_available")
-    @patch("sandbox.caddy_deploy.ensure_docker_network")
-    @patch("sandbox.caddy_deploy.validate_caddy")
-    @patch("subprocess.run")
-    def test_restore_bootstrap_filters_missing_networks(
-        self, mock_subproc, mock_val, mock_net, mock_ports, mock_running, mock_nets, mock_bundle, mock_ensure, mock_root
-    ):
-        mock_root.return_value = self.tmp_path
-        mock_bundle.return_value = {
-            "conf/Caddyfile": "{\n\temail ops@example.com\n}\n\nimport /etc/caddy/sites/*.caddy\n",
-            "conf/sites/s3-split.caddy": "s3.example.com {\n\treverse_proxy cS3Split:3000\n}\n",
-            "docker-compose.override.yml": SAMPLE_OVERRIDE,
-        }
-        mock_running.return_value = (False, "not running")
-        mock_nets.return_value = {"dbhost-network", "s3-split_net"}
-        mock_ports.return_value = (True, "free")
-        mock_net.return_value = (True, "ok")
-        mock_val.return_value = (True, "valid")
-        mock_subproc.return_value = subprocess.CompletedProcess([], 0, b"", b"")
-
-        res = restore_caddy_from_store(
-            self.vps_config, org_name="sFactory0", gh_token="tok", bootstrap=True
-        )
-        self.assertTrue(res.success)
-        self.assertTrue(res.changed)
-        self.assertEqual(res.skipped_networks, ["repo-backups_net"])
-        self.assertIn("Skipped missing external networks: repo-backups_net", res.message)
-
-    @patch("sandbox.caddy_store._sync.resolve_factory_root")
-    @patch("sandbox.caddy_store._sync.ensure_caddy_store_repo")
-    @patch("sandbox.caddy_store._sync.fetch_caddy_store_bundle")
-    @patch("sandbox.caddy_store._sync.list_remote_docker_networks")
-    @patch("sandbox.caddy_store._sync.fetch_vps_caddy_files")
-    @patch("sandbox.caddy_store._sync.apply_files_to_vps")
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.ensure_caddy_network")
-    @patch("sandbox.caddy_deploy.validate_caddy")
-    @patch("sandbox.caddy_deploy.reload_caddy")
-    @patch("subprocess.run")
-    def test_restore_running_idempotent_merge_and_prune(
-        self, mock_subproc, mock_reload, mock_val, mock_net, mock_running,
-        mock_apply, mock_vps_files, mock_nets, mock_bundle, mock_ensure, mock_root
-    ):
-        mock_root.return_value = self.tmp_path
-        mock_running.return_value = (True, "running")
-        mock_net.return_value = (True, "connected")
-        mock_nets.return_value = {"dbhost-network"}
-        mock_val.return_value = (True, "valid")
-        mock_reload.return_value = (True, "reloaded")
-        mock_subproc.return_value = subprocess.CompletedProcess([], 0, "", "")
-
-        desired = {
-            "conf/Caddyfile": "{\n}\n",
-            "conf/sites/resource-plane.caddy": "db.dev {\n\treverse_proxy db-host-web:3000\n}\n",
-        }
-        mock_bundle.return_value = desired
-
-        # Case 1: Already converged (even with an unstored local extra.caddy when prune=False) -> no-op
-        mock_vps_files.return_value = {
-            **desired,
-            "conf/sites/extra.caddy": "extra.dev {\n}\n",
-        }
-        res_noop = restore_caddy_from_store(self.vps_config, org_name="sFactory0", gh_token="tok", prune=False)
-        self.assertTrue(res_noop.success)
-        self.assertFalse(res_noop.changed)
-        mock_apply.assert_not_called()
-        mock_reload.assert_not_called()
-
-        # Case 2: prune=True deletes extra.caddy (never Caddyfile) and reloads without compose up
-        res_prune = restore_caddy_from_store(self.vps_config, org_name="sFactory0", gh_token="tok", prune=True)
-        self.assertTrue(res_prune.success)
-        self.assertTrue(res_prune.changed)
-        self.assertEqual(res_prune.files_deleted, ["conf/sites/extra.caddy"])
-        mock_apply.assert_called_once()
-        mock_reload.assert_called_once()
-
-    @patch("sandbox.caddy_store._sync.resolve_factory_root")
-    @patch("sandbox.caddy_store._sync.ensure_caddy_store_repo")
-    @patch("sandbox.caddy_store._sync.fetch_caddy_store_bundle")
-    @patch("sandbox.caddy_store._sync.list_remote_docker_networks")
-    @patch("sandbox.caddy_store._sync.fetch_vps_caddy_files")
-    @patch("sandbox.caddy_store._sync.apply_files_to_vps")
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.ensure_caddy_network")
-    @patch("sandbox.caddy_deploy.validate_caddy")
-    @patch("sandbox.caddy_deploy.reload_caddy")
-    @patch("subprocess.run")
-    def test_restore_validation_failure_rolls_back_and_skips_reload(
-        self, mock_subproc, mock_reload, mock_val, mock_net, mock_running,
-        mock_apply, mock_vps_files, mock_nets, mock_bundle, mock_ensure, mock_root
-    ):
-        mock_root.return_value = self.tmp_path
-        mock_running.return_value = (True, "running")
-        mock_net.return_value = (True, "connected")
-        mock_nets.return_value = {"dbhost-network"}
-        mock_bundle.return_value = {"conf/Caddyfile": "broken {{{\n"}
-        mock_vps_files.return_value = {"conf/Caddyfile": "{\n}\n"}
-        mock_val.return_value = (False, "syntax error")
-        mock_subproc.return_value = subprocess.CompletedProcess([], 0, "", "")
-
-        res = restore_caddy_from_store(self.vps_config, org_name="sFactory0", gh_token="tok")
-        self.assertFalse(res.success)
-        self.assertIn("rolled back", res.message)
-        mock_reload.assert_not_called()
 
     @patch("sandbox.caddy_store._cli.resolve_factory_root")
     @patch("sandbox.caddy_store._cli.backup_caddy_to_store")

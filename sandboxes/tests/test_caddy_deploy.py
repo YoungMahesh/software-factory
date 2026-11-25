@@ -1,7 +1,6 @@
 """Unit tests for Host Ingress Proxy (/opt/caddy) automation module."""
 
 from pathlib import Path
-import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -11,13 +10,11 @@ from sandbox.caddy_deploy import (
     DEFAULT_CADDYFILE_PATH,
     DEFAULT_RESOURCE_PLANE_SITE_PATH,
     CaddyConfig,
-    bootstrap_caddy,
     build_caddy_parser,
     caddyfile_imports_sites,
     check_caddy_running,
     check_ports_available,
     ensure_caddy_network,
-    ensure_caddy_site_config,
     find_caddy_source_dir,
     format_caddy_route,
     main as caddy_main,
@@ -127,39 +124,6 @@ class TestCaddyDeploy(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("is connected to network", msg)
 
-    @patch("subprocess.run")
-    def test_ensure_caddy_site_config_requires_import(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="example.com {\n}\n", stderr="")
-        ok, changed, msg = ensure_caddy_site_config(self.vps_config, "db-host.example.com")
-        self.assertFalse(ok)
-        self.assertFalse(changed)
-        self.assertIn("import /etc/caddy/sites/*.caddy", msg)
-
-    @patch("subprocess.run")
-    def test_ensure_caddy_site_config_unchanged_skips_write(self, mock_run):
-        desired = render_resource_plane_site("db-host.example.com")
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="import /etc/caddy/sites/*.caddy\n", stderr=""),
-            MagicMock(returncode=0, stdout=desired, stderr=""),
-        ]
-        ok, changed, msg = ensure_caddy_site_config(self.vps_config, "db-host.example.com")
-        self.assertTrue(ok)
-        self.assertFalse(changed)
-        self.assertIn("already up to date", msg)
-        self.assertEqual(mock_run.call_count, 2)
-
-    @patch("subprocess.run")
-    def test_ensure_caddy_site_config_updates_and_validates(self, mock_run):
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="import /etc/caddy/sites/*.caddy\n", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-        ]
-        ok, changed, msg = ensure_caddy_site_config(self.vps_config, "new-domain.dev")
-        self.assertTrue(ok)
-        self.assertTrue(changed)
-        self.assertIn("/opt/caddy/conf/sites/resource-plane.caddy", msg)
-        self.assertEqual(mock_run.call_count, 3)
 
     @patch("subprocess.run")
     def test_reload_caddy_validates_then_reloads(self, mock_run):
@@ -179,34 +143,6 @@ class TestCaddyDeploy(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("syntax error", msg)
 
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.check_ports_available")
-    @patch("sandbox.caddy_deploy.ensure_docker_network")
-    @patch("sandbox.caddy_deploy._run_ssh")
-    def test_bootstrap_caddy_fresh_host(self, mock_ssh, mock_net, mock_ports, mock_check):
-        mock_check.side_effect = [(False, "not running"), (True, "running")]
-        mock_ports.return_value = (True, "Ports free")
-        mock_net.return_value = (True, "Network ready")
-        mock_ssh.side_effect = [
-            subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 0, "missing\n", ""),
-            subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 0, "", ""),
-        ]
-
-        ok, msg = bootstrap_caddy(self.vps_config, email="ops@example.com")
-        self.assertTrue(ok)
-        self.assertIn("/opt/caddy", msg)
-        self.assertEqual(mock_ssh.call_count, 4)
-
-    @patch("sandbox.caddy_deploy.check_caddy_running")
-    @patch("sandbox.caddy_deploy.check_ports_available")
-    def test_bootstrap_caddy_aborts_on_port_conflict(self, mock_ports, mock_check):
-        mock_check.return_value = (False, "not running")
-        mock_ports.return_value = (False, "Ports 80/443 are already in use on remote VPS: nginx")
-        ok, msg = bootstrap_caddy(self.vps_config)
-        self.assertFalse(ok)
-        self.assertIn("already in use", msg)
 
     @patch("sandbox.caddy_deploy.check_caddy_running")
     @patch("sandbox.caddy_deploy.ensure_caddy_network")

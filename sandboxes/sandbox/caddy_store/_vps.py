@@ -113,38 +113,3 @@ def write_local_caddy_dir(local_dir: Path, files: dict[str, str]) -> None:
             raise ValueError(f"Unsafe relative path: {rel}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(content, encoding="utf-8")
-
-
-def apply_files_to_vps(
-    vps_config: VpsSshConfig,
-    files_to_write: dict[str, str],
-    files_to_delete: list[str],
-    caddy_dir: str = DEFAULT_CADDY_DIR,
-    timeout: int = 45,
-) -> None:
-    """Streams updated files via tar over SSH and deletes specified relative paths."""
-    if files_to_write:
-        payload = build_tar_gz_bytes(files_to_write)
-        p_ssh = subprocess.run(
-            build_ssh_cmd(vps_config, f"mkdir -p '{caddy_dir}' && tar -xzf - -C '{caddy_dir}'"),
-            input=payload,
-            timeout=timeout,
-            capture_output=True,
-            check=False,
-        )
-        if p_ssh.returncode != 0:
-            err = p_ssh.stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"Failed transferring Caddy files to {caddy_dir}: {err}")
-
-    if files_to_delete:
-        rm_args = " ".join(f"'{caddy_dir}/{p}'" for p in files_to_delete if is_declarative_caddy_relpath(p))
-        if rm_args:
-            res = subprocess.run(
-                build_ssh_cmd(vps_config, f"rm -f {rm_args}"),
-                timeout=timeout,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if res.returncode != 0:
-                raise RuntimeError(f"Failed removing pruned Caddy files: {res.stderr.strip()}")

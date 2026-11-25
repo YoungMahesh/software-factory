@@ -239,10 +239,14 @@ def wire_cloud_resources(
     )
 
     result = CloudWiringResult()
-    owner, bare_repo = _resolve_repo_owner_and_name(
-        project_name, options.repo_name, options.org_name, default_org
-    )
-    target_repo = f"{owner}/{bare_repo}"
+    owner = options.org_name or default_org
+    bare_repo = (options.repo_name or project_name).strip().rstrip("/").rsplit("/", 1)[-1]
+    needs_github_owner = options.github or options.push_vault or options.launch
+    if needs_github_owner or "/" in (options.repo_name or ""):
+        owner, bare_repo = _resolve_repo_owner_and_name(
+            project_name, options.repo_name, options.org_name, default_org
+        )
+    target_repo = f"{owner}/{bare_repo}" if owner else bare_repo
     env_file = project_dir / ".env"
 
     if options.github:
@@ -310,7 +314,7 @@ def wire_cloud_resources(
         deploy_impl = deploy_fn or deploy_app
         deploy_req = AppDeployRequest(
             target=str(project_dir),
-            repo=bare_repo,
+            repo=target_repo if (options.repo_name or options.github or options.org_name) else None,
             subdomain=options.subdomain,
             base_domain=options.base_domain,
             skip_migrate=options.skip_migrate,
