@@ -73,7 +73,8 @@ The pipeline executes the following stages automatically:
 1. **Connectivity Check**: Tests SSH reachability.
 2. **Environment Validation**: Runs `docker info` remotely to verify the daemon.
 3. **File Synchronization**: Streams `resource-plane/` to `RESOURCE_PLANE_REMOTE_DIR` using SSH and tar. The archive excludes `.env`, `.data`, `.git`, `node_modules`, and `.next`.
-4. **Container Orchestration**: Executes `./deploy.sh` remotely, starting PostgreSQL, SeaweedFS, and the Next.js web application via Docker Compose, then applies Drizzle database migrations.
+4. **Idempotent Container Orchestration**: Executes `./deploy.sh` remotely, ensuring the `dbhost-network` Docker bridge network exists, starting/rebuilding containers via Docker Compose, applying migrations, and polling the health endpoint.
+5. **Deterministic Credential Synchronization**: Automatically retrieves the remote `ADMIN_TOKEN` and writes `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env` (preserving any existing values, or bypassed via `--no-sync-env`).
 
 Output on completion:
 ```text
@@ -82,14 +83,14 @@ Output on completion:
    PostgreSQL Port:   54320 (or configured host port)
    SeaweedFS S3 Port: 8333
 
-Next step: ensure RESOURCE_PLANE_DOMAIN and RESOURCE_PLANE_ADMIN_TOKEN are configured in .env
+   ✓ Synchronized RESOURCE_PLANE_DOMAIN, RESOURCE_PLANE_ADMIN_TOKEN to .env
 ```
 
 ---
 
 ## 3. Configuring Execution Sandboxes to Use the Deployed Resource Plane
 
-Once deployed, link your Modal sandboxes and CLI utilities to the Resource Plane by setting the connection variables in your root `.env`:
+`deploy-infra` automatically populates the required connection variables in your root `.env`. If you used `--no-sync-env` or manage `.env` manually, ensure the following are set:
 
 ```env
 # Domain name or IP pointing to the Resource Plane deployment

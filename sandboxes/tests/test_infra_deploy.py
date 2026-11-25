@@ -17,9 +17,11 @@ from sandbox.infra_deploy import (
     check_ssh_connection,
     deploy_resource_plane,
     execute_remote_deploy,
+    fetch_remote_admin_token,
     find_resource_plane_source_dir,
     main,
     resolve_vps_ssh_config,
+    sync_local_env_credentials,
     sync_resource_plane_to_vps,
 )
 
@@ -93,18 +95,16 @@ class TestInfraDeploy(unittest.TestCase):
             self.assertEqual(cfg.port, 22022)
             self.assertEqual(cfg.remote_dir, "/custom/path")
 
-    def test_resolve_vps_ssh_config_db_host_fallback(self):
-        """Falls back to legacy DB_HOST_SSH_* variables if RESOURCE_PLANE_* is unset."""
+    def test_resolve_vps_ssh_config_legacy_db_host_ignored(self):
+        """Ignores legacy DB_HOST_SSH_* variables and raises ValueError for missing host."""
         env = {
             "DB_HOST_SSH_HOST": "legacyhost.test",
             "DB_HOST_SSH_USER": "legacyuser",
         }
         with patch.dict(os.environ, env, clear=True):
-            cfg = resolve_vps_ssh_config()
-            self.assertEqual(cfg.host, "legacyhost.test")
-            self.assertEqual(cfg.user, "legacyuser")
-            self.assertEqual(cfg.port, DEFAULT_SSH_PORT)
-            self.assertEqual(cfg.remote_dir, DEFAULT_REMOTE_DIR)
+            with self.assertRaises(ValueError) as ctx:
+                resolve_vps_ssh_config()
+            self.assertIn("Missing VPS SSH host", str(ctx.exception))
 
     def test_build_ssh_cmd(self):
         """Verifies SSH command structure with and without key and remote command."""
@@ -200,8 +200,10 @@ class TestInfraDeploy(unittest.TestCase):
     @patch("sandbox.infra_deploy.check_remote_docker")
     @patch("sandbox.infra_deploy.sync_resource_plane_to_vps")
     @patch("sandbox.infra_deploy.execute_remote_deploy")
+    @patch("sandbox.infra_deploy.sync_local_env_credentials")
     def test_deploy_resource_plane_pipeline_full_success(
         self,
+        mock_env_sync,
         mock_exec,
         mock_sync,
         mock_docker,
@@ -212,6 +214,7 @@ class TestInfraDeploy(unittest.TestCase):
         mock_docker.return_value = (True, "Docker OK")
         mock_sync.return_value = True
         mock_exec.return_value = (0, "Success output")
+        mock_env_sync.return_value = (True, ["RESOURCE_PLANE_DOMAIN"])
 
         code = deploy_resource_plane(self.sample_config, stream=False)
         self.assertEqual(code, 0)
@@ -219,6 +222,7 @@ class TestInfraDeploy(unittest.TestCase):
         mock_docker.assert_called_once()
         mock_sync.assert_called_once()
         mock_exec.assert_called_once()
+        mock_env_sync.assert_called_once()
 
     @patch("sandbox.infra_deploy.check_ssh_connection")
     def test_deploy_resource_plane_pipeline_ssh_failure(self, mock_ssh):
@@ -238,3 +242,130 @@ class TestInfraDeploy(unittest.TestCase):
         self.assertEqual(code, 0)
         mock_ssh.assert_called_once()
         mock_docker.assert_called_once()
+
+    @patch("subprocess.run")
+    def test_fetch_remote_admin_token_success(self, mock_run):
+        """Retrieves and parses ADMIN_TOKEN from remote .env via SSH."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="secret_token_12345\n",
+        )
+        token = fetch_remote_admin_token(self.sample_config)
+        self.assertEqual(token, "secret_token_12345")
+        mock_run.assert_called_once()
+        self.assertIn("ADMIN_TOKEN=", mock_run.call_args[0][0][-1])
+
+    @patch("subprocess.run")
+    def test_fetch_remote_admin_token_failure(self, mock_run):
+        """Returns None if remote SSH command fails or yields empty token."""
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=1, stdout="")
+        token = fetch_remote_admin_token(self.sample_config)
+        self.assertIsNone(token)
+
+    def test_sync_local_env_credentials_creates_new_file(self):
+        """Creates new .env file when none exists and sets credentials."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / ".env"
+            updated, keys = sync_local_env_credentials(
+                env_file,
+                domain="vps.example.com",
+                admin_token="admintoken999",
+            )
+            self.assertTrue(updated)
+            self.assertIn("RESOURCE_PLANE_DOMAIN", keys)
+            self.assertIn("RESOURCE_PLANE_ADMIN_TOKEN", keys)
+            content = env_file.read_text()
+            self.assertIn('RESOURCE_PLANE_DOMAIN="vps.example.com"', content)
+            self.assertIn('RESOURCE_PLANE_ADMIN_TOKEN="admintoken999"', content)
+
+    def test_sync_local_env_credentials_preserves_existing(self):
+        """Preserves existing non-empty variables in .env."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / ".env"
+            env_file.write_text(
+                'RESOURCE_PLANE_DOMAIN="existing.domain.com"\n'
+                'RESOURCE_PLANE_ADMIN_TOKEN=""\n'
+                'OTHER_VAR="keepme"\n'
+            )
+            updated, keys = sync_local_env_credentials(
+                env_file,
+                domain="new.vps.com",
+                admin_token="newtoken123",
+            )
+            self.assertTrue(updated)
+            self.assertIn("RESOURCE_PLANE_ADMIN_TOKEN", keys)
+            self.assertNotIn("RESOURCE_PLANE_DOMAIN", keys)
+
+            content = env_file.read_text()
+            self.assertIn('RESOURCE_PLANE_DOMAIN="existing.domain.com"', content)
+            self.assertIn('RESOURCE_PLANE_ADMIN_TOKEN="newtoken123"', content)
+            self.assertIn('OTHER_VAR="keepme"', content)
+
+            # Re-running again should make no changes (idempotency)
+            re_updated, re_keys = sync_local_env_credentials(
+                env_file,
+                domain="another.vps.com",
+                admin_token="anothertoken",
+            )
+            self.assertFalse(re_updated)
+            self.assertIn("RESOURCE_PLANE_DOMAIN", re_keys)
+            self.assertIn("RESOURCE_PLANE_ADMIN_TOKEN", re_keys)
+
+    @patch("sandbox.infra_deploy.check_ssh_connection")
+    @patch("sandbox.infra_deploy.check_remote_docker")
+    @patch("sandbox.infra_deploy.sync_resource_plane_to_vps")
+    @patch("sandbox.infra_deploy.execute_remote_deploy")
+    @patch("sandbox.infra_deploy.fetch_remote_admin_token")
+    @patch("sandbox.infra_deploy.resolve_factory_root")
+    def test_deploy_resource_plane_with_sync_env(
+        self,
+        mock_root,
+        mock_token,
+        mock_exec,
+        mock_sync,
+        mock_docker,
+        mock_ssh,
+    ):
+        """Verifies deploy_resource_plane automatically syncs credentials when enabled."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_path = Path(tmp_dir)
+            mock_root.return_value = root_path
+            mock_ssh.return_value = True
+            mock_docker.return_value = (True, "Docker OK")
+            mock_sync.return_value = True
+            mock_exec.return_value = (0, "Success output")
+            mock_token.return_value = "synced_token_abc"
+
+            code = deploy_resource_plane(self.sample_config, stream=False, sync_env=True)
+            self.assertEqual(code, 0)
+            mock_token.assert_called_once_with(self.sample_config)
+
+            env_file = root_path / ".env"
+            self.assertTrue(env_file.exists())
+            content = env_file.read_text()
+            self.assertIn('RESOURCE_PLANE_DOMAIN="vps.example.com"', content)
+            self.assertIn('RESOURCE_PLANE_ADMIN_TOKEN="synced_token_abc"', content)
+
+    @patch("sandbox.infra_deploy.check_ssh_connection")
+    @patch("sandbox.infra_deploy.check_remote_docker")
+    @patch("sandbox.infra_deploy.sync_resource_plane_to_vps")
+    @patch("sandbox.infra_deploy.execute_remote_deploy")
+    @patch("sandbox.infra_deploy.fetch_remote_admin_token")
+    def test_main_no_sync_env_flag(
+        self,
+        mock_token,
+        mock_exec,
+        mock_sync,
+        mock_docker,
+        mock_ssh,
+    ):
+        """Ensures --no-sync-env bypasses local credential synchronization."""
+        mock_ssh.return_value = True
+        mock_docker.return_value = (True, "Docker OK")
+        mock_sync.return_value = True
+        mock_exec.return_value = (0, "Success output")
+
+        code = main(["--host", "vps.example.com", "--no-sync-env"])
+        self.assertEqual(code, 0)
+        mock_token.assert_not_called()

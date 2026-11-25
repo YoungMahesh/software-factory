@@ -48,11 +48,11 @@ Modal Sandboxes uses a unified `.env` file for local development and control pla
 - `RESOURCE_PLANE_ADMIN_TOKEN`: Admin bearer token for JSON-RPC authentication at `POST /api/mcp` (falls back to legacy `DB_HOST_ADMIN_TOKEN`).
 
 ### 11. Resource Plane VPS Deployment Automation (`modal-sandbox infra deploy`)
-- `RESOURCE_PLANE_SSH_HOST`: Target Linux VPS hostname or IP address for automated deployment (falls back to `DB_HOST_SSH_HOST`).
-- `RESOURCE_PLANE_SSH_USER`: SSH user on the target VPS with Docker permissions (defaults to `root`, falls back to `DB_HOST_SSH_USER`).
-- `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`, falls back to `DB_HOST_SSH_PORT`).
+- `RESOURCE_PLANE_SSH_HOST`: Target Linux VPS hostname or IP address for automated deployment (required).
+- `RESOURCE_PLANE_SSH_USER`: SSH user on the target VPS with Docker permissions (defaults to `root`).
+- `RESOURCE_PLANE_SSH_PORT`: Remote SSH port on the VPS (defaults to `22`).
 - `RESOURCE_PLANE_SSH_KEY`: Path to the private SSH key file used for VPS authentication (optional if `ssh-agent` or `~/.ssh/id_rsa` is configured).
-- `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`, falls back to `DB_HOST_REMOTE_DIR`).
+- `RESOURCE_PLANE_REMOTE_DIR`: Remote destination directory on the VPS for resource-plane files and Docker Compose (defaults to `/opt/resource-plane`).
 
 ---
 

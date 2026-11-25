@@ -11,6 +11,7 @@ import argparse
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -44,21 +45,41 @@ def resolve_vps_ssh_config(
     """Resolves VPS SSH connection configuration from arguments or environment."""
     file_env = dotenv or {}
 
-    def setting(current: str, legacy: str) -> str | None:
-        return os.environ.get(current) or os.environ.get(legacy) or file_env.get(current) or file_env.get(legacy)
-
-    resolved_host = host or setting("RESOURCE_PLANE_SSH_HOST", "DB_HOST_SSH_HOST")
+    resolved_host = (
+        host
+        or os.environ.get("RESOURCE_PLANE_SSH_HOST")
+        or file_env.get("RESOURCE_PLANE_SSH_HOST")
+    )
     if not resolved_host or not resolved_host.strip():
         raise ValueError(
             "Missing VPS SSH host. Set RESOURCE_PLANE_SSH_HOST in .env or provide --host."
         )
 
-    resolved_user = user or setting("RESOURCE_PLANE_SSH_USER", "DB_HOST_SSH_USER") or DEFAULT_SSH_USER
-    raw_port = port or setting("RESOURCE_PLANE_SSH_PORT", "DB_HOST_SSH_PORT") or DEFAULT_SSH_PORT
+    resolved_user = (
+        user
+        or os.environ.get("RESOURCE_PLANE_SSH_USER")
+        or file_env.get("RESOURCE_PLANE_SSH_USER")
+        or DEFAULT_SSH_USER
+    )
+    raw_port = (
+        port
+        or os.environ.get("RESOURCE_PLANE_SSH_PORT")
+        or file_env.get("RESOURCE_PLANE_SSH_PORT")
+        or DEFAULT_SSH_PORT
+    )
     resolved_port = int(raw_port)
-    raw_key = key_path or setting("RESOURCE_PLANE_SSH_KEY", "DB_HOST_SSH_KEY")
+    raw_key = (
+        key_path
+        or os.environ.get("RESOURCE_PLANE_SSH_KEY")
+        or file_env.get("RESOURCE_PLANE_SSH_KEY")
+    )
     resolved_key = Path(raw_key).expanduser().resolve() if raw_key else None
-    resolved_remote_dir = remote_dir or setting("RESOURCE_PLANE_REMOTE_DIR", "DB_HOST_REMOTE_DIR") or DEFAULT_REMOTE_DIR
+    resolved_remote_dir = (
+        remote_dir
+        or os.environ.get("RESOURCE_PLANE_REMOTE_DIR")
+        or file_env.get("RESOURCE_PLANE_REMOTE_DIR")
+        or DEFAULT_REMOTE_DIR
+    )
 
     return VpsSshConfig(
         host=resolved_host.strip(),
@@ -199,9 +220,82 @@ def execute_remote_deploy(
     return res.returncode, res.stdout + ("\n" + res.stderr if res.stderr else "")
 
 
+def fetch_remote_admin_token(config: VpsSshConfig, timeout: int = 15) -> str | None:
+    """Retrieves ADMIN_TOKEN directly from the remote resource-plane .env over SSH."""
+    remote_cmd = (
+        f"cat '{config.remote_dir}/.env' 2>/dev/null | "
+        "grep -E '^[[:space:]]*ADMIN_TOKEN=' | head -n1 | cut -d= -f2- | tr -d '\"'\'' \r\n'"
+    )
+    cmd = build_ssh_cmd(config, remote_cmd)
+    try:
+        res = subprocess.run(cmd, timeout=timeout, capture_output=True, text=True, check=False)
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
+def sync_local_env_credentials(
+    env_file_path: Path,
+    domain: str,
+    admin_token: str | None = None,
+) -> tuple[bool, list[str]]:
+    """Synchronizes domain and admin token to local .env idempotently without clobbering."""
+    keys_to_set: dict[str, str] = {"RESOURCE_PLANE_DOMAIN": domain}
+    if admin_token:
+        keys_to_set["RESOURCE_PLANE_ADMIN_TOKEN"] = admin_token
+
+    if not env_file_path.exists():
+        env_file_path.parent.mkdir(parents=True, exist_ok=True)
+        content = "\n".join(f'{k}="{v}"' for k, v in keys_to_set.items()) + "\n"
+        env_file_path.write_text(content, encoding="utf-8")
+        return True, list(keys_to_set.keys())
+
+    content = env_file_path.read_text(encoding="utf-8")
+    lines = content.splitlines(keepends=True)
+    existing_vars = parse_env_file(env_file_path)
+
+    updated_keys: list[str] = []
+    preserved_keys: list[str] = []
+
+    for key, value in keys_to_set.items():
+        existing_val = existing_vars.get(key, "").strip()
+        if existing_val:
+            preserved_keys.append(key)
+            continue
+
+        pattern = re.compile(rf"^\s*(export\s+)?{re.escape(key)}\s*=.*$")
+        new_line = f'{key}="{value}"\n'
+        replaced = False
+        new_lines: list[str] = []
+
+        for line in lines:
+            if pattern.match(line):
+                new_lines.append(new_line)
+                replaced = True
+            else:
+                new_lines.append(line)
+
+        if not replaced:
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines[-1] += "\n"
+            new_lines.append(new_line)
+
+        lines = new_lines
+        updated_keys.append(key)
+
+    if updated_keys:
+        env_file_path.write_text("".join(lines), encoding="utf-8")
+        return True, updated_keys
+
+    return False, preserved_keys
+
+
 def deploy_resource_plane(
     config: VpsSshConfig | None = None,
     stream: bool = True,
+    sync_env: bool = True,
 ) -> int:
     """Coordinates full automated deployment of Resource Plane to the target VPS."""
     cfg = config or resolve_vps_ssh_config()
@@ -247,7 +341,22 @@ def deploy_resource_plane(
     print(f"   Dashboard / Web UI: http://{cfg.host}:3000")
     print(f"   PostgreSQL Port:   54320 (or configured host port)")
     print(f"   SeaweedFS S3 Port: 8333")
-    print("\nNext step: ensure RESOURCE_PLANE_DOMAIN and RESOURCE_PLANE_ADMIN_TOKEN are configured in .env\n")
+
+    if sync_env:
+        admin_token = fetch_remote_admin_token(cfg)
+        root_env = resolve_factory_root() / ".env"
+        updated, modified_keys = sync_local_env_credentials(
+            root_env,
+            domain=cfg.host,
+            admin_token=admin_token,
+        )
+        if updated:
+            print(f"\n   ✓ Synchronized {', '.join(modified_keys)} to {root_env.name}")
+        elif modified_keys:
+            print(f"\n   ℹ Existing {', '.join(modified_keys)} preserved in {root_env.name}")
+    else:
+        print("\nNext step: ensure RESOURCE_PLANE_DOMAIN and RESOURCE_PLANE_ADMIN_TOKEN are configured in .env\n")
+
     return 0
 
 
@@ -262,6 +371,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
     parser.add_argument("--key", help="Path to private SSH key file (defaults to RESOURCE_PLANE_SSH_KEY env var).")
     parser.add_argument("--remote-dir", help="Target directory on remote VPS (defaults to /opt/resource-plane).")
+    parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize credentials to local .env.")
     parser.add_argument("--check-only", action="store_true", help="Only verify SSH and Docker connectivity without deploying.")
     return parser
 
@@ -293,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
         print("✓ " if ok else "❌ ", msg)
         return 0 if ok else 1
 
-    return deploy_resource_plane(cfg, stream=True)
+    return deploy_resource_plane(cfg, stream=True, sync_env=not args.no_sync_env)
 
 
 if __name__ == "__main__":

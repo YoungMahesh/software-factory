@@ -118,6 +118,12 @@ done
 echo -e "${CYAN}==> Running pre-flight setup (TLS certificates & directories)...${NC}"
 ./scripts/init-setup.sh
 
+# Ensure external bridge network exists for docker compose
+if ! docker network inspect dbhost-network >/dev/null 2>&1; then
+  echo -e "${CYAN}==> Creating external Docker network 'dbhost-network'...${NC}"
+  docker network create dbhost-network >/dev/null 2>&1 || true
+fi
+
 # 5. Build and start containers via Docker Compose
 echo -e "${CYAN}==> Orchestrating containers with Docker Compose...${NC}"
 docker compose -f docker-compose.prod.yml up -d --build

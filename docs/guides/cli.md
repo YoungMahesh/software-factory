@@ -159,11 +159,12 @@ modal-sandbox infra deploy --host 203.0.113.10 --user root --key ~/.ssh/id_ed255
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--host` | string | `RESOURCE_PLANE_SSH_HOST` | Target Linux VPS hostname or IP address (falls back to `DB_HOST_SSH_HOST`). |
-| `--user` | string | `RESOURCE_PLANE_SSH_USER` / `root` | Remote SSH user with Docker permissions (falls back to `DB_HOST_SSH_USER`). |
-| `--port` | integer | `RESOURCE_PLANE_SSH_PORT` / `22` | Remote SSH port (falls back to `DB_HOST_SSH_PORT`). |
+| `--host` | string | `RESOURCE_PLANE_SSH_HOST` | Target Linux VPS hostname or IP address. |
+| `--user` | string | `RESOURCE_PLANE_SSH_USER` / `root` | Remote SSH user with Docker permissions. |
+| `--port` | integer | `RESOURCE_PLANE_SSH_PORT` / `22` | Remote SSH port. |
 | `--key` | path | `RESOURCE_PLANE_SSH_KEY` | Path to private SSH key file (optional if SSH agent or `~/.ssh/id_rsa` is used). |
 | `--remote-dir` | path | `RESOURCE_PLANE_REMOTE_DIR` / `/opt/resource-plane` | Destination path on remote VPS for resource-plane files. |
+| `--no-sync-env` | flag | `False` | Do not automatically synchronize `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env`. |
 | `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
 
 ---
