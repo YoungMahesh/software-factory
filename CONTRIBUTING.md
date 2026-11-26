@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Software Factory! We welcome cont
 Clone the repository and set up a virtual environment:
 
 ```bash
-git clone https://github.com/sFactory0/software-factory.git
+git clone https://github.com/YoungMahesh/software-factory.git
 cd software-factory
 
 python3 -m venv .venv

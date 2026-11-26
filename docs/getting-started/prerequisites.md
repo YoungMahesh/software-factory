@@ -5,7 +5,7 @@
 Use Linux, macOS, or WSL2 with Python 3.11+, Git, and an OpenSSH client. The sandbox base image uses Ubuntu 24.04 with Python 3.12.
 
 ```bash
-git clone https://github.com/sFactory0/software-factory.git
+git clone https://github.com/YoungMahesh/software-factory.git
 cd software-factory
 python3 -m venv .venv
 source .venv/bin/activate

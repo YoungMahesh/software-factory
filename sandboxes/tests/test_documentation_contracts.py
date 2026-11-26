@@ -48,8 +48,41 @@ def test_cli_options_have_reference_entries(parser_factory, start, end):
 def test_installed_commands_are_documented():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     reference = CLI_REFERENCE.read_text()
-    missing = [name for name in project["project"]["scripts"] if name not in reference]
-    assert not missing, f"Installed commands missing from CLI reference: {missing}"
+    readme_text = (ROOT / "readme.md").read_text()
+    missing_cli = [name for name in project["project"]["scripts"] if name not in reference]
+    missing_readme = [name for name in project["project"]["scripts"] if name not in readme_text]
+    assert not missing_cli, f"Installed commands missing from CLI reference: {missing_cli}"
+    assert not missing_readme, f"Installed commands missing from readme.md: {missing_readme}"
+
+
+def test_public_docs_do_not_reference_private_org_repo():
+    public_files = [
+        ROOT / name
+        for name in (
+            "readme.md",
+            "CONTRIBUTING.md",
+            "SECURITY.md",
+            "CODE_OF_CONDUCT.md",
+            "GLOSSARY.md",
+            "mkdocs.yml",
+            "app-template/README.md",
+            "dashboard/README.md",
+            "resource-plane/README.md",
+            "resource-plane/GLOSSARY.md",
+        )
+    ]
+    public_files.extend(
+        path
+        for path in (ROOT / "docs").rglob("*.md")
+        if not path.is_symlink()
+        and path.relative_to(ROOT / "docs").parts[0] not in ("adr", "research")
+    )
+    stale = [
+        str(path.relative_to(ROOT))
+        for path in public_files
+        if "sFactory0/software-factory" in path.read_text()
+    ]
+    assert not stale, f"Public docs still reference private sFactory0/software-factory: {stale}"
 
 
 def test_mcp_reference_uses_registered_tool_names():

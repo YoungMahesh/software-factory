@@ -2,7 +2,7 @@ site_name: Software Factory
 site_description: Monorepo platform combining cloud execution environments on Modal with persistent stateful database and object storage infrastructure.
 site_author: Software Factory Contributors
 repo_name: software-factory
-repo_url: https://github.com/sFactory0/software-factory
+repo_url: https://github.com/YoungMahesh/software-factory
 docs_dir: docs
 site_dir: site
 theme:

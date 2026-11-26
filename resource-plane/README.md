@@ -9,7 +9,7 @@ The factory monorepo also contains Modal sandbox tooling in `sandboxes/` and an 
 Use Docker Engine with an accessible Docker socket, OpenSSL, Node.js compatible with the Next.js package, and pnpm 10.31.0. Install dependencies from the monorepo root:
 
 ```bash
-git clone https://github.com/sFactory0/software-factory.git
+git clone https://github.com/YoungMahesh/software-factory.git
 cd software-factory
 pnpm install
 cd resource-plane/apps/web

@@ -219,4 +219,4 @@ Allow SSH for the deployment host and public HTTP/HTTPS for Caddy. Expose the co
 
 Back up `/opt/resource-plane/.env` and `.data/` separately from `config/caddy/`, including database, S3, and CA state. Use logical PostgreSQL backups or a consistent stopped/filesystem snapshot procedure. Keep the Caddy DNS token and certificate volumes in a separate sensitive backup process.
 
-Continue to [application creation and deployment](applications.md) to deploy apps using the database, buckets, and wildcard ingress. The [Resource Plane README](https://github.com/sFactory0/software-factory/blob/main/resource-plane/README.md) covers MCP connections and operational commands.
+Continue to [application creation and deployment](applications.md) to deploy apps using the database, buckets, and wildcard ingress. The [Resource Plane README](https://github.com/YoungMahesh/software-factory/blob/main/resource-plane/README.md) covers MCP connections and operational commands.

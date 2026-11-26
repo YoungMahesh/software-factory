@@ -27,6 +27,8 @@ Single-context layout (`GLOSSARY.md` and `docs/adr/` at repo root). See [`docs/a
 ### Verification
 
 - **Automated tests**: Run `pytest` before finalizing changes. All tests and line budgets must pass cleanly.
+- **Public repository URL**: Use `https://github.com/YoungMahesh/software-factory` for all user-facing links, clone commands, and public documentation (even when `git remote -v` points to `sFactory0/software-factory`).
+- **Root README ([`readme.md`](readme.md))**: Whenever changing CLI commands or flags, environment variables, subsystem structure, repository URLs, or setup/verification steps, update [`readme.md`](readme.md) (and [`docs/guides/cli.md`](docs/guides/cli.md) when CLI options change), re-test any modified commands in `readme.md`, and run `pytest sandboxes/tests/test_documentation_contracts.py sandboxes/tests/test_docs.py` plus `zensical build --strict`.
 - **Sandbox live verification**: Target `${GH_ORG_NAME}/software-factory` with `modal-sandbox --testing --repo software-factory` or `sandboxes/scripts/test_live_sandbox.py`. Terminate test sandboxes immediately after verification.
 
 ### Universal file line budget and ratchet

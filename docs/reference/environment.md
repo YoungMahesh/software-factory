@@ -1,6 +1,6 @@
 # Environment Variables Reference
 
-Factory configuration starts with the repository root `.env`; copy the tracked [`.env.example`](https://github.com/sFactory0/software-factory/blob/main/.env.example) when configuring integrations. Resource Plane server credentials belong to its own runtime environment, described below.
+Factory configuration starts with the repository root `.env`; copy the tracked [`.env.example`](https://github.com/YoungMahesh/software-factory/blob/main/.env.example) when configuring integrations. Resource Plane server credentials belong to its own runtime environment, described below.
 
 ## Factory and sandbox variables
 
