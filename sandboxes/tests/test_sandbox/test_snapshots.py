@@ -123,9 +123,16 @@ class TestSnapshotCliArgsAndValidation(unittest.TestCase):
         self.assertIn("--snapshot-ttl must be a positive integer", res.stderr)
 
 
+@patch("sandbox.snapshots.record_snapshot")
 class TestSnapshotRunnerExecution(unittest.TestCase):
+    """Tests for capture_snapshot / capture_sandbox_snapshot execution paths.
+
+    The class-level patch on record_snapshot prevents any test in this class
+    from accidentally writing fixture image IDs into the live modal.Dict registry.
+    """
+
     @patch("modal.Sandbox.from_id")
-    def test_capture_snapshot_invokes_sync_and_snapshot_filesystem(self, mock_from_id):
+    def test_capture_snapshot_invokes_sync_and_snapshot_filesystem(self, mock_from_id, mock_record):
         import io
         import contextlib
         from unittest.mock import MagicMock
@@ -167,7 +174,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         self.assertIn("10 days (864000s)", output)
 
     @patch("modal.Sandbox.from_id")
-    def test_capture_snapshot_respects_terminate(self, mock_from_id):
+    def test_capture_snapshot_respects_terminate(self, mock_from_id, mock_record):
         import io
         import contextlib
         from unittest.mock import MagicMock
@@ -195,7 +202,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         self.assertIn("Terminating sandbox sb-test-123", output)
 
     @patch("modal.Sandbox.from_id")
-    def test_capture_snapshot_vm_notice(self, mock_from_id):
+    def test_capture_snapshot_vm_notice(self, mock_from_id, mock_record):
         import io
         import contextlib
         from unittest.mock import MagicMock
@@ -220,7 +227,6 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         self.assertIn("Docker daemon storage", output)
         self.assertIn("--vm", output)
 
-    @patch("sandbox.snapshots.record_snapshot")
     @patch("modal.Sandbox.from_id")
     def test_capture_snapshot_records_in_registry(self, mock_from_id, mock_record):
         from unittest.mock import MagicMock
@@ -258,6 +264,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         mock_image_from_id,
         mock_app_lookup,
         mock_sandbox_create,
+        mock_record,
     ):
         from unittest.mock import MagicMock
         from sandbox.main import create_parser, run_sandbox_launch
@@ -297,6 +304,7 @@ class TestSnapshotRunnerExecution(unittest.TestCase):
         mock_image_from_id,
         mock_app_lookup,
         mock_sandbox_create,
+        mock_record,
     ):
         from unittest.mock import MagicMock
         from sandbox.main import create_parser, run_sandbox_launch
