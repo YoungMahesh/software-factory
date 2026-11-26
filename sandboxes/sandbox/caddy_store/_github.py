@@ -1,4 +1,4 @@
-"""GitHub REST API persistence helpers for Host Ingress Store (caddy-store)."""
+"""GitHub REST API persistence helpers for Central Config Store (caddy/)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ import urllib.request
 
 from sandbox.env_store import fetch_github_file
 
-CANONICAL_CADDY_STORE_REPO = "caddy-store"
+CANONICAL_CONFIG_REPO = "config"
+CANONICAL_CADDY_STORE_REPO = CANONICAL_CONFIG_REPO
+CADDY_STORE_PREFIX = "caddy"
 DEFAULT_CADDY_STORE_PROFILE = "default"
 PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 TRANSIENT_SUFFIXES = (".bak", ".tmp", ".swp", "~")
@@ -70,7 +72,7 @@ def _github_request(
 
 
 def ensure_caddy_store_repo(owner: str, token: str, create_if_missing: bool = False) -> None:
-    """Verifies ${GH_ORG_NAME}/caddy-store exists, optionally creating it as a private repo."""
+    """Verifies ${GH_ORG_NAME}/config exists, optionally creating it as a private repo."""
     status, body = _github_request(
         f"https://api.github.com/repos/{owner}/{CANONICAL_CADDY_STORE_REPO}", token
     )
@@ -100,7 +102,7 @@ def ensure_caddy_store_repo(owner: str, token: str, create_if_missing: bool = Fa
             "name": CANONICAL_CADDY_STORE_REPO,
             "private": True,
             "auto_init": True,
-            "description": "Private Host Ingress Proxy (/opt/caddy) configurations for Software Factory",
+            "description": "Private Central Config Store (env/, caddy/, scratchpad/) for Software Factory",
         },
     )
     if c_status not in (200, 201):
@@ -112,7 +114,7 @@ def ensure_caddy_store_repo(owner: str, token: str, create_if_missing: bool = Fa
 
 
 def list_caddy_store_profile_blobs(owner: str, profile: str, token: str) -> dict[str, str]:
-    """Lists {rel_path: blob_sha} under <profile>/ in caddy-store."""
+    """Lists {rel_path: blob_sha} under caddy/<profile>/ in Central Config Store."""
     status, body = _github_request(
         f"https://api.github.com/repos/{owner}/{CANONICAL_CADDY_STORE_REPO}/git/trees/HEAD?recursive=1",
         token,
@@ -123,7 +125,7 @@ def list_caddy_store_profile_blobs(owner: str, profile: str, token: str) -> dict
         msg = body.get("message", f"HTTP {status}") if isinstance(body, dict) else str(body)
         raise RuntimeError(f"Failed listing '{owner}/{CANONICAL_CADDY_STORE_REPO}': {msg}")
 
-    prefix = f"{profile}/"
+    prefix = f"{CADDY_STORE_PREFIX}/{profile}/"
     blobs: dict[str, str] = {}
     for entry in body.get("tree", []):
         if entry.get("type") != "blob":
@@ -137,12 +139,12 @@ def list_caddy_store_profile_blobs(owner: str, profile: str, token: str) -> dict
 
 
 def fetch_caddy_store_bundle(owner: str, profile: str, token: str) -> dict[str, str]:
-    """Fetches all declarative files for a profile from caddy-store."""
+    """Fetches all declarative files for a profile from caddy/<profile>/ in Central Config Store."""
     blobs = list_caddy_store_profile_blobs(owner, profile, token)
     files: dict[str, str] = {}
     for rel in sorted(blobs):
         content = fetch_github_file(
-            owner, CANONICAL_CADDY_STORE_REPO, f"{profile}/{rel}", token
+            owner, CANONICAL_CADDY_STORE_REPO, f"{CADDY_STORE_PREFIX}/{profile}/{rel}", token
         )
         if content is not None:
             files[rel] = content
@@ -157,7 +159,7 @@ def commit_caddy_store_file(
     commit_message: str,
     sha: str | None = None,
 ) -> None:
-    """Creates or updates a single file in caddy-store via GitHub Contents API."""
+    """Creates or updates a single file in Central Config Store via GitHub Contents API."""
     payload: dict[str, Any] = {
         "message": commit_message,
         "content": base64.b64encode(content_bytes).decode("ascii"),

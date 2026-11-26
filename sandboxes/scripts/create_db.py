@@ -86,7 +86,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--push-vault",
         action="store_true",
-        help="Automatically encrypt and push updated .env to central env-store vault.",
+        help="Automatically encrypt and push updated .env to Central Config Store (config).",
     )
     parser.add_argument(
         "--ca-path",
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         written_env_msg = f"{env_path} as {args.env_var}"
 
         if args.push_vault:
-            print("🔐 Pushing updated secrets to central env-store...")
+            print("🔐 Pushing updated secrets to Central Config Store...")
             cmd = ["push-repo-env", "-e", str(env_path)]
             res = subprocess.run(cmd, check=False)
             if res.returncode != 0:

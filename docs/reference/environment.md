@@ -9,14 +9,14 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `WEB_UI_USERNAME`, `WEB_UI_PASSWORD` | Both required for hosted sandbox dashboard and API Basic authentication; no implicit username default |
 | `MODAL_TOKENS` | JSON array of Modal profile objects, each with `name`, `token_id`, `token_secret`, and optional `active`; required for `--modal` |
 | `MODAL_CONFIG_PATH` | Optional path to host Modal configuration instead of `~/.modal.toml` |
-| `GH_TOKEN`, `GH_ORG_NAME` | GitHub access and default organization for shorthand repository names; writes to GitHub or `env-store` need appropriate write access |
+| `GH_TOKEN`, `GH_ORG_NAME` | GitHub access and default organization for shorthand repository names; writes to GitHub or `config` (`env/`, `caddy/`, `scratchpad/`) need appropriate write access |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Credential for an already configured sandbox application tunnel; absent token means startup skips the tunnel |
 | `MODAL_SANDBOX_TUNNEL_DOMAIN` | Display hostname for the application tunnel; does not create DNS or configure the tunnel |
 | `SSH_AUTHORIZED_KEY` | Bootstrap input populated by the launcher's `sandboxes/shared/ssh-key.pub`; configure the launcher's public-key file to change the key |
 | `OPENCODE_GO_API_KEY` | OpenCode provider key used by T3 Code |
 | `ANTIGRAVITY_CLIENT_ID`, `ANTIGRAVITY_CLIENT_SECRET`, `ANTIGRAVITY_TOKENS` | Antigravity OAuth configuration and account profiles |
 | `AGE_PRIVATE_KEY` | Age private key for repository vault decryption; `SOPS_AGE_KEY` is a host resolver fallback, as is `~/.config/sops/age/keys.txt` in vault helpers |
-| `DEFAULT_GIT_NAME`, `DEFAULT_GIT_EMAIL` | Fallback sandbox Git authorship; repository-specific authorship comes from `env-store/<repo>/git.env` |
+| `DEFAULT_GIT_NAME`, `DEFAULT_GIT_EMAIL` | Fallback sandbox Git authorship; repository-specific authorship comes from `config/env/<repo>/git.env` |
 | `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
 | `MODAL_SANDBOX_ENDPOINT_URL` | Public or Modal control plane base URL for CLI `--remote` and pool-wide Codex status (e.g. `https://apps.example.com`); `--endpoint-url` overrides it |
 | `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) proxied at `https://<APPS_BASE_DOMAIN>` by Caddy (auto-discovered via Modal SDK when unset) |
@@ -39,7 +39,7 @@ Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Chil
 | `RESOURCE_PLANE_SSH_PORT` | SSH port, default `22` |
 | `RESOURCE_PLANE_SSH_KEY` | Required explicit private key path, normally `.secrets/resource_plane_ssh`; no ambient SSH key fallback |
 | `RESOURCE_PLANE_REMOTE_DIR` | Resource Plane deployment directory, default `/opt/resource-plane` |
-| `CADDY_STORE_PROFILE` | Logical folder in the private `caddy-store` repository, default `default`; Caddy and deploy-app `--profile` overrides it |
+| `CADDY_STORE_PROFILE` | Logical profile folder under `caddy/` in the private `config` repository, default `default`; Caddy and deploy-app `--profile` overrides it |
 | `APPS_BASE_DOMAIN` | Root DNS domain for the apex Sandbox Web Dashboard and Hosted App subdomains, such as `apps.example.com` |
 | `CLOUDFLARE_DNS_API_TOKEN` | DNS-01 token for Caddy wildcard certificates, falling back to `CLOUDFLARE_API_TOKEN`; remotely stored in `/opt/caddy/.env` |
 
@@ -80,7 +80,7 @@ Lookup rules differ between loading factory credentials and sending values to a 
 | Hosted control plane deployment | Parse all root `.env` keys, apply dashboard authentication and Git provenance, then fill missing keys from `CONTROL_PLANE_SECRET_KEYS` in `sandboxes/sandbox/config.py` |
 | Child sandbox with root `.env` | Inject that file's values; the explicit `CODEX_STATUS_SECRET` filter excludes the status signing key when present |
 | Child sandbox without root `.env` | Forward selected GitHub, Cloudflare, SSH, provider, Age, Modal, dashboard, and Resource Plane environment keys listed in `sandboxes/sandbox/launcher.py` |
-| Repository vault | Fetch and decrypt `env-store/<repo>/env.map` and mapped files, then add the repository bundle and Git identity |
+| Repository vault | Fetch and decrypt `config/env/<repo>/env.map` and mapped files, then add the repository bundle and Git identity |
 
 The control plane's host fallback list also includes Codex profile and status settings and the remote endpoint URL. The child launcher has a separate fallback list, so these lists must not be treated as interchangeable. An explicit allowlist restricts ambient host fallbacks; it does not restrict all keys in a factory `.env`.
 

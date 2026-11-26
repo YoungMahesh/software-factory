@@ -53,6 +53,6 @@ Production Resource Plane and Hosted App HTTPS use Caddy in a separate Docker Co
 - Resource Plane console and optional S3 hostnames use site files under `/opt/caddy/conf/sites/`.
 - The apex of `APPS_BASE_DOMAIN` (`https://<APPS_BASE_DOMAIN>`) can reverse-proxy to the Modal-hosted Sandbox Web Dashboard (`SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK discovery) inside `apps-wildcard.caddy` without consuming Modal custom-domain slots.
 - Hosted Apps use the wildcard certificate for `APPS_BASE_DOMAIN` and snippets under `/opt/caddy/conf/apps/`.
-- The Cloudflare DNS-01 token for wildcard certificates is stored in `/opt/caddy/.env`, outside `caddy-store` backups.
+- The Cloudflare DNS-01 token for wildcard certificates is stored in `/opt/caddy/.env`, outside Central Config Store (`config/caddy/`) backups.
 
 See [Resource Plane deployment](../guides/resource-plane-deployment.md) for bootstrap, backup, and restore, and [application deployment](../guides/applications.md) for wildcard DNS and app routes.

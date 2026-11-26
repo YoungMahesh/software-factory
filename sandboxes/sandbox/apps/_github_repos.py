@@ -11,7 +11,7 @@ import urllib.request
 
 from pydantic import BaseModel, Field
 
-EXCLUDED_INFRA_REPOS: frozenset[str] = frozenset({"env-store", "caddy-store"})
+EXCLUDED_INFRA_REPOS: frozenset[str] = frozenset({"config", "env-store", "caddy-store"})
 _OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 _GITHUB_URL_RE = re.compile(

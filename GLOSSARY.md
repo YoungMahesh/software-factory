@@ -96,7 +96,7 @@ The local factory settings and credentials used to configure control plane deplo
 _Avoid_: Config file, root env, secret bundle
 
 **Shared Workspace Secret (Retired)**:
-A retired shared credential source used by earlier sandbox provisioning. Current provisioning resolves factory configuration and the Central Environment Store.
+A retired shared credential source used by earlier sandbox provisioning. Current provisioning resolves factory configuration and the Central Config Store.
 _Avoid_: Global secret, root secret, default secret
 
 **Test Organization Scope**:
@@ -178,12 +178,12 @@ _Avoid_: File size limit, code line limit, test budget, 500-line rule
 The single-organization GitHub access configuration defined via `GH_TOKEN` and `GH_ORG_NAME` in the Factory Environment Configuration (`.env`), replacing legacy multi-file secret bundles (`secrets/github-orgs.env`).
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
-**Central Environment Store**:
-A dedicated private GitHub repository (`env-store` under `${GH_ORG_NAME}`) that securely houses SOPS-encrypted environment files and directory mappings organized by target repository name, serving as the centralized secret vault for public and private workspaces without polluting open-source codebases.
-_Avoid_: Central secrets repo, github vault, secret bucket
+**Central Config Store**:
+A single private GitHub repository (`config` under `${GH_ORG_NAME}`) housing SOPS-encrypted environment files (`env/<repo>/`), plaintext Host Ingress Proxy configurations (`caddy/<profile>/`), and Markdown Scratchpad notes (`scratchpad/<slug>.md`). Supersedes the retired `env-store` and `caddy-store` repositories.
+_Avoid_: Central secrets repo, env-store, caddy-store, config bucket, secret bucket
 
 **Environment Mapping Manifest (`env.map`)**:
-A plaintext configuration manifest located in `env-store/<repo>/env.map` (and cached locally in `.git/env-vault/env.map`) that maps source secret files to relative workspace destination paths (e.g. `web.env=apps/web/.env`, `api.env=packages/api/.env.local`) for monorepo architectures.
+A plaintext configuration manifest located in `config/env/<repo>/env.map` (and cached locally in `.git/env-vault/env.map`) that maps source secret files to relative workspace destination paths (e.g. `web.env=apps/web/.env`, `api.env=packages/api/.env.local`) for monorepo architectures.
 _Avoid_: Secret manifest, env config, dotenv map
 
 **Repository Vault Cache (`.git/env-vault/`)**:
@@ -207,7 +207,7 @@ The explicit set of ambient host configuration keys accepted as fallbacks during
 _Avoid_: Environment dump, full env export, host env pass-through
 
 **In-Repo Secret Manifest (Legacy)**:
-A retired repository-local mapping of encrypted files to workspace destinations, superseded by the Central Environment Store manifest.
+A retired repository-local mapping of encrypted files to workspace destinations, superseded by the Central Config Store manifest.
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
@@ -279,15 +279,11 @@ The remote infrastructure automation mechanism that uses SSH credentials configu
 _Avoid_: SSH runner, remote script, vps agent
 
 **Host Ingress Proxy**:
-The shared reverse-proxy service running on a VPS alongside the Resource Plane that owns host HTTP/HTTPS ports, manages public ACME TLS certificates, and routes external domain traffic to the Resource Plane and any co-located host applications.
+The shared reverse-proxy service running on a VPS alongside the Resource Plane that owns host HTTP/HTTPS ports, manages public ACME TLS certificates, and routes external domain traffic to the Resource Plane and any co-located host applications. Configuration backups are stored in the Central Config Store under `caddy/<profile>/`.
 _Avoid_: App proxy, caddy server, edge proxy, reverse-proxy container
 
-**Host Ingress Store**:
-A dedicated private GitHub repository (`caddy-store` under `${GH_ORG_NAME}`) holding plaintext Host Ingress Proxy configuration (`/opt/caddy/conf/` and `docker-compose.override.yml`) organized by logical VPS profile folders.
-_Avoid_: Caddy backup, proxy store, caddy-store env, caddy vault
-
 **In-Repo Secrets Directory**:
-An uncommitted, Git-ignored directory at the repository root (`.secrets/`) used to store local credentials and private keys that cannot be stored in `.env`, synchronized to the central environment store via `push-repo-env` and `pull-repo-env`.
+An uncommitted, Git-ignored directory at the repository root (`.secrets/`) used to store local credentials and private keys that cannot be stored in `.env`, synchronized to the Central Config Store (`env/`) via `push-repo-env` and `pull-repo-env`.
 _Avoid_: Local keys, private folder, uncommitted secrets, key cache
 
 **DbHostClient**:
@@ -295,7 +291,7 @@ A deep control plane client module (`sandbox/db_host_client.py`) that encapsulat
 _Avoid_: MCP client, db-host transport, postgres helper, rpc caller
 
 **EnvStoreVault**:
-A domain adapter and vault client module (`sandbox/env_store.py`) that encapsulates target repository secret resolution, SOPS decryption, manifest parsing, and bundle packaging, exposing symmetric push/pull and sandbox bundle projection seams.
+A domain adapter and vault client module (`sandbox/env_store.py`) that encapsulates target repository secret resolution from the Central Config Store (`env/<repo>/`), SOPS decryption, manifest parsing, and bundle packaging, exposing symmetric push/pull and sandbox bundle projection seams.
 _Avoid_: Secret fetcher, vault script, env parser, sops helper
 
 **FactoryConfiguration**:
@@ -334,4 +330,12 @@ _Avoid_: Build job, prompt job, start request
 **Prime Sandbox**:
 A long-lived, multi-tenant Modal sandbox provisioned lazily on demand that hosts multiple Factory Apps and T3 Code Server threads concurrently, eliminating container startup overhead for subsequent prompts.
 _Avoid_: Shared sandbox, warm sandbox, master sandbox, persistent container
+
+**Scratchpad**:
+The idea-capture and AI-assisted note workflow in the Sandbox Web Dashboard (`#scratchpad`), where operators refine rough prompts or architecture drafts with a free OpenCode model, review or edit the suggestion in a confirmation modal, browse saved notes, and send a note into the Builder composer.
+_Avoid_: Memo tab, notepad, prompt history, draft buffer
+
+**Scratchpad Note**:
+A Markdown file stored under `scratchpad/<slug>.md` in the Central Config Store (`config`), formatted with a `# <Title>` heading, a collision-disambiguated lowercase kebab-case filename, and structured Markdown content committed on explicit user confirmation (or raw save).
+_Avoid_: Brainstorm doc, quick note file, markdown memo
 

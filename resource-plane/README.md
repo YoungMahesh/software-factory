@@ -99,6 +99,6 @@ curl http://127.0.0.1:3000/api/health
 
 The health response contains top-level `postgres` and `seaweedfs` status objects, including their ports and container state. It does not require Basic authentication.
 
-Back up `.env`, `.data/postgres/`, `.data/seaweedfs/`, and `.data/certs/` as sensitive state. Use PostgreSQL logical backups or a consistent stopped/filesystem snapshot procedure; copying a live database directory is not a standalone recovery strategy. Protect the CA private key and stored service credentials. Caddy declarations and certificate volumes require separate backups; caddy-store excludes secret environment files and ACME volumes.
+Back up `.env`, `.data/postgres/`, `.data/seaweedfs/`, and `.data/certs/` as sensitive state. Use PostgreSQL logical backups or a consistent stopped/filesystem snapshot procedure; copying a live database directory is not a standalone recovery strategy. Protect the CA private key and stored service credentials. Caddy declarations and certificate volumes require separate backups; Central Config Store (`config/caddy/`) excludes secret environment files and ACME volumes.
 
 For canonical terms, use the repository [glossary](../GLOSSARY.md). Historical subsystem decisions remain under [docs/adr/](docs/adr/); current platform architecture decisions are in the [root ADR index](../docs/adr/index.md).

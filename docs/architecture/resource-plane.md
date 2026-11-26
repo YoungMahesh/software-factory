@@ -55,4 +55,4 @@ Production data lives under `/opt/resource-plane/.data/`, including `postgres/`,
 
 ## Deployment boundary
 
-Host deployment commands use `RESOURCE_PLANE_SSH_KEY` over SSH. Runtime clients use MCP bearer tokens, database roles, and bucket keys. Keep deployment keys on the deployment host; avoid mapping them into application repositories through `env-store`. See [secrets](secrets.md) for actual injection and filesystem behavior.
+Host deployment commands use `RESOURCE_PLANE_SSH_KEY` over SSH. Runtime clients use MCP bearer tokens, database roles, and bucket keys. Keep deployment keys on the deployment host; avoid mapping them into application repositories through `config/env/`. See [secrets](secrets.md) for actual injection and filesystem behavior.

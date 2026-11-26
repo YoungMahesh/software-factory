@@ -1,4 +1,4 @@
-"""Optional factory cloud wiring for GitHub, Resource Plane, env-store, and Modal sandboxes."""
+"""Optional factory cloud wiring for GitHub, Resource Plane, Central Config Store, and Modal sandboxes."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def _resolve_repo_owner_and_name(
     org_name: str | None,
     default_org: str | None,
 ) -> tuple[str, str]:
-    """Resolves (owner, bare_repo_name) for GitHub and env-store operations."""
+    """Resolves (owner, bare_repo_name) for GitHub and Central Config Store operations."""
     raw = (repo_name or project_name).strip().rstrip("/")
     if "/" in raw:
         owner, bare = raw.split("/", 1)
@@ -270,7 +270,7 @@ def wire_cloud_resources(
             gh_token=gh_token,
         )
         if not getattr(push_res, "success", False):
-            raise RuntimeError(f"Failed pushing secrets to env-store: {getattr(push_res, 'message', push_res)}")
+            raise RuntimeError(f"Failed pushing secrets to Central Config Store: {getattr(push_res, 'message', push_res)}")
         result.vault_pushed = True
 
     if options.launch:

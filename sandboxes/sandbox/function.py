@@ -4,8 +4,12 @@ import logging
 import os
 from pathlib import Path
 import sys
-
 from typing import Any
+
+# Prefer this checkout's sandboxes/ package over any global editable install when running from a worktree.
+_EXECUTION_ROOT = str(Path(__file__).resolve().parent.parent)
+if sys.path[:1] != [_EXECUTION_ROOT]:
+    sys.path.insert(0, _EXECUTION_ROOT)
 
 from fastapi import Depends, FastAPI, HTTPException, status
 import modal
@@ -93,7 +97,7 @@ def validate_deployment_credentials(root: Path, enforce: bool | None = None) -> 
     if not has_age_key:
         logger.warning(
             "Age decryption key (AGE_PRIVATE_KEY / SOPS_AGE_KEY) not found in environment or .env. "
-            "Decrypting secrets from Central Environment Store (env-store) will be skipped."
+            "Decrypting secrets from Central Config Store (config/env/) will be skipped."
         )
 
     return True
@@ -142,10 +146,15 @@ CONTROL_PLANE_PIP_PACKAGES: tuple[str, ...] = (
     "python-dotenv>=1.0.0",
 )
 
+OPENCODE_INSTALL_COMMANDS: tuple[str, ...] = (
+    "curl -fsSL https://opencode.ai/v2/install | bash",
+    "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
+)
+
 image = (
     modal.Image.debian_slim()
-    .apt_install("curl")
-    .run_commands(*SOPS_INSTALL_COMMANDS)
+    .apt_install("curl", "ca-certificates")
+    .run_commands(*SOPS_INSTALL_COMMANDS, *OPENCODE_INSTALL_COMMANDS)
     .pip_install(*CONTROL_PLANE_PIP_PACKAGES)
     .add_local_python_source("sandbox")
     .add_local_dir(execution_root / "shared", "/root/shared", ignore=["**/__pycache__"])

@@ -41,9 +41,9 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        self.assertEqual([o.target_path for o in res.pushed_files], ["my-app/default.env"])
-        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/default.env")
-        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
+        self.assertEqual([o.target_path for o in res.pushed_files], ["env/my-app/default.env"])
+        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "env/my-app/default.env")
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "env/my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"default.env = .env\n")
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -66,7 +66,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         self.assertTrue(res.success)
         prompt_mock.assert_not_called()
         self.assertEqual(mock_commit.call_count, 1)
-        self.assertEqual(mock_commit.call_args.kwargs["path"], "my-app/default.env")
+        self.assertEqual(mock_commit.call_args.kwargs["path"], "env/my-app/default.env")
 
     @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -92,7 +92,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         prompt_mock.assert_not_called()
         self.assertEqual(
             [o.target_path for o in res.pushed_files],
-            ["my-app/web.env", "my-app/api.env", "my-app/default.env"],
+            ["env/my-app/web.env", "env/my-app/api.env", "env/my-app/default.env"],
         )
         self.assertEqual(mock_commit.call_count, 4)
         map_bytes = mock_commit.call_args_list[3].kwargs["content_bytes"].decode("utf-8")
@@ -118,7 +118,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
             )
 
         self.assertTrue(res.success)
-        self.assertEqual([o.target_path for o in res.pushed_files], ["my-app/web.env"])
+        self.assertEqual([o.target_path for o in res.pushed_files], ["env/my-app/web.env"])
         self.assertEqual(mock_commit.call_count, 1)
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -181,7 +181,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
 
         self.assertTrue(res.success)
         self.assertEqual(res.skipped_files, ["packages/api/.env"])
-        self.assertEqual([o.target_path for o in res.pushed_files], ["my-app/web.env"])
+        self.assertEqual([o.target_path for o in res.pushed_files], ["env/my-app/web.env"])
         self.assertEqual(mock_commit.call_count, 1)
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -224,7 +224,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         self.assertTrue(res.success)
         self.assertEqual(
             [o.target_path for o in res.pushed_files],
-            ["my-app/default.env", "my-app/resource_plane_ssh"],
+            ["env/my-app/default.env", "env/my-app/resource_plane_ssh"],
         )
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -273,7 +273,7 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         self._write(".env", "ROOT=1\n")
 
         def fake_commit(**kwargs):
-            if kwargs["path"] == "my-app/default.env":
+            if kwargs["path"] == "env/my-app/default.env":
                 raise RuntimeError("GitHub API 500")
             return "sha_web"
 
@@ -288,9 +288,9 @@ class TestPushRepoEnvManifestSync(unittest.TestCase):
         )
 
         self.assertFalse(res.success)
-        self.assertEqual([o.target_path for o in res.pushed_files], ["my-app/web.env"])
-        self.assertEqual([o.target_path for o in res.failed_files], ["my-app/default.env"])
-        self.assertNotIn("my-app/env.map", [c.kwargs["path"] for c in mock_commit.call_args_list])
+        self.assertEqual([o.target_path for o in res.pushed_files], ["env/my-app/web.env"])
+        self.assertEqual([o.target_path for o in res.failed_files], ["env/my-app/default.env"])
+        self.assertNotIn("env/my-app/env.map", [c.kwargs["path"] for c in mock_commit.call_args_list])
 
     @patch("scripts.push_repo_env.push_repo_env")
     def test_main_cli_all_flag_and_multi_file_output(self, mock_push):

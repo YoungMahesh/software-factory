@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Push local project environment secrets to the Central Environment Store (env-store).
+"""Push local project environment secrets to the Central Config Store (config).
 
 Encrypts a project's .env using the organization's public Age recipient key and
-commits it directly to github.com/${GH_ORG_NAME}/env-store via GitHub REST API
-as defined in ADR 0057 and ADR 0066.
+commits it directly to github.com/${GH_ORG_NAME}/config (under env/<repo>/) via
+GitHub REST API.
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def main() -> None:
 
     if is_git_subcommand:
         git_parser = argparse.ArgumentParser(
-            description="Push repository Git authorship (git.env) to env-store vault."
+            description="Push repository Git authorship (git.env) to Central Config Store (config)."
         )
         git_parser.add_argument("subcommand", choices=["git"])
         git_parser.add_argument("--name", help="Git author name (GIT_AUTHOR_NAME).")
@@ -131,7 +131,7 @@ def main() -> None:
         )
     else:
         parser = argparse.ArgumentParser(
-            description="Push local project .env secrets to env-store vault."
+            description="Push local project .env secrets to Central Config Store (config)."
         )
         parser.add_argument(
             "-r", "--repo", help="Target repository name (defaults to git remote origin)."
@@ -200,15 +200,15 @@ def main() -> None:
             res.org_name
             or getattr(args, "org", None)
             or os.environ.get("GH_ORG_NAME")
-            or "env-store"
+            or "org"
         )
         pushed_files = getattr(res, "pushed_files", None) or []
         if len(pushed_files) > 1:
-            print(f"✅ Successfully encrypted and stored {len(pushed_files)} files in {org_display}/env-store:")
+            print(f"✅ Successfully encrypted and stored {len(pushed_files)} files in {org_display}/config:")
             for item in pushed_files:
                 print(f"   • {item.rel_path} -> {item.target_path} (SHA: {item.commit_sha})")
         else:
-            print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/env-store.")
+            print(f"✅ Successfully encrypted and stored {res.target_path} in {org_display}/config.")
             print(f"   Commit SHA: {res.commit_sha}")
         print("🚀 Future modal-sandbox launches will automatically inject these settings!")
         sys.exit(0)

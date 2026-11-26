@@ -28,7 +28,7 @@ def build_deploy_app_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional app name/path when using 'deploy-app down <target>'.",
     )
-    parser.add_argument("--repo", default=None, help="GitHub repository (<repo> or <owner>/<repo>) to deploy from GitHub + env-store.")
+    parser.add_argument("--repo", default=None, help="GitHub repository (<repo> or <owner>/<repo>) to deploy from GitHub + Central Config Store (config).")
     parser.add_argument("-b", "--branch", default="main", help="Git branch to pull in --repo mode (default: main).")
     parser.add_argument("--subdomain", default=None, help="Override subdomain label under APPS_BASE_DOMAIN.")
     parser.add_argument("--base-domain", default=None, help="Override APPS_BASE_DOMAIN (e.g. apps.example.com).")
@@ -36,8 +36,8 @@ def build_deploy_app_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-migrate", action="store_true", help="Skip automatic Drizzle database migration on deploy.")
     parser.add_argument("--down", action="store_true", help="Stop containers and remove the Caddy route for the app.")
     parser.add_argument("--purge", action="store_true", help="With down/--down, also remove /root/<repo-name> on the VPS.")
-    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to caddy-store after updating routes.")
-    parser.add_argument("--profile", default=None, help="Logical VPS profile folder in caddy-store.")
+    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to Central Config Store (config/caddy/<profile>/) after updating routes.")
+    parser.add_argument("--profile", default=None, help="Logical VPS profile folder under caddy/ in config repo.")
     parser.add_argument("--host", default=None, help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST).")
     parser.add_argument("--user", default=None, help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER or 'root').")
     parser.add_argument("--port", type=int, default=None, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT or 22).")

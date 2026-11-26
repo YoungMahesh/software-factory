@@ -1,9 +1,11 @@
-"""Host Ingress Store (caddy-store) deep module interface."""
+"""Central Config Store (caddy/) deep module interface."""
 
 from ._cli import maybe_sync_after_deploy, run_bootstrap_from_store, run_caddy_store_subcommand
 from ._compose_filter import DEFAULT_CADDY_NETWORK, filter_compose_override_networks
 from ._github import (
+    CADDY_STORE_PREFIX,
     CANONICAL_CADDY_STORE_REPO,
+    CANONICAL_CONFIG_REPO,
     DEFAULT_CADDY_STORE_PROFILE,
     commit_caddy_store_file,
     delete_caddy_store_file,
@@ -28,7 +30,9 @@ from ._vps import (
 )
 
 __all__ = [
+    "CADDY_STORE_PREFIX",
     "CANONICAL_CADDY_STORE_REPO",
+    "CANONICAL_CONFIG_REPO",
     "CaddyStoreResult",
     "DEFAULT_CADDY_DIR",
     "DEFAULT_CADDY_NETWORK",

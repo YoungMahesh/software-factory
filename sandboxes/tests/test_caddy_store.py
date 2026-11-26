@@ -155,10 +155,12 @@ networks:
             200,
             {
                 "tree": [
-                    {"type": "blob", "path": "default/conf/Caddyfile", "sha": "sha1"},
-                    {"type": "blob", "path": "default/conf/sites/.gitkeep", "sha": "sha2"},
-                    {"type": "blob", "path": "staging/conf/Caddyfile", "sha": "sha3"},
-                    {"type": "blob", "path": "default/docker-compose.yml", "sha": "sha4"},
+                    {"type": "blob", "path": "caddy/default/conf/Caddyfile", "sha": "sha1"},
+                    {"type": "blob", "path": "caddy/default/conf/sites/.gitkeep", "sha": "sha2"},
+                    {"type": "blob", "path": "caddy/staging/conf/Caddyfile", "sha": "sha3"},
+                    {"type": "blob", "path": "caddy/default/docker-compose.yml", "sha": "sha4"},
+                    {"type": "blob", "path": "env/default/conf/Caddyfile", "sha": "sha5"},
+                    {"type": "blob", "path": "scratchpad/default-note.md", "sha": "sha6"},
                 ]
             },
         )
@@ -212,7 +214,9 @@ class TestCaddyStoreSync(unittest.TestCase):
         self.assertEqual(res1.files_written, ["conf/sites/app.caddy"])
         self.assertEqual(res1.files_deleted, ["conf/sites/old.caddy"])
         mock_commit.assert_called_once()
+        self.assertEqual(mock_commit.call_args.args[1], "caddy/prod/conf/sites/app.caddy")
         mock_del.assert_called_once()
+        self.assertEqual(mock_del.call_args.args[1], "caddy/prod/conf/sites/old.caddy")
         self.assertTrue((out_dir / "conf" / "sites" / "app.caddy").is_file())
 
         # Second run: everything matches -> idempotent no-op

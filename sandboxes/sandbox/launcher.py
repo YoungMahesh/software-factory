@@ -274,15 +274,15 @@ class SandboxLauncher:
                     if vault_bundle.git_author_name: env["TARGET_GIT_AUTHOR_NAME"] = vault_bundle.git_author_name
                     if vault_bundle.git_author_email:
                         env["TARGET_GIT_AUTHOR_EMAIL"] = vault_bundle.git_author_email
-                        self._emit_log(f"👤 Resolved repo-specific Git identity from env-store for {bare_repo}...")
+                        self._emit_log(f"👤 Resolved repo-specific Git identity from Central Config Store (config) for {bare_repo}...")
                     if vault_bundle.tz: env["TZ"] = vault_bundle.tz
                     if vault_bundle.env_dict:
                         sandbox_secrets.append(modal.Secret.from_dict(vault_bundle.env_dict))
-                        self._emit_log(f"🔐 Injected {len(vault_bundle.env_dict)} secrets from env-store into {bare_repo}...")
+                        self._emit_log(f"🔐 Injected {len(vault_bundle.env_dict)} secrets from Central Config Store (config) into {bare_repo}...")
                     else:
-                        self._emit_log(f"ℹ️ No secrets found for {bare_repo} in env-store.")
+                        self._emit_log(f"ℹ️ No secrets found for {bare_repo} in Central Config Store (config).")
             except Exception as e:
-                self._emit_log(f"⚠️ env-store resolution skipped: {e}")
+                self._emit_log(f"⚠️ Central Config Store (config) resolution skipped: {e}")
 
         if req.from_snapshot: env["RESUME_SNAPSHOT"] = "1"
         if clean_repo is None: env["NO_REPO"] = "1"

@@ -164,7 +164,7 @@ def _resolve_base_env(
         return env_map
 
     if org_name and gh_token:
-        bundle = resolve_sandbox_bundle(bare_repo, org_name=org_name, token=gh_token)
+        bundle = resolve_sandbox_bundle(bare_repo, org_name=org_name, gh_token=gh_token)
         if bundle and bundle.env_dict:
             env_map.update(bundle.env_dict)
     return env_map
@@ -331,7 +331,7 @@ def deploy_app(
         if req.sync_caddy_store:
             from sandbox.caddy_store import maybe_sync_after_deploy
             if maybe_sync_after_deploy(vps_config, req.profile) != 0:
-                print("⚠️  Warning: caddy-store sync failed.", file=sys.stderr)
+                print("⚠️  Warning: Central Config Store caddy/ sync failed.", file=sys.stderr)
 
         return AppDeployResult(
             repo_name=target.bare_repo,

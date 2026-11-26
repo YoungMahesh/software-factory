@@ -287,7 +287,7 @@ def inject_vault_bundle_in_sandbox(
     env: dict[str, str],
     resolve_bundle_fn: Callable[..., Any] | None = None,
 ) -> bool:
-    """Resolves env-store secrets host-side and writes .env/.git/env-vault into app_dir."""
+    """Resolves Central Config Store (env/) secrets host-side and writes .env/.git/env-vault into app_dir."""
     owner, bare_repo = repo.split("/", 1) if "/" in repo else (env.get("GH_ORG_NAME") or "", repo)
     if not owner or not bare_repo:
         return False
@@ -316,7 +316,7 @@ def inject_vault_bundle_in_sandbox(
         sb, "python3", "-c", _VAULT_UNPACK_SCRIPT, stdin_text=payload, timeout=60
     )
     if rc != 0:
-        raise RuntimeError(f"Failed materializing env-store secrets in {app_dir}: {err or out}")
+        raise RuntimeError(f"Failed materializing Central Config Store secrets in {app_dir}: {err or out}")
     return True
 
 

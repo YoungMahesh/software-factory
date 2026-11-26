@@ -1,4 +1,4 @@
-"""Idempotent backup and restore orchestration for Host Ingress Store (caddy-store)."""
+"""Idempotent backup and restore orchestration for Central Config Store (caddy/)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from sandbox.host_ingress import apply_configuration, prepare_runtime
 
 from ._compose_filter import filter_compose_override_networks
 from ._github import (
+    CADDY_STORE_PREFIX,
     CANONICAL_CADDY_STORE_REPO,
     DEFAULT_CADDY_STORE_PROFILE,
     PROFILE_NAME_RE,
@@ -88,7 +89,7 @@ def backup_caddy_to_store(
     from_dir: Path | None = None,
     caddy_dir: str = DEFAULT_CADDY_DIR,
 ) -> CaddyStoreResult:
-    """Captures declarative /opt/caddy config from VPS (or --from-dir) and mirrors to caddy-store."""
+    """Captures declarative /opt/caddy config from VPS (or --from-dir) and mirrors to Central Config Store."""
     root = resolve_factory_root()
     dotenv = parse_env_file(root / ".env") if (root / ".env").is_file() else {}
     resolved_profile = resolve_caddy_store_profile(profile, dotenv=dotenv)
@@ -126,32 +127,32 @@ def backup_caddy_to_store(
         return CaddyStoreResult(
             True,
             resolved_profile,
-            f"Host Ingress Store '{owner}/{CANONICAL_CADDY_STORE_REPO}' profile '{resolved_profile}' is already up to date (idempotent no-op).",
+            f"Central Config Store '{owner}/{CANONICAL_CADDY_STORE_REPO}' ({CADDY_STORE_PREFIX}/{resolved_profile}) is already up to date (idempotent no-op).",
             changed=False,
         )
 
     for rel, content in sorted(to_upsert.items()):
         commit_caddy_store_file(
             owner,
-            f"{resolved_profile}/{rel}",
+            f"{CADDY_STORE_PREFIX}/{resolved_profile}/{rel}",
             content.encode("utf-8"),
             token,
-            commit_message=f"chore(caddy-store/{resolved_profile}): update {rel}",
+            commit_message=f"chore(caddy/{resolved_profile}): update {rel}",
             sha=remote_blobs.get(rel),
         )
     for rel in to_delete:
         delete_caddy_store_file(
             owner,
-            f"{resolved_profile}/{rel}",
+            f"{CADDY_STORE_PREFIX}/{resolved_profile}/{rel}",
             remote_blobs[rel],
             token,
-            commit_message=f"chore(caddy-store/{resolved_profile}): remove {rel}",
+            commit_message=f"chore(caddy/{resolved_profile}): remove {rel}",
         )
 
     return CaddyStoreResult(
         True,
         resolved_profile,
-        f"Backed up {len(to_upsert)} updated and {len(to_delete)} removed file(s) to '{owner}/{CANONICAL_CADDY_STORE_REPO}' (profile '{resolved_profile}').",
+        f"Backed up {len(to_upsert)} updated and {len(to_delete)} removed file(s) to '{owner}/{CANONICAL_CADDY_STORE_REPO}' ({CADDY_STORE_PREFIX}/{resolved_profile}).",
         changed=True,
         files_written=sorted(to_upsert),
         files_deleted=to_delete,
@@ -234,7 +235,7 @@ def restore_caddy_from_store(
     from_dir: Path | None = None,
     caddy_dir: str = DEFAULT_CADDY_DIR,
 ) -> CaddyStoreResult:
-    """Restores Host Ingress Proxy configuration from caddy-store (or --from-dir) onto VPS."""
+    """Restores Host Ingress Proxy configuration from Central Config Store (or --from-dir) onto VPS."""
     from sandbox.caddy_deploy import CaddyConfig, check_caddy_running
 
     root = resolve_factory_root()
@@ -256,7 +257,7 @@ def restore_caddy_from_store(
 
     if not store_files:
         return CaddyStoreResult(
-            False, resolved_profile, f"No declarative Caddy files found for profile '{resolved_profile}' in '{owner_label}'."
+            False, resolved_profile, f"No declarative Caddy files found for profile '{resolved_profile}' ({CADDY_STORE_PREFIX}/{resolved_profile}) in '{owner_label}'."
         )
     if dir_out is not None:
         write_local_caddy_dir(dir_out, store_files)

@@ -9,7 +9,7 @@ The implementation is in `sandboxes/sandbox/config.py`, `sandboxes/sandbox/launc
 - The hosted control plane collects the factory root `.env`, required dashboard credentials, provenance, and selected host environment fallbacks at deployment time. Changes to deployed credentials require redeployment.
 - A child launch with a factory `.env` generally passes that file through `modal.Secret.from_dotenv()`. When the file contains `CODEX_STATUS_SECRET`, the launcher builds a filtered dictionary excluding that signing key.
 - Without a factory `.env`, the launcher forwards a selected set of host environment keys. This includes GitHub, Age, Modal, ingress, provider, dashboard, and Resource Plane credentials; see [environment resolution](../reference/environment.md#resolution-and-propagation).
-- Repository secrets are fetched and decrypted from `env-store` on the launch host, then sent to the sandbox as environment values and encoded file bundles.
+- Repository secrets are fetched and decrypted from `config/env/` on the launch host, then sent to the sandbox as environment values and encoded file bundles.
 
 A standalone launch requires no GitHub credentials, but it can still receive configured factory secrets through the same injection path. Standalone mode does not guarantee an empty credential environment.
 
@@ -38,9 +38,9 @@ Removing an environment variable from a shell does not erase copies already writ
 
 Resumption injects launch configuration again and reuses existing files. Fresh injection does not remove credentials already present in the image. See [snapshot behavior](snapshots.md) for restore and persistence details.
 
-## Central Environment Store (`env-store`)
+## Central Config Store (`config/env/`)
 
-The organization's private `env-store` repository holds SOPS-encrypted files under `<repo>/`, using Age recipients. `<repo>/env.map` maps vault filenames to workspace destinations, for example `web.env=apps/web/.env`. Legacy manifests inside application repositories are retired; see [ADR 0057](../adr/0057-central-env-store-and-host-side-secret-injection.md) and [ADR 0065](../adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md).
+The organization's private `config` repository holds SOPS-encrypted files under `env/<repo>/`, using Age recipients. `env/<repo>/env.map` maps vault filenames to workspace destinations, for example `web.env=apps/web/.env`. Legacy manifests inside application repositories and the older standalone `env-store` repo are retired; see [ADR 0057](../adr/0057-central-env-store-and-host-side-secret-injection.md), [ADR 0065](../adr/0065-retire-in-repo-env-map-and-standardize-ghclone-on-env-store.md), and [ADR 0093](../adr/0093-central-config-store-and-dashboard-scratchpad.md).
 
 `push-repo-env` encrypts and pushes mapped files. `pull-repo-env` decrypts them into local destinations, and `ghclone` invokes the pull workflow after cloning. Manual pulls need usable GitHub access and an Age key on the machine performing the pull. Host-side decryption does not imply that `GH_TOKEN` and `AGE_PRIVATE_KEY` are excluded from child sandbox injection.
 
@@ -54,4 +54,4 @@ The cache is outside tracked Git content, but remains plaintext on the sandbox f
 
 Infrastructure and Hosted App deployment use an explicit SSH private key on the deployment host. Keep the key in an ignored file such as `.secrets/resource_plane_ssh`, rather than embedding it in `.env`. Normal runtime database and storage clients use the Resource Plane API, database roles, and bucket credentials.
 
-A file mapped into a target repository through `env-store` will be materialized there. Do not map deployment SSH keys into ordinary application sandboxes if you want to maintain the host deployment boundary.
+A file mapped into a target repository through `config/env/` will be materialized there. Do not map deployment SSH keys into ordinary application sandboxes if you want to maintain the host deployment boundary.

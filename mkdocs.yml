@@ -174,6 +174,9 @@ nav:
     - '0088: Wildcard Host Ingress and Hosted App Deployment': adr/0088-wildcard-host-ingress-and-hosted-app-deployment.md
     - '0089: Prompt Homepage and Durable T3 Launch Coordinator': adr/0089-prompt-homepage-and-t3-launch-coordinator.md
     - '0090: Prime Sandbox Reuse for Multi-App Dashboard Prompts': adr/0090-prime-sandbox-multi-app-reuse.md
+    - '0091: GitHub Repository Catalog Cache, Prime Repo Launch, and Opt-In Web App Mode': adr/0091-github-repo-picker-and-opt-in-web-app-mode.md
+    - '0092: Host Sandbox Web Dashboard on App Base Domain via Caddy Reverse Proxy': adr/0092-host-sandbox-dashboard-on-base-domain.md
+    - '0093: Central Config Store and Dashboard Scratchpad': adr/0093-central-config-store-and-dashboard-scratchpad.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

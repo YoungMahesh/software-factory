@@ -132,6 +132,18 @@
           <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
                 x-text="snapshots.length"></span>
         </button>
+
+        <button id="nav-tab-scratchpad"
+                @click="openScratchpadTab()"
+                :class="currentTab === 'scratchpad' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          <span>Scratchpad</span>
+          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+                x-text="scratchpadNotes.length"></span>
+        </button>
       </nav>
 
       <!-- Quick Filter & Actions -->
@@ -516,6 +528,158 @@
           No Factory Apps yet. Enter a prompt above to start your first app.
         </div>
       </section>
+    </div>
+
+    <!-- TAB 3: SCRATCHPAD IDEAS & NOTES -->
+    <div x-show="currentTab === 'scratchpad'" class="space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-bold tracking-tight text-white">Scratchpad</h2>
+          <p class="text-sm text-slate-400">
+            Capture rough ideas, refine them into clean Markdown with free OpenCode AI, and commit notes to
+            <span class="font-mono text-indigo-300" x-text="(scratchpadConfigRepo || 'config') + '/scratchpad/'"></span>.
+          </p>
+        </div>
+        <button id="scratchpad-refresh-btn"
+                type="button"
+                @click="fetchScratchpadNotes(true)"
+                :disabled="scratchpadLoading"
+                class="inline-flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-50">
+          <svg class="w-3.5 h-3.5 mr-1.5" :class="scratchpadLoading ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span x-text="scratchpadLoading ? 'Refreshing...' : 'Refresh Notes'"></span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- Left: Composer + Selected Note Viewer -->
+        <div class="lg:col-span-7 space-y-6">
+          <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-base font-semibold text-white">New Idea / Plan</h3>
+              <span class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                Free AI Model
+              </span>
+            </div>
+
+            <div class="space-y-3">
+              <input id="scratchpad-title-hint"
+                     type="text"
+                     x-model="scratchpadForm.titleHint"
+                     placeholder="Optional title hint (AI suggests one if blank)..."
+                     class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none">
+
+              <textarea id="scratchpad-raw-input"
+                        rows="7"
+                        x-model="scratchpadForm.rawText"
+                        @keydown.meta.enter.prevent="submitScratchpadIdea()"
+                        @keydown.ctrl.enter.prevent="submitScratchpadIdea()"
+                        placeholder="Jot down your idea, feature notes, architecture sketch, or rough prompt..."
+                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
+            </div>
+
+            <div x-show="scratchpadError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300" x-text="scratchpadError"></div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <span class="text-xs text-slate-500">Tip: Press Ctrl/Cmd + Enter to refine with AI</span>
+              <div class="flex items-center space-x-2.5">
+                <button id="scratchpad-save-raw-btn"
+                        type="button"
+                        @click="saveRawScratchpadNote()"
+                        :disabled="scratchpadSuggesting || scratchpadSaving || !scratchpadForm.rawText.trim()"
+                        class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition-colors disabled:opacity-50">
+                  <span x-text="scratchpadSaving ? 'Saving...' : 'Save Raw'"></span>
+                </button>
+                <button id="scratchpad-submit-btn"
+                        type="button"
+                        @click="submitScratchpadIdea()"
+                        :disabled="scratchpadSuggesting || scratchpadSaving || !scratchpadForm.rawText.trim()"
+                        class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                  <svg x-show="scratchpadSuggesting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span x-text="scratchpadSuggesting ? 'Thinking...' : 'Submit'"></span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Selected Note Viewer -->
+          <section x-show="selectedScratchpadNote" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-lg font-bold text-white break-words" x-text="selectedScratchpadNote?.title"></h3>
+                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span class="font-mono text-indigo-300" x-text="selectedScratchpadNote?.path"></span>
+                  <a x-show="selectedScratchpadNote?.html_url"
+                     :href="selectedScratchpadNote?.html_url"
+                     target="_blank"
+                     class="text-slate-400 hover:text-white underline">
+                    GitHub ↗
+                  </a>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button type="button"
+                        @click="copyText(selectedScratchpadNote?.content || '', 'Note Markdown copied!')"
+                        class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium">
+                  Copy
+                </button>
+                <button id="scratchpad-use-in-builder-btn"
+                        type="button"
+                        @click="useScratchpadNoteInBuilder(selectedScratchpadNote)"
+                        class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm">
+                  Use in Builder →
+                </button>
+              </div>
+            </div>
+            <pre id="scratchpad-note-content"
+                 class="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs sm:text-sm text-slate-200 whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto"
+                 x-text="selectedScratchpadNote?.content || ''"></pre>
+          </section>
+        </div>
+
+        <!-- Right: Saved Notes Browser -->
+        <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-base font-semibold text-white">Saved Notes</h3>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300"
+                  x-text="filteredScratchpadNotes.length + ' of ' + scratchpadNotes.length"></span>
+          </div>
+
+          <input id="scratchpad-notes-filter"
+                 type="text"
+                 x-model="scratchpadFilter"
+                 placeholder="Filter notes by title or filename..."
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+
+          <div x-show="scratchpadLoading && scratchpadNotes.length === 0" class="py-10 text-center text-sm text-slate-400">
+            Loading notes from config/scratchpad/...
+          </div>
+
+          <div x-show="!scratchpadLoading && filteredScratchpadNotes.length === 0"
+               class="border border-dashed border-slate-800 rounded-xl p-6 text-center text-xs text-slate-500">
+            No Scratchpad notes found yet. Submit an idea to create your first note.
+          </div>
+
+          <div class="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+            <template x-for="note in filteredScratchpadNotes" :key="note.filename">
+              <button type="button"
+                      @click="selectScratchpadNote(note.filename)"
+                      :data-note-filename="note.filename"
+                      :class="selectedScratchpadNote?.filename === note.filename ? 'bg-indigo-600/15 border-indigo-500/60' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'"
+                      class="w-full text-left p-3 rounded-xl border transition-colors space-y-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium text-white truncate" x-text="note.title"></span>
+                  <span class="text-[11px] text-slate-500 font-mono flex-shrink-0" x-text="note.size + ' B'"></span>
+                </div>
+                <div class="text-xs font-mono text-indigo-300 truncate" x-text="note.path"></div>
+              </button>
+            </template>
+          </div>
+        </section>
+      </div>
     </div>
 
     <!-- TAB 1: SANDBOXES LIST -->
@@ -1156,6 +1320,75 @@
     </div>
   </div>
 
+  <!-- MODAL: SCRATCHPAD AI SUGGESTION -->
+  <div x-show="scratchpadModalOpen"
+       x-transition.opacity
+       @keydown.escape.window="if (scratchpadModalOpen) rejectScratchpadSuggestion()"
+       class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+       style="display: none;">
+    <div id="scratchpad-suggestion-modal"
+         class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-lg font-bold text-white">Review Suggested Note</h3>
+          <p class="text-xs text-slate-400">
+            Generated with free model <span class="font-mono text-emerald-300" x-text="scratchpadSuggestion.model || 'opencode'"></span>. Edit before committing or reject to keep your draft.
+          </p>
+        </div>
+        <button type="button" @click="rejectScratchpadSuggestion()" class="text-slate-400 hover:text-white px-2 py-1">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label for="scratchpad-modal-title" class="block text-xs font-medium text-slate-300 mb-1">Note Title</label>
+          <input id="scratchpad-modal-title"
+                 type="text"
+                 x-model="scratchpadSuggestion.title"
+                 class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none">
+          <div class="mt-1.5 text-xs text-slate-400">
+            Target file: <span id="scratchpad-target-path-preview" class="font-mono text-indigo-300" x-text="previewScratchpadTargetPath()"></span>
+          </div>
+        </div>
+
+        <div>
+          <label for="scratchpad-modal-content" class="block text-xs font-medium text-slate-300 mb-1">Markdown Body (committed below <code># Title</code>)</label>
+          <textarea id="scratchpad-modal-content"
+                    rows="11"
+                    x-model="scratchpadSuggestion.content"
+                    class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-100 focus:outline-none resize-y"></textarea>
+        </div>
+      </div>
+
+      <div x-show="scratchpadModalError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300" x-text="scratchpadModalError"></div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+        <button id="scratchpad-reject-btn"
+                type="button"
+                @click="rejectScratchpadSuggestion()"
+                :disabled="scratchpadSaving"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium disabled:opacity-50">
+          Reject
+        </button>
+        <div class="flex items-center space-x-2">
+          <button id="scratchpad-modal-save-raw-btn"
+                  type="button"
+                  @click="saveRawFromModal()"
+                  :disabled="scratchpadSaving"
+                  class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-sm font-medium disabled:opacity-50">
+            Save Raw
+          </button>
+          <button id="scratchpad-accept-btn"
+                  type="button"
+                  @click="acceptScratchpadSuggestion()"
+                  :disabled="scratchpadSaving || !scratchpadSuggestion.title.trim() || !scratchpadSuggestion.content.trim()"
+                  class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md disabled:opacity-50">
+            <span x-text="scratchpadSaving ? 'Committing...' : 'Accept & Commit'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION -->
   <div x-show="toast.visible" x-transition
        class="fixed bottom-6 right-6 z-50 bg-slate-900 border px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm max-w-md"
@@ -1284,6 +1517,28 @@
         resultModalOpen: false,
         launchResult: null,
 
+        // Scratchpad State
+        scratchpadNotes: [],
+        scratchpadConfigRepo: '',
+        scratchpadLoaded: false,
+        scratchpadLoading: false,
+        scratchpadSuggesting: false,
+        scratchpadSaving: false,
+        scratchpadFilter: '',
+        scratchpadError: '',
+        scratchpadModalOpen: false,
+        scratchpadModalError: '',
+        selectedScratchpadNote: null,
+        scratchpadForm: {
+          titleHint: '',
+          rawText: ''
+        },
+        scratchpadSuggestion: {
+          title: '',
+          content: '',
+          model: ''
+        },
+
         // Toast State
         toast: {
           visible: false,
@@ -1293,10 +1548,16 @@
 
         async init() {
           const hash = window.location.hash.replace(/^#/, '');
-          if (hash === 'sandboxes' || hash === 'snapshots' || hash === 'builder') {
+          if (hash === 'sandboxes' || hash === 'snapshots' || hash === 'builder' || hash === 'scratchpad') {
             this.currentTab = hash;
           }
-          await Promise.all([this.fetchProfiles(), this.fetchVersion(), this.fetchModels(), this.fetchRepoCatalog()]);
+          await Promise.all([
+            this.fetchProfiles(),
+            this.fetchVersion(),
+            this.fetchModels(),
+            this.fetchRepoCatalog(),
+            this.fetchScratchpadNotes()
+          ]);
           await this.refreshAll();
           const params = new URLSearchParams(window.location.search);
           const pendingLaunch = params.get('launch');
@@ -1987,6 +2248,218 @@
           }
           const minutes = Math.round(seconds / 60);
           return minutes + (minutes === 1 ? ' minute' : ' minutes') + ' timeout';
+        },
+
+        get filteredScratchpadNotes() {
+          const notes = this.scratchpadNotes || [];
+          const q = (this.scratchpadFilter || this.searchQuery || '').toLowerCase().trim();
+          if (!q) return notes;
+          return notes.filter(n =>
+            (n.title && n.title.toLowerCase().includes(q)) ||
+            (n.filename && n.filename.toLowerCase().includes(q)) ||
+            (n.path && n.path.toLowerCase().includes(q))
+          );
+        },
+
+        slugifyScratchpadTitle(title) {
+          const ascii = (title || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+          const slug = ascii.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/g, '');
+          return slug || 'untitled-note';
+        },
+
+        previewScratchpadTargetPath() {
+          const existing = new Set((this.scratchpadNotes || []).map(n => (n.filename || '').toLowerCase()));
+          const base = this.slugifyScratchpadTitle(this.scratchpadSuggestion.title);
+          let candidate = base;
+          let counter = 2;
+          while (existing.has(candidate + '.md')) {
+            const suffix = '-' + counter;
+            const stem = base.slice(0, Math.max(1, 80 - suffix.length)).replace(/-+$/g, '');
+            candidate = stem + suffix;
+            counter += 1;
+          }
+          const prefix = this.scratchpadConfigRepo ? this.scratchpadConfigRepo + '/' : '';
+          return prefix + 'scratchpad/' + candidate + '.md';
+        },
+
+        async openScratchpadTab() {
+          this.currentTab = 'scratchpad';
+          window.location.hash = 'scratchpad';
+          if (!this.scratchpadLoaded) {
+            await this.fetchScratchpadNotes();
+          }
+        },
+
+        async fetchScratchpadNotes(showFeedback = false) {
+          if (this.scratchpadLoading) return;
+          this.scratchpadLoading = true;
+          try {
+            const res = await fetch('/api/scratchpad/notes', { cache: 'no-store' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            const data = await res.json();
+            this.scratchpadConfigRepo = data.config_repo || '';
+            this.scratchpadNotes = Array.isArray(data.notes) ? data.notes : [];
+            this.scratchpadLoaded = true;
+            if (showFeedback) {
+              this.showToast(`Loaded ${this.scratchpadNotes.length} Scratchpad note(s).`);
+            }
+          } catch (err) {
+            if (showFeedback || this.currentTab === 'scratchpad') {
+              this.showToast('Failed loading Scratchpad notes: ' + err.message, 'error');
+            }
+          } finally {
+            this.scratchpadLoading = false;
+          }
+        },
+
+        async selectScratchpadNote(filename) {
+          if (!filename) return;
+          try {
+            const res = await fetch('/api/scratchpad/notes/' + encodeURIComponent(filename));
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            this.selectedScratchpadNote = await res.json();
+          } catch (err) {
+            this.showToast('Failed loading note: ' + err.message, 'error');
+          }
+        },
+
+        async submitScratchpadIdea() {
+          const raw = (this.scratchpadForm.rawText || '').trim();
+          if (!raw || this.scratchpadSuggesting || this.scratchpadSaving) return;
+          this.scratchpadError = '';
+          this.scratchpadModalError = '';
+          this.scratchpadSuggesting = true;
+          try {
+            if (!this.scratchpadLoaded) {
+              await this.fetchScratchpadNotes();
+            }
+            const res = await fetch('/api/scratchpad/suggest', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                raw_text: raw,
+                title_hint: (this.scratchpadForm.titleHint || '').trim() || null
+              })
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            const data = await res.json();
+            this.scratchpadSuggestion = {
+              title: data.title || '',
+              content: data.content || '',
+              model: data.model || ''
+            };
+            this.scratchpadModalOpen = true;
+          } catch (err) {
+            this.scratchpadError = 'AI refinement failed: ' + err.message;
+            this.showToast(this.scratchpadError, 'error');
+          } finally {
+            this.scratchpadSuggesting = false;
+          }
+        },
+
+        rejectScratchpadSuggestion() {
+          this.scratchpadModalOpen = false;
+          this.scratchpadModalError = '';
+          this.showToast('Suggestion dismissed. Your draft was preserved.');
+        },
+
+        async commitScratchpadPayload(title, content, mode) {
+          this.scratchpadSaving = true;
+          this.scratchpadModalError = '';
+          this.scratchpadError = '';
+          try {
+            const res = await fetch('/api/scratchpad/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: title || '', content, mode })
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            const saved = await res.json();
+            this.scratchpadModalOpen = false;
+            this.scratchpadForm.rawText = '';
+            this.scratchpadForm.titleHint = '';
+            const savedSummary = {
+              filename: saved.filename,
+              slug: saved.slug,
+              path: saved.path,
+              title: saved.title,
+              sha: saved.sha,
+              size: saved.size || (saved.content ? saved.content.length : 0),
+              html_url: saved.html_url
+            };
+            this.scratchpadConfigRepo = saved.config_repo || this.scratchpadConfigRepo;
+            this.selectedScratchpadNote = {
+              ...savedSummary,
+              content: saved.content
+            };
+            this.scratchpadNotes = [
+              ...this.scratchpadNotes.filter(n => n.filename !== saved.filename),
+              savedSummary
+            ].sort((a, b) => (a.filename || '').localeCompare(b.filename || ''));
+            await this.fetchScratchpadNotes();
+            if (!this.scratchpadNotes.some(n => n.filename === saved.filename)) {
+              this.scratchpadNotes = [
+                ...this.scratchpadNotes,
+                savedSummary
+              ].sort((a, b) => (a.filename || '').localeCompare(b.filename || ''));
+            }
+            this.showToast(`Committed ${saved.path} to ${saved.config_repo}.`);
+          } catch (err) {
+            const msg = 'Failed saving note: ' + err.message;
+            if (this.scratchpadModalOpen) {
+              this.scratchpadModalError = msg;
+            } else {
+              this.scratchpadError = msg;
+            }
+            this.showToast(msg, 'error');
+          } finally {
+            this.scratchpadSaving = false;
+          }
+        },
+
+        async acceptScratchpadSuggestion() {
+          const title = (this.scratchpadSuggestion.title || '').trim();
+          const content = (this.scratchpadSuggestion.content || '').trim();
+          if (!title || !content || this.scratchpadSaving) return;
+          await this.commitScratchpadPayload(title, content, 'ai');
+        },
+
+        async saveRawScratchpadNote() {
+          const raw = (this.scratchpadForm.rawText || '').trim();
+          if (!raw || this.scratchpadSaving) return;
+          const title = (this.scratchpadForm.titleHint || '').trim();
+          await this.commitScratchpadPayload(title, raw, 'raw');
+        },
+
+        async saveRawFromModal() {
+          const raw = (this.scratchpadForm.rawText || '').trim();
+          if (!raw || this.scratchpadSaving) return;
+          const title = (this.scratchpadSuggestion.title || this.scratchpadForm.titleHint || '').trim();
+          await this.commitScratchpadPayload(title, raw, 'raw');
+        },
+
+        useScratchpadNoteInBuilder(note) {
+          if (!note || !note.content) return;
+          this.builderForm.prompt = note.content;
+          this.currentTab = 'builder';
+          window.location.hash = 'builder';
+          this.showToast(`Loaded '${note.title}' into Builder prompt.`);
+          this.$nextTick(() => {
+            const el = document.getElementById('builder-prompt-input');
+            if (el) el.focus();
+          });
         }
       };
     }

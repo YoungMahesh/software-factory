@@ -64,7 +64,7 @@ class TestEnvStore(unittest.TestCase):
         mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        result = fetch_github_file("sFactory0", "env-store", "my-repo/default.env", token="ghp_test")
+        result = fetch_github_file("sFactory0", "config", "env/my-repo/default.env", token="ghp_test")
         self.assertEqual(result, "MY_SECRET=encrypted_value")
 
     @patch("urllib.request.urlopen")
@@ -77,7 +77,7 @@ class TestEnvStore(unittest.TestCase):
             fp=None,
         )
         mock_urlopen.side_effect = err
-        result = fetch_github_file("sFactory0", "env-store", "missing-repo/default.env", token="ghp_test")
+        result = fetch_github_file("sFactory0", "config", "env/missing-repo/default.env", token="ghp_test")
         self.assertIsNone(result)
 
     @patch("shutil.which")
@@ -112,8 +112,8 @@ class TestEnvStore(unittest.TestCase):
         self.assertEqual(raw, expected_raw)
         mock_fetch.assert_called_once_with(
             "sFactory0",
-            "env-store",
-            "my-cool-app/default.env",
+            "config",
+            "env/my-cool-app/default.env",
             token="ghp_123",
         )
 
@@ -135,8 +135,8 @@ class TestEnvStore(unittest.TestCase):
         self.assertEqual(env_dict["DB_PASS"], "dbpass")
         mock_fetch.assert_called_once_with(
             "sFactory0",
-            "env-store",
-            "my-cool-app/default.env",
+            "config",
+            "env/my-cool-app/default.env",
             token="ghp_123",
         )
 
@@ -166,7 +166,7 @@ class TestEnvStore(unittest.TestCase):
             org_name="test-org",
             gh_token="tok",
             age_key=None,
-            env_repo_name="env-store",
+            env_repo_name="config",
             target_filename="git.env",
         )
 
@@ -208,9 +208,9 @@ class TestEnvStore(unittest.TestCase):
     @patch("sandbox.env_store.decrypt_sops_payload")
     def test_fetch_vault_env_bundle_with_map(self, mock_decrypt, mock_fetch):
         def fake_fetch(owner, repo, path, token):
-            if path == "my-app/env.map":
+            if path == "env/my-app/env.map":
                 return "web.env = apps/web/.env\napi.env = packages/api/.env\n"
-            if path in ("my-app/web.env", "my-app/api.env"):
+            if path in ("env/my-app/web.env", "env/my-app/api.env"):
                 return f"ENC_{path}"
             return None
 
@@ -238,9 +238,9 @@ class TestEnvStore(unittest.TestCase):
     @patch("sandbox.env_store.decrypt_sops_payload")
     def test_fetch_vault_env_bundle_fallback_default_env(self, mock_decrypt, mock_fetch):
         def fake_fetch(owner, repo, path, token):
-            if path == "my-app/env.map":
+            if path == "env/my-app/env.map":
                 return None
-            if path == "my-app/default.env":
+            if path == "env/my-app/default.env":
                 return "ENC_DEFAULT"
             return None
 
@@ -257,9 +257,9 @@ class TestEnvStore(unittest.TestCase):
     @patch("sandbox.env_store.decrypt_sops_payload")
     def test_fetch_vault_env_bundle_missing_mapped_file_resilience(self, mock_decrypt, mock_fetch):
         def fake_fetch(owner, repo, path, token):
-            if path == "my-app/env.map":
+            if path == "env/my-app/env.map":
                 return "found.env = apps/web/.env\nmissing.env = apps/api/.env\n"
-            if path == "my-app/found.env":
+            if path == "env/my-app/found.env":
                 return "ENC_FOUND"
             return None  # missing.env is 404
 

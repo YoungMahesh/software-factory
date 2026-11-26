@@ -166,6 +166,7 @@ class TestGitHubRepoPickerAndWebAppToggle(unittest.TestCase):
             if "orgs/my-org/repos" in url and "page=2" not in url:
                 return _FakeHttpResponse(
                     [
+                        {"name": "config", "full_name": "my-org/config", "owner": {"login": "my-org"}, "archived": False, "updated_at": "2026-11-26T10:00:00Z"},
                         {"name": "env-store", "full_name": "my-org/env-store", "owner": {"login": "my-org"}, "archived": False, "updated_at": "2026-11-26T10:00:00Z"},
                         {"name": "caddy-store", "full_name": "my-org/caddy-store", "owner": {"login": "my-org"}, "archived": False, "updated_at": "2026-11-26T10:00:00Z"},
                         {"name": "old-repo", "full_name": "my-org/old-repo", "owner": {"login": "my-org"}, "archived": True, "updated_at": "2026-11-26T10:00:00Z"},

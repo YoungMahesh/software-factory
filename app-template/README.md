@@ -9,7 +9,7 @@ create-app my-app -y
 # Minimal web app without persistence/authentication requirements.
 create-app my-demo --no-db --no-auth -y
 
-# Opt-in GitHub + Resource Plane DB + env-store + T3 sandbox.
+# Opt-in GitHub + Resource Plane DB + Central Config Store + T3 sandbox.
 create-app my-app --cloud -y
 ```
 

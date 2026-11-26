@@ -8,7 +8,7 @@ show_help() {
 Usage: ghclone <repo> [destination] [options] [gh repo clone / git clone flags...]
 
 Clone a repository from GitHub into ~/ path in the sandbox
-and decrypt repository environment secrets from the central environment store (env-store).
+and decrypt repository environment secrets from the Central Config Store (config/env/).
 
 Arguments:
   repo                  Repository name (e.g. 'my-repo', 'owner/my-repo', or 'org/repo').
@@ -23,9 +23,9 @@ Options:
 Any other flags (or flags after '--') are passed directly to 'gh repo clone'.
 
 Examples:
-  ghclone my-repo                         # Clones $GH_ORG_NAME/my-repo to ~/my-repo and pulls env from env-store
-  ghclone my-repo ~/custom-dir            # Clones $GH_ORG_NAME/my-repo to ~/custom-dir and pulls env from env-store
-  ghclone other-org/repo                  # Clones other-org/repo to ~/repo and pulls env from env-store
+  ghclone my-repo                         # Clones $GH_ORG_NAME/my-repo to ~/my-repo and pulls env from config
+  ghclone my-repo ~/custom-dir            # Clones $GH_ORG_NAME/my-repo to ~/custom-dir and pulls env from config
+  ghclone other-org/repo                  # Clones other-org/repo to ~/repo and pulls env from config
   ghclone my-repo --no-decrypt            # Clones without decrypting environment secrets
   ghclone my-repo -- --depth 1            # Clones shallow with depth 1
 EOF

@@ -241,9 +241,9 @@ fi
 # Scrub GH_REPO from environment so tooling and T3 Code dynamically detect git remotes
 unset GH_REPO 2>/dev/null || true
 
-# Materialize environment secrets from Central Environment Store if provided
+# Materialize environment secrets from Central Config Store if provided
 if [ -n "${VAULT_ENV_BUNDLE_B64:-}" ]; then
-    echo "🔐 Materializing environment secrets bundle from env-store into $TARGET_DIR..."
+    echo "🔐 Materializing environment secrets bundle from config store into $TARGET_DIR..."
     python3 -c "
 import base64, json, os, sys
 
@@ -287,7 +287,7 @@ fi
 
 if [ -n "${VAULT_DOTENV_B64:-}" ]; then
     if [ ! -f "$TARGET_DIR/.env" ]; then
-        echo "🔐 Materializing environment secrets from env-store into $TARGET_DIR/.env..."
+        echo "🔐 Materializing environment secrets from config store into $TARGET_DIR/.env..."
         echo "$VAULT_DOTENV_B64" | base64 -d > "$TARGET_DIR/.env"
         chmod 600 "$TARGET_DIR/.env"
     fi
@@ -326,7 +326,7 @@ if [ -n "$RP_DOMAIN_VAL" ] && [ ! -s "$RP_CA_FILE" ]; then
     fi
 fi
 
-# Configure repository-specific Git authorship from env-store if provided
+# Configure repository-specific Git authorship from Central Config Store if provided
 if [ -n "${TARGET_GIT_AUTHOR_NAME:-}" ]; then
     git -C "$TARGET_DIR" config --local user.name "$TARGET_GIT_AUTHOR_NAME"
 fi

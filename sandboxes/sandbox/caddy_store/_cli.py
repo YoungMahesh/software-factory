@@ -1,4 +1,4 @@
-"""CLI subcommand and deploy-flag integration for Host Ingress Store (caddy-store)."""
+"""CLI subcommand and deploy-flag integration for Central Config Store (caddy/)."""
 
 from __future__ import annotations
 
@@ -17,18 +17,18 @@ from ._vps import DEFAULT_CADDY_DIR
 def _build_store_subparser(subcmd: str) -> argparse.ArgumentParser:
     """Builds parser for `modal-sandbox infra caddy backup|restore`."""
     desc = (
-        "Capture /opt/caddy configuration from VPS into caddy-store."
+        "Capture /opt/caddy configuration from VPS into Central Config Store (config under caddy/<profile>/)."
         if subcmd == "backup"
-        else "Restore /opt/caddy configuration from caddy-store onto VPS."
+        else "Restore /opt/caddy configuration from Central Config Store (config under caddy/<profile>/) onto VPS."
     )
     parser = argparse.ArgumentParser(prog=f"modal-sandbox infra caddy {subcmd}", description=desc)
-    parser.add_argument("--profile", default=None, help="Logical VPS profile folder in caddy-store (defaults to CADDY_STORE_PROFILE or 'default').")
-    parser.add_argument("-o", "--org", default=None, help="GitHub organization owning caddy-store (defaults to GH_ORG_NAME).")
+    parser.add_argument("--profile", default=None, help="Logical VPS profile folder under caddy/ in config repo (defaults to CADDY_STORE_PROFILE or 'default').")
+    parser.add_argument("-o", "--org", default=None, help="GitHub organization owning config repo (defaults to GH_ORG_NAME).")
     parser.add_argument("-t", "--token", default=None, help="GitHub token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")
     parser.add_argument("--dir", type=Path, default=None, help="Optional local directory to write a copy for inspection.")
-    parser.add_argument("--from-dir", type=Path, default=None, help="Optional local directory to read instead of VPS (backup) or caddy-store (restore).")
+    parser.add_argument("--from-dir", type=Path, default=None, help="Optional local directory to read instead of VPS (backup) or config repo (restore).")
     if subcmd == "restore":
-        parser.add_argument("--prune", action="store_true", help="Remove extra files under /opt/caddy/conf/ not in caddy-store (never removes Caddyfile).")
+        parser.add_argument("--prune", action="store_true", help="Remove extra files under /opt/caddy/conf/ not in config repo caddy/<profile>/ (never removes Caddyfile).")
         parser.add_argument("--bootstrap", action="store_true", help=f"Provision {DEFAULT_CADDY_DIR} on a fresh VPS before restoring.")
     parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
     parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")

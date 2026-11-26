@@ -119,11 +119,11 @@ def prepare_app_workspace(
                 resolve_bundle_fn=resolve_bundle_fn,
             )
             if injected and log_cb:
-                log_cb(f"🔐 Injected env-store secrets for {app.repo}")
+                log_cb(f"🔐 Injected Central Config Store secrets for {app.repo}")
         except Exception as exc:
-            logger.warning("env-store injection skipped for %s: %s", app.repo, exc)
+            logger.warning("Central Config Store secret injection skipped for %s: %s", app.repo, exc)
             if log_cb:
-                log_cb(f"⚠️ env-store injection skipped: {exc}")
+                log_cb(f"⚠️ Secret injection from config repo skipped: {exc}")
         install_repo_dependencies_in_sandbox(sb, app_dir)
         return
 

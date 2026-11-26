@@ -88,27 +88,27 @@ modal-sandbox --from-snapshot im-9876543210 --name resumed-dev
 
 ---
 
-## Central Environment Store CLI Utilities
+## Central Config Store CLI Utilities (`config/env/`)
 
 ### `push-repo-env`
-Encrypts and commits repository secrets or Git authorship into the centralized `env-store` vault without leaving sensitive unencrypted keys in the workspace. Checks `<repo>/env.map` in `env-store` before pushing so monorepo `.env` files at paths other than `.env` are discovered and synchronized cleanly.
+Encrypts and commits repository secrets or Git authorship into the centralized `config` repository under `env/<repo>/` without leaving sensitive unencrypted keys in the workspace. Checks `env/<repo>/env.map` in `config` before pushing so monorepo `.env` files at paths other than `.env` are discovered and synchronized cleanly.
 
 ```bash
-# Sync all local files listed in <repo>/env.map (plus unmapped root .env -> default.env)
+# Sync all local files listed in env/<repo>/env.map (plus unmapped root .env -> default.env)
 # Prompts [y/N] per file when multiple or non-root paths exist; auto-pushes when only root .env exists
 push-repo-env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Non-interactive sync of all existing local files listed in <repo>/env.map
+# Non-interactive sync of all existing local files listed in env/<repo>/env.map
 push-repo-env --all [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Push a single mapped file (reuses existing vault filename from <repo>/env.map automatically)
+# Push a single mapped file (reuses existing vault filename from env/<repo>/env.map automatically)
 push-repo-env -e apps/web/.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Register and push a new custom or subpath environment file (e.g. .env.local -> <repo>/local.env)
+# Register and push a new custom or subpath environment file (e.g. .env.local -> env/<repo>/local.env)
 # NOTE: -d/--dest is REQUIRED when -e is not yet in env.map and is not repo-root .env
 push-repo-env -e .env.local -d local.env [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 
-# Push repository-specific Git authorship to <repo>/git.env
+# Push repository-specific Git authorship to env/<repo>/git.env
 push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <org>] [-t <token>] [--recipient <key>]
 ```
 
@@ -117,11 +117,11 @@ push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `-r, --repo` | string | Origin remote | Target repository name. |
-| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
+| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `config`. |
 | `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
-| `-e, --env` | path | — | Push a single local source environment file (if omitted, checks `<repo>/env.map`). |
-| `-d, --dest` | string | Mapped or `default.env` | Destination filename in vault for single-file push. **Required for new unmapped files other than repo-root `.env`**. Automatically creates or updates `<repo>/env.map` in `env-store`. |
-| `--all` | flag | `False` | Push all existing local files mapped in `<repo>/env.map` (plus unmapped root `.env`) without prompting. Mutually exclusive with `-e` and `-d`. |
+| `-e, --env` | path | — | Push a single local source environment file (if omitted, checks `env/<repo>/env.map`). |
+| `-d, --dest` | string | Mapped or `default.env` | Destination filename in vault for single-file push. **Required for new unmapped files other than repo-root `.env`**. Automatically creates or updates `env/<repo>/env.map` in `config`. |
+| `--all` | flag | `False` | Push all existing local files mapped in `env/<repo>/env.map` (plus unmapped root `.env`) without prompting. Mutually exclusive with `-e` and `-d`. |
 | `--allow-binary` | flag | `False` | Allow encrypting new destination files with unknown/binary extensions (existing `env.map` entries are allowed implicitly). |
 | `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
 
@@ -132,12 +132,12 @@ push-repo-env git --name "Jane Doe" --email "jane@example.com" [-r <repo>] [-o <
 | `--name` | string | `GIT_AUTHOR_NAME` | Git author and committer name (or configured `git config user.name`). |
 | `--email` | string | `GIT_AUTHOR_EMAIL` | Git author and committer email (or configured `git config user.email`). |
 | `-r, --repo` | string | Origin remote | Target repository name. |
-| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `env-store`. |
+| `-o, --org` | string | `GH_ORG_NAME` | Target GitHub organization hosting `config`. |
 | `-t, --token` | string | `GH_TOKEN` | GitHub Personal Access Token with repository write permissions. |
 | `--recipient` | string | Default key | Age public recipient key for SOPS encryption. |
 
 ### `pull-repo-env`
-Pulls and decrypts environment secrets from the `env-store` vault into the local directory (mode `0600`) and applies repository Git authorship locally to `.git/config`.
+Pulls and decrypts environment secrets from `config` (`env/<repo>/`) into the local directory (mode `0600`) and applies repository Git authorship locally to `.git/config`.
 
 ```bash
 # Pull application secrets into .env and configure local Git authorship
@@ -149,7 +149,7 @@ pull-repo-env [-r <repo>] [-o <org>] [-d .env] [--optional]
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `-r, --repo` | Git origin repository | Vault repository scope. |
-| `-o, --org` | Detected owner / `GH_ORG_NAME` | Organization hosting env-store. |
+| `-o, --org` | Detected owner / `GH_ORG_NAME` | Organization hosting `config`. |
 | `-t, --token` | GitHub credential resolution | Explicit GitHub access token. |
 | `-k, --key` | Age key resolution | Explicit Age decryption key. |
 | `-d, --dest` | `.env` | Root environment destination; other mapped files use manifest destinations. |
@@ -238,7 +238,7 @@ create-db my-service-db --fail-if-exists
 | `--write-env` | flag | `False` | Inject or update connection URI in local `.env` file. |
 | `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
 | `--env-var` | string | `DATABASE_URL` | Variable name to write in environment file. |
-| `--push-vault` | flag | `False` | Automatically push updated `.env` to central `env-store` vault via `push-repo-env`. |
+| `--push-vault` | flag | `False` | Automatically push updated `.env` to Central Config Store (`config/env/`) via `push-repo-env`. |
 | `--ca-path` | path | `~/.config/resource-plane/ca.crt` | Destination path for cached root CA certificate (falls back to `~/.config/db-host/ca.crt`). |
 | `--json` | flag | `False` | Emit raw credentials and connection details as JSON. |
 | `-q, --quiet` | flag | `False` | Output only the PostgreSQL connection URI string. |
@@ -286,7 +286,7 @@ create-s3 my-bucket --fail-if-exists
 | `--write-env` | flag | `False` | Inject or update standard AWS SDK variables in local `.env` file. |
 | `--env-file` | path | `.env` | Path to target environment file for `--write-env`. |
 | `--prefix` | string | `""` | Prefix prepended to environment variable names. |
-| `--push-vault` | flag | `False` | Automatically push updated `.env` to central `env-store` vault via `push-repo-env`. |
+| `--push-vault` | flag | `False` | Automatically push updated `.env` to Central Config Store (`config/env/`) via `push-repo-env`. |
 | `--json` | flag | `False` | Emit raw credentials, connection details, and code snippets as JSON. |
 | `-q, --quiet` | flag | `False` | Output only the canonical S3 URI (`s3://<bucket-name>`). |
 | `--fail-if-exists` | flag | `False` | Exit with error if bucket already exists instead of reusing existing credentials. |
@@ -308,7 +308,7 @@ create-app . -y
 # Full-stack web + mobile app with local defaults
 create-app my-app --mobile-app -y
 
-# One-shot cloud creation: GitHub repo + Resource Plane DB + env-store + T3 sandbox launch
+# One-shot cloud creation: GitHub repo + Resource Plane DB + config/env/ + T3 sandbox launch
 create-app my-app --cloud
 
 # Full cloud flow including an S3 bucket and mobile client
@@ -334,12 +334,12 @@ modal-sandbox create-app my-app --cloud
 | `--cloud` | flag | `False` | Enable `--github`, `--provision-db` (when `--db` is active), `--push-vault`, and `--launch` (`--provision-s3` stays opt-in). |
 | `--github` | flag | `False` | Create repository in `GH_ORG_NAME` (private by default) and push initial commit. |
 | `--public` | flag | `False` | Create public GitHub repository when `--github` is enabled. |
-| `--repo-name` | string | Project name | Override GitHub/`env-store` target repository (`<repo>` or `<owner>/<repo>`). |
+| `--repo-name` | string | Project name | Override GitHub/`config/env/` target repository (`<repo>` or `<owner>/<repo>`). |
 | `--provision-db` | flag | `False` | Provision a Resource Plane PostgreSQL database via `create-db` and write `DATABASE_URL` to `.env`. |
 | `--db-name` | string | Derived | Explicit Resource Plane database name. |
 | `--provision-s3` | flag | `False` | Provision a Resource Plane S3 bucket via `create-s3` and write AWS SDK vars to `.env`. |
 | `--bucket-name` | string | Derived | Explicit Resource Plane S3 bucket name. |
-| `--push-vault` | flag | `False` | Encrypt and push `.env` to Central Environment Store (`env-store`). |
+| `--push-vault` | flag | `False` | Encrypt and push `.env` to Central Config Store (`config/env/<repo>/`). |
 | `--launch` | flag | `False` | Launch a Modal Sandbox with `--t3` (plus `--react-native` if `--mobile-app`) after scaffolding. |
 | `--vm` | flag | `False` | Launch the sandbox as a full Linux VM (used with `--launch`). |
 | `--no-t3` | flag | `False` | Disable T3 Code when launching with `--launch`. |
@@ -363,7 +363,7 @@ deploy-app
 # Deploy an explicit local directory with a custom subdomain
 deploy-app ./my-app --subdomain preview
 
-# Deploy an app pushed from a Modal Sandbox (clones/pulls GitHub + env-store)
+# Deploy an app pushed from a Modal Sandbox (clones/pulls GitHub + config/env/)
 deploy-app --repo my-app
 
 # Stop containers and remove Caddy route (--purge also removes /root/<repo-name>)
@@ -378,7 +378,7 @@ deploy-app down my-app --purge
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `target` | Current directory | Local app directory, repository name, or `down` subcommand. |
-| `--repo` | Inferred from local Git when possible | Repository identity; without a local target, use GitHub + env-store source mode. |
+| `--repo` | Inferred from local Git when possible | Repository identity; without a local target, use GitHub + `config/env/` source mode. |
 | `-b, --branch` | `main` | Git branch in GitHub source mode. |
 | `--subdomain` | Repository slug | Hosted App label under the base domain. |
 | `--base-domain` | `APPS_BASE_DOMAIN` | Override wildcard base domain. |
@@ -386,8 +386,8 @@ deploy-app down my-app --purge
 | `--skip-migrate` | `False` | Skip automatic Drizzle migration. |
 | `--down` | `False` | Stop the app and remove its Caddy route; alias for `down <target>`. |
 | `--purge` | `False` | With teardown, also remove the remote app directory and ownership record. |
-| `--sync` | `False` | Back up Caddy configuration to caddy-store after route updates. |
-| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy Store profile, rather than a Modal workspace profile. |
+| `--sync` | `False` | Back up Caddy configuration to Central Config Store (`config/caddy/<profile>/`) after route updates. |
+| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`, rather than a Modal workspace profile. |
 | `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS connection overrides; explicit private key required. |
 
 Run from the deployment host. A sandbox developer can push code and environment files, then use `deploy-app --repo owner/name` on that host. See [application deployment](applications.md) for prerequisites, ownership checks, and failure recovery.
@@ -420,22 +420,22 @@ modal-sandbox infra caddy --bootstrap --from-store
 | `--no-dashboard` | `False` | Keep or revert the `APPS_BASE_DOMAIN` apex to HTTP `404`. |
 | `--no-sync-env` | `False` | Do not synchronize `MODAL_SANDBOX_ENDPOINT_URL` into local `.env`. |
 | `--cf-dns-token` | Factory DNS token variables | DNS-01 token. |
-| `--from-store` | `False` | Restore caddy-store during bootstrap; requires `--bootstrap`. |
+| `--from-store` | `False` | Restore `config/caddy/<profile>/` during bootstrap; requires `--bootstrap`. |
 | `--sync` | `False` | Back up configuration after route changes. |
-| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy Store profile folder. |
+| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`. |
 | `--check-only` | `False` | Inspect Caddy without changing configuration. |
 | `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS SSH connection overrides. |
 
 `backup` and `restore` also accept `--profile` and SSH overrides; `restore --prune` removes extra local site files. See [deployment and restore](resource-plane-deployment.md) for required files, DNS, and network behavior.
 
-### Caddy Store backup and restore options
+### Central Config Store (`caddy/`) backup and restore options
 
 | Option | Purpose |
 | :--- | :--- |
-| `-o, --org` | GitHub organization owning caddy-store. |
+| `-o, --org` | GitHub organization owning `config`. |
 | `-t, --token` | GitHub access token override. |
 | `--dir` | Write a local inspection copy. |
-| `--from-dir` | Use local configuration instead of reading from VPS (backup) or caddy-store (restore). |
+| `--from-dir` | Use local configuration instead of reading from VPS (backup) or `config/caddy/` (restore). |
 | `--bootstrap` | With `restore`, provision `/opt/caddy` before restoring. |
 | `--prune` | With `restore`, remove extra configuration files while retaining the main Caddyfile. |
-| `--profile`, `--host`, `--user`, `--port`, `--key` | Caddy Store profile and deployment SSH overrides. |
+| `--profile`, `--host`, `--user`, `--port`, `--key` | Caddy config profile and deployment SSH overrides. |

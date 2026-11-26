@@ -1,8 +1,8 @@
-"""Central Environment Store push and secret encryption package.
+"""Central Config Store (env/) push and secret encryption package.
 
 Handles encrypting local environment secrets with SOPS using recipient Age keys,
-committing encrypted payloads to github.com/${GH_ORG_NAME}/env-store using the
-GitHub Contents REST API, and managing the env.map mapping manifest.
+committing encrypted payloads to github.com/${GH_ORG_NAME}/config under env/<repo>/
+via the GitHub Contents REST API, and managing the env.map mapping manifest.
 """
 
 from sandbox.env_store_push._sync import push_repo_env

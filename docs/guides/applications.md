@@ -31,7 +31,7 @@ The template directory is a blueprint excluded from the factory pnpm workspace. 
 | :--- | :--- |
 | Create/push GitHub repository | `GH_TOKEN` with repository creation/push access, `GH_ORG_NAME` or explicit owner in `--repo-name`, and Git authorship |
 | Provision PostgreSQL or S3 | Deployed Resource Plane, `RESOURCE_PLANE_DOMAIN`, `RESOURCE_PLANE_ADMIN_TOKEN` |
-| Push secrets to env-store | GitHub write access to the private `env-store` repository and SOPS available; launch host needs an Age key to decrypt the vault later |
+| Push secrets to Central Config Store (`config/env/`) | GitHub write access to the private `config` repository and SOPS available; launch host needs an Age key to decrypt the vault later |
 | Launch development sandbox | Authenticated Modal client/profile, launch-host SSH public-key file, and GitHub access to the pushed repository |
 | Deploy a Hosted App | Deployment host SSH key, VPS Docker, Caddy wildcard ingress, and the configuration described below |
 
@@ -63,7 +63,7 @@ modal-sandbox infra deploy
 modal-sandbox infra caddy --bootstrap --wildcard --domain resources.example.com
 ```
 
-The token must permit DNS changes for the relevant Cloudflare zone. Caddy stores it at `/opt/caddy/.env`, excluded from caddy-store. The wildcard certificate covers the configured base domain and its immediate subdomains: the apex (`https://<APPS_BASE_DOMAIN>`) routes to the Sandbox Web Dashboard when `sandbox-control-plane` is deployed (or `--no-dashboard` leaves it at `404`), while `<repo-name>.<APPS_BASE_DOMAIN>` routes Hosted Apps reusing that certificate.
+The token must permit DNS changes for the relevant Cloudflare zone. Caddy stores it at `/opt/caddy/.env`, excluded from Central Config Store (`config/caddy/`) backups. The wildcard certificate covers the configured base domain and its immediate subdomains: the apex (`https://<APPS_BASE_DOMAIN>`) routes to the Sandbox Web Dashboard when `sandbox-control-plane` is deployed (or `--no-dashboard` leaves it at `404`), while `<repo-name>.<APPS_BASE_DOMAIN>` routes Hosted Apps reusing that certificate.
 
 ## Deploy or redeploy
 

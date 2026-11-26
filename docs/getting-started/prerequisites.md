@@ -45,7 +45,7 @@ cp .env.example .env
 | Cloudflare application ingress | `CLOUDFLARE_TUNNEL_TOKEN` and an existing tunnel route to port 3000; optional display hostname `MODAL_SANDBOX_TUNNEL_DOMAIN` |
 | Hosted sandbox control plane | `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`, both required |
 | Modal tooling inside a sandbox | `MODAL_TOKENS` and the `--modal` option |
-| Application secrets from `env-store` | GitHub vault access and an Age decryption key on the launch host |
+| Application secrets from Central Config Store (`config/env/`) | GitHub vault access and an Age decryption key on the launch host |
 | Database and S3 provisioning | `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` |
 | VPS deployment | `RESOURCE_PLANE_SSH_HOST` and explicit `RESOURCE_PLANE_SSH_KEY` |
 

@@ -1,8 +1,8 @@
-"""Central Environment Store vault resolver module.
+"""Central Config Store environment vault resolver module.
 
 Retrieves and decrypts target repository secrets from the private
-github.com/${GH_ORG_NAME}/env-store vault host-side for injection
-into Modal sandboxes as defined in ADR 0057 and ADR 0067.
+github.com/${GH_ORG_NAME}/config repository (under env/<repo>/) host-side for
+injection into Modal sandboxes.
 """
 
 from __future__ import annotations
@@ -22,7 +22,9 @@ import urllib.request
 import warnings
 
 DEFAULT_KEY_FILE = Path.home() / ".config" / "sops" / "age" / "keys.txt"
-DEFAULT_VAULT_REPO = "env-store"
+DEFAULT_CONFIG_REPO = "config"
+DEFAULT_VAULT_REPO = DEFAULT_CONFIG_REPO
+ENV_STORE_PREFIX = "env"
 SOPS_SUPPORTED_EXTENSIONS = {".env", ".json", ".yaml", ".yml", ".ini"}
 
 def get_file_extension(filename: str | Path) -> str:
@@ -158,7 +160,7 @@ def fetch_vault_env_raw(
     env_repo_name: str = DEFAULT_VAULT_REPO,
     target_filename: str = "default.env",
 ) -> str | None:
-    """Fetches and decrypts environment file text for a target repository from env-store."""
+    """Fetches and decrypts environment file text for a target repository from Central Config Store."""
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
     resolved_org = org_name or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
@@ -168,7 +170,7 @@ def fetch_vault_env_raw(
     if not resolved_org or not resolved_token:
         return None
 
-    file_path = f"{bare_repo}/{target_filename}"
+    file_path = f"{ENV_STORE_PREFIX}/{bare_repo}/{target_filename}"
     ciphertext = fetch_github_file(resolved_org, env_repo_name, file_path, token=resolved_token)
     if not ciphertext:
         return None
@@ -186,7 +188,7 @@ def fetch_vault_env(
     env_repo_name: str = DEFAULT_VAULT_REPO,
     target_filename: str = "default.env",
 ) -> dict[str, str] | None:
-    """Fetches and decrypts environment variables for a target repository from env-store."""
+    """Fetches and decrypts environment variables for a target repository from Central Config Store."""
     raw_text = fetch_vault_env_raw(repo_name=repo_name, org_name=org_name, gh_token=gh_token, age_key=age_key, env_repo_name=env_repo_name, target_filename=target_filename)
     return parse_env_text(raw_text) if raw_text is not None else None
 
@@ -197,7 +199,7 @@ def fetch_vault_env_bundle(
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
 ) -> dict[str, Any] | None:
-    """Fetches environment bundle (mapped files + manifest) for a repository from env-store."""
+    """Fetches environment bundle (mapped files + manifest) for a repository from Central Config Store."""
     clean_repo = repo_name.strip().rstrip("/")
     bare_repo = clean_repo.split("/", 1)[1] if "/" in clean_repo else clean_repo
     resolved_org = org_name or os.environ.get("GH_ORG_NAME") or os.environ.get("GH_ORG")
@@ -207,7 +209,7 @@ def fetch_vault_env_bundle(
     if not resolved_org or not resolved_token:
         return None
 
-    env_map_path = f"{bare_repo}/env.map"
+    env_map_path = f"{ENV_STORE_PREFIX}/{bare_repo}/env.map"
     raw_env_map = fetch_github_file(resolved_org, env_repo_name, env_map_path, token=resolved_token)
     mappings = parse_env_map(raw_env_map) if raw_env_map else []
     files: dict[str, str] = {}
@@ -219,7 +221,7 @@ def fetch_vault_env_bundle(
                 if decrypted is not None:
                     files[src] = decrypted
                 else:
-                    warnings.warn(f"Mapped secret file '{src}' not found in {bare_repo} env-store.", UserWarning, stacklevel=2)
+                    warnings.warn(f"Mapped secret file '{src}' not found in {bare_repo} config env store.", UserWarning, stacklevel=2)
             except Exception as e:
                 warnings.warn(f"Failed to decrypt mapped secret file '{src}' for {bare_repo}: {e}", UserWarning, stacklevel=2)
         return {"env_map_content": raw_env_map, "mappings": mappings, "files": files}
@@ -236,7 +238,7 @@ def fetch_vault_git_identity(
     age_key: str | None = None,
     env_repo_name: str = DEFAULT_VAULT_REPO,
 ) -> dict[str, str] | None:
-    """Fetches and decrypts repository-specific git authorship from <repo>/git.env in env-store."""
+    """Fetches and decrypts repository-specific git authorship from env/<repo>/git.env in Central Config Store."""
     return fetch_vault_env(repo_name=repo_name, org_name=org_name, gh_token=gh_token, age_key=age_key, env_repo_name=env_repo_name, target_filename="git.env")
 
 
@@ -323,7 +325,7 @@ def resolve_sandbox_bundle(
 
 
 class EnvStoreVault:
-    """Domain adapter encapsulating Central Environment Store pull, push, and bundle operations."""
+    """Domain adapter encapsulating Central Config Store (env/) pull, push, and bundle operations."""
 
     def __init__(
         self,
@@ -374,7 +376,7 @@ class EnvStoreVault:
         allow_binary: bool = False,
         push_all: bool = False,
     ) -> PushResult:
-        """Encrypts and pushes local environment secrets to env-store."""
+        """Encrypts and pushes local environment secrets to Central Config Store."""
         return push_repo_env(
             repo_dir=repo_dir,
             env_file=env_file,

@@ -1,4 +1,4 @@
-"""Transport, SOPS encryption, GitHub commit, and Git identity helpers for env-store push."""
+"""Transport, SOPS encryption, GitHub commit, and Git identity helpers for Central Config Store."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def commit_to_env_store(
     token: str,
     commit_message: str | None = None,
 ) -> str:
-    """Commits or updates a file in env-store using GitHub Contents REST API."""
+    """Commits or updates a file in Central Config Store using GitHub Contents REST API."""
     url = f"https://api.github.com/repos/{owner}/{env_repo}/contents/{path}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -108,7 +108,10 @@ def commit_to_env_store(
         if e.code != 404:
             raise
 
-    msg = commit_message or f"chore({path.split('/')[0]}): update {path.split('/')[-1]}"
+    parts = [p for p in path.strip("/").split("/") if p]
+    scope = parts[1] if len(parts) >= 3 and parts[0] in ("env", "caddy") else (parts[0] if parts else "config")
+    filename = parts[-1] if parts else path
+    msg = commit_message or f"chore({scope}): update {filename}"
     body: dict[str, str] = {
         "message": msg,
         "content": base64.b64encode(content_bytes).decode("ascii"),
@@ -194,8 +197,8 @@ def push_repo_git_identity(
     encrypt_fn: Any = None,
     commit_fn: Any = None,
 ) -> PushResult:
-    """Encrypts repository-specific Git authorship and commits to <repo>/git.env in env-store."""
-    from sandbox.env_store import DEFAULT_VAULT_REPO
+    """Encrypts repository-specific Git authorship and commits to env/<repo>/git.env in Central Config Store."""
+    from sandbox.env_store import DEFAULT_VAULT_REPO, ENV_STORE_PREFIX
 
     target_vault_repo = vault_repo or DEFAULT_VAULT_REPO
     final_repo, final_org, token, recip, err = _resolve_repo_context(repo_dir, repo_name, org_name, gh_token, recipient)
@@ -222,7 +225,7 @@ def push_repo_git_identity(
         tmp_src.write(raw_env_content)
         tmp_src_path = Path(tmp_src.name)
     try:
-        vault_path = f"{final_repo}/git.env"
+        vault_path = f"{ENV_STORE_PREFIX}/{final_repo}/git.env"
         sha = _encrypt_and_commit(
             tmp_src_path,
             final_org,

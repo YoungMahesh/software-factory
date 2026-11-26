@@ -76,12 +76,14 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
 
         sha = commit_to_env_store(
             owner="sFactory0",
-            env_repo="env-store",
-            path="my-app/default.env",
+            env_repo="config",
+            path="env/my-app/default.env",
             content_bytes=b"SOPS_CIPHERTEXT",
             token="ghp_test",
         )
         self.assertEqual(sha, "abc123")
+        put_req = mock_urlopen.call_args_list[1].args[0]
+        self.assertIn(b"chore(my-app): update default.env", put_req.data)
 
     @patch("scripts.push_repo_env.fetch_github_file")
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -105,8 +107,8 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
         self.assertEqual(res.commit_sha, "commit_sha_123")
         mock_encrypt.assert_called_once()
         self.assertEqual(mock_commit.call_count, 2)
-        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/default.env")
-        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
+        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "env/my-app/default.env")
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "env/my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"default.env = .env\n")
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -175,9 +177,9 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        self.assertEqual(res.target_path, "my-app/web.env")
+        self.assertEqual(res.target_path, "env/my-app/web.env")
         self.assertEqual(mock_commit.call_count, 1)
-        self.assertEqual(mock_commit.call_args.kwargs["path"], "my-app/web.env")
+        self.assertEqual(mock_commit.call_args.kwargs["path"], "env/my-app/web.env")
         self.assertEqual(mock_encrypt.call_args.kwargs.get("filename_override"), "web.env")
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -221,7 +223,7 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        self.assertEqual(res.target_path, "my-app/resource_plane_ssh")
+        self.assertEqual(res.target_path, "env/my-app/resource_plane_ssh")
         mock_encrypt.assert_called_once()
 
     @patch("scripts.push_repo_env.fetch_github_file")
@@ -244,11 +246,11 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        self.assertEqual(res.target_path, "my-app/local.env")
+        self.assertEqual(res.target_path, "env/my-app/local.env")
         mock_encrypt.assert_called_once()
         self.assertEqual(mock_commit.call_count, 2)
-        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "my-app/local.env")
-        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "my-app/env.map")
+        self.assertEqual(mock_commit.call_args_list[0].kwargs["path"], "env/my-app/local.env")
+        self.assertEqual(mock_commit.call_args_list[1].kwargs["path"], "env/my-app/env.map")
         self.assertEqual(mock_commit.call_args_list[1].kwargs["content_bytes"], b"local.env = .env.local\n")
 
     @patch("scripts.push_repo_env.commit_to_env_store")
@@ -294,7 +296,7 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
         )
 
         self.assertTrue(res.success)
-        self.assertEqual(res.target_path, "my-app/local.custom")
+        self.assertEqual(res.target_path, "env/my-app/local.custom")
         mock_encrypt.assert_called_once()
         self.assertEqual(mock_commit.call_count, 2)
 
@@ -325,7 +327,7 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
     @patch("scripts.push_repo_env.run_sops_encrypt")
     def test_push_repo_env_custom_preserves_existing_default_env(self, mock_encrypt, mock_commit, mock_fetch):
         def fake_fetch(owner, repo, path, token):
-            if path == "my-app/default.env":
+            if path == "env/my-app/default.env":
                 return "ENC_CIPHERTEXT"
             return None
 
@@ -385,10 +387,10 @@ class TestPushRepoEnvSingleFile(unittest.TestCase):
 
         self.assertTrue(res.success)
         self.assertEqual(res.commit_sha, "git_sha_456")
-        self.assertEqual(res.target_path, "my-app/git.env")
+        self.assertEqual(res.target_path, "env/my-app/git.env")
         mock_encrypt.assert_called_once()
         mock_commit.assert_called_once()
-        self.assertEqual(mock_commit.call_args.kwargs["path"], "my-app/git.env")
+        self.assertEqual(mock_commit.call_args.kwargs["path"], "env/my-app/git.env")
 
     @patch("subprocess.run")
     def test_push_repo_git_identity_missing_fails(self, mock_run):

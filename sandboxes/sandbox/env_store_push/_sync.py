@@ -1,4 +1,4 @@
-"""Manifest-driven and single-file env-store push orchestration."""
+"""Manifest-driven and single-file Central Config Store (env/) push orchestration."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _prompt_user_for_file(rel_path: str, vault_path: str) -> bool:
         )
     while True:
         try:
-            answer = input(f"Push '{rel_path}' -> '{vault_path}' to env-store? [y/N]: ").strip().lower()
+            answer = input(f"Push '{rel_path}' -> '{vault_path}' to Central Config Store? [y/N]: ").strip().lower()
         except EOFError:
             return False
         if answer in ("y", "yes"):
@@ -62,10 +62,10 @@ def _fetch_and_parse_env_map(
     repo_name: str,
     token: str,
 ) -> tuple[str | None, list[tuple[str, str]]]:
-    """Fetches env.map from env-store and parses plaintext entries, failing on encrypted manifests."""
-    from sandbox.env_store import is_encrypted_sops_payload, parse_env_map
+    """Fetches env.map from Central Config Store and parses plaintext entries, failing on encrypted manifests."""
+    from sandbox.env_store import ENV_STORE_PREFIX, is_encrypted_sops_payload, parse_env_map
 
-    map_path = f"{repo_name}/env.map"
+    map_path = f"{ENV_STORE_PREFIX}/{repo_name}/env.map"
     raw_map = fetch_f(owner, vault_repo, map_path, token=token)
     if raw_map is not None and is_encrypted_sops_payload(raw_map):
         raise ValueError(
@@ -86,11 +86,13 @@ def _commit_env_map_if_changed(
     new_map: str,
 ) -> None:
     """Commits updated env.map manifest when content differs from remote."""
+    from sandbox.env_store import ENV_STORE_PREFIX
+
     if new_map != (raw_map or ""):
         com_f(
             owner=owner,
             env_repo=vault_repo,
-            path=f"{repo_name}/env.map",
+            path=f"{ENV_STORE_PREFIX}/{repo_name}/env.map",
             content_bytes=new_map.encode("utf-8"),
             token=token,
             commit_message=f"chore({repo_name}): update env.map manifest",
@@ -171,7 +173,7 @@ def _push_single_file(
                 "",
                 message=(
                     f"Source environment file '{rel_dest}' is not mapped in env.map and is not root '.env'. "
-                    "You must pass -d/--dest to define its destination in env-store."
+                    "You must pass -d/--dest to define its destination in Central Config Store."
                 ),
                 org_name=final_org,
             )
@@ -179,8 +181,10 @@ def _push_single_file(
     if not is_sops_supported_format(dest_name) and not allow_binary and not matched_from_map:
         return PushResult(False, final_repo, "", message=_unsupported_ext_message(dest_name))
 
+    from sandbox.env_store import ENV_STORE_PREFIX
+
     ensure_gitignore(repo_dir)
-    vault_path = f"{final_repo}/{dest_name}"
+    vault_path = f"{ENV_STORE_PREFIX}/{final_repo}/{dest_name}"
     sha = _encrypt_and_commit(
         src, final_org, vault_repo, vault_path, token, recip,
         encrypt_fn=encrypt_fn, commit_fn=commit_fn, filename_override=dest_name,
@@ -188,7 +192,7 @@ def _push_single_file(
 
     new_map = update_env_map_content(raw_map, dest_name, rel_dest)
     if raw_map is None and dest_name != "default.env":
-        if fetch_f(final_org, vault_repo, f"{final_repo}/default.env", token=token):
+        if fetch_f(final_org, vault_repo, f"{ENV_STORE_PREFIX}/{final_repo}/default.env", token=token):
             new_map = update_env_map_content(new_map, "default.env", ".env")
     _commit_env_map_if_changed(com_f, final_org, vault_repo, final_repo, token, raw_map, new_map)
 
@@ -260,13 +264,15 @@ def _push_from_env_map(
             org_name=final_org, skipped_files=skipped,
         )
 
+    from sandbox.env_store import ENV_STORE_PREFIX
+
     needs_prompt = (not push_all) and (candidates != [("default.env", ".env")])
     if needs_prompt:
         prompter = prompt_fn or _prompt_user_for_file
         selected: list[tuple[str, str]] = []
         try:
             for vault_name, rel_path in existing:
-                if prompter(rel_path, f"{final_repo}/{vault_name}"):
+                if prompter(rel_path, f"{ENV_STORE_PREFIX}/{final_repo}/{vault_name}"):
                     selected.append((vault_name, rel_path))
         except NonInteractivePromptError as exc:
             return PushResult(False, final_repo, "", message=str(exc), org_name=final_org, skipped_files=skipped)
@@ -284,7 +290,7 @@ def _push_from_env_map(
     pushed: list[PushFileOutcome] = []
     failed: list[PushFileOutcome] = []
     for vault_name, rel_path in selected:
-        vault_path = f"{final_repo}/{vault_name}"
+        vault_path = f"{ENV_STORE_PREFIX}/{final_repo}/{vault_name}"
         try:
             sha = _encrypt_and_commit(
                 repo_root / rel_path, final_org, vault_repo, vault_path, token, recip,
@@ -299,7 +305,7 @@ def _push_from_env_map(
         try:
             _commit_env_map_if_changed(com_f, final_org, vault_repo, final_repo, token, raw_map, new_map)
         except Exception as exc:
-            failed.append(PushFileOutcome("env.map", "env.map", f"{final_repo}/env.map", False, message=str(exc)))
+            failed.append(PushFileOutcome("env.map", "env.map", f"{ENV_STORE_PREFIX}/{final_repo}/env.map", False, message=str(exc)))
 
     target_summary = ", ".join(o.target_path for o in pushed)
     last_sha = pushed[-1].commit_sha if pushed else None
@@ -333,7 +339,7 @@ def push_repo_env(
     fetch_fn: Any = None,
     prompt_fn: Any = None,
 ) -> PushResult:
-    """Encrypts local .env file(s), commits to env-store vault, and maintains env.map."""
+    """Encrypts local .env file(s), commits to Central Config Store (config), and maintains env.map."""
     from sandbox.env_store import DEFAULT_VAULT_REPO, fetch_github_file
 
     if push_all and (env_file is not None or dest_name is not None):

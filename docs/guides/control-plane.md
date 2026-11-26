@@ -41,7 +41,7 @@ This discovers the deployed `sandbox-control-plane` web URL via Modal SDK (overr
 
 ## Launch through the dashboard or CLI
 
-The dashboard defaults to the prompt-first **Builder** homepage for launching and reopening **Factory Apps** in **T3 Code**, alongside **Sandboxes** and **Snapshots** tabs for inspecting running instances across apps/profiles, terminating instances, capturing filesystem snapshots, and resuming snapshots. Factory App and Launch Request state is stored in `modal.Volume` (`factory-state-v1`).
+The dashboard defaults to the prompt-first **Builder** homepage for launching and reopening **Factory Apps** in **T3 Code**, alongside **Sandboxes**, **Snapshots**, and **Scratchpad** tabs for inspecting running instances across apps/profiles, terminating instances, capturing filesystem snapshots, resuming snapshots, and refining/committing Markdown ideas into `github.com/${GH_ORG_NAME}/config/scratchpad/`. Factory App and Launch Request state is stored in `modal.Volume` (`factory-state-v1`).
 
 Each instance has a generated suffix, such as `dev-box-a1b2c3d4`, even when its Modal App is named `dev-box`. Use the displayed SSH host, port, and generated alias. Dashboard launch does not write to the browser user's local `~/.ssh/config`. The remote CLI can register those details locally:
 
@@ -58,7 +58,11 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 
 | Method | Route | Authentication | Purpose |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | Basic | Dashboard (Builder homepage, Sandboxes, Snapshots) |
+| `GET` | `/` | Basic | Dashboard (Builder homepage, Sandboxes, Snapshots, Scratchpad) |
+| `GET` | `/api/scratchpad/notes` | Basic | List saved Markdown notes in `config/scratchpad/` |
+| `GET` | `/api/scratchpad/notes/{filename}` | Basic | Read a saved Scratchpad Markdown note |
+| `POST` | `/api/scratchpad/suggest` | Basic | Refine raw text into title + Markdown via free OpenCode CLI model |
+| `POST` | `/api/scratchpad/notes` | Basic | Commit accepted or raw Scratchpad note to `config/scratchpad/<slug>.md` |
 | `GET` | `/health` | None | Control plane liveness |
 | `GET` | `/api/version` | Basic | Deployed factory provenance |
 | `GET` | `/api/profiles` | Basic | Modal workspace profiles |

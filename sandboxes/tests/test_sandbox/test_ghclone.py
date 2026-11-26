@@ -27,7 +27,7 @@ class TestGhClone(unittest.TestCase):
             self.assertIn("GH_ORG_NAME", res.stdout)
             self.assertIn("destination", res.stdout)
             self.assertIn("--no-decrypt", res.stdout)
-            self.assertIn("env-store", res.stdout)
+            self.assertIn("config/env/", res.stdout)
 
     def test_missing_repo_argument_exits_nonzero_with_error(self):
         res = subprocess.run(

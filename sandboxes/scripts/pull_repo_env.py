@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Pull decrypted environment secrets from the Central Environment Store (env-store).
+"""Pull decrypted environment secrets from the Central Config Store (config).
 
-Retrieves and decrypts target repository secrets from github.com/${GH_ORG_NAME}/env-store
-to a local workstation .env file as defined in ADR 0065.
+Retrieves and decrypts target repository secrets from
+github.com/${GH_ORG_NAME}/config (under env/<repo>/) to a local workstation .env
+file.
 """
 
 from __future__ import annotations
@@ -96,7 +97,7 @@ def pull_repo_env(
     vault_repo: str = DEFAULT_VAULT_REPO,
     optional: bool = False,
 ) -> bool:
-    """Pulls and decrypts environment secrets and Git identity from env-store."""
+    """Pulls and decrypts environment secrets and Git identity from Central Config Store."""
     cwd = Path.cwd()
     detected_org, detected_name = detect_repo_name(cwd)
     final_repo = repo_name or detected_name
@@ -106,7 +107,7 @@ def pull_repo_env(
     token = resolve_gh_token(gh_token)
     if not token:
         if optional:
-            print("ℹ️ GitHub token not found. Skipping optional env-store pull.", file=sys.stderr)
+            print("ℹ️ GitHub token not found. Skipping optional config env pull.", file=sys.stderr)
             return False
         print(
             "❌ GitHub token not found. Please set GH_TOKEN or GITHUB_TOKEN, log in via 'gh auth login', or pass --token.",
@@ -116,7 +117,7 @@ def pull_repo_env(
 
     if not final_org:
         if optional:
-            print("ℹ️ GitHub organization not found. Skipping optional env-store pull.", file=sys.stderr)
+            print("ℹ️ GitHub organization not found. Skipping optional config env pull.", file=sys.stderr)
             return False
         print(
             "❌ GitHub organization not found. Please set GH_ORG_NAME or pass -o <org>.",
@@ -136,7 +137,7 @@ def pull_repo_env(
         )
     except Exception as e:
         if optional:
-            print(f"ℹ️ Could not decrypt secrets from env-store for repository '{final_repo}': {e}", file=sys.stderr)
+            print(f"ℹ️ Could not decrypt secrets from config ({vault_repo}) for repository '{final_repo}': {e}", file=sys.stderr)
             return False
         raise
 
@@ -175,7 +176,7 @@ def pull_repo_env(
 
     if raw_env is None and not git_configured:
         if optional:
-            print(f"ℹ️ No secrets found for repository '{final_repo}' in env-store ({vault_repo}).", file=sys.stderr)
+            print(f"ℹ️ No secrets found for repository '{final_repo}' in config ({vault_repo}).", file=sys.stderr)
         return False
 
     if bundle and bundle.get("mappings") and bundle.get("files"):
@@ -212,7 +213,7 @@ def pull_repo_env(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Pull decrypted .env secrets from env-store vault.")
+    parser = argparse.ArgumentParser(description="Pull decrypted .env secrets from Central Config Store (config).")
     parser.add_argument("-r", "--repo", help="Target repository name (defaults to git remote origin).")
     parser.add_argument("-o", "--org", help="Target GitHub organization (defaults to GH_ORG_NAME).")
     parser.add_argument("-t", "--token", help="GitHub Personal Access Token (defaults to GH_TOKEN / GITHUB_TOKEN / gh auth token).")

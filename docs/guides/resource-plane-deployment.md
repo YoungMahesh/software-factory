@@ -45,13 +45,13 @@ RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 | `RESOURCE_PLANE_SSH_KEY` | *(Required)* | Path to private SSH key file (canonically placed in `.secrets/resource_plane_ssh`). Ambient fallbacks are disabled. |
 | `RESOURCE_PLANE_REMOTE_DIR` | `/opt/resource-plane` | Destination folder on the remote VPS. |
 
-#### SSH Key Storage and Central Vault (`env-store`)
+#### SSH Key Storage and Central Config Store (`config/env/`)
 
-Keep the multi-line SSH private key in a separate file; the factory configuration parser handles single-line values rather than embedding multi-line keys in `.env`. Under [ADR 0083](../adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md):
+Keep the multi-line SSH private key in a separate file; the factory configuration parser handles single-line values rather than embedding multi-line keys in `.env`. Under [ADR 0083](../adr/0083-mandatory-resource-plane-ssh-key-and-secrets-directory.md) and [ADR 0093](../adr/0093-central-config-store-and-dashboard-scratchpad.md):
 
 1. **In-Repo Placement**: Save the private key to `.secrets/resource_plane_ssh` (extensionless per Linux conventions). The `.secrets/` directory is excluded in `.gitignore`.
 2. **Automatic Permission Hardening**: `modal-sandbox infra deploy` validates that the key exists and normalizes its permissions to `0600` and adds a missing trailing newline to a recognized private-key file.
-3. **Synchronize to `env-store`**: Push the key to the central secret vault with the `--allow-binary` flag:
+3. **Synchronize to `config/env/`**: Push the key to the central config store with the `--allow-binary` flag:
    ```bash
    push-repo-env -e .secrets/resource_plane_ssh -d resource_plane_ssh --allow-binary
    ```
@@ -137,24 +137,24 @@ modal-sandbox infra caddy --check-only
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
 - Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips, and routes the `<APPS_BASE_DOMAIN>` apex to the Modal Sandbox Web Dashboard (with `--dashboard-upstream` / `SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery, syncing empty `MODAL_SANDBOX_ENDPOINT_URL` in `.env`).
 
-#### Persisting and Restoring `/opt/caddy` via Host Ingress Store (`caddy-store`)
+#### Persisting and Restoring `/opt/caddy` via Central Config Store (`config/caddy/`)
 
-Declarative `/opt/caddy` files (`conf/Caddyfile`, `conf/sites/*.caddy`, nested `conf/` includes, and `docker-compose.override.yml`) are persisted in the private `github.com/${GH_ORG_NAME}/caddy-store` repository organized by logical VPS profile folder (`CADDY_STORE_PROFILE`, default `default`):
+Declarative `/opt/caddy` files (`conf/Caddyfile`, `conf/sites/*.caddy`, nested `conf/` includes, and `docker-compose.override.yml`) are persisted in the private `github.com/${GH_ORG_NAME}/config` repository under `caddy/<profile>/` (`CADDY_STORE_PROFILE`, default `default`):
 
 ```bash
-# Idempotently capture live /opt/caddy/conf/ and docker-compose.override.yml into caddy-store:
+# Idempotently capture live /opt/caddy/conf/ and docker-compose.override.yml into config/caddy/<profile>/:
 modal-sandbox infra caddy backup
 
 # Optional profile override (e.g., staging vs default production VPS):
 modal-sandbox infra caddy backup --profile staging
 
-# Update Resource Plane route and immediately sync /opt/caddy to caddy-store:
+# Update Resource Plane route and immediately sync /opt/caddy to config/caddy/<profile>/:
 modal-sandbox infra caddy --domain db-host.example.com --sync
 
 # Provision /opt/caddy on a brand-new VPS and restore all stored routes + Caddyfile + active networks:
 modal-sandbox infra caddy --bootstrap --from-store
 
-# Idempotently converge an existing running VPS from caddy-store (--prune removes extra local *.caddy files):
+# Idempotently converge an existing running VPS from config/caddy/<profile>/ (--prune removes extra local *.caddy files):
 modal-sandbox infra caddy restore
 modal-sandbox infra caddy restore --prune
 ```
@@ -217,6 +217,6 @@ The default `resource-plane/docker-compose.yml` defines only PostgreSQL and Seaw
 
 Allow SSH for the deployment host and public HTTP/HTTPS for Caddy. Expose the configured PostgreSQL port only to clients that need it. Route console and S3 traffic through Caddy for HTTPS; their direct ports speak HTTP. Keep internal filer port 8888 private. Production Compose publishes listeners on `0.0.0.0` unless `HOST_BIND_IP` is configured, so host firewall policy must match the intended exposure.
 
-Back up `/opt/resource-plane/.env` and `.data/` separately from caddy-store, including database, S3, and CA state. Use logical PostgreSQL backups or a consistent stopped/filesystem snapshot procedure. Keep the Caddy DNS token and certificate volumes in a separate sensitive backup process.
+Back up `/opt/resource-plane/.env` and `.data/` separately from `config/caddy/`, including database, S3, and CA state. Use logical PostgreSQL backups or a consistent stopped/filesystem snapshot procedure. Keep the Caddy DNS token and certificate volumes in a separate sensitive backup process.
 
 Continue to [application creation and deployment](applications.md) to deploy apps using the database, buckets, and wildcard ingress. The [Resource Plane README](https://github.com/sFactory0/software-factory/blob/main/resource-plane/README.md) covers MCP connections and operational commands.

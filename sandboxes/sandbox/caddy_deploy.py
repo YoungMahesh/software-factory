@@ -322,9 +322,9 @@ def build_caddy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize MODAL_SANDBOX_ENDPOINT_URL to local .env.")
     parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 API token (defaults to CLOUDFLARE_DNS_API_TOKEN or CLOUDFLARE_API_TOKEN).")
     parser.add_argument("--email", default=None, help="Optional ACME email written during --bootstrap.")
-    parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from caddy-store instead of an empty Caddyfile.")
-    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to caddy-store after configuring routes.")
-    parser.add_argument("--profile", default=None, help="Logical VPS profile folder in caddy-store (defaults to CADDY_STORE_PROFILE or 'default').")
+    parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from Central Config Store (config/caddy/<profile>/) instead of an empty Caddyfile.")
+    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to Central Config Store (config/caddy/<profile>/) after configuring routes.")
+    parser.add_argument("--profile", default=None, help="Logical VPS profile folder under caddy/ in config repo (defaults to CADDY_STORE_PROFILE or 'default').")
     parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
     parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")
     parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
@@ -334,7 +334,7 @@ def build_caddy_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entrypoint for Host Ingress Proxy setup and caddy-store sync."""
+    """CLI entrypoint for Host Ingress Proxy setup and Central Config Store (caddy/) sync."""
     arg_list = list(sys.argv[1:] if argv is None else argv)
     if arg_list and arg_list[0] in ("backup", "restore"):
         from sandbox.caddy_store import run_caddy_store_subcommand

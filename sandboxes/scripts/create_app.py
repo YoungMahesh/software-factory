@@ -40,12 +40,12 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cloud", action="store_true", help="Enable --github, --provision-db (when --db), --push-vault, and --launch.")
     parser.add_argument("--github", action="store_true", help="Create GitHub repository in GH_ORG_NAME and push initial commit.")
     parser.add_argument("--public", action="store_true", help="Create public GitHub repository (used with --github; default: private).")
-    parser.add_argument("--repo-name", default=None, help="Override GitHub/env-store repository name (<repo> or <owner>/<repo>).")
+    parser.add_argument("--repo-name", default=None, help="Override GitHub/config env repository name (<repo> or <owner>/<repo>).")
     parser.add_argument("--provision-db", action="store_true", help="Provision Resource Plane PostgreSQL database and inject DATABASE_URL.")
     parser.add_argument("--db-name", default=None, help="Explicit Resource Plane PostgreSQL database name.")
     parser.add_argument("--provision-s3", action="store_true", help="Provision Resource Plane S3 bucket and inject AWS SDK variables.")
     parser.add_argument("--bucket-name", default=None, help="Explicit Resource Plane S3 bucket name.")
-    parser.add_argument("--push-vault", action="store_true", help="Encrypt and push .env to Central Environment Store (env-store).")
+    parser.add_argument("--push-vault", action="store_true", help="Encrypt and push .env to Central Config Store (config/env/<repo>/).")
     parser.add_argument("--launch", action="store_true", help="Launch a Modal Sandbox with T3 Code after scaffolding.")
     parser.add_argument("--vm", action="store_true", help="Launch sandbox as a full Linux VM (used with --launch).")
     parser.add_argument("--no-t3", action="store_true", help="Disable T3 Code when launching sandbox with --launch.")
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             if cloud_res.s3_info:
                 print(f"✓ Provisioned S3 bucket: {cloud_res.s3_info.bucket_name}")
             if cloud_res.vault_pushed:
-                print("✓ Pushed .env secrets to Central Environment Store (env-store)")
+                print("✓ Pushed .env secrets to Central Config Store (config)")
             if cloud_res.launch_response is not None:
                 from sandbox.formatting import display_launch_summary
 
