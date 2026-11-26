@@ -63,7 +63,7 @@ modal-sandbox infra deploy
 modal-sandbox infra caddy --bootstrap --wildcard --domain resources.example.com
 ```
 
-The token must permit DNS changes for the relevant Cloudflare zone. Caddy stores it at `/opt/caddy/.env`, excluded from caddy-store. The wildcard certificate covers the configured base domain and its immediate subdomains. New app routes reuse that certificate.
+The token must permit DNS changes for the relevant Cloudflare zone. Caddy stores it at `/opt/caddy/.env`, excluded from caddy-store. The wildcard certificate covers the configured base domain and its immediate subdomains: the apex (`https://<APPS_BASE_DOMAIN>`) routes to the Sandbox Web Dashboard when `sandbox-control-plane` is deployed (or `--no-dashboard` leaves it at `404`), while `<repo-name>.<APPS_BASE_DOMAIN>` routes Hosted Apps reusing that certificate.
 
 ## Deploy or redeploy
 

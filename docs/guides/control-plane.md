@@ -29,6 +29,16 @@ ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py
 
 The deployed control plane receives captured factory configuration and Git provenance. Edit `.env` and redeploy to update production secrets or staged files; modifying a local checkout does not update an already deployed app. The dashboard shows the deployed commit, and `GET /api/version` returns provenance.
 
+## Custom base domain via Caddy
+
+After deploying `sandboxes/sandbox/function.py` to Modal and configuring `APPS_BASE_DOMAIN` (plus `CLOUDFLARE_DNS_API_TOKEN` or `CLOUDFLARE_API_TOKEN`) in root `.env`, expose the Sandbox Web Dashboard at `https://<APPS_BASE_DOMAIN>` via the VPS Host Ingress Proxy:
+
+```bash
+modal-sandbox infra caddy --wildcard
+```
+
+This discovers the deployed `sandbox-control-plane` web URL via Modal SDK (overridable via `SANDBOX_DASHBOARD_UPSTREAM` or `--dashboard-upstream`), proxies the apex of `APPS_BASE_DOMAIN` to Modal inside `/opt/caddy/conf/sites/apps-wildcard.caddy` with `Host` header rewriting and unbuffered SSE streaming, and sets empty `MODAL_SANDBOX_ENDPOINT_URL` in root `.env` to `https://<APPS_BASE_DOMAIN>` (preserving existing values; pass `--no-sync-env` to skip or `--no-dashboard` to revert the apex to `404`). Authentication stays in Modal (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`).
+
 ## Launch through the dashboard or CLI
 
 The dashboard defaults to the prompt-first **Builder** homepage for launching and reopening **Factory Apps** in **T3 Code**, alongside **Sandboxes** and **Snapshots** tabs for inspecting running instances across apps/profiles, terminating instances, capturing filesystem snapshots, and resuming snapshots. Factory App and Launch Request state is stored in `modal.Volume` (`factory-state-v1`).

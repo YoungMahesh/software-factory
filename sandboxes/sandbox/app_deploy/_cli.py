@@ -31,7 +31,7 @@ def build_deploy_app_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", default=None, help="GitHub repository (<repo> or <owner>/<repo>) to deploy from GitHub + env-store.")
     parser.add_argument("-b", "--branch", default="main", help="Git branch to pull in --repo mode (default: main).")
     parser.add_argument("--subdomain", default=None, help="Override subdomain label under APPS_BASE_DOMAIN.")
-    parser.add_argument("--base-domain", default=None, help="Override APPS_BASE_DOMAIN (e.g. sf.mahesh0.dev).")
+    parser.add_argument("--base-domain", default=None, help="Override APPS_BASE_DOMAIN (e.g. apps.example.com).")
     parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 token if wildcard Caddy setup is needed.")
     parser.add_argument("--skip-migrate", action="store_true", help="Skip automatic Drizzle database migration on deploy.")
     parser.add_argument("--down", action="store_true", help="Stop containers and remove the Caddy route for the app.")

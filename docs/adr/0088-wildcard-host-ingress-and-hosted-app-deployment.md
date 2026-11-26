@@ -15,7 +15,7 @@ Deploying scaffolded applications live to the internet on the Resource Plane VPS
 ## Decision
 
 1. **App Base Domain (`APPS_BASE_DOMAIN`)**:
-   - Introduce `APPS_BASE_DOMAIN` in `.env` (e.g., `sf.mahesh0.dev`), kept independent from `RESOURCE_PLANE_DOMAIN`.
+   - Introduce `APPS_BASE_DOMAIN` in `.env` (e.g., `apps.example.com`), kept independent from `RESOURCE_PLANE_DOMAIN`.
    - Each **Hosted App** defaults to `<sanitized-repo-name>.<APPS_BASE_DOMAIN>` with `--subdomain <label>` override, idempotent redeploys for the same app, and collision rejection across distinct apps.
    - The apex `<APPS_BASE_DOMAIN>` stays minimal/reserved under the wildcard block unless explicitly routed.
 

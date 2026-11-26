@@ -121,9 +121,11 @@ class TestWorktreeEnvPropagation(unittest.TestCase):
             repo.mkdir()
             self._init_git_repo(repo)
 
-            # No env.map in .git/env-vault, but main repo has .env and .env.local
+            # No env.map in .git/env-vault, but main repo has .env, .env.local, and .secrets/
             (repo / ".env").write_text("MAIN_KEY=val1\n")
             (repo / ".env.local").write_text("LOCAL_KEY=val2\n")
+            (repo / ".secrets").mkdir()
+            (repo / ".secrets" / "resource_plane_ssh").write_text("PRIVATE KEY\n")
 
             hooks_dir = root / "git-hooks"
             hooks_dir.mkdir()
@@ -146,10 +148,14 @@ class TestWorktreeEnvPropagation(unittest.TestCase):
 
             wt_env = wt_dir / ".env"
             wt_local = wt_dir / ".env.local"
+            wt_ssh = wt_dir / ".secrets" / "resource_plane_ssh"
             self.assertTrue(wt_env.is_file(), f"Expected {wt_env} to exist")
             self.assertTrue(wt_local.is_file(), f"Expected {wt_local} to exist")
+            self.assertTrue(wt_ssh.is_file(), f"Expected {wt_ssh} to exist")
             self.assertEqual(wt_env.read_text(), "MAIN_KEY=val1\n")
             self.assertEqual(wt_local.read_text(), "LOCAL_KEY=val2\n")
+            self.assertEqual(wt_ssh.read_text(), "PRIVATE KEY\n")
+            self.assertEqual(stat.S_IMODE(wt_ssh.stat().st_mode), 0o600)
 
     def test_worktree_propagation_chains_local_hook(self):
         with tempfile.TemporaryDirectory() as td:

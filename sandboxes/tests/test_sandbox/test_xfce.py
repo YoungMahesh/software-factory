@@ -98,12 +98,12 @@ class TestXfceIntegration(unittest.TestCase):
             print_access_info(
                 app_name="xfce-test",
                 sandbox_name="xfce-test-sandbox",
-                xfce_url="https://3000.mahesh0.dev/vnc.html?autoconnect=true&resize=remote",
+                xfce_url="https://3000.example.com/vnc.html?autoconnect=true&resize=remote",
                 xfce_port=3000,
                 xfce_password="mypassword",
             )
         output = captured_output.getvalue()
-        self.assertIn("XFCE Desktop: https://3000.mahesh0.dev", output)
+        self.assertIn("XFCE Desktop: https://3000.example.com", output)
         self.assertIn("VNC Password: mypassword", output)
 
     def test_startup_script_contains_xfce_support(self):

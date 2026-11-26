@@ -20,8 +20,11 @@ class TestPullRepoEnv(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.repo_dir = Path(self.temp_dir.name)
+        self._cwd_patcher = patch("scripts.pull_repo_env.Path.cwd", return_value=self.repo_dir)
+        self._cwd_patcher.start()
 
     def tearDown(self):
+        self._cwd_patcher.stop()
         self.temp_dir.cleanup()
 
     def test_sops_supported_format_resolution(self):
@@ -246,6 +249,31 @@ class TestPullRepoEnv(unittest.TestCase):
         token_bin = self.repo_dir / "certs" / "token.bin"
         self.assertTrue(token_bin.is_file())
         self.assertEqual(token_bin.read_bytes(), raw_binary_content)
+
+    @patch("scripts.pull_repo_env.fetch_vault_env_bundle")
+    def test_pull_repo_env_with_explicit_dest_never_clobbers_cwd_vault(self, mock_fetch_bundle):
+        fake_cwd = self.repo_dir / "main-checkout"
+        vault_dir = fake_cwd / ".git" / "env-vault"
+        vault_dir.mkdir(parents=True)
+        (vault_dir / "default.env").write_text("REAL_SECRET=keep\n", encoding="utf-8")
+        (vault_dir / "env.map").write_text("default.env=.env\nkey=.secrets/key\n", encoding="utf-8")
+
+        external_dir = self.repo_dir / "external-target"
+        external_dir.mkdir()
+        mock_fetch_bundle.return_value = {"files": {"default.env": "TEST_SECRET=overwrite\n"}}
+
+        with patch("scripts.pull_repo_env.Path.cwd", return_value=fake_cwd):
+            success = pull_repo_env(
+                repo_name="my-app",
+                org_name="sFactory0",
+                dest_file=external_dir / ".env",
+                gh_token="ghp_test",
+            )
+
+        self.assertTrue(success)
+        self.assertEqual((external_dir / ".env").read_text(), "TEST_SECRET=overwrite\n")
+        self.assertEqual((vault_dir / "default.env").read_text(), "REAL_SECRET=keep\n")
+        self.assertEqual((vault_dir / "env.map").read_text(), "default.env=.env\nkey=.secrets/key\n")
 
 
 if __name__ == "__main__":

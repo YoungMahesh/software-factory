@@ -62,25 +62,25 @@ class TestAppDeployConfigAndCaddy(unittest.TestCase):
             resolve_deploy_target(None, None, cwd=factory_root)
 
     def test_resolve_app_domain_and_build_remote_app_env(self):
-        sub, fqdn = resolve_app_domain("my-app", "sf.mahesh0.dev")
-        self.assertEqual((sub, fqdn), ("my-app", "my-app.sf.mahesh0.dev"))
+        sub, fqdn = resolve_app_domain("my-app", "apps.example.com")
+        self.assertEqual((sub, fqdn), ("my-app", "my-app.apps.example.com"))
 
-        sub2, fqdn2 = resolve_app_domain("my-app", "sf.mahesh0.dev", subdomain="demo.sf.mahesh0.dev")
-        self.assertEqual((sub2, fqdn2), ("demo", "demo.sf.mahesh0.dev"))
+        sub2, fqdn2 = resolve_app_domain("my-app", "apps.example.com", subdomain="demo.apps.example.com")
+        self.assertEqual((sub2, fqdn2), ("demo", "demo.apps.example.com"))
 
         env_dict = build_remote_app_env(
             {
                 "NODE_ENV": "development",
                 "NEXT_PUBLIC_APP_URL": "http://localhost:3000",
-                "DATABASE_URL": "postgresql://u:p@db-host.mahesh0.dev:54320/app?sslmode=verify-full&sslrootcert=/home/dev/.config/resource-plane/ca.crt",
+                "DATABASE_URL": "postgresql://u:p@db-host.example.com:54320/app?sslmode=verify-full&sslrootcert=/home/dev/.config/resource-plane/ca.crt",
                 "BETTER_AUTH_SECRET": "sec123",
             },
-            fqdn="my-app.sf.mahesh0.dev",
+            fqdn="my-app.apps.example.com",
             container_name="my-app-web",
         )
         self.assertEqual(env_dict["NODE_ENV"], "production")
-        self.assertEqual(env_dict["NEXT_PUBLIC_APP_URL"], "https://my-app.sf.mahesh0.dev")
-        self.assertEqual(env_dict["EXPO_PUBLIC_API_URL"], "https://my-app.sf.mahesh0.dev")
+        self.assertEqual(env_dict["NEXT_PUBLIC_APP_URL"], "https://my-app.apps.example.com")
+        self.assertEqual(env_dict["EXPO_PUBLIC_API_URL"], "https://my-app.apps.example.com")
         self.assertEqual(env_dict["APP_CONTAINER_NAME"], "my-app-web")
         self.assertEqual(env_dict["RESOURCE_PLANE_CA_CERT"], "/app/.certs/ca.crt")
         self.assertIn("sslrootcert=%2Fapp%2F.certs%2Fca.crt", env_dict["DATABASE_URL"])
@@ -91,13 +91,13 @@ class TestAppDeployConfigAndCaddy(unittest.TestCase):
         mock_ssh.return_value = subprocess.CompletedProcess(
             [],
             0,
-            "FILE:other-app.caddy\n" + render_app_route("other-app", "api.sf.mahesh0.dev", "other-app-web:3000") + "\n---END---\n",
+            "FILE:other-app.caddy\n" + render_app_route("other-app", "api.apps.example.com", "other-app-web:3000") + "\n---END---\n",
             "",
         )
-        ok_self, _ = check_app_route_collision(self.vps_config, "other-app", "api.sf.mahesh0.dev")
+        ok_self, _ = check_app_route_collision(self.vps_config, "other-app", "api.apps.example.com")
         self.assertTrue(ok_self)
 
-        ok_other, msg = check_app_route_collision(self.vps_config, "new-app", "api.sf.mahesh0.dev")
+        ok_other, msg = check_app_route_collision(self.vps_config, "new-app", "api.apps.example.com")
         self.assertFalse(ok_other)
         self.assertIn("already assigned", msg)
 

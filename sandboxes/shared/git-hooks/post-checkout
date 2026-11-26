@@ -40,7 +40,7 @@ if [ -f "$VAULT_DIR/env.map" ]; then
         fi
     done < "$VAULT_DIR/env.map"
 elif [ -d "$MAIN_REPO_ROOT" ] && [ "$MAIN_REPO_ROOT" != "$WT_ROOT" ]; then
-    # 2. Zero-config fallback: copy root .env* files from main repository root
+    # 2. Zero-config fallback: copy root .env* files and .secrets/ from main repository root
     for f in "$MAIN_REPO_ROOT"/.env*; do
         [ -f "$f" ] || continue
         fname=$(basename "$f")
@@ -50,6 +50,17 @@ elif [ -d "$MAIN_REPO_ROOT" ] && [ "$MAIN_REPO_ROOT" != "$WT_ROOT" ]; then
             chmod 600 "$dest_file" 2>/dev/null || true
         fi
     done
+    if [ -d "$MAIN_REPO_ROOT/.secrets" ]; then
+        while IFS= read -r -d '' f; do
+            rel="${f#"$MAIN_REPO_ROOT/.secrets/"}"
+            dest_file="$WT_ROOT/.secrets/$rel"
+            if [ ! -e "$dest_file" ]; then
+                mkdir -p "$(dirname "$dest_file")"
+                cp "$f" "$dest_file"
+                chmod 600 "$dest_file" 2>/dev/null || true
+            fi
+        done < <(find "$MAIN_REPO_ROOT/.secrets" -type f -print0)
+    fi
 fi
 
 # 3. Chain-execute local repository hook if present

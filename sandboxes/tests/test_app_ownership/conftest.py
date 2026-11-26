@@ -48,6 +48,18 @@ def apps(ingress, monkeypatch):
         _deploy, "remove_app_caddy_route",
         lambda *args, **kwargs: _caddy.remove_app_caddy_route(*args, caddy_dir=str(ingress.root), **kwargs),
     )
+    for env_key in (
+        "RESOURCE_PLANE_SSH_HOST",
+        "RESOURCE_PLANE_SSH_USER",
+        "RESOURCE_PLANE_SSH_PORT",
+        "RESOURCE_PLANE_SSH_KEY",
+        "RESOURCE_PLANE_REMOTE_DIR",
+        "RESOURCE_PLANE_DOMAIN",
+        "APPS_BASE_DOMAIN",
+        "CLOUDFLARE_DNS_API_TOKEN",
+        "CLOUDFLARE_API_TOKEN",
+    ):
+        monkeypatch.delenv(env_key, raising=False)
     monkeypatch.setenv("GH_ORG_NAME", "test-org")
     monkeypatch.setenv("GH_TOKEN", "unused-test-token")
 

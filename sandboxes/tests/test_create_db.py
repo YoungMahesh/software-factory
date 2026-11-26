@@ -37,8 +37,8 @@ class TestDbHostClient(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_normalize_base_url(self):
-        self.assertEqual(normalize_base_url("db-host.mahesh0.dev"), "https://db-host.mahesh0.dev")
-        self.assertEqual(normalize_base_url("https://db-host.mahesh0.dev/"), "https://db-host.mahesh0.dev")
+        self.assertEqual(normalize_base_url("db-host.example.com"), "https://db-host.example.com")
+        self.assertEqual(normalize_base_url("https://db-host.example.com/"), "https://db-host.example.com")
         self.assertEqual(normalize_base_url("http://localhost:3000"), "http://localhost:3000")
         with self.assertRaises(ValueError):
             normalize_base_url("")
@@ -211,9 +211,9 @@ class TestCreateDbCli(unittest.TestCase):
                     "name": "my_db",
                     "username": "db_user",
                     "password": "secretpassword",
-                    "host": "db-host.mahesh0.dev",
+                    "host": "db-host.example.com",
                     "port": 54320,
-                    "connectionString": "postgresql://db_user:secretpassword@db-host.mahesh0.dev:54320/my_db?sslmode=verify-full&sslrootcert=ca.crt",
+                    "connectionString": "postgresql://db_user:secretpassword@db-host.example.com:54320/my_db?sslmode=verify-full&sslrootcert=ca.crt",
                 }
             return {}
 
@@ -222,7 +222,7 @@ class TestCreateDbCli(unittest.TestCase):
         info = create_database_connection(
             database_name="my_db",
             project_name="test-repo",
-            domain="db-host.mahesh0.dev",
+            domain="db-host.example.com",
             token="admin-token",
         )
 
@@ -248,7 +248,7 @@ class TestCreateDbCli(unittest.TestCase):
                     "name": "my_db",
                     "username": "existing_user",
                     "password": "existingpassword",
-                    "host": "db-host.mahesh0.dev",
+                    "host": "db-host.example.com",
                     "port": 54320,
                 }
             return {}
@@ -258,7 +258,7 @@ class TestCreateDbCli(unittest.TestCase):
         info = create_database_connection(
             database_name="my_db",
             project_name="test-repo",
-            domain="db-host.mahesh0.dev",
+            domain="db-host.example.com",
             token="admin-token",
             if_not_exists=True,
         )

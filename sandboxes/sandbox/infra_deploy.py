@@ -252,15 +252,13 @@ def fetch_remote_admin_token(config: VpsSshConfig, timeout: int = 15) -> str | N
     return None
 
 
-def sync_local_env_credentials(
+def sync_env_keys(
     env_file_path: Path,
-    domain: str,
-    admin_token: str | None = None,
+    keys_to_set: dict[str, str],
 ) -> tuple[bool, list[str]]:
-    """Synchronizes domain and admin token to local .env idempotently without clobbering."""
-    keys_to_set: dict[str, str] = {"RESOURCE_PLANE_DOMAIN": domain}
-    if admin_token:
-        keys_to_set["RESOURCE_PLANE_ADMIN_TOKEN"] = admin_token
+    """Synchronizes environment key-value pairs to local .env idempotently without clobbering."""
+    if not keys_to_set:
+        return False, []
 
     if not env_file_path.exists():
         env_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,6 +304,18 @@ def sync_local_env_credentials(
         return True, updated_keys
 
     return False, preserved_keys
+
+
+def sync_local_env_credentials(
+    env_file_path: Path,
+    domain: str,
+    admin_token: str | None = None,
+) -> tuple[bool, list[str]]:
+    """Synchronizes domain and admin token to local .env idempotently without clobbering."""
+    keys_to_set: dict[str, str] = {"RESOURCE_PLANE_DOMAIN": domain}
+    if admin_token:
+        keys_to_set["RESOURCE_PLANE_ADMIN_TOKEN"] = admin_token
+    return sync_env_keys(env_file_path, keys_to_set)
 
 
 def deploy_resource_plane(

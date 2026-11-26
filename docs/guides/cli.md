@@ -397,6 +397,8 @@ Run from the deployment host. A sandbox developer can push code and environment 
 ```bash
 modal-sandbox infra caddy --bootstrap --domain resources.example.com
 modal-sandbox infra caddy --wildcard --base-domain apps.example.com
+modal-sandbox infra caddy --dashboard --dashboard-upstream https://<workspace>--sandbox-control-plane-fastapi-app.modal.run
+modal-sandbox infra caddy --no-dashboard
 modal-sandbox infra caddy --check-only
 modal-sandbox infra caddy backup --profile staging
 modal-sandbox infra caddy restore --profile staging --prune
@@ -411,8 +413,12 @@ modal-sandbox infra caddy --bootstrap --from-store
 | `--s3-upstream` | `neon-seaweedfs:8333` | S3 proxy upstream. |
 | `--bootstrap` | `False` | Provision the canonical `/opt/caddy` Compose stack. |
 | `--email` | Unset | Optional ACME email for bootstrap. |
-| `--wildcard` | `False` | Configure the Cloudflare DNS-01 wildcard certificate. |
-| `--base-domain` | `APPS_BASE_DOMAIN` | Hosted App base domain. |
+| `--wildcard` | `False` | Configure the Cloudflare DNS-01 wildcard certificate and apex dashboard route when available. |
+| `--base-domain` | `APPS_BASE_DOMAIN` | App Base Domain for the Sandbox Web Dashboard apex and Hosted Apps. |
+| `--dashboard` | `False` | Require routing the `APPS_BASE_DOMAIN` apex to the Modal Sandbox Web Dashboard (implies `--wildcard`). |
+| `--dashboard-upstream` | `SANDBOX_DASHBOARD_UPSTREAM` / Modal SDK | Modal Control Plane origin URL proxied at the apex (implies `--wildcard`). |
+| `--no-dashboard` | `False` | Keep or revert the `APPS_BASE_DOMAIN` apex to HTTP `404`. |
+| `--no-sync-env` | `False` | Do not synchronize `MODAL_SANDBOX_ENDPOINT_URL` into local `.env`. |
 | `--cf-dns-token` | Factory DNS token variables | DNS-01 token. |
 | `--from-store` | `False` | Restore caddy-store during bootstrap; requires `--bootstrap`. |
 | `--sync` | `False` | Back up configuration after route changes. |

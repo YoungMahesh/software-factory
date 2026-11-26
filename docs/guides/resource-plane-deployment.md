@@ -121,8 +121,13 @@ modal-sandbox infra caddy --domain db-host.example.com
 # Provision /opt/caddy on a brand-new VPS with a single wildcard certificate for APPS_BASE_DOMAIN:
 modal-sandbox infra caddy --bootstrap --wildcard --domain db-host.example.com
 
-# Or upgrade an existing /opt/caddy stack in-place to caddy-dns/cloudflare + wildcard ingress:
+# Or upgrade an existing /opt/caddy stack in-place to caddy-dns/cloudflare + wildcard ingress
+# (auto-routes https://<APPS_BASE_DOMAIN> to the deployed Modal Sandbox Web Dashboard when available):
 modal-sandbox infra caddy --wildcard --base-domain apps.example.com
+
+# Require and update the apex Sandbox Web Dashboard route explicitly (or revert apex to 404):
+modal-sandbox infra caddy --dashboard
+modal-sandbox infra caddy --no-dashboard
 
 # Verify running container, network attachment, and Caddyfile validity:
 modal-sandbox infra caddy --check-only
@@ -130,7 +135,7 @@ modal-sandbox infra caddy --check-only
 
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
-- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, and imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips.
+- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips, and routes the `<APPS_BASE_DOMAIN>` apex to the Modal Sandbox Web Dashboard (with `--dashboard-upstream` / `SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery, syncing empty `MODAL_SANDBOX_ENDPOINT_URL` in `.env`).
 
 #### Persisting and Restoring `/opt/caddy` via Host Ingress Store (`caddy-store`)
 

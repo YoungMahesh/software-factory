@@ -51,7 +51,8 @@ The T3 and Metro endpoints work independently of the Cloudflare application tunn
 Production Resource Plane and Hosted App HTTPS use Caddy in a separate Docker Compose stack at `/opt/caddy`, connected to `dbhost-network`. This is independent from sandbox Cloudflare tunnels.
 
 - Resource Plane console and optional S3 hostnames use site files under `/opt/caddy/conf/sites/`.
-- Hosted Apps use a wildcard certificate for `APPS_BASE_DOMAIN` and snippets under `/opt/caddy/conf/apps/`.
+- The apex of `APPS_BASE_DOMAIN` (`https://<APPS_BASE_DOMAIN>`) can reverse-proxy to the Modal-hosted Sandbox Web Dashboard (`SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK discovery) inside `apps-wildcard.caddy` without consuming Modal custom-domain slots.
+- Hosted Apps use the wildcard certificate for `APPS_BASE_DOMAIN` and snippets under `/opt/caddy/conf/apps/`.
 - The Cloudflare DNS-01 token for wildcard certificates is stored in `/opt/caddy/.env`, outside `caddy-store` backups.
 
 See [Resource Plane deployment](../guides/resource-plane-deployment.md) for bootstrap, backup, and restore, and [application deployment](../guides/applications.md) for wildcard DNS and app routes.

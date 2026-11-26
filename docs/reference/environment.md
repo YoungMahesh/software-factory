@@ -18,7 +18,8 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `AGE_PRIVATE_KEY` | Age private key for repository vault decryption; `SOPS_AGE_KEY` is a host resolver fallback, as is `~/.config/sops/age/keys.txt` in vault helpers |
 | `DEFAULT_GIT_NAME`, `DEFAULT_GIT_EMAIL` | Fallback sandbox Git authorship; repository-specific authorship comes from `env-store/<repo>/git.env` |
 | `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
-| `MODAL_SANDBOX_ENDPOINT_URL` | Hosted control plane base URL for CLI `--remote`; `--endpoint-url` overrides it |
+| `MODAL_SANDBOX_ENDPOINT_URL` | Public or Modal control plane base URL for CLI `--remote` and pool-wide Codex status (e.g. `https://apps.example.com`); `--endpoint-url` overrides it |
+| `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) proxied at `https://<APPS_BASE_DOMAIN>` by Caddy (auto-discovered via Modal SDK when unset) |
 | `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |
@@ -39,7 +40,7 @@ Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Chil
 | `RESOURCE_PLANE_SSH_KEY` | Required explicit private key path, normally `.secrets/resource_plane_ssh`; no ambient SSH key fallback |
 | `RESOURCE_PLANE_REMOTE_DIR` | Resource Plane deployment directory, default `/opt/resource-plane` |
 | `CADDY_STORE_PROFILE` | Logical folder in the private `caddy-store` repository, default `default`; Caddy and deploy-app `--profile` overrides it |
-| `APPS_BASE_DOMAIN` | Base domain for Hosted Apps, such as `apps.example.com` |
+| `APPS_BASE_DOMAIN` | Root DNS domain for the apex Sandbox Web Dashboard and Hosted App subdomains, such as `apps.example.com` |
 | `CLOUDFLARE_DNS_API_TOKEN` | DNS-01 token for Caddy wildcard certificates, falling back to `CLOUDFLARE_API_TOKEN`; remotely stored in `/opt/caddy/.env` |
 
 `create-db` caches the public root CA at `~/.config/resource-plane/ca.crt`, reusing the legacy `~/.config/db-host` directory when it exists. `--ca-path` selects an explicit path. The generated app supports `RESOURCE_PLANE_CA_CERT` for a portable CA path; `deploy-app` stages the certificate at `/app/.certs/ca.crt` inside its container.

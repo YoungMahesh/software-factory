@@ -31,6 +31,7 @@ from sandbox.caddy_wildcard import (
     render_resource_plane_site,
     resolve_apps_base_domain,
     resolve_cloudflare_dns_token,
+    resolve_wildcard_dashboard_upstream,
 )
 from sandbox.config import parse_env_file, resolve_factory_root
 from sandbox.host_ingress import apply_configuration, prepare_runtime
@@ -39,6 +40,7 @@ from sandbox.infra_deploy import (
     build_ssh_cmd,
     find_resource_plane_source_dir,
     resolve_vps_ssh_config,
+    sync_env_keys,
 )
 
 DEFAULT_CADDYFILE_PATH = "/opt/caddy/conf/Caddyfile"
@@ -221,19 +223,45 @@ def setup_reverse_proxy(
     s3_domain: str | None = None, s3_upstream: str = DEFAULT_S3_UPSTREAM,
     bootstrap: bool = False, email: str | None = None, caddy_config: CaddyConfig | None = None,
     *, base_domain: str | None = None, cf_dns_token: str | None = None, wildcard: bool = False,
+    dashboard: bool = False, dashboard_upstream: str | None = None, no_dashboard: bool = False,
+    dotenv: dict[str, str] | None = None, env_file_path: Path | None = None,
 ) -> tuple[bool, str]:
     """High-level orchestration: optionally bootstraps /opt/caddy, sets up wildcard TLS, writes site config, and reloads."""
     cfg = caddy_config or CaddyConfig()
     wc_msg, active_base = "", None
-    if wildcard or (base_domain and base_domain.strip()):
-        active_base = resolve_apps_base_domain(base_domain)
-        resolved_cf = resolve_cloudflare_dns_token(cf_dns_token)
+    wants_wc = bool(
+        wildcard or dashboard or no_dashboard
+        or (dashboard_upstream and dashboard_upstream.strip())
+        or (base_domain and base_domain.strip())
+    )
+    if wants_wc:
+        if no_dashboard and (dashboard or (dashboard_upstream and dashboard_upstream.strip())):
+            return False, "Cannot combine --no-dashboard with --dashboard or --dashboard-upstream."
+        active_base = resolve_apps_base_domain(base_domain, dotenv=dotenv)
+        resolved_cf = resolve_cloudflare_dns_token(cf_dns_token, dotenv=dotenv)
+        dash_ok, effective_dash, dash_note = resolve_wildcard_dashboard_upstream(
+            active_base, explicit_upstream=dashboard_upstream,
+            require_dashboard=dashboard, no_dashboard=no_dashboard,
+            dotenv=dotenv,
+        )
+        if not dash_ok:
+            return False, f"Sandbox Web Dashboard setup failed: {dash_note}"
         wc_ok, wc_msg = ensure_wildcard_caddy(
             vps_config, active_base, resolved_cf, bootstrap=bootstrap, email=email,
+            dashboard_upstream=effective_dash, preserve_dashboard=not no_dashboard,
             caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
         )
         if not wc_ok:
             return False, f"Wildcard Caddy setup failed: {wc_msg}"
+        if dash_note:
+            wc_msg = f"{wc_msg} {dash_note}".strip()
+        if effective_dash and env_file_path is not None:
+            endpoint_url = f"https://{active_base}"
+            synced, _ = sync_env_keys(env_file_path, {"MODAL_SANDBOX_ENDPOINT_URL": endpoint_url})
+            if synced:
+                wc_msg = f"{wc_msg} Synchronized MODAL_SANDBOX_ENDPOINT_URL={endpoint_url} to {env_file_path.name}.".strip()
+            else:
+                wc_msg = f"{wc_msg} Preserved existing MODAL_SANDBOX_ENDPOINT_URL in {env_file_path.name}.".strip()
         bootstrap = False
     elif bootstrap:
         boot_ok, boot_msg = bootstrap_caddy(vps_config, email=email, caddy_config=cfg)
@@ -288,6 +316,10 @@ def build_caddy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bootstrap", action="store_true", help=f"Provision {DEFAULT_CADDY_DIR} via Docker Compose on a fresh VPS.")
     parser.add_argument("--wildcard", action="store_true", help="Provision or upgrade /opt/caddy with Cloudflare DNS-01 wildcard cert for APPS_BASE_DOMAIN.")
     parser.add_argument("--base-domain", default=None, help="App Base Domain for wildcard cert (defaults to APPS_BASE_DOMAIN).")
+    parser.add_argument("--dashboard", action="store_true", help="Route APPS_BASE_DOMAIN apex to the Modal Sandbox Web Dashboard (implies --wildcard).")
+    parser.add_argument("--dashboard-upstream", default=None, help="Modal Control Plane origin URL for apex reverse proxy (defaults to SANDBOX_DASHBOARD_UPSTREAM or Modal SDK lookup).")
+    parser.add_argument("--no-dashboard", action="store_true", help="Keep or revert APPS_BASE_DOMAIN apex to 404 instead of routing the Sandbox Web Dashboard.")
+    parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize MODAL_SANDBOX_ENDPOINT_URL to local .env.")
     parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 API token (defaults to CLOUDFLARE_DNS_API_TOKEN or CLOUDFLARE_API_TOKEN).")
     parser.add_argument("--email", default=None, help="Optional ACME email written during --bootstrap.")
     parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from caddy-store instead of an empty Caddyfile.")
@@ -345,7 +377,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             s3_domain=args.s3_domain, s3_upstream=args.s3_upstream, sync=args.sync, caddy_cfg=caddy_cfg,
         )
 
-    wants_wildcard = bool(args.wildcard or args.base_domain)
+    if args.no_dashboard and (args.dashboard or (args.dashboard_upstream and args.dashboard_upstream.strip())):
+        print("❌ Cannot combine --no-dashboard with --dashboard or --dashboard-upstream.", file=sys.stderr)
+        return 1
+
+    wants_wildcard = bool(
+        args.wildcard or args.base_domain or args.dashboard or args.dashboard_upstream or args.no_dashboard
+    )
     env_base = args.base_domain or os.environ.get("APPS_BASE_DOMAIN") or file_env.get("APPS_BASE_DOMAIN")
     env_cf = (args.cf_dns_token or os.environ.get("CLOUDFLARE_DNS_API_TOKEN") or file_env.get("CLOUDFLARE_DNS_API_TOKEN")
               or os.environ.get("CLOUDFLARE_API_TOKEN") or file_env.get("CLOUDFLARE_API_TOKEN"))
@@ -362,6 +400,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "wildcard": True,
                 "base_domain": resolve_apps_base_domain(args.base_domain, dotenv=file_env),
                 "cf_dns_token": resolve_cloudflare_dns_token(args.cf_dns_token, dotenv=file_env),
+                "dashboard": args.dashboard,
+                "dashboard_upstream": args.dashboard_upstream,
+                "no_dashboard": args.no_dashboard,
+                "dotenv": file_env,
+                "env_file_path": None if args.no_sync_env else (root / ".env"),
             }
         except ValueError as exc:
             print(f"❌ {exc}", file=sys.stderr)

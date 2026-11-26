@@ -174,3 +174,29 @@ def test_preexisting_disk_match_without_activation_proof_is_reloaded(ingress):
     reloads = ingress.state()["reloads"]
     ok, message = setup_reverse_proxy(ingress.vps, domain="new.example.com", caddy_config=ingress.config)
     assert ok and ingress.state()["reloads"] == reloads
+
+
+def test_wildcard_dashboard_route_activates_preserves_and_reverts(ingress):
+    from sandbox.caddy_wildcard import ensure_wildcard_caddy, extract_dashboard_upstream
+
+    ok, msg = ensure_wildcard_caddy(
+        ingress.vps, "apps.example.com", "cf-tok",
+        dashboard_upstream="https://cp.modal.run", caddy_dir=str(ingress.root),
+    )
+    assert ok, msg
+    wildcard_file = ingress.root / "conf/sites/apps-wildcard.caddy"
+    assert extract_dashboard_upstream(wildcard_file.read_text()) == "https://cp.modal.run"
+
+    ok2, msg2 = ensure_wildcard_caddy(
+        ingress.vps, "apps.example.com", "cf-tok",
+        dashboard_upstream=None, preserve_dashboard=True, caddy_dir=str(ingress.root),
+    )
+    assert ok2, msg2
+    assert extract_dashboard_upstream(wildcard_file.read_text()) == "https://cp.modal.run"
+
+    ok3, msg3 = ensure_wildcard_caddy(
+        ingress.vps, "apps.example.com", "cf-tok",
+        dashboard_upstream=None, preserve_dashboard=False, caddy_dir=str(ingress.root),
+    )
+    assert ok3, msg3
+    assert extract_dashboard_upstream(wildcard_file.read_text()) is None

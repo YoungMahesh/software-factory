@@ -215,7 +215,7 @@ The cloud-hosted API and dashboard for provisioning and managing development san
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:
-The browser interface of the Hosted Sandbox Control Plane for viewing, launching, terminating, and snapshotting development sandboxes and managing snapshot registry records.
+The browser interface of the Hosted Sandbox Control Plane for viewing, launching, terminating, and snapshotting development sandboxes and managing snapshot registry records, served on Modal and optionally exposed at the apex of the App Base Domain.
 _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
 
 **Snapshot Registry**:
@@ -312,7 +312,7 @@ _Avoid_: Project generator, bootstrap script, create-base-app
 
 
 **App Base Domain**:
-The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers subdomains assigned to Hosted Apps on the VPS.
+The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers the apex Sandbox Web Dashboard and subdomains assigned to Hosted Apps on the VPS.
 _Avoid_: Root domain, tunnel domain, resource plane domain
 
 **Hosted App**:

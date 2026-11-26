@@ -9,20 +9,28 @@ import re
 import subprocess
 import urllib.parse
 
+from sandbox.config import resolve_factory_configuration
 from sandbox.host_ingress import apply_configuration, prepare_runtime
 from sandbox.infra_deploy import VpsSshConfig, build_ssh_cmd
+from sandbox.profiles import get_client_for_profile
 
 DEFAULT_CADDY_DIR = "/opt/caddy"
 DEFAULT_CADDY_CONTAINER = "caddy"
 DEFAULT_CADDY_NETWORK = "dbhost-network"
 DEFAULT_WEB_UPSTREAM = "db-host-web:3000"
 DEFAULT_S3_UPSTREAM = "neon-seaweedfs:8333"
+CONTROL_PLANE_APP_NAME = "sandbox-control-plane"
+CONTROL_PLANE_FUNCTION_NAME = "fastapi_app"
 
 SITES_IMPORT_PATTERN = re.compile(
     r"^\s*import\s+(?:/etc/caddy/sites/\*\.caddy|sites/\*\.caddy)\s*$",
     re.MULTILINE,
 )
 DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+DASHBOARD_PROXY_RE = re.compile(
+    r"@sandbox_dashboard\s+host\s+\S+\s*.*?handle\s+@sandbox_dashboard\s*\{.*?reverse_proxy\s+(\S+)",
+    re.DOTALL,
+)
 
 
 def render_base_caddyfile(email: str | None = None) -> str:
@@ -69,7 +77,7 @@ def parse_caddyfile_domains(caddyfile_content: str) -> list[str]:
 
 
 def normalize_base_domain(raw_domain: str) -> str:
-    """Normalizes and validates a base DNS domain (e.g. sf.mahesh0.dev)."""
+    """Normalizes and validates a base DNS domain (e.g. apps.example.com)."""
     cleaned = raw_domain.strip()
     if "://" in cleaned:
         parsed = urllib.parse.urlparse(cleaned)
@@ -77,7 +85,7 @@ def normalize_base_domain(raw_domain: str) -> str:
     cleaned = cleaned.split("/", 1)[0].split(":", 1)[0].strip().lower().lstrip("*.").rstrip(".")
     labels = [part for part in cleaned.split(".") if part]
     if len(labels) < 2 or not all(DNS_LABEL_RE.match(lbl) for lbl in labels):
-        raise ValueError(f"Invalid base domain '{raw_domain}'. Expected a DNS domain like 'sf.mahesh0.dev'.")
+        raise ValueError(f"Invalid base domain '{raw_domain}'. Expected a DNS domain like 'apps.example.com'.")
     return ".".join(labels)
 
 
@@ -139,9 +147,112 @@ def is_subdomain_of(domain: str, base_domain: str) -> bool:
     return clean_domain == clean_base or clean_domain.endswith(f".{clean_base}")
 
 
-def render_wildcard_site(base_domain: str) -> str:
+def normalize_dashboard_upstream(raw_url: str, *, base_domain: str | None = None) -> str:
+    """Normalizes and validates the Sandbox Web Dashboard origin URL for Caddy reverse_proxy."""
+    cleaned = raw_url.strip()
+    if not cleaned:
+        raise ValueError("Dashboard upstream URL must not be empty.")
+    if "://" not in cleaned:
+        cleaned = f"https://{cleaned}"
+    parsed = urllib.parse.urlsplit(cleaned)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.hostname:
+        raise ValueError(f"Invalid dashboard upstream URL '{raw_url}'. Expected an http(s) URL.")
+    if (parsed.path and parsed.path != "/") or parsed.query or parsed.fragment:
+        raise ValueError(f"Dashboard upstream URL '{raw_url}' must be an origin without path, query, or fragment.")
+    if base_domain and is_subdomain_of(parsed.hostname, base_domain):
+        raise ValueError(
+            f"Dashboard upstream '{raw_url}' cannot target '{base_domain}' or its subdomains "
+            "(would create a reverse-proxy loop)."
+        )
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def extract_dashboard_upstream(site_content: str) -> str | None:
+    """Extracts an existing @sandbox_dashboard reverse_proxy upstream from apps-wildcard.caddy."""
+    match = DASHBOARD_PROXY_RE.search(site_content)
+    return match.group(1).strip() if match else None
+
+
+def lookup_control_plane_web_url(
+    *,
+    dotenv: dict[str, str] | None = None,
+    repo_root: Path | None = None,
+) -> str | None:
+    """Discovers the deployed Modal Sandbox Control Plane origin URL via Modal SDK."""
+    import modal
+    from sandbox.profiles import get_active_profile_name, load_profiles_config
+
+    if dotenv:
+        resolve_factory_configuration(repo_root=repo_root, env=dotenv, mutate_environ=True)
+    else:
+        resolve_factory_configuration(repo_root=repo_root, mutate_environ=True)
+
+    active_profile = get_active_profile_name()
+    profiles = load_profiles_config()
+    env_name = profiles.get(active_profile, {}).get("environment") if active_profile else None
+    client = get_client_for_profile(None, use_cache=False)
+    fn = modal.Function.from_name(
+        CONTROL_PLANE_APP_NAME,
+        CONTROL_PLANE_FUNCTION_NAME,
+        environment_name=env_name or None,
+        client=client,
+    )
+    return fn.get_web_url()
+
+
+def resolve_dashboard_upstream(
+    explicit_upstream: str | None = None,
+    *,
+    base_domain: str,
+    dotenv: dict[str, str] | None = None,
+    repo_root: Path | None = None,
+    lookup_fn=None,
+) -> tuple[str | None, str | None]:
+    """Resolves the Modal Control Plane upstream URL, returning (upstream, warning_or_error)."""
+    env_map = dotenv or {}
+    raw = (
+        explicit_upstream
+        or os.environ.get("SANDBOX_DASHBOARD_UPSTREAM")
+        or env_map.get("SANDBOX_DASHBOARD_UPSTREAM")
+    )
+    if raw and raw.strip():
+        return normalize_dashboard_upstream(raw, base_domain=base_domain), None
+
+    lookup_err: str | None = None
+    discover = lookup_fn or (lambda: lookup_control_plane_web_url(dotenv=env_map, repo_root=repo_root))
+    try:
+        discovered = discover()
+        if discovered and discovered.strip():
+            return normalize_dashboard_upstream(discovered, base_domain=base_domain), None
+        lookup_err = f"Deployed Modal function '{CONTROL_PLANE_APP_NAME}.{CONTROL_PLANE_FUNCTION_NAME}' has no web URL."
+    except Exception as exc:
+        lookup_err = f"Could not look up Modal Control Plane web URL: {exc}"
+
+    endpoint_fallback = os.environ.get("MODAL_SANDBOX_ENDPOINT_URL") or env_map.get("MODAL_SANDBOX_ENDPOINT_URL")
+    if endpoint_fallback and endpoint_fallback.strip():
+        try:
+            return normalize_dashboard_upstream(endpoint_fallback, base_domain=base_domain), None
+        except ValueError:
+            pass
+
+    return None, lookup_err
+
+
+def render_wildcard_site(base_domain: str, *, dashboard_upstream: str | None = None) -> str:
     """Renders the Caddy wildcard site block backed by Cloudflare DNS-01."""
     clean = normalize_base_domain(base_domain)
+    dashboard_block = ""
+    if dashboard_upstream and dashboard_upstream.strip():
+        normalized = normalize_dashboard_upstream(dashboard_upstream, base_domain=clean)
+        dashboard_block = (
+            f"\t@sandbox_dashboard host {clean}\n"
+            "\thandle @sandbox_dashboard {\n"
+            f"\t\treverse_proxy {normalized} {{\n"
+            "\t\t\theader_up Host {upstream_hostport}\n"
+            "\t\t\tflush_interval -1\n"
+            "\t\t}\n"
+            "\t}\n"
+        )
     return (
         "# Managed by modal-sandbox infra caddy (wildcard ingress)\n"
         f"{clean}, *.{clean} {{\n"
@@ -149,6 +260,7 @@ def render_wildcard_site(base_domain: str) -> str:
         "\t\tdns cloudflare {env.CLOUDFLARE_DNS_API_TOKEN}\n"
         "\t}\n"
         "\timport /etc/caddy/apps/*.caddy\n"
+        f"{dashboard_block}"
         "\thandle {\n"
         '\t\trespond "Not Found" 404\n'
         "\t}\n"
@@ -248,6 +360,39 @@ def sync_caddy_wildcard_runtime(
     return result.success, result.changed, result.message
 
 
+def resolve_wildcard_dashboard_upstream(
+    base_domain: str,
+    *,
+    explicit_upstream: str | None = None,
+    require_dashboard: bool = False,
+    no_dashboard: bool = False,
+    dotenv: dict[str, str] | None = None,
+    lookup_fn=None,
+) -> tuple[bool, str | None, str]:
+    """Resolves dashboard upstream for wildcard Caddy setup without remote SSH probes."""
+    if no_dashboard:
+        return True, None, "Apex dashboard routing disabled (--no-dashboard); apex returns 404."
+
+    try:
+        upstream, lookup_note = resolve_dashboard_upstream(
+            explicit_upstream, base_domain=base_domain, dotenv=dotenv, lookup_fn=lookup_fn,
+        )
+    except ValueError as exc:
+        return False, None, str(exc)
+
+    if upstream:
+        return True, upstream, f"Routing apex 'https://{base_domain}' -> '{upstream}'."
+
+    if require_dashboard or (explicit_upstream and explicit_upstream.strip()):
+        return False, None, lookup_note or "Sandbox Web Dashboard upstream URL could not be resolved."
+
+    note = f"{lookup_note} " if lookup_note else ""
+    return True, None, (
+        f"Warning: {note}Preserving existing apex route if configured, or 404 until "
+        "sandbox-control-plane is deployed and re-run with --dashboard."
+    )
+
+
 def ensure_wildcard_caddy(
     vps_config: VpsSshConfig,
     base_domain: str,
@@ -255,6 +400,8 @@ def ensure_wildcard_caddy(
     *,
     bootstrap: bool = False,
     email: str | None = None,
+    dashboard_upstream: str | None = None,
+    preserve_dashboard: bool = False,
     caddy_dir: str = DEFAULT_CADDY_DIR,
     container_name: str = DEFAULT_CADDY_CONTAINER,
     network: str = DEFAULT_CADDY_NETWORK,
@@ -263,9 +410,20 @@ def ensure_wildcard_caddy(
     """Converges wildcard runtime and configuration in one recoverable change."""
     clean_base = normalize_base_domain(base_domain)
     clean_token = resolve_cloudflare_dns_token(cf_dns_token)
+    effective_upstream = dashboard_upstream
+    if not effective_upstream and preserve_dashboard and not bootstrap:
+        ok_read, remote_site = _read_remote(vps_config, f"{caddy_dir}/conf/sites/apps-wildcard.caddy")
+        if ok_read and remote_site.strip():
+            preserved = extract_dashboard_upstream(remote_site)
+            if preserved:
+                try:
+                    effective_upstream = normalize_dashboard_upstream(preserved, base_domain=clean_base)
+                except ValueError:
+                    effective_upstream = None
+    site_content = render_wildcard_site(clean_base, dashboard_upstream=effective_upstream)
     result = prepare_runtime(
         vps_config, source_dir=source_dir, bootstrap=bootstrap, email=email,
-        files={"conf/sites/apps-wildcard.caddy": render_wildcard_site(clean_base)},
+        files={"conf/sites/apps-wildcard.caddy": site_content},
         cf_dns_token=clean_token, require_cloudflare=True, caddy_dir=caddy_dir,
         container_name=container_name, network=network,
     )

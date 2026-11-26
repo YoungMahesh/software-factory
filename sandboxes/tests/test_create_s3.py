@@ -56,14 +56,14 @@ class TestS3HostDomain(unittest.TestCase):
 
     def test_generate_boto3_snippet(self):
         snippet = generate_boto3_snippet(
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             access_key_id="TEST_KEY",
             secret_access_key="TEST_SECRET",
             region="us-east-1",
             bucket_name="my-test-bucket",
         )
         self.assertIn("import boto3", snippet)
-        self.assertIn("endpoint_url='http://db-host.mahesh0.dev:8333'", snippet)
+        self.assertIn("endpoint_url='http://db-host.example.com:8333'", snippet)
         self.assertIn("aws_access_key_id='TEST_KEY'", snippet)
         self.assertIn("aws_secret_access_key='TEST_SECRET'", snippet)
         self.assertIn("region_name='us-east-1'", snippet)
@@ -80,7 +80,7 @@ class TestS3HostDomain(unittest.TestCase):
             project_id="p-1",
             access_key_id="NEW_KEY",
             secret_access_key="NEW_SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://test-bucket",
@@ -100,7 +100,7 @@ class TestS3HostDomain(unittest.TestCase):
         content = env_file.read_text()
         self.assertIn('AWS_ACCESS_KEY_ID="NEW_KEY"', content)
         self.assertIn('AWS_SECRET_ACCESS_KEY="NEW_SECRET"', content)
-        self.assertIn('AWS_ENDPOINT_URL_S3="http://db-host.mahesh0.dev:8333"', content)
+        self.assertIn('AWS_ENDPOINT_URL_S3="http://db-host.example.com:8333"', content)
         self.assertIn('AWS_REGION="us-east-1"', content)
         self.assertIn('S3_BUCKET_NAME="test-bucket"', content)
         self.assertIn("EXISTING=1", content)
@@ -114,7 +114,7 @@ class TestS3HostDomain(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://test-bucket",
@@ -145,7 +145,7 @@ class TestS3HostDomain(unittest.TestCase):
                     "bucketName": "my-bucket",
                     "accessKeyId": "AKIA123",
                     "secretAccessKey": "SECRET456",
-                    "endpoint": "http://db-host.mahesh0.dev:8333",
+                    "endpoint": "http://db-host.example.com:8333",
                     "region": "us-east-1",
                     "formatted": {
                         "env": "AWS_ACCESS_KEY_ID=AKIA123\n",
@@ -160,7 +160,7 @@ class TestS3HostDomain(unittest.TestCase):
         info = create_s3_bucket(
             bucket_name="my-bucket",
             project_name="my-repo",
-            domain="db-host.mahesh0.dev",
+            domain="db-host.example.com",
             token="admin-token",
         )
 
@@ -168,7 +168,7 @@ class TestS3HostDomain(unittest.TestCase):
         self.assertEqual(info.project_id, "p-1")
         self.assertEqual(info.access_key_id, "AKIA123")
         self.assertEqual(info.secret_access_key, "SECRET456")
-        self.assertEqual(info.endpoint, "http://db-host.mahesh0.dev:8333")
+        self.assertEqual(info.endpoint, "http://db-host.example.com:8333")
         self.assertEqual(info.s3_uri, "s3://my-bucket")
         self.assertFalse(info.already_existed)
         self.assertIn("s3 = boto3.client", info.formatted_boto3)
@@ -186,7 +186,7 @@ class TestS3HostDomain(unittest.TestCase):
                     "bucketName": "existing-bucket",
                     "accessKeyId": "AKIAEXISTING",
                     "secretAccessKey": "SECRETEXISTING",
-                    "endpoint": "http://db-host.mahesh0.dev:8333",
+                    "endpoint": "http://db-host.example.com:8333",
                     "region": "us-east-1",
                     "formatted": {},
                 }
@@ -197,7 +197,7 @@ class TestS3HostDomain(unittest.TestCase):
         info = create_s3_bucket(
             bucket_name="existing-bucket",
             project_name="my-repo",
-            domain="db-host.mahesh0.dev",
+            domain="db-host.example.com",
             token="admin-token",
             if_not_exists=True,
         )
@@ -221,7 +221,7 @@ class TestS3HostDomain(unittest.TestCase):
             create_s3_bucket(
                 bucket_name="existing-bucket",
                 project_name="my-repo",
-                domain="db-host.mahesh0.dev",
+                domain="db-host.example.com",
                 token="admin-token",
                 if_not_exists=False,
             )
@@ -254,7 +254,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://demo-bucket",
@@ -266,7 +266,7 @@ class TestCreateS3Cli(unittest.TestCase):
         text = format_text_output(info, written_env=["AWS_ACCESS_KEY_ID"], env_path=Path(".env"))
         self.assertIn("Created new S3 bucket: demo-bucket", text)
         self.assertIn("s3://demo-bucket", text)
-        self.assertIn("http://db-host.mahesh0.dev:8333", text)
+        self.assertIn("http://db-host.example.com:8333", text)
         self.assertIn("Injected into .env", text)
 
         info.already_existed = True
@@ -282,7 +282,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://cli-bucket",
@@ -306,7 +306,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://quiet-bucket",
@@ -332,7 +332,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://json-bucket",
@@ -360,7 +360,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://vault-bucket",
@@ -397,7 +397,7 @@ class TestCreateS3Cli(unittest.TestCase):
             project_id="p-1",
             access_key_id="KEY",
             secret_access_key="SECRET",
-            endpoint="http://db-host.mahesh0.dev:8333",
+            endpoint="http://db-host.example.com:8333",
             region="us-east-1",
             already_existed=False,
             s3_uri="s3://vault-bucket",

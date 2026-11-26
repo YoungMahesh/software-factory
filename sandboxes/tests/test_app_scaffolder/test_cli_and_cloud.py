@@ -53,19 +53,19 @@ class TestCreateAppCliAndCloud(unittest.TestCase):
 
     def test_deploy_flag_wires_hosted_app_deploy(self):
         parser = create_parser()
-        raw = ["my-live-app", "--deploy", "--subdomain", "preview", "--base-domain", "sf.mahesh0.dev", "--skip-migrate"]
+        raw = ["my-live-app", "--deploy", "--subdomain", "preview", "--base-domain", "apps.example.com", "--skip-migrate"]
         args = parser.parse_args(raw)
         with patch("sys.stdin.isatty", return_value=False):
             _, cloud = _resolve_options(args, raw)
         self.assertTrue(cloud.deploy)
         self.assertEqual(cloud.subdomain, "preview")
-        self.assertEqual(cloud.base_domain, "sf.mahesh0.dev")
+        self.assertEqual(cloud.base_domain, "apps.example.com")
         self.assertTrue(cloud.skip_migrate)
 
         project_dir = self.tmp_path / "my-live-app"
         project_dir.mkdir()
         (project_dir / ".env").write_text("NODE_ENV=development\n", encoding="utf-8")
-        mock_deploy = MagicMock(return_value=MagicMock(url="https://preview.sf.mahesh0.dev", remote_dir="/root/my-live-app"))
+        mock_deploy = MagicMock(return_value=MagicMock(url="https://preview.apps.example.com", remote_dir="/root/my-live-app"))
         with patch.dict("os.environ", {"GH_ORG_NAME": "sFactory0"}, clear=False):
             res = wire_cloud_resources(
                 "my-live-app",
@@ -74,7 +74,7 @@ class TestCreateAppCliAndCloud(unittest.TestCase):
                 repo_root=self.tmp_path,
                 deploy_fn=mock_deploy,
             )
-        self.assertEqual(res.deploy_result.url, "https://preview.sf.mahesh0.dev")
+        self.assertEqual(res.deploy_result.url, "https://preview.apps.example.com")
         mock_deploy.assert_called_once()
 
     def test_cloud_shorthand_resolves_db_github_vault_launch_and_keeps_s3_opt_in(self):

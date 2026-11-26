@@ -7,7 +7,7 @@ We decouple the software factory codebase, runner tooling, container startup scr
 ## Context
 
 To prepare this repository for an open-source fork, personal configurations and proprietary defaults needed to be eliminated:
-1. **Hardcoded Ingress Domain**: The launch readiness banner printed `https://3000.mahesh0.dev`, and CLI help hardcoded `3000.mahesh0.dev`.
+1. **Hardcoded Ingress Domain**: The launch readiness banner printed `https://3000.<personal-domain>`, and CLI help hardcoded `3000.<personal-domain>`.
 2. **Personal Git Profile & Directory Routing**: `shared/gitconfig` declared hardcoded authorship (`Mahesh <maheshghamand@gmail.com>`), staged a secondary profile `shared/gitconfig-mahesh471978` (`mahesh471978@gmail.com`), and conditionally routed private directories (`[includeIf "gitdir:/root/intrifund/"]`).
 3. **Hardcoded Container Git Commits**: `shared/startup.sh` initialized empty Git repositories with hardcoded authorship (`Mahesh <maheshghamand@gmail.com>`).
 4. **Hardcoded GitHub Organization Default**: `sandbox/config.py`, `shared/startup.sh`, and developer CLI scripts (`scripts/ghclone`, `scripts/ghls`, `scripts/ghpr`) defaulted unqualified repository names to `sFactory0`.

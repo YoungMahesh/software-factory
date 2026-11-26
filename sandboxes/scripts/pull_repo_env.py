@@ -29,6 +29,64 @@ from sandbox.env_store import (
 from sandbox.env_store import detect_repo_name
 
 
+def _resolve_repo_git_paths(
+    dest_file: Path | None,
+    final_dest: Path,
+    cwd: Path,
+) -> tuple[Path | None, Path | None]:
+    """Resolves (repo_root, common_git_dir) only when dest belongs to a local Git checkout."""
+    dest_root = final_dest.parent.resolve()
+    candidates = [dest_root]
+    if dest_file is None or dest_root == cwd.resolve():
+        resolved_cwd = cwd.resolve()
+        if resolved_cwd not in candidates:
+            candidates.append(resolved_cwd)
+
+    for candidate in candidates:
+        git_marker = candidate / ".git"
+        if not git_marker.exists():
+            continue
+        if git_marker.is_dir():
+            return candidate, git_marker
+        res = subprocess.run(
+            ["git", "-C", str(candidate), "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            common_path = Path(res.stdout.strip())
+            if not common_path.is_absolute():
+                common_path = (candidate / common_path).resolve()
+            return candidate, common_path
+    return None, None
+
+
+def _write_vault_cache(
+    common_git_dir: Path | None,
+    *,
+    env_map_content: str,
+    files: dict[str, str | bytes],
+) -> None:
+    """Stages decrypted vault files and env.map under <common_git_dir>/env-vault."""
+    if common_git_dir is None or not common_git_dir.is_dir():
+        return
+    vault_dir = common_git_dir / "env-vault"
+    vault_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        vault_dir.chmod(0o700)
+    except Exception:
+        pass
+    if env_map_content:
+        mf = vault_dir / "env.map"
+        mf.write_text(env_map_content, encoding="utf-8")
+        mf.chmod(0o600)
+    for sname, scontent in files.items():
+        vf = vault_dir / sname
+        vf.write_bytes(scontent.encode("utf-8") if isinstance(scontent, str) else scontent)
+        vf.chmod(0o600)
+
+
 def pull_repo_env(
     repo_name: str | None = None,
     org_name: str | None = None,
@@ -86,11 +144,7 @@ def pull_repo_env(
         raw_env = bundle.get("files", {}).get("default.env") or (next(iter(bundle["files"].values())) if bundle.get("files") else None)
 
     git_configured = False
-    repo_git_dir = (
-        final_dest.parent
-        if (final_dest.parent / ".git").is_dir()
-        else (cwd if (cwd / ".git").is_dir() else None)
-    )
+    repo_git_dir, common_git_dir = _resolve_repo_git_paths(dest_file, final_dest, cwd)
     if repo_git_dir:
         try:
             vault_git = fetch_vault_git_identity(
@@ -125,21 +179,11 @@ def pull_repo_env(
         return False
 
     if bundle and bundle.get("mappings") and bundle.get("files"):
-        if repo_git_dir and (repo_git_dir / ".git").is_dir():
-            vault_dir = repo_git_dir / ".git" / "env-vault"
-            vault_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                vault_dir.chmod(0o700)
-            except Exception:
-                pass
-            if bundle.get("env_map_content"):
-                mf = vault_dir / "env.map"
-                mf.write_text(bundle["env_map_content"], encoding="utf-8")
-                mf.chmod(0o600)
-            for sname, scontent in bundle["files"].items():
-                vf = vault_dir / sname
-                vf.write_bytes(scontent.encode("utf-8") if isinstance(scontent, str) else scontent)
-                vf.chmod(0o600)
+        _write_vault_cache(
+            common_git_dir,
+            env_map_content=bundle.get("env_map_content") or "",
+            files=bundle["files"],
+        )
 
         base_dir = repo_git_dir or final_dest.parent
         for sname, drel in bundle["mappings"]:
@@ -158,19 +202,11 @@ def pull_repo_env(
             raw_env += "\n"
         final_dest.write_text(raw_env, encoding="utf-8")
         final_dest.chmod(0o600)
-        if repo_git_dir and (repo_git_dir / ".git").is_dir():
-            vault_dir = repo_git_dir / ".git" / "env-vault"
-            vault_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                vault_dir.chmod(0o700)
-            except Exception:
-                pass
-            df = vault_dir / "default.env"
-            df.write_text(raw_env, encoding="utf-8")
-            df.chmod(0o600)
-            mf = vault_dir / "env.map"
-            mf.write_text("default.env=.env\n", encoding="utf-8")
-            mf.chmod(0o600)
+        _write_vault_cache(
+            common_git_dir,
+            env_map_content="default.env=.env\n",
+            files={"default.env": raw_env},
+        )
 
     return True
 
