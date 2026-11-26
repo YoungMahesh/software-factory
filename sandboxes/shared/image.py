@@ -162,52 +162,91 @@ BASE_IMAGE_FILES: list[tuple[Path, str]] = [\
 ]
 
 
+RUFF_VERSION = "0.17.6"
+UV_TOOL_DIR = "/opt/uv-tools"
+UV_TOOL_BIN_DIR = "/usr/local/bin"
+RUFF_INSTALL_COMMAND = (
+    "uv tool install --no-cache --no-python-downloads --python python3 "
+    f"ruff=={RUFF_VERSION}"
+)
+
+BASE_IMAGE_ENV: dict[str, str] = {
+    "DEBIAN_FRONTEND": "noninteractive",
+    "UV_TOOL_DIR": UV_TOOL_DIR,
+    "UV_TOOL_BIN_DIR": UV_TOOL_BIN_DIR,
+}
+
+BASE_IMAGE_APT_PACKAGES: tuple[str, ...] = (
+    "curl",
+    "git",
+    "gh",
+    "htop",
+    "jq",
+    "openssh-server",
+    "wget",
+    "docker.io",
+    "docker-buildx",
+    "docker-compose-v2",
+    "unzip",
+    "ripgrep",
+    "age",
+    "tree",
+    "lsof",
+    "psmisc",
+    "fd-find",
+    "python3",
+    "python3-pip",
+    "python3-venv",
+    "python-is-python3",
+    # Core POSIX, archive, and text utilities
+    "file",
+    "bsdextrautils",
+    "bc",
+    "gettext-base",
+    "xxd",
+    "dos2unix",
+    "zip",
+    "zstd",
+    # Network and process debugging
+    "dnsutils",
+    "iputils-ping",
+    "rsync",
+    "socat",
+    "strace",
+    # Database clients matching Resource Plane and local state workflows
+    "postgresql-client",
+    "sqlite3",
+    # Shell formatting and minimal SSH ergonomics
+    "shfmt",
+    "tmux",
+    "nano",
+    # System libraries and fonts required by headless Chromium/Chrome and T3 Code browser
+    "libnss3",
+    "libatk1.0-0t64",
+    "libatk-bridge2.0-0t64",
+    "libatspi2.0-0t64",
+    "libdbus-1-3",
+    "libx11-6",
+    "libxcb1",
+    "libxcomposite1",
+    "libxdamage1",
+    "libxext6",
+    "libxfixes3",
+    "libxrandr2",
+    "libxkbcommon0",
+    "libgbm1",
+    "libasound2t64",
+    "libexpat1",
+    "fontconfig",
+    "fonts-liberation",
+)
+
+
 # Shared Base Image: Cached once by Modal and shared between Standard and VM Sandboxes
 base_image = (
     modal.Image.from_registry("ubuntu:24.04", add_python="3.12")
-    .env({"DEBIAN_FRONTEND": "noninteractive"})
-    .apt_install(
-        "curl",
-        "git",
-        "gh",
-        "htop",
-        "jq",
-        "openssh-server",
-        "wget",
-        "docker.io",
-        "docker-buildx",
-        "docker-compose-v2",
-        "unzip",
-        "ripgrep",
-        "age",
-        "tree",
-        "lsof",
-        "psmisc",
-        "fd-find",
-        "python3",
-        "python3-pip",
-        "python3-venv",
-        "python-is-python3",
-        # System libraries and fonts required by headless Chromium/Chrome and T3 Code browser
-        "libnss3",
-        "libatk1.0-0t64",
-        "libatk-bridge2.0-0t64",
-        "libatspi2.0-0t64",
-        "libdbus-1-3",
-        "libx11-6",
-        "libxcb1",
-        "libxcomposite1",
-        "libxdamage1",
-        "libxext6",
-        "libxfixes3",
-        "libxrandr2",
-        "libxkbcommon0",
-        "libgbm1",
-        "libasound2t64",
-        "libexpat1",
-        "fontconfig",
-        "fonts-liberation",
-    )
+    .env(BASE_IMAGE_ENV)
+    .apt_install(*BASE_IMAGE_APT_PACKAGES)
     .run_commands(
         # Install Node.js 24 and pnpm at image build time
         "curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
@@ -219,8 +258,9 @@ base_image = (
         # Install Cloudflared
         "curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared",
         "chmod +x /usr/local/bin/cloudflared",
-        # Install Astral uv and uvx
+        # Install Astral uv, uvx, and pinned ruff CLI
         "curl -fsSL https://astral.sh/uv/install.sh | env UV_INSTALL_DIR='/usr/local/bin' sh",
+        RUFF_INSTALL_COMMAND,
         # Symlink fd-find to fd
         "ln -sf /usr/bin/fdfind /usr/local/bin/fd",
         # Configure global pip defaults to allow non-venv installs when needed

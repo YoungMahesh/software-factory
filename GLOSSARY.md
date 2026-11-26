@@ -159,7 +159,7 @@ The provider keys and service tokens used by OpenCode within the T3 Code integra
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 **Shared Base Image**:
-A cached Modal image definition built on Ubuntu 24.04 providing the foundational filesystem for both Standard Sandboxes and VM Sandboxes, pre-baked with common tooling including SSH server, SOPS, age, Git, ripgrep, tree, lsof, psmisc, fd, Python 3 (with venv and uv), Docker CLI binaries (including Buildx and Compose v2), Node.js 24, and pnpm.
+The single cached Ubuntu 24.04 Modal image shared across Standard Sandboxes and VM Sandboxes as their foundational filesystem, pre-baked with core system, runtime, and developer utilities.
 _Avoid_: Base container, root image, runner image
 
 **Browser Tooling**:
