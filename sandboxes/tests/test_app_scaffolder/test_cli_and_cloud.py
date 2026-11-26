@@ -243,3 +243,55 @@ class TestCreateAppCliAndCloud(unittest.TestCase):
         self.assertIn("create-app", content)
         self.assertIn("/root/.config/resource-plane/ca.crt", content)
         self.assertIn("/api/ca.crt", content)
+
+    def test_create_app_runs_from_isolated_bin_path_without_third_party_packages(self):
+        # Simulates /usr/local/bin/create-app running inside a Modal sandbox via /opt/sandboxes
+        import importlib
+
+        image_mod = importlib.import_module("shared.image")
+        deps_repr = []
+        cur = image_mod.base_image
+        stack = [cur]
+        seen = set()
+        while stack:
+            node = stack.pop()
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+            deps_repr.append(repr(node))
+            for entry in getattr(node, "_deps_", lambda: ())():
+                stack.append(entry)
+        self.assertTrue(
+            any("/opt/sandboxes/sandbox" in r for r in deps_repr)
+            and any("/opt/sandboxes/shared" in r for r in deps_repr)
+            or hasattr(image_mod, "REMOTE_SANDBOX_RUNTIME_DIR"),
+            "shared.image must stage sandboxes/sandbox and sandboxes/shared into /opt/sandboxes",
+        )
+
+        # Also verify create_app local scaffold succeeds when modal/pydantic are absent
+        script_copy = self.tmp_path / "create-app"
+        script_copy.write_text(
+            (self.factory_root / "sandboxes" / "scripts" / "create_app.py").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        target_app = self.tmp_path / "isolated-app"
+        probe_code = (
+            "import builtins, runpy, sys\n"
+            "real_import = builtins.__import__\n"
+            "def blocked(name, *a, **kw):\n"
+            "    if name.split('.')[0] in ('modal', 'pydantic', 'httpx'):\n"
+            "        raise ImportError(name)\n"
+            "    return real_import(name, *a, **kw)\n"
+            "builtins.__import__ = blocked\n"
+            f"sys.path.insert(0, {str(self.factory_root / 'sandboxes')!r})\n"
+            f"sys.argv = [{str(script_copy)!r}, {str(target_app)!r}, '-y', '--no-install', '--no-git']\n"
+            f"runpy.run_path({str(script_copy)!r}, run_name='__main__')\n"
+        )
+        res = subprocess.run(
+            [sys.executable, "-c", probe_code],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0, f"stderr:\n{res.stderr}\nstdout:\n{res.stdout}")
+        self.assertTrue((target_app / "apps" / "web" / "package.json").is_file())

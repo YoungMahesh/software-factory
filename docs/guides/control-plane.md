@@ -31,7 +31,7 @@ The deployed control plane receives captured factory configuration and Git prove
 
 ## Launch through the dashboard or CLI
 
-The dashboard can launch standalone or repository sandboxes, inspect running instances across apps/profiles, terminate instances, capture filesystem snapshots, and resume snapshots.
+The dashboard defaults to the prompt-first **Builder** homepage for launching and reopening **Factory Apps** in **T3 Code**, alongside **Sandboxes** and **Snapshots** tabs for inspecting running instances across apps/profiles, terminating instances, capturing filesystem snapshots, and resuming snapshots. Factory App and Launch Request state is stored in `modal.Volume` (`factory-state-v1`).
 
 Each instance has a generated suffix, such as `dev-box-a1b2c3d4`, even when its Modal App is named `dev-box`. Use the displayed SSH host, port, and generated alias. Dashboard launch does not write to the browser user's local `~/.ssh/config`. The remote CLI can register those details locally:
 
@@ -48,10 +48,18 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 
 | Method | Route | Authentication | Purpose |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | Basic | Dashboard |
+| `GET` | `/` | Basic | Dashboard (Builder homepage, Sandboxes, Snapshots) |
 | `GET` | `/health` | None | Control plane liveness |
 | `GET` | `/api/version` | Basic | Deployed factory provenance |
 | `GET` | `/api/profiles` | Basic | Modal workspace profiles |
+| `GET` | `/api/models` | Basic | Available builder provider/model choices |
+| `GET` | `/api/apps` | Basic | List Factory Apps enriched with sandbox state and snapshots |
+| `POST` | `/api/apps` | Basic | Create a Factory App and spawn a durable Launch Request |
+| `GET` | `/api/apps/{app_id}` | Basic | Get one Factory App enriched with live sandbox state |
+| `POST` | `/api/apps/{app_id}/open` | Basic | Mint a short-lived pairing token and return direct T3 chat handoff URL |
+| `POST` | `/api/apps/{app_id}/relaunch` | Basic | Spawn a fresh Launch Request from a Factory App's saved prompt |
+| `DELETE` | `/api/apps/{app_id}` | Basic | Delete a Factory App record and optionally terminate its active sandbox |
+| `GET` | `/api/launches/{request_id}` | Basic | Poll Launch Request progress, logs, and T3 handoff URL |
 | `GET` | `/api/sandboxes` | Basic | Active sandbox discovery |
 | `POST` | `/api/sandboxes` | Basic | Launch with dashboard payload (`mode`, repo/name, options) |
 | `POST` | `/api/sandboxes/stream` | Basic | Launch with SSE progress events (`log`, `done`, or `error`) |

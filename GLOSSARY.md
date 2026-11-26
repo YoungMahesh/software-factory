@@ -319,3 +319,11 @@ _Avoid_: Root domain, tunnel domain, resource plane domain
 A scaffolded application deployed alongside the Resource Plane on the VPS (`/root/<repo-name>`) and exposed on a subdomain of the App Base Domain through the Host Ingress Proxy. Each Hosted App owns its deployment directory, container identity, and route. Redeployment and teardown must identify the same app, and distinct apps cannot share those claims.
 _Avoid_: Live app, production sandbox, VPS app
 
+**Factory App**:
+A prompt-initiated application created through the builder homepage, linking its initial prompt, local Git workspace, optional Resource Plane resources, Modal sandbox, T3 Code Server thread, and optional Hosted App.
+_Avoid_: Builder project, prompt project, user app
+
+**Launch Request**:
+A single idempotent provisioning attempt to create or reopen a Factory App, tracking request status, workspace metadata, Modal sandbox handle, and T3 Code Server thread identity.
+_Avoid_: Build job, prompt job, start request
+

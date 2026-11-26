@@ -19,6 +19,30 @@ _STANDALONE_ALLOWED_ENTRIES = {".git", ".gitignore"}
 
 
 @dataclass
+class CloudWiringOptions:
+    """Opt-in cloud automation options executed after local template scaffolding."""
+
+    github: bool = False
+    public_repo: bool = False
+    repo_name: str | None = None
+    org_name: str | None = None
+    provision_db: bool = False
+    db_name: str | None = None
+    provision_s3: bool = False
+    bucket_name: str | None = None
+    push_vault: bool = False
+    launch: bool = False
+    vm: bool = False
+    t3: bool = True
+    profile: str | None = None
+    mobile_app: bool = False
+    deploy: bool = False
+    subdomain: str | None = None
+    base_domain: str | None = None
+    skip_migrate: bool = False
+
+
+@dataclass
 class AppScaffoldRequest:
     """Configuration options controlling App Template materialization."""
 

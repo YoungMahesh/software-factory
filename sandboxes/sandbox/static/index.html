@@ -100,6 +100,17 @@
     <!-- Tab Controls & Filter -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <nav class="flex space-x-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <button @click="currentTab = 'builder'"
+                :class="currentTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span>Builder</span>
+          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+                x-text="apps.length"></span>
+        </button>
+
         <button @click="currentTab = 'sandboxes'"
                 :class="currentTab === 'sandboxes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
@@ -126,7 +137,7 @@
       <!-- Quick Filter & Actions -->
       <div class="flex items-center space-x-3">
         <div class="relative w-full sm:w-64">
-          <input type="text" x-model="searchQuery" placeholder="Filter by ID, name, profile..."
+          <input type="text" x-model="searchQuery" placeholder="Filter apps, IDs, profiles..."
                  class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
           <svg class="w-4 h-4 absolute left-3 top-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -142,6 +153,237 @@
           <span>Launch Sandbox</span>
         </button>
       </div>
+    </div>
+
+    <!-- TAB 0: PROMPT BUILDER HOMEPAGE -->
+    <div x-show="currentTab === 'builder'" class="space-y-8">
+      <!-- Prompt Composer Hero -->
+      <section class="bg-gradient-to-b from-slate-900 to-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-5">
+        <div class="space-y-1.5">
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">What do you want to build?</h2>
+          <p class="text-sm text-slate-400">
+            Describe your app below. We'll scaffold a local Git workspace in an isolated Modal sandbox and open it directly in T3 Code chat.
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <textarea id="builder-prompt-input" rows="4" x-model="builderForm.prompt"
+                    @keydown.meta.enter.prevent="submitAppPrompt()"
+                    @keydown.ctrl.enter.prevent="submitAppPrompt()"
+                    placeholder="Build a personal habit tracker with daily streaks, analytics chart, and dark mode..."
+                    class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
+
+          <!-- Compact Builder Controls -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div class="flex flex-wrap items-center gap-2.5 text-xs">
+              <!-- Model Selector -->
+              <select x-model.number="builderSelectedModelIndex" @change="onBuilderModelChange()"
+                      class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <template x-for="(m, idx) in availableModels" :key="idx">
+                  <option :value="idx" x-text="m.label"></option>
+                </template>
+              </select>
+
+              <!-- Thinking Level Selector -->
+              <select x-show="selectedBuilderModel && selectedBuilderModel.thought_levels && selectedBuilderModel.thought_levels.length > 0"
+                      x-model="builderForm.thought_level"
+                      class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="">Thinking: Default</option>
+                <template x-for="opt in (selectedBuilderModel?.thought_levels || [])" :key="opt.id">
+                  <option :value="opt.id" x-text="'Thinking: ' + opt.label"></option>
+                </template>
+              </select>
+
+              <!-- Workspace Template Toggle -->
+              <div class="inline-flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <button type="button" @click="builderForm.template = 'nextjs'"
+                        :class="builderForm.template === 'nextjs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                        class="px-2.5 py-1 rounded-md transition-colors">
+                  Next.js App
+                </button>
+                <button type="button" @click="builderForm.template = 'blank'; builderForm.mobile_app = false"
+                        :class="builderForm.template === 'blank' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                        class="px-2.5 py-1 rounded-md transition-colors">
+                  Blank Git Repo
+                </button>
+              </div>
+
+              <!-- Mobile App Toggle -->
+              <label x-show="builderForm.template === 'nextjs'"
+                     class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" x-model="builderForm.mobile_app" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                <span>+ Mobile</span>
+              </label>
+
+              <!-- Advanced Options Toggle -->
+              <button type="button" @click="builderShowAdvanced = !builderShowAdvanced"
+                      class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
+                <span x-text="builderShowAdvanced ? '▾ Advanced' : '▸ Advanced'"></span>
+              </button>
+            </div>
+
+            <button type="button" @click="submitAppPrompt()" :disabled="builderSubmitting || !builderForm.prompt.trim()"
+                    class="inline-flex items-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <svg x-show="builderSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span x-text="builderSubmitting ? 'Starting...' : 'Build App'"></span>
+            </button>
+          </div>
+
+          <!-- Collapsed Advanced Controls -->
+          <div x-show="builderShowAdvanced" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">App Name (optional)</label>
+              <input type="text" x-model="builderForm.name" placeholder="Auto-derived from prompt"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Modal Profile</label>
+              <select x-model="builderForm.profile"
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="">Active Default Profile</option>
+                <template x-for="p in profiles" :key="p.name">
+                  <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
+                </template>
+              </select>
+            </div>
+            <div class="flex items-end pb-1">
+              <label class="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" x-model="builderForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                <span>VM Sandbox (Docker runtime)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Launch Progress Card -->
+      <section x-show="activeLaunch" class="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300"
+                    x-text="activeLaunch?.request?.status || 'queued'"></span>
+              <h3 class="text-base font-semibold text-white" x-text="activeLaunch?.app?.title || 'Launching Factory App'"></h3>
+            </div>
+            <p class="text-xs text-slate-400 mt-1 line-clamp-2" x-text="activeLaunch?.app?.prompt || ''"></p>
+          </div>
+          <button type="button" @click="dismissActiveLaunch()" class="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800">✕</button>
+        </div>
+
+        <!-- Step Indicators -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+          <template x-for="step in (activeLaunch?.request?.steps || [])" :key="step.key">
+            <div class="p-3 rounded-xl border"
+                 :class="step.status === 'done' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : (step.status === 'active' ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200' : (step.status === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-slate-950/60 border-slate-800 text-slate-500'))">
+              <div class="font-medium flex items-center gap-1.5">
+                <span x-text="step.status === 'done' ? '✓' : (step.status === 'error' ? '✕' : (step.status === 'active' ? '●' : '○'))"></span>
+                <span x-text="step.label"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Error / Ready Controls -->
+        <div x-show="activeLaunch?.request?.status === 'failed'" class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200 flex items-center justify-between gap-3">
+          <span x-text="activeLaunch?.request?.error || 'Launch failed'"></span>
+          <button type="button" @click="relaunchFactoryApp(activeLaunch.app)"
+                  class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium flex-shrink-0">
+            Retry
+          </button>
+        </div>
+
+        <div x-show="activeLaunch?.request?.status === 'ready' && activeLaunch?.request?.handoff_url"
+             class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 flex items-center justify-between gap-3">
+          <span>Workspace ready — redirecting into T3 Code chat...</span>
+          <a :href="activeLaunch?.request?.handoff_url"
+             class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex-shrink-0">
+            Open in T3
+          </a>
+        </div>
+
+        <!-- Logs -->
+        <div x-show="(activeLaunch?.request?.logs || []).length > 0" class="bg-black/80 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-300 max-h-32 overflow-y-auto space-y-0.5">
+          <template x-for="(line, idx) in (activeLaunch?.request?.logs || [])" :key="idx">
+            <div x-text="line"></div>
+          </template>
+        </div>
+      </section>
+
+      <!-- Factory Apps Grid -->
+      <section class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Factory Apps</h3>
+          <span class="text-xs text-slate-500" x-text="filteredApps.length + ' app(s)'"></span>
+        </div>
+
+        <div x-show="filteredApps.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <template x-for="app in filteredApps" :key="app.app_id">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-colors">
+              <div class="space-y-2.5">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <h4 class="text-base font-semibold text-white truncate" x-text="app.title"></h4>
+                    <div class="text-xs font-mono text-slate-500 truncate" x-text="'/root/' + app.slug"></div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0"
+                        :class="app.runtime_status === 'running' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : (app.runtime_status === 'provisioning' ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : (app.runtime_status === 'failed' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'))"
+                        x-text="app.runtime_status.toUpperCase()"></span>
+                </div>
+
+                <p class="text-xs text-slate-300 line-clamp-2" x-text="app.prompt"></p>
+
+                <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300" x-text="app.template === 'nextjs' ? (app.mobile_app ? 'Next.js + Expo' : 'Next.js') : 'Blank Git'"></span>
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300" x-text="app.model"></span>
+                  <span x-show="app.database_name" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'DB: ' + app.database_name"></span>
+                </div>
+
+                <div x-show="app.runtime_status === 'failed' && app.last_error" class="text-[11px] text-rose-400 line-clamp-2" x-text="app.last_error"></div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
+                <span class="text-slate-500" x-text="formatDate(app.created_at)"></span>
+                <div class="flex items-center gap-1.5">
+                  <button x-show="app.runtime_status === 'running'" type="button" @click="openFactoryApp(app)"
+                          class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
+                    Open in T3
+                  </button>
+                  <button x-show="app.runtime_status === 'running' && app.sandbox_id" type="button"
+                          @click="openSnapshotModal({ id: app.sandbox_id, name: app.slug, profile: app.profile })"
+                          class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+                    Snapshot
+                  </button>
+                  <button x-show="app.runtime_status === 'provisioning' && app.latest_request_id" type="button"
+                          @click="trackLaunch(app.latest_request_id)"
+                          class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-medium">
+                    Progress
+                  </button>
+                  <button x-show="app.runtime_status === 'stopped' || app.runtime_status === 'failed'" type="button"
+                          @click="relaunchFactoryApp(app)"
+                          class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
+                    Relaunch
+                  </button>
+                  <button x-show="(app.runtime_status === 'stopped' || app.runtime_status === 'failed') && app.snapshot_image_id" type="button"
+                          @click="openLaunchModal({ image_id: app.snapshot_image_id, name: app.snapshot_name || app.slug, profile: app.profile, is_vm: app.vm })"
+                          class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
+                    Resume Snapshot
+                  </button>
+                  <button type="button" @click="deleteFactoryApp(app)" title="Delete Factory App"
+                          class="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-slate-700">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="filteredApps.length === 0" class="bg-slate-900/60 border border-dashed border-slate-800 rounded-2xl p-10 text-center text-sm text-slate-500">
+          No Factory Apps yet. Enter a prompt above to start your first app.
+        </div>
+      </section>
     </div>
 
     <!-- TAB 1: SANDBOXES LIST -->
@@ -803,7 +1045,7 @@
 
     function sandboxApp() {
       return {
-        currentTab: 'sandboxes',
+        currentTab: 'builder',
         loading: false,
         autoRefresh: false,
         refreshTimer: null,
@@ -812,6 +1054,39 @@
         profiles: [],
         selectedProfile: 'all',
         version: null,
+
+        apps: [],
+        availableModels: [
+          {
+            provider: 'antigravity',
+            model: 'gemini-4-hydrogen',
+            label: 'Antigravity · Gemini 4 Hydrogen',
+            is_default: true,
+            thought_levels: [
+              { id: 'low', label: 'Low' },
+              { id: 'medium', label: 'Medium' },
+              { id: 'high', label: 'High' },
+              { id: 'xhigh', label: 'Extra' }
+            ]
+          }
+        ],
+        builderSelectedModelIndex: 0,
+        builderShowAdvanced: false,
+        builderSubmitting: false,
+        builderForm: {
+          prompt: '',
+          name: '',
+          template: 'nextjs',
+          mobile_app: false,
+          vm: false,
+          profile: '',
+          provider: 'antigravity',
+          model: 'gemini-4-hydrogen',
+          thought_level: ''
+        },
+        activeLaunch: null,
+        launchPollTimer: null,
+        redirectedLaunchId: null,
 
         sandboxes: [],
         snapshots: [],
@@ -874,8 +1149,17 @@
         },
 
         async init() {
-          await Promise.all([this.fetchProfiles(), this.fetchVersion()]);
+          const hash = window.location.hash.replace(/^#/, '');
+          if (hash === 'sandboxes' || hash === 'snapshots' || hash === 'builder') {
+            this.currentTab = hash;
+          }
+          await Promise.all([this.fetchProfiles(), this.fetchVersion(), this.fetchModels()]);
           await this.refreshAll();
+          const params = new URLSearchParams(window.location.search);
+          const pendingLaunch = params.get('launch');
+          if (pendingLaunch) {
+            await this.trackLaunch(pendingLaunch);
+          }
           this.$watch('autoRefresh', (val) => {
             if (val) {
               this.refreshTimer = setInterval(() => this.refreshAll(true), 5000);
@@ -884,6 +1168,50 @@
               this.refreshTimer = null;
             }
           });
+        },
+
+        async fetchModels() {
+          try {
+            const res = await fetch('/api/models');
+            if (res.ok) {
+              const items = await res.json();
+              if (Array.isArray(items) && items.length > 0) {
+                this.availableModels = items;
+                const defIdx = items.findIndex(m => m.is_default);
+                this.builderSelectedModelIndex = defIdx >= 0 ? defIdx : 0;
+                const def = items[this.builderSelectedModelIndex];
+                this.builderForm.provider = def.provider;
+                this.builderForm.model = def.model;
+              }
+            }
+          } catch (err) {
+            console.error('Failed fetching models:', err);
+          }
+        },
+
+        get selectedBuilderModel() {
+          return this.availableModels[this.builderSelectedModelIndex] || this.availableModels[0];
+        },
+
+        onBuilderModelChange() {
+          const sel = this.selectedBuilderModel;
+          if (!sel) return;
+          this.builderForm.provider = sel.provider;
+          this.builderForm.model = sel.model;
+          if (!sel.thought_levels || sel.thought_levels.length === 0) {
+            this.builderForm.thought_level = '';
+          }
+        },
+
+        get filteredApps() {
+          const q = this.searchQuery.toLowerCase().trim();
+          if (!q) return this.apps;
+          return this.apps.filter(a =>
+            (a.title && a.title.toLowerCase().includes(q)) ||
+            (a.slug && a.slug.toLowerCase().includes(q)) ||
+            (a.prompt && a.prompt.toLowerCase().includes(q)) ||
+            (a.model && a.model.toLowerCase().includes(q))
+          );
         },
 
         async fetchVersion() {
@@ -948,16 +1276,167 @@
             if (profileParam) sbParams.push(profileParam);
             const sbQuery = '?' + sbParams.join('&');
             const snapQuery = profileParam ? `?${profileParam}` : '';
-            const [sbRes, snapRes] = await Promise.all([
+            const [sbRes, snapRes, appsRes] = await Promise.all([
               fetch(`/api/sandboxes${sbQuery}`),
-              fetch(`/api/snapshots${snapQuery}`)
+              fetch(`/api/snapshots${snapQuery}`),
+              fetch(`/api/apps${snapQuery}`)
             ]);
             if (sbRes.ok) this.sandboxes = await sbRes.json();
             if (snapRes.ok) this.snapshots = await snapRes.json();
+            if (appsRes.ok) this.apps = await appsRes.json();
           } catch (err) {
             console.error('Failed refreshing data:', err);
           } finally {
             if (!silent) this.loading = false;
+          }
+        },
+
+        async submitAppPrompt() {
+          if (!this.builderForm.prompt || !this.builderForm.prompt.trim() || this.builderSubmitting) return;
+          this.builderSubmitting = true;
+          try {
+            const payload = {
+              prompt: this.builderForm.prompt.trim(),
+              name: this.builderForm.name.trim() || null,
+              template: this.builderForm.template,
+              mobile_app: this.builderForm.template === 'nextjs' ? !!this.builderForm.mobile_app : false,
+              vm: !!this.builderForm.vm,
+              profile: this.builderForm.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : null),
+              provider: this.builderForm.provider,
+              model: this.builderForm.model,
+              thought_level: this.builderForm.thought_level || null
+            };
+            const res = await fetch('/api/apps', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            const data = await res.json();
+            this.builderForm.prompt = '';
+            this.builderForm.name = '';
+            await this.refreshAll(true);
+            await this.trackLaunch(data.request_id);
+          } catch (err) {
+            this.showToast('Launch failed: ' + err.message, 'error');
+          } finally {
+            this.builderSubmitting = false;
+          }
+        },
+
+        async trackLaunch(requestId) {
+          if (!requestId) return;
+          if (this.launchPollTimer) {
+            clearInterval(this.launchPollTimer);
+            this.launchPollTimer = null;
+          }
+          const url = new URL(window.location.href);
+          url.searchParams.set('launch', requestId);
+          window.history.replaceState({}, '', url.toString());
+
+          await this.pollLaunchOnce(requestId);
+          if (this.activeLaunch && !['ready', 'failed'].includes(this.activeLaunch.request?.status)) {
+            this.launchPollTimer = setInterval(() => this.pollLaunchOnce(requestId), 1500);
+          }
+        },
+
+        async pollLaunchOnce(requestId) {
+          try {
+            const res = await fetch(`/api/launches/${encodeURIComponent(requestId)}`);
+            if (!res.ok) {
+              if (res.status === 404 && this.launchPollTimer) {
+                clearInterval(this.launchPollTimer);
+                this.launchPollTimer = null;
+              }
+              return;
+            }
+            const data = await res.json();
+            this.activeLaunch = data;
+            const status = data.request?.status;
+            if (status === 'ready' || status === 'failed') {
+              if (this.launchPollTimer) {
+                clearInterval(this.launchPollTimer);
+                this.launchPollTimer = null;
+              }
+              await this.refreshAll(true);
+              if (status === 'ready' && data.request?.handoff_url && this.redirectedLaunchId !== requestId) {
+                this.redirectedLaunchId = requestId;
+                const clean = new URL(window.location.href);
+                clean.searchParams.delete('launch');
+                window.history.replaceState({}, '', clean.pathname + clean.search);
+                window.location.assign(data.request.handoff_url);
+              }
+            }
+          } catch (err) {
+            console.error('Launch polling failed:', err);
+          }
+        },
+
+        dismissActiveLaunch() {
+          if (this.launchPollTimer) {
+            clearInterval(this.launchPollTimer);
+            this.launchPollTimer = null;
+          }
+          this.activeLaunch = null;
+          const clean = new URL(window.location.href);
+          clean.searchParams.delete('launch');
+          window.history.replaceState({}, '', clean.pathname + clean.search);
+        },
+
+        async openFactoryApp(app) {
+          try {
+            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}/open`, { method: 'POST' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              const detail = err.detail;
+              if (res.status === 409 && detail && detail.code === 'sandbox_stopped') {
+                this.showToast('Sandbox stopped — use Relaunch or Resume Snapshot.', 'error');
+                await this.refreshAll(true);
+                return;
+              }
+              throw new Error((detail && detail.message) || detail || `Error (${res.status})`);
+            }
+            const data = await res.json();
+            window.location.assign(data.handoff_url);
+          } catch (err) {
+            this.showToast('Could not open T3 chat: ' + err.message, 'error');
+          }
+        },
+
+        async relaunchFactoryApp(app) {
+          if (!app || !app.app_id) return;
+          try {
+            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}/relaunch`, { method: 'POST' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Error (${res.status})`);
+            }
+            const data = await res.json();
+            await this.refreshAll(true);
+            await this.trackLaunch(data.request_id);
+          } catch (err) {
+            this.showToast('Relaunch failed: ' + err.message, 'error');
+          }
+        },
+
+        async deleteFactoryApp(app) {
+          const msg = app.runtime_status === 'running'
+            ? `Delete "${app.title}" and terminate its running sandbox?`
+            : `Delete "${app.title}" from Factory Apps?`;
+          if (!confirm(msg)) return;
+          try {
+            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}?terminate_sandbox=true`, { method: 'DELETE' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Error (${res.status})`);
+            }
+            this.showToast(`Deleted "${app.title}".`);
+            await this.refreshAll();
+          } catch (err) {
+            this.showToast('Delete failed: ' + err.message, 'error');
           }
         },
 

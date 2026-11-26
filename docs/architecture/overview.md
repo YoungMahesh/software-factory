@@ -66,12 +66,12 @@ flowchart TD
 ### 1. Execution Plane (`sandboxes/`)
 
 - **`sandboxes/sandbox/main.py`**: The primary CLI entrypoint (`modal-sandbox`). Parses runtime flags, resolves local configuration, triggers snapshots, and dispatches subcommands (including `modal-sandbox infra deploy`).
-- **`sandboxes/sandbox/function.py`**: Serverless FastAPI control plane hosted via `@modal.asgi_app()`. Exposes an authenticated dashboard (`GET /`) and REST API (`POST /api/sandboxes`, `POST /launch`, etc.).
+- **`sandboxes/sandbox/function.py`**: Serverless FastAPI control plane hosted via `@modal.asgi_app()`. Exposes the prompt-first **Factory App** Builder homepage and operator dashboard (`GET /`), spawned `Launch Request` worker (`run_launch_request`), and REST API (`POST /api/apps`, `POST /api/sandboxes`, `POST /launch`, etc.).
 - **`sandboxes/sandbox/launcher.py`**: Unified sandbox runner orchestrating container and Linux VM creation via the Modal client SDK.
 - **`sandboxes/shared/image.py`**: Composable base and runtime image definitions with prebaked developer utilities and toolchains.
 - **`sandboxes/sandbox/env_store.py`**: Retrieves and decrypts target repository secrets host-side from the centralized `env-store` repository before injecting them into sandboxes via `modal.Secret`.
 - **`sandboxes/shared/startup.sh`**: Runs as the entrypoint inside the sandbox container. Starts `sshd`, executes cloudflared ingress, configures AI developer harnesses, clones target repositories, and materializes local `.env` files.
-- **Filesystem Snapshots & Volumes**: Copy-on-write image capture leveraging `modal.Image.from_id()` and persistent storage for agent usage metrics via `modal.Volume` (`t3code-usage-v1`).
+- **Filesystem Snapshots & Volumes**: Copy-on-write image capture leveraging `modal.Image.from_id()` and persistent storage for agent usage metrics (`t3code-usage-v1`) and Factory App metadata (`factory-state-v1`) via `modal.Volume`.
 
 ### 2. Resource Plane (`resource-plane/`)
 

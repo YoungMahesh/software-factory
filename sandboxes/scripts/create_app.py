@@ -9,16 +9,15 @@ import sys
 
 # Ensure sandboxes package root is on sys.path when invoked directly as script
 _SANDBOXES_ROOT = Path(__file__).resolve().parent.parent
-if str(_SANDBOXES_ROOT) not in sys.path:
-    sys.path.insert(0, str(_SANDBOXES_ROOT))
+for _candidate in (_SANDBOXES_ROOT, Path("/opt/sandboxes")):
+    if _candidate.is_dir() and str(_candidate) not in sys.path:
+        sys.path.insert(0, str(_candidate))
 
 from sandbox.app_scaffolder import (
     AppScaffoldRequest,
     CloudWiringOptions,
     scaffold_app,
-    wire_cloud_resources,
 )
-from sandbox.formatting import display_launch_summary
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -176,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             cloud_opts.deploy,
         ])
         if has_cloud:
+            from sandbox.app_scaffolder import wire_cloud_resources
+
             cloud_res = wire_cloud_resources(res.project_name, res.project_dir, cloud_opts)
             if cloud_res.github_repo:
                 print(f"✓ Pushed GitHub repository: https://github.com/{cloud_res.github_repo}")
@@ -186,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
             if cloud_res.vault_pushed:
                 print("✓ Pushed .env secrets to Central Environment Store (env-store)")
             if cloud_res.launch_response is not None:
+                from sandbox.formatting import display_launch_summary
+
                 display_launch_summary(cloud_res.launch_response)
             if cloud_res.deploy_result is not None:
                 print(f"✓ Deployed Hosted App: {cloud_res.deploy_result.url} ({cloud_res.deploy_result.remote_dir})")

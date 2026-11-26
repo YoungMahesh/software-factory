@@ -13,6 +13,7 @@ from typing import Any
 import urllib.error
 import urllib.request
 
+from sandbox.app_scaffolder._template import CloudWiringOptions
 from sandbox.config import resolve_factory_credentials, resolve_factory_root
 from sandbox.core import LaunchRequest, LaunchResponse
 from sandbox.db_host import DatabaseConnectionInfo, create_database_connection
@@ -21,30 +22,6 @@ from sandbox.env_store import resolve_gh_token
 from sandbox.env_store_push import push_repo_env
 from sandbox.launcher import launch_sandbox
 from sandbox.s3_host import S3BucketInfo, create_s3_bucket, write_s3_env_vars
-
-
-@dataclass
-class CloudWiringOptions:
-    """Opt-in cloud automation options executed after local template scaffolding."""
-
-    github: bool = False
-    public_repo: bool = False
-    repo_name: str | None = None
-    org_name: str | None = None
-    provision_db: bool = False
-    db_name: str | None = None
-    provision_s3: bool = False
-    bucket_name: str | None = None
-    push_vault: bool = False
-    launch: bool = False
-    vm: bool = False
-    t3: bool = True
-    profile: str | None = None
-    mobile_app: bool = False
-    deploy: bool = False
-    subdomain: str | None = None
-    base_domain: str | None = None
-    skip_migrate: bool = False
 
 
 @dataclass

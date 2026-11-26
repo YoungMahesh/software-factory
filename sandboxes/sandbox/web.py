@@ -24,6 +24,7 @@ import modal
 from pydantic import BaseModel
 
 from shared.image import DEFAULT_T3_USAGE_VOLUME
+from sandbox.apps import apps_router
 from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
 )
@@ -434,6 +435,9 @@ def index_page() -> HTMLResponse:
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return HTMLResponse(index_file.read_text(encoding="utf-8"))
+
+
+router.include_router(apps_router)
 
 
 def create_app() -> FastAPI:

@@ -1,8 +1,11 @@
 from collections.abc import Iterable
-import json
 from pathlib import Path
 import modal
 
+from shared.app_staging import (
+    stage_app_template_into_image,
+    stage_sandbox_runtime_into_image,
+)
 from shared.t3_patches import (
     T3_DRIVER_ORDER_PATCH_REPLACEMENT,
     T3_DRIVER_ORDER_PATCH_TARGET,
@@ -81,6 +84,7 @@ LOCAL_CREATE_APP = _resolve_file("create_app.py", *_SCRIPTS_SEARCH_DIRS)
 REMOTE_CREATE_APP = "/usr/local/bin/create-app"
 LOCAL_APP_TEMPLATE_DIR = _resolve_dir(REPO_ROOT.parent / "app-template", Path("/opt/app-template"))
 REMOTE_APP_TEMPLATE_DIR = "/opt/app-template"
+REMOTE_SANDBOX_RUNTIME_DIR = "/opt/sandboxes/sandbox"
 LOCAL_POST_CHECKOUT_HOOK = SHARED_DIR / "git-hooks" / "post-checkout"
 REMOTE_POST_CHECKOUT_HOOK = "/root/.git-hooks/post-checkout"
 
@@ -265,55 +269,8 @@ base_image = base_image.add_local_dir(
 )
 
 
-def stage_app_template_into_image(
-    image: modal.Image,
-    template_dir: Path | None = None,
-    factory_root: Path | None = None,
-    *,
-    copy: bool = True,
-) -> modal.Image:
-    """Bakes App Template files and allowlisted Matt Pocock skills into /opt/app-template."""
-    tmpl_dir = template_dir or LOCAL_APP_TEMPLATE_DIR
-    if not (tmpl_dir / "base").is_dir():
-        return image
-
-    image = image.add_local_dir(
-        tmpl_dir,
-        REMOTE_APP_TEMPLATE_DIR,
-        copy=copy,
-        ignore=["node_modules", "**/node_modules", ".next", "**/.next", "_skills_source"],
-    )
-
-    pre_staged = tmpl_dir / "_skills_source"
-    src_root = pre_staged if (pre_staged / ".agents" / "skills").is_dir() else (factory_root or tmpl_dir.parent)
-    manifest_file = tmpl_dir / "skills.json"
-    skills_dir = src_root / ".agents" / "skills"
-    lock_file = src_root / "skills-lock.json"
-    if manifest_file.is_file() and skills_dir.is_dir() and lock_file.is_file():
-        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-        allowlisted = [s for s in manifest.get("skills", []) if (skills_dir / s).is_dir()]
-        if allowlisted:
-            patterns = [p for name in allowlisted for p in (name, f"{name}/**")]
-            image = image.add_local_dir(
-                skills_dir,
-                f"{REMOTE_APP_TEMPLATE_DIR}/_skills_source/.agents/skills",
-                copy=copy,
-                ignore=~modal.FilePatternMatcher(*patterns),
-            )
-        image = image.add_local_file(
-            lock_file, f"{REMOTE_APP_TEMPLATE_DIR}/_skills_source/skills-lock.json", copy=copy
-        )
-        agent_docs_dir = src_root / "docs" / "agents"
-        if agent_docs_dir.is_dir():
-            image = image.add_local_dir(
-                agent_docs_dir,
-                f"{REMOTE_APP_TEMPLATE_DIR}/_skills_source/docs/agents",
-                copy=copy,
-            )
-    return image
-
-
 base_image = stage_app_template_into_image(base_image)
+base_image = stage_sandbox_runtime_into_image(base_image)
 
 
 def load_ssh_pub_key() -> str:

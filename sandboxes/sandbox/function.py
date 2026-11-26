@@ -5,9 +5,19 @@ import os
 from pathlib import Path
 import sys
 
+from typing import Any
+
 from fastapi import Depends, FastAPI, HTTPException, status
 import modal
 
+from sandbox.apps import (
+    FACTORY_STATE_MOUNT_PATH,
+    FactoryStateStore,
+    LaunchCoordinator,
+    get_factory_state_volume,
+    set_default_store,
+    set_launch_dispatcher,
+)
 from shared.image import SOPS_INSTALL_COMMANDS, stage_app_template_into_image
 from sandbox.config import (
     collect_control_plane_secrets_dict,
@@ -235,12 +245,32 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
         ) from exc
 
 
+factory_state_volume = get_factory_state_volume()
+
+
 @app.function(
     image=image,
     secrets=function_secrets,
+    volumes={FACTORY_STATE_MOUNT_PATH: factory_state_volume},
+    timeout=600,
+)
+def run_launch_request(request_id: str) -> dict[str, Any]:
+    """Modal background worker executing a Factory App Launch Request."""
+    store = FactoryStateStore(root_dir=FACTORY_STATE_MOUNT_PATH, volume=factory_state_volume)
+    set_default_store(store)
+    result = LaunchCoordinator(store=store).execute_launch_request(request_id)
+    return result.model_dump()
+
+
+@app.function(
+    image=image,
+    secrets=function_secrets,
+    volumes={FACTORY_STATE_MOUNT_PATH: factory_state_volume},
     timeout=180,
 )
 @modal.asgi_app()
 def fastapi_app():
     """Serves the control plane ASGI application."""
+    set_default_store(FactoryStateStore(root_dir=FACTORY_STATE_MOUNT_PATH, volume=factory_state_volume))
+    set_launch_dispatcher(lambda request_id: run_launch_request.spawn(request_id))
     return web_app

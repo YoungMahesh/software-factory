@@ -22,6 +22,7 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |
+| `FACTORY_STATE_DIR` | Override directory for `FactoryStateStore` metadata outside `/root/.factory-state` (`factory-state-v1` volume) |
 | `DOCS_CUSTOM_DOMAIN` | Optional custom domain for the Modal documentation app |
 
 Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Child sandboxes receive scoped status access rather than the signing secret. See [AI tooling](../guides/ai-tooling.md#codex-login-profiles).
