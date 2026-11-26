@@ -195,6 +195,8 @@ class FactoryAppRecord(BaseModel):
     thought_level: str | None = None
     status: Literal["provisioning", "ready", "failed"] = "provisioning"
     latest_request_id: str | None = None
+    failed_step: LaunchStatus | None = None
+    workspace_ready: bool = False
     sandbox_id: str | None = None
     sandbox_name: str | None = None
     environment_id: str | None = None
@@ -222,6 +224,8 @@ class LaunchRequestRecord(BaseModel):
     request_id: str
     app_id: str
     kind: Literal["create", "relaunch"] = "create"
+    resume_from_step: LaunchStatus | None = None
+    failed_step: LaunchStatus | None = None
     status: LaunchStatus = "queued"
     current_label: str = "Queued launch request"
     steps: list[LaunchStep] = Field(default_factory=list)
@@ -247,6 +251,7 @@ class LaunchRequestRecord(BaseModel):
         handoff_url: str | None = None,
         handoff_expires_at: str | None = None,
         error: str | None = None,
+        failed_step: LaunchStatus | None = None,
     ) -> LaunchRequestRecord:
         """Returns a copy advancing step timeline, logs, and terminal handoff/error fields."""
         base_steps = self.steps or initial_launch_steps()
@@ -261,6 +266,7 @@ class LaunchRequestRecord(BaseModel):
                 "handoff_url": handoff_url if handoff_url is not None else self.handoff_url,
                 "handoff_expires_at": handoff_expires_at if handoff_expires_at is not None else self.handoff_expires_at,
                 "error": error,
+                "failed_step": failed_step if status == "failed" else None,
             }
         )
 
@@ -333,9 +339,14 @@ DEFAULT_ANTIGRAVITY_MODELS: list[ModelChoice] = [
 ]
 
 
-def initial_launch_steps() -> list[LaunchStep]:
-    """Builds the ordered Launch Request step list in pending state."""
-    return [LaunchStep(key=key, label=label, status="pending") for key, label in STEP_DEFINITIONS]
+def initial_launch_steps(*, resume_from: LaunchStatus | None = None) -> list[LaunchStep]:
+    """Builds the ordered Launch Request step list, pre-completing steps before resume_from."""
+    order = [key for key, _ in STEP_DEFINITIONS]
+    resume_idx = order.index(resume_from) if resume_from in order else 0
+    return [
+        LaunchStep(key=key, label=label, status="done" if i < resume_idx else "pending")
+        for i, (key, label) in enumerate(STEP_DEFINITIONS)
+    ]
 
 
 def advance_launch_steps(steps: list[LaunchStep], active_key: LaunchStatus) -> list[LaunchStep]:

@@ -57,7 +57,7 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 | `POST` | `/api/apps` | Basic | Create a Factory App and spawn a durable Launch Request |
 | `GET` | `/api/apps/{app_id}` | Basic | Get one Factory App enriched with live sandbox state |
 | `POST` | `/api/apps/{app_id}/open` | Basic | Mint a short-lived pairing token and return direct T3 chat handoff URL |
-| `POST` | `/api/apps/{app_id}/relaunch` | Basic | Spawn a fresh Launch Request from a Factory App's saved prompt |
+| `POST` | `/api/apps/{app_id}/relaunch` | Basic | Spawn a Launch Request (`?resume=true` resumes from failed step when sandbox is alive) |
 | `DELETE` | `/api/apps/{app_id}` | Basic | Delete a Factory App record and optionally terminate its active sandbox |
 | `GET` | `/api/launches/{request_id}` | Basic | Poll Launch Request progress, logs, and T3 handoff URL |
 | `GET` | `/api/sandboxes` | Basic | Active sandbox discovery |

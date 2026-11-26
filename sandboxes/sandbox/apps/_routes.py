@@ -141,12 +141,16 @@ def api_open_app(app_id: str) -> OpenAppResponse:
 
 
 @apps_router.post("/api/apps/{app_id}/relaunch", status_code=status.HTTP_202_ACCEPTED)
-def api_relaunch_app(app_id: str) -> dict[str, Any]:
-    """Starts a fresh Launch Request from a stopped or failed Factory App's saved prompt."""
+def api_relaunch_app(
+    app_id: str,
+    resume: bool = Query(False, description="Resume from failed step on preserved sandbox when still active"),
+) -> dict[str, Any]:
+    """Starts a fresh Launch Request or resumes from the failed step when resume=true."""
     coordinator = get_coordinator()
     try:
         app, launch = coordinator.relaunch_factory_app(
             app_id,
+            resume=resume,
             dispatch_fn=lambda req_id: _dispatch_launch(req_id, coordinator),
         )
     except AppNotFoundError as exc:

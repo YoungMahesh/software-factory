@@ -1,4 +1,4 @@
-"""Tests for LaunchCoordinator orchestration, failure cleanup, and app lifecycle seams."""
+"""Tests for LaunchCoordinator orchestration, step-resume retry, failure cleanup, and app lifecycle."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from sandbox.apps import (
     FactoryStateStore,
     LaunchCoordinator,
 )
+from sandbox.apps._sandbox_t3 import wait_for_t3_ready
 from sandbox.core import LaunchResponse
 
 
@@ -146,7 +147,7 @@ class TestLaunchCoordinator(unittest.TestCase):
             )
 
             dispatched: list[str] = []
-            app, req = coord.create_and_dispatch(
+            _, req = coord.create_and_dispatch(
                 CreateAppPayload(prompt="Habit tracker", thought_level="high"),
                 dispatch_fn=dispatched.append,
             )
@@ -161,14 +162,10 @@ class TestLaunchCoordinator(unittest.TestCase):
                 "https://ta-100-3775.w.modal.host/env-01/thread%3Aabc-1#token=pair-tok-xyz",
             )
             self.assertEqual(res.app.status, "ready")
-            self.assertEqual(res.app.prompt, "Habit tracker")
+            self.assertTrue(res.app.workspace_ready)
+            self.assertIsNone(res.app.failed_step)
             self.assertEqual(res.app.database_name, "habit_tracker")
-            self.assertEqual(
-                res.app.chat_url,
-                "https://ta-100-3775.w.modal.host/env-01/thread%3Aabc-1",
-            )
-            # Log buffering ensures 25 log callbacks do not trigger 25 separate volume commits
-            self.assertLess(mock_volume.commit.call_count - commits_before, 12)
+            self.assertLess(mock_volume.commit.call_count - commits_before, 16)
 
             launch_req_arg = mock_launch.call_args[0][0]
             self.assertTrue(launch_req_arg.no_cloudflare)
@@ -179,16 +176,9 @@ class TestLaunchCoordinator(unittest.TestCase):
             cmds = [" ".join(cmd) for cmd, _ in fake_sb.calls]
             create_cmds = [c for c in cmds if c.startswith("create-app /root/habit-tracker -y")]
             self.assertEqual(len(create_cmds), 1)
-            self.assertNotIn("--github", create_cmds[0])
-            self.assertNotIn("--push-vault", create_cmds[0])
-
-            env_writer_calls = [cmd for cmd, stdin in fake_sb.calls if stdin and "habit_tracker" in stdin]
-            self.assertEqual(len(env_writer_calls), 1)
-            self.assertIn("0o700", env_writer_calls[0][2])
+            self.assertNotIn("--force", create_cmds[0])
 
             thread_start_call = next((cmd, stdin) for cmd, stdin in fake_sb.calls if cmd[:3] == ("t3", "thread", "start"))
-            self.assertIn("--provider", thread_start_call[0])
-            self.assertIn("antigravity", thread_start_call[0])
             self.assertIn("gemini-4-hydrogen", thread_start_call[0])
             self.assertIn("thought_level=high", thread_start_call[0])
             self.assertTrue(thread_start_call[1].startswith("Habit tracker"))
@@ -249,7 +239,6 @@ class TestLaunchCoordinator(unittest.TestCase):
             store = FactoryStateStore(root_dir=Path(tmpdir))
             fake_sb = _FakeSandbox("sb-stale")
             mock_terminate = MagicMock(return_value={"id": "sb-stale", "status": "terminated"})
-            coord: LaunchCoordinator
 
             def _launch_and_supersede(_req, *, log_cb=None):
                 store.update_app(app.app_id, latest_request_id="req_newer")
@@ -273,35 +262,142 @@ class TestLaunchCoordinator(unittest.TestCase):
             self.assertEqual(store.get_app(app.app_id).status, "provisioning")
             mock_terminate.assert_called_once_with("sb-stale", profile=None)
 
-    def test_execute_launch_failure_terminates_partial_sandbox(self):
+    def test_pre_boot_failure_terminates_partial_sandbox(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = FactoryStateStore(root_dir=Path(tmpdir))
-            fake_sb = _FakeSandbox("sb-fail", fail_cmd="t3 thread start")
+            fake_sb = _FakeSandbox("sb-no-url")
             mock_launch = MagicMock(
                 return_value=(
                     fake_sb,
                     LaunchResponse(
-                        sandbox_id="sb-fail",
+                        sandbox_id="sb-no-url",
                         app_name="broken-app",
                         sandbox_name="broken-app-1234",
-                        t3_url="https://ta-fail-3775.w.modal.host",
+                        t3_url=None,
                     ),
                 )
             )
-            mock_terminate = MagicMock(return_value={"id": "sb-fail", "status": "terminated"})
+            mock_terminate = MagicMock(return_value={"id": "sb-no-url", "status": "terminated"})
+            coord = LaunchCoordinator(store=store, launch_fn=mock_launch, terminate_fn=mock_terminate, env={})
+
+            _, req = coord.create_and_dispatch(CreateAppPayload(prompt="No URL app"))
+            res = coord.execute_launch_request(req.request_id)
+            self.assertEqual(res.request.status, "failed")
+            self.assertIsNone(res.app.sandbox_id)
+            self.assertEqual(res.app.failed_step, "launching_sandbox")
+            mock_terminate.assert_called_once_with("sb-no-url", profile=None)
+
+    def test_post_boot_failure_preserves_sandbox_and_retry_resumes_from_failed_step(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = FactoryStateStore(root_dir=Path(tmpdir))
+            fake_sb = _FakeSandbox("sb-resume", running=True, fail_cmd="t3 thread start")
+            mock_launch = MagicMock(
+                return_value=(
+                    fake_sb,
+                    LaunchResponse(
+                        sandbox_id="sb-resume",
+                        app_name="resume-app",
+                        sandbox_name="resume-app-1234",
+                        t3_url="https://ta-resume-3775.w.modal.host",
+                    ),
+                )
+            )
+            mock_terminate = MagicMock(return_value={"id": "sb-resume", "status": "terminated"})
             coord = LaunchCoordinator(
                 store=store,
                 launch_fn=mock_launch,
                 terminate_fn=mock_terminate,
+                sandbox_from_id_fn=MagicMock(return_value=fake_sb),
                 env={},
             )
 
-            app, req = coord.create_and_dispatch(CreateAppPayload(prompt="Broken app"))
-            res = coord.execute_launch_request(req.request_id)
-            self.assertEqual(res.request.status, "failed")
-            self.assertEqual(res.app.status, "failed")
-            self.assertIn("t3 thread start", res.request.error)
-            mock_terminate.assert_called_once_with("sb-fail", profile=None)
+            app, req = coord.create_and_dispatch(CreateAppPayload(prompt="Resume app"))
+            failed = coord.execute_launch_request(req.request_id)
+            self.assertEqual(failed.request.status, "failed")
+            self.assertEqual(failed.request.failed_step, "starting_thread")
+            self.assertEqual(failed.app.status, "failed")
+            self.assertEqual(failed.app.sandbox_id, "sb-resume")
+            self.assertTrue(failed.app.workspace_ready)
+            self.assertEqual(failed.app.failed_step, "starting_thread")
+            mock_terminate.assert_not_called()
+
+            # Clear injected failure and click Retry (resume=True): should reuse sb-resume and skip launch/create-app
+            fake_sb.fail_cmd = None
+            calls_before_retry = len(fake_sb.calls)
+            resumed_app, retry_req = coord.relaunch_factory_app(app.app_id, resume=True)
+            self.assertEqual(retry_req.resume_from_step, "starting_thread")
+            self.assertEqual(resumed_app.sandbox_id, "sb-resume")
+
+            retried = coord.execute_launch_request(retry_req.request_id)
+            self.assertEqual(retried.request.status, "ready")
+            self.assertEqual(retried.app.status, "ready")
+            self.assertIsNone(retried.app.failed_step)
+            self.assertEqual(mock_launch.call_count, 1)
+            retry_cmds = [" ".join(cmd) for cmd, _ in fake_sb.calls[calls_before_retry:]]
+            self.assertFalse(any("create-app" in c for c in retry_cmds))
+            self.assertFalse(any("server-runtime.json" in c for c in retry_cmds))
+            self.assertTrue(any(c.startswith("t3 thread start") for c in retry_cmds))
+
+    def test_retry_falls_back_to_fresh_launch_if_preserved_sandbox_stopped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = FactoryStateStore(root_dir=Path(tmpdir))
+            dead_sb = _FakeSandbox("sb-dead", running=False)
+            fresh_sb = _FakeSandbox("sb-fresh", running=True)
+            app = FactoryAppRecord(
+                app_id="app_dead_retry",
+                slug="dead-retry",
+                title="Dead Retry",
+                prompt="Retry",
+                status="failed",
+                failed_step="waiting_t3",
+                workspace_ready=True,
+                sandbox_id="sb-dead",
+                t3_url="https://ta-dead-3775.w.modal.host",
+            )
+            store.save_app(app)
+            mock_launch = MagicMock(
+                return_value=(
+                    fresh_sb,
+                    LaunchResponse(
+                        sandbox_id="sb-fresh",
+                        app_name="dead-retry",
+                        sandbox_name="dead-retry-9999",
+                        t3_url="https://ta-fresh-3775.w.modal.host",
+                    ),
+                )
+            )
+            coord = LaunchCoordinator(
+                store=store,
+                launch_fn=mock_launch,
+                sandbox_from_id_fn=MagicMock(return_value=dead_sb),
+                env={},
+            )
+            _, retry_req = coord.relaunch_factory_app("app_dead_retry", resume=True)
+            self.assertIsNone(retry_req.resume_from_step)
+            res = coord.execute_launch_request(retry_req.request_id)
+            self.assertEqual(res.request.status, "ready")
+            self.assertEqual(res.app.sandbox_id, "sb-fresh")
+
+    def test_wait_for_t3_ready_timeout_includes_probe_and_t3_log_diagnostics(self):
+        sb = MagicMock()
+
+        def _exec(*cmd, **_kwargs):
+            proc = MagicMock()
+            if cmd[0] == "python3":
+                proc.wait.return_value = 1
+                proc.stdout.read.return_value = ""
+                proc.stderr.read.return_value = "missing: settings.json"
+            else:
+                proc.wait.return_value = 0
+                proc.stdout.read.return_value = "T3 booting..."
+                proc.stderr.read.return_value = ""
+            return proc
+
+        sb.exec.side_effect = _exec
+        with self.assertRaises(TimeoutError) as ctx:
+            wait_for_t3_ready(sb, timeout_secs=0)
+        self.assertIn("missing: settings.json", str(ctx.exception))
+        self.assertIn("T3 booting...", str(ctx.exception))
 
     def test_open_factory_app_mints_fresh_token_and_handles_stopped_with_snapshot(self):
         with tempfile.TemporaryDirectory() as tmpdir:

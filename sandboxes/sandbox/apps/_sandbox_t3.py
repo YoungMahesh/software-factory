@@ -12,17 +12,24 @@ from sandbox.app_scaffolder._cloud import sanitize_db_name
 
 from ._models import FactoryAppRecord, build_initial_thread_prompt
 
+DEFAULT_T3_READY_TIMEOUT_SECS = 150
+
 _T3_PROBE_SCRIPT = (
-    "import glob, json, os\n"
-    "rt = '/root/.t3/userdata/server-runtime.json'\n"
-    "eid = '/root/.t3/userdata/environment-id'\n"
-    "st = '/root/.t3/userdata/settings.json'\n"
-    "if not (os.path.isfile(rt) and os.path.isfile(eid) and os.path.isfile(st)):\n"
+    "import glob, json, os, sys\n"
+    "checks = [\n"
+    "    ('server-runtime.json', '/root/.t3/userdata/server-runtime.json'),\n"
+    "    ('environment-id', '/root/.t3/userdata/environment-id'),\n"
+    "    ('settings.json', '/root/.t3/userdata/settings.json'),\n"
+    "]\n"
+    "missing = [name for name, path in checks if not os.path.isfile(path)]\n"
+    "if missing:\n"
+    "    sys.stderr.write('missing: ' + ', '.join(missing) + '\\n')\n"
     "    raise SystemExit(1)\n"
-    "env_id = open(eid).read().strip()\n"
+    "env_id = open('/root/.t3/userdata/environment-id').read().strip()\n"
     "if not env_id:\n"
+    "    sys.stderr.write('empty environment-id\\n')\n"
     "    raise SystemExit(1)\n"
-    "settings = json.load(open(st))\n"
+    "settings = json.load(open('/root/.t3/userdata/settings.json'))\n"
     "caches = {}\n"
     "for p in glob.glob('/root/.t3/caches/*.json'):\n"
     "    try:\n"
@@ -123,15 +130,55 @@ def ensure_blank_git_workspace(sb: Any, app_dir: str) -> None:
         raise RuntimeError(f"Failed initializing blank Git workspace in {app_dir}: {err or out}")
 
 
-def wait_for_t3_ready(sb: Any, timeout_secs: int = 60) -> dict[str, Any]:
+def prepare_app_workspace(
+    sb: Any,
+    app: FactoryAppRecord,
+    app_dir: str,
+    *,
+    force: bool = False,
+) -> None:
+    """Scaffolds a Next.js App Template or initializes a blank Git workspace inside the sandbox."""
+    if app.template == "nextjs":
+        cmd = ["create-app", app_dir, "-y"]
+        if app.mobile_app:
+            cmd.append("--mobile-app")
+        if force:
+            cmd.append("--force")
+        rc, out, err = exec_in_sandbox(sb, *cmd, timeout=300)
+        if rc != 0:
+            raise RuntimeError(f"create-app failed in {app_dir}: {err or out}")
+    else:
+        ensure_blank_git_workspace(sb, app_dir)
+
+
+def wait_for_t3_ready(sb: Any, timeout_secs: int = DEFAULT_T3_READY_TIMEOUT_SECS) -> dict[str, Any]:
     """Polls until T3 Code Server emits server-runtime, environment-id, and settings."""
     deadline = time.monotonic() + timeout_secs
-    while time.monotonic() < deadline:
-        rc, out, _ = exec_in_sandbox(sb, "python3", "-c", _T3_PROBE_SCRIPT, timeout=15)
+    last_probe_err = ""
+    while True:
+        rc, out, err = exec_in_sandbox(sb, "python3", "-c", _T3_PROBE_SCRIPT, timeout=15)
         if rc == 0 and out.strip():
             return json.loads(out)
+        if err.strip():
+            last_probe_err = err.strip()
+        if time.monotonic() >= deadline:
+            break
         time.sleep(1.0)
-    raise TimeoutError("Timed out waiting for T3 Code Server readiness inside sandbox.")
+
+    log_tail = ""
+    try:
+        log_rc, log_out, _ = exec_in_sandbox(sb, "tail", "-n", "15", "/tmp/t3.log", timeout=10)
+        if log_rc == 0 and log_out.strip():
+            log_tail = log_out.strip()
+    except Exception:
+        pass
+
+    parts = [f"Timed out after {timeout_secs}s waiting for T3 Code Server readiness inside sandbox."]
+    if last_probe_err:
+        parts.append(f"Probe state: {last_probe_err}.")
+    if log_tail:
+        parts.append(f"Recent /tmp/t3.log:\n{log_tail}")
+    raise TimeoutError(" ".join(parts))
 
 
 def resolve_provider_model(

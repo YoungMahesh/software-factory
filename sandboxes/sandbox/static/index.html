@@ -288,7 +288,7 @@
         <!-- Error / Ready Controls -->
         <div x-show="activeLaunch?.request?.status === 'failed'" class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200 flex items-center justify-between gap-3">
           <span x-text="activeLaunch?.request?.error || 'Launch failed'"></span>
-          <button type="button" @click="relaunchFactoryApp(activeLaunch.app)"
+          <button type="button" @click="relaunchFactoryApp(activeLaunch.app, { resume: true })"
                   class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium flex-shrink-0">
             Retry
           </button>
@@ -360,8 +360,13 @@
                           class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-medium">
                     Progress
                   </button>
+                  <button x-show="app.runtime_status === 'failed' && app.failed_step && app.sandbox_id" type="button"
+                          @click="relaunchFactoryApp(app, { resume: true })"
+                          class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium">
+                    Retry Step
+                  </button>
                   <button x-show="app.runtime_status === 'stopped' || app.runtime_status === 'failed'" type="button"
-                          @click="relaunchFactoryApp(app)"
+                          @click="relaunchFactoryApp(app, { resume: false })"
                           class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
                     Relaunch
                   </button>
@@ -1406,10 +1411,11 @@
           }
         },
 
-        async relaunchFactoryApp(app) {
+        async relaunchFactoryApp(app, { resume = false } = {}) {
           if (!app || !app.app_id) return;
           try {
-            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}/relaunch`, { method: 'POST' });
+            const suffix = resume ? '?resume=true' : '';
+            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}/relaunch${suffix}`, { method: 'POST' });
             if (!res.ok) {
               const err = await res.json().catch(() => ({}));
               throw new Error(err.detail || `Error (${res.status})`);

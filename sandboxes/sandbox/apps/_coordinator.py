@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import Any, Callable
 import uuid
 
 import modal
 
 from sandbox.config import resolve_factory_credentials
-from sandbox.core import LaunchRequest
 from sandbox.db_host import create_database_connection
 from sandbox.launcher import launch_sandbox
 from sandbox.lifecycle import terminate_sandbox
@@ -22,7 +20,6 @@ from ._models import (
     DEFAULT_ANTIGRAVITY_MODELS,
     DEFAULT_BUILDER_MODEL,
     DEFAULT_BUILDER_PROVIDER,
-    HANDOFF_TOKEN_TTL_SECONDS,
     CreateAppPayload,
     FactoryAppRecord,
     FactoryAppView,
@@ -35,17 +32,9 @@ from ._models import (
     derive_app_slug,
     derive_app_title,
     initial_launch_steps,
-    utc_now_iso,
 )
-from ._sandbox_t3 import (
-    ensure_blank_git_workspace,
-    ensure_project_and_start_thread,
-    exec_in_sandbox,
-    mint_pairing_token,
-    provision_optional_database,
-    resolve_provider_model,
-    wait_for_t3_ready,
-)
+from ._pipeline import RESUMABLE_STEPS, PipelineDeps, run_launch_pipeline
+from ._sandbox_t3 import mint_pairing_token
 from ._store import FactoryStateStore, get_default_store
 
 logger = logging.getLogger(__name__)
@@ -69,35 +58,8 @@ class AppSandboxStoppedError(Exception):
         self.snapshot_name = snapshot_name
 
 
-class _BufferedLogFlusher:
-    """Coalesces launcher log callbacks so volume commits happen at most every interval_secs."""
-
-    def __init__(self, store: FactoryStateStore, request_id: str, *, interval_secs: float = 2.0) -> None:
-        self._store = store
-        self._request_id = request_id
-        self._interval_secs = interval_secs
-        self._pending: list[str] = []
-        self._last_flush = time.monotonic()
-
-    def append(self, line: str) -> None:
-        self._pending.append(line)
-        if time.monotonic() - self._last_flush >= self._interval_secs:
-            self.flush()
-
-    def flush(self) -> None:
-        if not self._pending:
-            return
-        batch = list(self._pending)
-        self._pending.clear()
-        self._last_flush = time.monotonic()
-        try:
-            self._store.modify_launch(self._request_id, lambda cur: cur.with_appended_logs(batch))
-        except Exception as exc:
-            logger.debug("Skipping buffered log commit for %s: %s", self._request_id, exc)
-
-
 class LaunchCoordinator:
-    """Orchestrates Factory App creation, T3 handoff, reopen, relaunch, and cleanup."""
+    """Orchestrates Factory App creation, T3 handoff, step resume, relaunch, and cleanup."""
 
     def __init__(
         self,
@@ -181,48 +143,71 @@ class LaunchCoordinator:
     def relaunch_factory_app(
         self,
         app_id: str,
+        *,
+        resume: bool = False,
         dispatch_fn: Callable[[str], None] | None = None,
     ) -> tuple[FactoryAppRecord, LaunchRequestRecord]:
-        """Creates a new Launch Request from an existing Factory App's saved prompt."""
+        """Starts a fresh Launch Request or resumes from the last failed step when alive."""
         app = self.store.get_app(app_id)
         if app is None:
             raise AppNotFoundError(f"Factory App '{app_id}' not found.")
-        if app.sandbox_id and self._get_running_sandbox(app.sandbox_id, app.profile) is not None:
+
+        resume_step: LaunchStatus | None = None
+        if (
+            resume
+            and app.failed_step in RESUMABLE_STEPS
+            and app.sandbox_id
+            and app.t3_url
+            and self._get_running_sandbox(app.sandbox_id, app.profile) is not None
+        ):
+            resume_step = app.failed_step
+        elif app.sandbox_id and self._get_running_sandbox(app.sandbox_id, app.profile) is not None:
             self._terminate_quietly(app.sandbox_id, profile=app.profile, reason="relaunch")
 
         request_id = f"req_{uuid.uuid4().hex[:12]}"
-        updated_app = app.model_copy(
-            update={
-                "status": "provisioning",
-                "latest_request_id": request_id,
-                "sandbox_id": None,
-                "sandbox_name": None,
-                "environment_id": None,
-                "project_id": None,
-                "thread_id": None,
-                "t3_url": None,
-                "chat_url": None,
-                "last_error": None,
-            }
-        )
+        if resume_step is not None:
+            updated_app = app.model_copy(
+                update={
+                    "status": "provisioning",
+                    "latest_request_id": request_id,
+                    "failed_step": None,
+                    "last_error": None,
+                }
+            )
+            label = f"Resuming from {resume_step}"
+        else:
+            updated_app = app.model_copy(
+                update={
+                    "status": "provisioning",
+                    "latest_request_id": request_id,
+                    "failed_step": None,
+                    "workspace_ready": False,
+                    "sandbox_id": None,
+                    "sandbox_name": None,
+                    "environment_id": None,
+                    "project_id": None,
+                    "thread_id": None,
+                    "t3_url": None,
+                    "chat_url": None,
+                    "database_name": None,
+                    "last_error": None,
+                }
+            )
+            label = "Queued relaunch request"
+
         launch = LaunchRequestRecord(
             request_id=request_id,
             app_id=app.app_id,
             kind="relaunch",
+            resume_from_step=resume_step,
             status="queued",
-            current_label="Queued relaunch request",
-            steps=initial_launch_steps(),
+            current_label=label,
+            steps=initial_launch_steps(resume_from=resume_step),
         )
         saved_app, saved_launch = self.store.create_app_and_launch(updated_app, launch)
         if dispatch_fn is not None:
             dispatch_fn(saved_launch.request_id)
         return saved_app, saved_launch
-
-    def _record_progress(self, request_id: str, status: LaunchStatus, label: str, log_line: str | None = None) -> None:
-        self.store.modify_launch(
-            request_id,
-            lambda cur: cur.with_stage(status, label, log_lines=[log_line] if log_line else None),
-        )
 
     def _terminate_quietly(self, sandbox_id: str | None, *, profile: str | None, reason: str) -> None:
         if not sandbox_id:
@@ -232,13 +217,8 @@ class LaunchCoordinator:
         except Exception as exc:
             logger.warning("Failed terminating sandbox %s during %s: %s", sandbox_id, reason, exc)
 
-    def _assert_request_active(self, app_id: str, request_id: str) -> None:
-        current = self.store.get_app(app_id)
-        if current is None or current.latest_request_id != request_id:
-            raise RuntimeError(f"Launch Request '{request_id}' was superseded or deleted.")
-
     def execute_launch_request(self, request_id: str) -> LaunchStatusResponse:
-        """Executes the full Launch Request provisioning pipeline synchronously."""
+        """Executes a Launch Request, resuming from failed_step on an active sandbox when requested."""
         launch = self.store.get_launch(request_id)
         if launch is None:
             raise AppNotFoundError(f"Launch Request '{request_id}' not found.")
@@ -246,141 +226,16 @@ class LaunchCoordinator:
         if app is None:
             raise AppNotFoundError(f"Factory App '{launch.app_id}' not found.")
 
-        app_dir = f"/root/{app.slug}"
-        sandbox_id: str | None = None
-        flusher = _BufferedLogFlusher(self.store, request_id)
-        try:
-            self._record_progress(request_id, "launching_sandbox", "Provisioning Modal sandbox", "Starting Modal sandbox...")
-            req = LaunchRequest(
-                repo=None,
-                name=app.slug,
-                vm=app.vm,
-                no_cloudflare=True,
-                t3=True,
-                no_t3_persist=self.no_t3_persist,
-                react_native=app.mobile_app,
-                modal=False,
-                profile=app.profile,
-            )
-            running = self.launch_fn(req, log_cb=flusher.append)
-            flusher.flush()
-            sb, launch_resp = (running.sandbox, running.response) if hasattr(running, "response") else running
-            sandbox_id = launch_resp.sandbox_id
-            if not launch_resp.t3_url:
-                raise RuntimeError("Modal sandbox did not expose a T3 Code Server tunnel URL.")
-            self._assert_request_active(app.app_id, request_id)
-
-            self._record_progress(
-                request_id,
-                "scaffolding_workspace",
-                "Preparing local Git workspace",
-                f"Sandbox {sandbox_id} online; preparing {app_dir}...",
-            )
-            if app.template == "nextjs":
-                cmd = ["create-app", app_dir, "-y"]
-                if app.mobile_app:
-                    cmd.append("--mobile-app")
-                rc, out, err = exec_in_sandbox(sb, *cmd, timeout=300)
-                if rc != 0:
-                    raise RuntimeError(f"create-app failed in {app_dir}: {err or out}")
-            else:
-                ensure_blank_git_workspace(sb, app_dir)
-            db_name = provision_optional_database(
-                sb, app, app_dir, env=self._effective_env(), create_db_fn=self.create_db_fn
-            )
-
-            self._record_progress(
-                request_id, "waiting_t3", "Waiting for T3 Code Server", "Checking T3 server & model readiness..."
-            )
-            t3_meta = wait_for_t3_ready(sb, timeout_secs=60)
-            environment_id = t3_meta["environment_id"]
-            instance_id, chosen_model, thought_level = resolve_provider_model(
-                t3_meta, app.provider, app.model, app.thought_level
-            )
-
-            self._record_progress(
-                request_id,
-                "starting_thread",
-                "Starting agent thread & pairing",
-                f"Registering workspace and starting thread ({instance_id}/{chosen_model})...",
-            )
-            thread_id, project_id = ensure_project_and_start_thread(
-                sb, app, app_dir, instance_id=instance_id, model=chosen_model, thought_level=thought_level
-            )
-            token = mint_pairing_token(sb)
-            chat_url = build_direct_chat_url(launch_resp.t3_url, environment_id, thread_id)
-            handoff_url = build_direct_chat_url(launch_resp.t3_url, environment_id, thread_id, token=token)
-            handoff_expires_at = utc_now_iso(offset_seconds=HANDOFF_TOKEN_TTL_SECONDS)
-
-            updated_app = self.store.update_app_if_current_request(
-                app.app_id,
-                request_id,
-                status="ready",
-                provider_instance_id=instance_id,
-                model=chosen_model,
-                sandbox_id=sandbox_id,
-                sandbox_name=launch_resp.sandbox_name,
-                environment_id=environment_id,
-                project_id=project_id,
-                thread_id=thread_id,
-                t3_url=launch_resp.t3_url,
-                chat_url=chat_url,
-                database_name=db_name,
-                last_error=None,
-            )
-            if updated_app is None:
-                self._terminate_quietly(sandbox_id, profile=app.profile, reason="superseded_ready")
-                try:
-                    failed_launch = self.store.modify_launch(
-                        request_id,
-                        lambda cur: cur.with_stage(
-                            "failed", "Superseded or deleted", error="Launch Request was superseded or deleted."
-                        ),
-                    )
-                    return LaunchStatusResponse(request=failed_launch, app=self.store.get_app(app.app_id, reload=False))
-                except KeyError:
-                    return LaunchStatusResponse(
-                        request=launch.with_stage("failed", "Deleted", error="Factory App deleted during launch."),
-                        app=None,
-                    )
-
-            updated_launch = self.store.modify_launch(
-                request_id,
-                lambda cur: cur.with_stage(
-                    "ready",
-                    "Ready — opening T3 Code",
-                    log_lines=[f"Ready: {chat_url}"],
-                    handoff_url=handoff_url,
-                    handoff_expires_at=handoff_expires_at,
-                    error=None,
-                ),
-            )
-            return LaunchStatusResponse(request=updated_launch, app=updated_app)
-        except Exception as exc:
-            flusher.flush()
-            err_msg = str(exc)
-            logger.error("Launch Request %s failed: %s", request_id, err_msg)
-            self._terminate_quietly(sandbox_id, profile=app.profile, reason="launch_failure")
-            updated_app = self.store.update_app_if_current_request(
-                app.app_id,
-                request_id,
-                status="failed",
-                sandbox_id=None,
-                last_error=err_msg,
-            )
-            try:
-                updated_launch = self.store.modify_launch(
-                    request_id,
-                    lambda cur: cur.with_stage(
-                        "failed", "Launch failed", log_lines=[f"Error: {err_msg}"], error=err_msg
-                    ),
-                )
-            except KeyError:
-                updated_launch = launch.with_stage("failed", "Launch failed", error=err_msg)
-            return LaunchStatusResponse(
-                request=updated_launch,
-                app=updated_app or self.store.get_app(app.app_id, reload=False),
-            )
+        deps = PipelineDeps(
+            store=self.store,
+            launch_fn=self.launch_fn,
+            create_db_fn=self.create_db_fn,
+            terminate_quietly=self._terminate_quietly,
+            get_running_sandbox=self._get_running_sandbox,
+            effective_env=self._effective_env,
+            no_t3_persist=self.no_t3_persist,
+        )
+        return run_launch_pipeline(deps, app, launch)
 
     def _attach_sandbox(self, sandbox_id: str, profile: str | None) -> Any | None:
         try:

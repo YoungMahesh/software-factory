@@ -136,6 +136,18 @@ class TestAppRoutes(unittest.TestCase):
         self.assertEqual(relaunch.status_code, 202)
         self.assertEqual(len(self.dispatched), 1)
 
+        # Resume query preserves failed sandbox when active
+        self.fake_sandbox.poll.return_value = None
+        self.store.save_app(
+            app_rec.model_copy(
+                update={"status": "failed", "failed_step": "waiting_t3", "workspace_ready": True}
+            )
+        )
+        resumed = self.client.post("/api/apps/app_xyz/relaunch?resume=true")
+        self.assertEqual(resumed.status_code, 202)
+        self.assertEqual(resumed.json()["request"]["resume_from_step"], "waiting_t3")
+        self.assertEqual(resumed.json()["app"]["sandbox_id"], "sb-stopped")
+
         deleted = self.client.delete("/api/apps/app_xyz?terminate_sandbox=true")
         self.assertEqual(deleted.status_code, 200)
         self.assertTrue(deleted.json()["deleted"])
