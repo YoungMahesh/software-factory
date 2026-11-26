@@ -2,6 +2,7 @@
 
 import base64
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -426,36 +427,32 @@ class TestWebAPI(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers["content-type"])
-        self.assertIn("Modal Sandbox Runner", response.text)
-        self.assertIn("Sandboxes", response.text)
-        self.assertIn("Snapshots", response.text)
-        self.assertIn("Workspace Profiles", response.text)
-        self.assertIn("overflow-x-auto", response.text)
+        self.assertIn("Modal Sandbox Control Plane API", response.text)
+
+        shell_src = (Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web" / "components" / "dashboard-shell.tsx").read_text(encoding="utf-8")
+        for label in ("Modal Sandbox Runner", "Sandboxes", "Snapshots", "Scratchpad"):
+            self.assertIn(label, shell_src)
 
     def test_index_page_contains_updated_launch_defaults(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        html = response.text
-        self.assertIn("this.launchForm.t3 = true;", html)
-        self.assertIn("this.launchForm.memory = snap.is_vm ? 1 : null;", html)
-        self.assertIn("replace(/[-_ ]*snapshot$/i, '')", html)
+        modal_src = (Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web" / "components" / "modals" / "snapshot-launch-modal.tsx").read_text(encoding="utf-8")
+        self.assertIn("useState(true)", modal_src)
+        self.assertIn("isVm ? 1 : null", modal_src)
+        self.assertIn("deriveResumedName", modal_src)
 
     def test_index_page_contains_actions_section_elements(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        html = response.text
-        self.assertIn("copySshCommand(sb)", html)
-        self.assertIn("sb.t3_pair_url", html)
-        self.assertIn("T3Code", html)
+        web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
+        sandboxes_src = (web_root / "app" / "sandboxes" / "page.tsx").read_text(encoding="utf-8")
+        self.assertIn("handleCopySsh", sandboxes_src)
+        self.assertIn("t3_pair_url", sandboxes_src)
+        self.assertIn("T3 Code", sandboxes_src)
 
     def test_index_page_contains_fresh_launch_elements(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        html = response.text
-        self.assertIn("openFreshLaunchModal()", html)
-        self.assertIn("Launch Fresh Sandbox", html)
-        self.assertIn("executeFreshLaunch()", html)
-        self.assertIn("freshLaunchForm.mode", html)
+        web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
+        provider_src = (web_root / "components" / "dashboard-provider.tsx").read_text(encoding="utf-8")
+        modal_src = (web_root / "components" / "modals" / "fresh-sandbox-modal.tsx").read_text(encoding="utf-8")
+        self.assertIn("openFreshLaunchModal", provider_src)
+        self.assertIn("Launch Fresh Sandbox", modal_src)
+        self.assertIn("handleLaunch", modal_src)
 
     def test_api_version_authenticated_and_unauth(self):
         with patch("sandbox.web.resolve_host_software_factory_provenance") as mock_prov:
@@ -474,9 +471,8 @@ class TestWebAPI(unittest.TestCase):
         self.assertEqual(unauth_client.get("/api/version").status_code, 401)
 
     def test_index_page_contains_version_badge(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("version.commit_short", response.text)
+        shell_src = (Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web" / "components" / "dashboard-shell.tsx").read_text(encoding="utf-8")
+        self.assertIn("version.commit_short", shell_src)
 
 
 

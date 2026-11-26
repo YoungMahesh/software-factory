@@ -1,0 +1,23 @@
+{
+  "name": "sandbox-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @dashboard/web dev",
+    "build": "pnpm --filter @dashboard/web build",
+    "start": "pnpm --filter @dashboard/web start",
+    "deploy:prod": "./deploy.sh",
+    "docker:build": "docker build -t sandbox-dashboard:latest .",
+    "lint": "pnpm --filter @dashboard/web lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.31.0"
+}

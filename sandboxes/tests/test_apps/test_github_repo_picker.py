@@ -349,11 +349,16 @@ class TestGitHubRepoPickerAndWebAppToggle(unittest.TestCase):
                     self.assertEqual(created.json()["app"]["repo"], "my-org/web-app")
                     self.assertFalse(created.json()["app"]["web_app"])
 
-                    html = client.get("/").text
-                    self.assertIn("github-repos-panel", html)
-                    self.assertIn("refresh-github-repos-btn", html)
-                    self.assertIn("builder-webapp-checkbox", html)
-                    self.assertIn("/api/github/repos/refresh", html)
+                    root_res = client.get("/")
+                    self.assertEqual(root_res.status_code, 200)
+
+                    web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
+                    builder_tsx = (web_root / "app" / "page.tsx").read_text(encoding="utf-8")
+                    provider_tsx = (web_root / "components" / "dashboard-provider.tsx").read_text(encoding="utf-8")
+                    self.assertIn("github-repos-panel", builder_tsx)
+                    self.assertIn("refresh-github-repos-btn", builder_tsx)
+                    self.assertIn("builder-webapp-checkbox", builder_tsx)
+                    self.assertIn("/api/github/repos/refresh", provider_tsx)
             finally:
                 set_coordinator_factory(None)
                 set_launch_dispatcher(None)

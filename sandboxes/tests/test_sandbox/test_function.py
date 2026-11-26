@@ -278,7 +278,6 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         }
         expected_files = {
             "/root/sandbox/web.py",
-            "/root/sandbox/static/index.html",
             "/root/shared/startup.sh",
             "/root/.scripts/setup.sh",
         }

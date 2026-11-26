@@ -2,3 +2,6 @@ packages:
   - "resource-plane"
   - "resource-plane/packages/*"
   - "resource-plane/apps/*"
+  - "dashboard"
+  - "dashboard/packages/*"
+  - "dashboard/apps/*"

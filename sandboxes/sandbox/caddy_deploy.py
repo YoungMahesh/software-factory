@@ -223,8 +223,8 @@ def setup_reverse_proxy(
     s3_domain: str | None = None, s3_upstream: str = DEFAULT_S3_UPSTREAM,
     bootstrap: bool = False, email: str | None = None, caddy_config: CaddyConfig | None = None,
     *, base_domain: str | None = None, cf_dns_token: str | None = None, wildcard: bool = False,
-    dashboard: bool = False, dashboard_upstream: str | None = None, no_dashboard: bool = False,
-    dotenv: dict[str, str] | None = None, env_file_path: Path | None = None,
+    dashboard: bool = False, dashboard_upstream: str | None = None, dashboard_web_upstream: str | None = None,
+    no_dashboard: bool = False, dotenv: dict[str, str] | None = None, env_file_path: Path | None = None,
 ) -> tuple[bool, str]:
     """High-level orchestration: optionally bootstraps /opt/caddy, sets up wildcard TLS, writes site config, and reloads."""
     cfg = caddy_config or CaddyConfig()
@@ -232,11 +232,12 @@ def setup_reverse_proxy(
     wants_wc = bool(
         wildcard or dashboard or no_dashboard
         or (dashboard_upstream and dashboard_upstream.strip())
+        or (dashboard_web_upstream and dashboard_web_upstream.strip())
         or (base_domain and base_domain.strip())
     )
     if wants_wc:
-        if no_dashboard and (dashboard or (dashboard_upstream and dashboard_upstream.strip())):
-            return False, "Cannot combine --no-dashboard with --dashboard or --dashboard-upstream."
+        if no_dashboard and (dashboard or (dashboard_upstream and dashboard_upstream.strip()) or (dashboard_web_upstream and dashboard_web_upstream.strip())):
+            return False, "Cannot combine --no-dashboard with --dashboard, --dashboard-upstream, or --dashboard-web-upstream."
         active_base = resolve_apps_base_domain(base_domain, dotenv=dotenv)
         resolved_cf = resolve_cloudflare_dns_token(cf_dns_token, dotenv=dotenv)
         dash_ok, effective_dash, dash_note = resolve_wildcard_dashboard_upstream(
@@ -248,7 +249,8 @@ def setup_reverse_proxy(
             return False, f"Sandbox Web Dashboard setup failed: {dash_note}"
         wc_ok, wc_msg = ensure_wildcard_caddy(
             vps_config, active_base, resolved_cf, bootstrap=bootstrap, email=email,
-            dashboard_upstream=effective_dash, preserve_dashboard=not no_dashboard,
+            dashboard_upstream=effective_dash, dashboard_web_upstream=dashboard_web_upstream,
+            preserve_dashboard=not no_dashboard,
             caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
         )
         if not wc_ok:
@@ -318,6 +320,7 @@ def build_caddy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-domain", default=None, help="App Base Domain for wildcard cert (defaults to APPS_BASE_DOMAIN).")
     parser.add_argument("--dashboard", action="store_true", help="Route APPS_BASE_DOMAIN apex to the Modal Sandbox Web Dashboard (implies --wildcard).")
     parser.add_argument("--dashboard-upstream", default=None, help="Modal Control Plane origin URL for apex reverse proxy (defaults to SANDBOX_DASHBOARD_UPSTREAM or Modal SDK lookup).")
+    parser.add_argument("--dashboard-web-upstream", default=None, help="Optional Next.js dashboard web container target (e.g. sandbox-dashboard-web:3000) for split apex routing.")
     parser.add_argument("--no-dashboard", action="store_true", help="Keep or revert APPS_BASE_DOMAIN apex to 404 instead of routing the Sandbox Web Dashboard.")
     parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize MODAL_SANDBOX_ENDPOINT_URL to local .env.")
     parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 API token (defaults to CLOUDFLARE_DNS_API_TOKEN or CLOUDFLARE_API_TOKEN).")
@@ -377,12 +380,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             s3_domain=args.s3_domain, s3_upstream=args.s3_upstream, sync=args.sync, caddy_cfg=caddy_cfg,
         )
 
-    if args.no_dashboard and (args.dashboard or (args.dashboard_upstream and args.dashboard_upstream.strip())):
-        print("❌ Cannot combine --no-dashboard with --dashboard or --dashboard-upstream.", file=sys.stderr)
+    if args.no_dashboard and (
+        args.dashboard
+        or (args.dashboard_upstream and args.dashboard_upstream.strip())
+        or (args.dashboard_web_upstream and args.dashboard_web_upstream.strip())
+    ):
+        print("❌ Cannot combine --no-dashboard with --dashboard, --dashboard-upstream, or --dashboard-web-upstream.", file=sys.stderr)
         return 1
 
     wants_wildcard = bool(
-        args.wildcard or args.base_domain or args.dashboard or args.dashboard_upstream or args.no_dashboard
+        args.wildcard or args.base_domain or args.dashboard or args.dashboard_upstream
+        or args.dashboard_web_upstream or args.no_dashboard
     )
     env_base = args.base_domain or os.environ.get("APPS_BASE_DOMAIN") or file_env.get("APPS_BASE_DOMAIN")
     env_cf = (args.cf_dns_token or os.environ.get("CLOUDFLARE_DNS_API_TOKEN") or file_env.get("CLOUDFLARE_DNS_API_TOKEN")
@@ -402,6 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "cf_dns_token": resolve_cloudflare_dns_token(args.cf_dns_token, dotenv=file_env),
                 "dashboard": args.dashboard,
                 "dashboard_upstream": args.dashboard_upstream,
+                "dashboard_web_upstream": args.dashboard_web_upstream,
                 "no_dashboard": args.no_dashboard,
                 "dotenv": file_env,
                 "env_file_path": None if args.no_sync_env else (root / ".env"),

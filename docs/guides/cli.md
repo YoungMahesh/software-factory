@@ -197,6 +197,35 @@ modal-sandbox infra deploy --host 203.0.113.10 --user root --key .secrets/resour
 | `--no-sync-env` | flag | `False` | Do not automatically synchronize `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env`. |
 | `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
 
+### `modal-sandbox infra dashboard`
+Deploys the Next.js **Sandbox Dashboard** (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS and optionally stages it on a subdomain or cuts over the apex of `APPS_BASE_DOMAIN` while keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal.
+
+```bash
+# Verify SSH and remote Docker connectivity
+modal-sandbox infra dashboard --check-only
+
+# Deploy container and stage on https://dashboard.<APPS_BASE_DOMAIN>
+modal-sandbox infra dashboard --subdomain dashboard
+
+# Deploy and cut over apex https://<APPS_BASE_DOMAIN> to Next.js
+modal-sandbox infra dashboard --cutover
+```
+
+#### `infra dashboard` Options
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--control-plane-url` | URL | `SANDBOX_DASHBOARD_UPSTREAM` / Modal SDK | Direct Modal Control Plane origin (`*.modal.run`) used by the Next.js BFF proxy. |
+| `--subdomain` | string | `None` | Expose staging preview at `<subdomain>.<APPS_BASE_DOMAIN>`. |
+| `--cutover` | flag | `False` | Switch apex `APPS_BASE_DOMAIN` to `sandbox-dashboard-web:3000` while preserving Modal CLI paths. |
+| `--base-domain` | string | `APPS_BASE_DOMAIN` | Override `APPS_BASE_DOMAIN`. |
+| `--cf-dns-token` | string | Factory DNS token variables | Cloudflare DNS-01 token when updating Caddy routes. |
+| `--remote-dir` | path | `/opt/sandbox-dashboard` | Destination path on remote VPS for `dashboard/`. |
+| `--sync` | flag | `False` | Back up `/opt/caddy` to Central Config Store after route changes. |
+| `--profile` | string | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`. |
+| `--host`, `--user`, `--port`, `--key` | string/int/path | `RESOURCE_PLANE_SSH_*` | Remote VPS SSH overrides. |
+| `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying. |
+
 ---
 
 ## Database & Storage Provisioning CLI Utilities
@@ -417,6 +446,7 @@ modal-sandbox infra caddy --bootstrap --from-store
 | `--base-domain` | `APPS_BASE_DOMAIN` | App Base Domain for the Sandbox Web Dashboard apex and Hosted Apps. |
 | `--dashboard` | `False` | Require routing the `APPS_BASE_DOMAIN` apex to the Modal Sandbox Web Dashboard (implies `--wildcard`). |
 | `--dashboard-upstream` | `SANDBOX_DASHBOARD_UPSTREAM` / Modal SDK | Modal Control Plane origin URL proxied at the apex (implies `--wildcard`). |
+| `--dashboard-web-upstream` | `None` | Optional Next.js dashboard web container target (e.g. `sandbox-dashboard-web:3000`) for split apex routing. |
 | `--no-dashboard` | `False` | Keep or revert the `APPS_BASE_DOMAIN` apex to HTTP `404`. |
 | `--no-sync-env` | `False` | Do not synchronize `MODAL_SANDBOX_ENDPOINT_URL` into local `.env`. |
 | `--cf-dns-token` | Factory DNS token variables | DNS-01 token. |

@@ -14,10 +14,12 @@ from sandbox.caddy_wildcard import (
     check_caddy_has_cloudflare_module,
     ensure_wildcard_caddy,
     extract_dashboard_upstream,
+    extract_dashboard_web_upstream,
     is_subdomain_of,
     lookup_control_plane_web_url,
     normalize_base_domain,
     normalize_dashboard_upstream,
+    normalize_dashboard_web_upstream,
     render_wildcard_site,
     resolve_apps_base_domain,
     resolve_cloudflare_dns_token,
@@ -218,6 +220,41 @@ class TestCaddyWildcard(unittest.TestCase):
 
         code_bad = caddy_main(["--dashboard", "--no-dashboard", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
         self.assertEqual(code_bad, 1)
+
+    def test_render_wildcard_site_split_apex_routing_and_preservation(self):
+        modal_upstream = "https://ws--sandbox-control-plane-fastapi-app.modal.run"
+        web_upstream = "sandbox-dashboard-web:3000"
+        rendered = render_wildcard_site(
+            "apps.example.com",
+            dashboard_upstream=modal_upstream,
+            dashboard_web_upstream=web_upstream,
+        )
+        self.assertIn("@sandbox_dashboard_cli {", rendered)
+        self.assertIn("path /launch /snapshot /health /api/codex/profiles", rendered)
+        self.assertIn(f"reverse_proxy {modal_upstream} {{", rendered)
+        self.assertIn("@sandbox_dashboard host apps.example.com", rendered)
+        self.assertIn(f"reverse_proxy {web_upstream} {{", rendered)
+        self.assertEqual(extract_dashboard_upstream(rendered), modal_upstream)
+        self.assertEqual(extract_dashboard_web_upstream(rendered), web_upstream)
+
+        legacy = render_wildcard_site("apps.example.com", dashboard_upstream=modal_upstream)
+        self.assertIsNone(extract_dashboard_web_upstream(legacy))
+
+        with self.assertRaises(ValueError):
+            normalize_dashboard_web_upstream("https://apps.example.com", base_domain="apps.example.com")
+
+        with (
+            patch("sandbox.caddy_wildcard.prepare_runtime") as mock_prep,
+            patch("sandbox.caddy_wildcard._read_remote", return_value=(True, rendered)),
+        ):
+            mock_prep.return_value = type("Res", (), {"success": True, "message": "ok"})()
+            ok, _ = ensure_wildcard_caddy(
+                self.vps_config, "apps.example.com", "cf-tok", preserve_dashboard=True
+            )
+            self.assertTrue(ok)
+            written = mock_prep.call_args.kwargs["files"]["conf/sites/apps-wildcard.caddy"]
+            self.assertIn(modal_upstream, written)
+            self.assertIn(web_upstream, written)
 
 
 if __name__ == "__main__":

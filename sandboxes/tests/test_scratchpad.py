@@ -407,6 +407,11 @@ class TestScratchpadAPI(unittest.TestCase):
     def test_dashboard_html_exposes_ideas_and_raw_sections_and_image_installs_opencode(self):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
+
+        web_root = Path(__file__).resolve().parents[2] / "dashboard" / "apps" / "web"
+        scratchpad_tsx = (web_root / "app" / "scratchpad" / "page.tsx").read_text(encoding="utf-8")
+        provider_tsx = (web_root / "components" / "dashboard-provider.tsx").read_text(encoding="utf-8")
+        combined = scratchpad_tsx + "\n" + provider_tsx
         for marker in (
             "Scratchpad",
             "scratchpad-subtab-ideas",
@@ -416,11 +421,11 @@ class TestScratchpadAPI(unittest.TestCase):
             "scratchpad-raw-submit-btn",
             "/api/scratchpad/notes/refresh",
             "/api/scratchpad/suggest",
-            "scratchpadModalOpen",
         ):
-            self.assertIn(marker, resp.text)
-        self.assertNotIn("scratchpad-save-raw-btn", resp.text)
-        self.assertNotIn("scratchpad-modal-save-raw-btn", resp.text)
+            self.assertIn(marker, combined)
+        self.assertIn("ScratchpadSuggestionModal", scratchpad_tsx)
+        self.assertNotIn("scratchpad-save-raw-btn", combined)
+        self.assertNotIn("scratchpad-modal-save-raw-btn", combined)
         self.assertTrue(any("opencode.ai/v2/install" in cmd for cmd in OPENCODE_INSTALL_COMMANDS))
 
         def _deps(obj):

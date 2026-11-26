@@ -57,7 +57,6 @@ include = ["sandbox*", "shared*", "scripts*"]
 
 [tool.setuptools.package-data]
 shared = ["*", "skills/**/*"]
-sandbox = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["sandboxes/tests"]

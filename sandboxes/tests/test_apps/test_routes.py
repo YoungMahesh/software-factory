@@ -161,15 +161,20 @@ class TestAppRoutes(unittest.TestCase):
         self.assertIsNotNone(run_launch_request)
         self.assertEqual(control_plane_modal_app.name, "sandbox-control-plane")
 
-    def test_homepage_serves_prompt_builder_while_preserving_operator_tabs(self):
+    def test_homepage_serves_status_page_and_nextjs_builder_exposes_operator_flows(self):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
-        html = res.text
-        self.assertIn("currentTab: 'builder'", html)
-        self.assertIn("builder-prompt-input", html)
-        self.assertIn("builderSelectedModelIndex", html)
-        self.assertIn("/api/apps", html)
-        self.assertIn("/api/launches/", html)
-        self.assertIn("/api/models", html)
-        self.assertIn("Relaunch", html)
-        self.assertIn("Resume Snapshot", html)
+        self.assertIn("Modal Sandbox Control Plane API", res.text)
+
+        web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
+        builder_tsx = (web_root / "app" / "page.tsx").read_text(encoding="utf-8")
+        provider_tsx = (web_root / "components" / "dashboard-provider.tsx").read_text(encoding="utf-8")
+        grid_tsx = (web_root / "components" / "builder" / "factory-app-grid.tsx").read_text(encoding="utf-8")
+        observer_ts = (web_root / "hooks" / "use-launch-observer.ts").read_text(encoding="utf-8")
+
+        self.assertIn("builder-prompt-input", builder_tsx)
+        self.assertIn("/api/apps", provider_tsx)
+        self.assertIn("/api/launches/", observer_ts)
+        self.assertIn("/api/models", provider_tsx)
+        self.assertIn("Relaunch", grid_tsx)
+        self.assertIn("Resume Snapshot", grid_tsx)

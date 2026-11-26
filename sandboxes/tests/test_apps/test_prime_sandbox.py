@@ -417,10 +417,15 @@ class TestPrimeSandbox(unittest.TestCase):
                     self.assertEqual(body[0]["runtime_status"], "running")
                     self.assertEqual(body[0]["app_count"], 1)
 
-                    html = client.get("/").text
-                    self.assertIn("/api/primes", html)
-                    self.assertIn("Snapshot Sandbox", html)
-                    self.assertNotIn("New Prime Sandbox", html)
+                    root_res = client.get("/")
+                    self.assertEqual(root_res.status_code, 200)
+
+                    web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
+                    provider_tsx = (web_root / "components" / "dashboard-provider.tsx").read_text(encoding="utf-8")
+                    grid_tsx = (web_root / "components" / "builder" / "factory-app-grid.tsx").read_text(encoding="utf-8")
+                    self.assertIn("/api/primes", provider_tsx)
+                    self.assertIn("Snapshot Sandbox", grid_tsx)
+                    self.assertNotIn("New Prime Sandbox", provider_tsx + grid_tsx)
 
                     with patch("sandbox.web.terminate_sandbox", return_value={"id": "sb-route", "status": "terminated"}):
                         term = client.post("/api/sandboxes/sb-route/terminate")

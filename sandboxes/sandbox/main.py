@@ -230,6 +230,9 @@ def main():
         if args and args[0] == "caddy":
             from sandbox.caddy_deploy import main as caddy_main
             sys.exit(caddy_main(args[1:]))
+        if args and args[0] == "dashboard":
+            from sandbox.dashboard_deploy import main as dashboard_main
+            sys.exit(dashboard_main(args[1:]))
         from sandbox.infra_deploy import main as infra_main
         sys.exit(infra_main(args[1:] if args[:1] == ["deploy"] else args))
 

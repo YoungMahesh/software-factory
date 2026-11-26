@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -128,8 +129,17 @@ class TestWebFreshLaunch(unittest.TestCase):
     def test_index_html_has_software_factory_and_sops(self):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
-        html = res.text
-        self.assertIn("software-factory", html)
-        self.assertIn("SOPS", html)
-        self.assertIn("/api/sandboxes/stream", html)
-        self.assertIn("fresh-launch-log-box", html)
+        self.assertIn("Modal Sandbox Control Plane", res.text)
+        modal_src = (
+            Path(__file__).resolve().parents[3]
+            / "dashboard"
+            / "apps"
+            / "web"
+            / "components"
+            / "modals"
+            / "fresh-sandbox-modal.tsx"
+        ).read_text(encoding="utf-8")
+        self.assertIn("software-factory", modal_src)
+        self.assertIn("SOPS", modal_src)
+        self.assertIn("/api/sandboxes/stream", modal_src)
+        self.assertIn("fresh-launch-log-box", modal_src)

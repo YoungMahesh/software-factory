@@ -1,9 +1,9 @@
-"""Web UI API routes and router for Modal Sandbox Runner.
+"""Web API routes and router for Modal Sandbox Runner Control Plane.
 
 Provides REST endpoints for inspecting and terminating sandboxes, capturing
-and listing filesystem snapshots, launching from snapshots, and serving the
-embedded HTML5 single-page application across multiple Modal workspace profiles.
-Exclusively hosted in Modal cloud via sandbox/function.py.
+and listing filesystem snapshots, launching from snapshots, Factory Apps, and
+Scratchpad workflows across Modal workspace profiles. Exclusively hosted in
+Modal cloud via sandbox/function.py and consumed by the Next.js dashboard.
 """
 
 from __future__ import annotations
@@ -12,14 +12,13 @@ import base64
 import json
 import logging
 import os
-from pathlib import Path
 import queue
 import secrets
 import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 import modal
 from pydantic import BaseModel
 
@@ -53,8 +52,6 @@ from sandbox.snapshots import (
 )
 
 logger = logging.getLogger(__name__)
-
-STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def check_authentication(request: Request) -> None:
@@ -431,22 +428,15 @@ def api_launch_from_snapshot(image_id: str, payload: SnapshotLaunchPayload) -> L
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to launch from snapshot: {exc}") from exc
 
 
-@router.get("/static/launch-observer.js")
-def launch_observer_script() -> FileResponse:
-    """Serves the dashboard's Launch Request observation module under dashboard auth."""
-    return FileResponse(STATIC_DIR / "launch-observer.js", media_type="text/javascript")
-
-
 @router.get("/", response_class=HTMLResponse)
 def index_page() -> HTMLResponse:
-    """Serves the single-page application dashboard."""
-    index_file = STATIC_DIR / "index.html"
-    if not index_file.is_file():
-        return HTMLResponse(
-            "<html><body><h2>Sandbox Runner Web UI</h2><p>Static index.html not found.</p></body></html>",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-    return HTMLResponse(index_file.read_text(encoding="utf-8"))
+    """Serves a minimal authenticated status page for the Control Plane API."""
+    return HTMLResponse(
+        "<!doctype html><html><head><title>Modal Sandbox Control Plane</title></head>"
+        "<body><h2>Modal Sandbox Control Plane API</h2>"
+        "<p>The web dashboard is served by the Next.js frontend. "
+        "API health: <a href=\"/health\">/health</a>.</p></body></html>"
+    )
 
 
 router.include_router(apps_router)

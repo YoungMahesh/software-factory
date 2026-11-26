@@ -160,7 +160,6 @@ image = (
     .add_local_python_source("sandbox")
     .add_local_dir(execution_root / "shared", "/root/shared", ignore=["**/__pycache__"])
     .add_local_dir(execution_root / "scripts", "/root/.scripts", ignore=["**/__pycache__"])
-    .add_local_dir(sandbox_dir / "static", "/root/sandbox/static")
 )
 image = stage_app_template_into_image(
     image,
