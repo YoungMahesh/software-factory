@@ -2,163 +2,178 @@
 <html lang="en" class="h-full bg-slate-950 text-slate-100">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Modal Sandbox Runner</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
+    html, body { overscroll-behavior-x: none; }
   </style>
 </head>
-<body class="h-full flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white"
+<body class="min-h-full flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white overflow-x-hidden"
       x-data="sandboxApp()" x-init="init()" x-cloak>
 
   <!-- Top Navbar -->
   <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/30">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:min-h-16 flex flex-wrap items-center justify-between gap-2.5">
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div class="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-indigo-600 flex-shrink-0 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/30">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
         </div>
-        <div>
-          <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
-            Modal Sandbox Runner
-            <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">Control Plane</span>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-lg font-semibold tracking-tight text-white flex flex-wrap items-center gap-1.5 sm:gap-2 leading-tight">
+            <span class="truncate">Modal Sandbox Runner</span>
+            <span class="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">Control Plane</span>
             <span x-show="version && version.commit_short && version.commit_short !== 'unknown'"
-                  class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono"
+                  class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono"
                   x-text="'git: ' + (version ? version.commit_short : '')"></span>
           </h1>
         </div>
       </div>
 
       <!-- Navigation & Global Controls -->
-      <div class="flex items-center space-x-3 sm:space-x-4">
+      <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
         <!-- Profile Switcher Dropdown -->
         <div class="relative" x-data="{ open: false }">
           <button @click="open = !open"
-                  class="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors">
-            <span class="w-2 h-2 rounded-full mr-2" :class="selectedProfile === 'all' ? 'bg-indigo-400' : 'bg-emerald-400'"></span>
+                  class="inline-flex items-center px-2.5 sm:px-3 py-1.5 min-h-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors max-w-[150px] sm:max-w-none">
+            <span class="w-2 h-2 rounded-full mr-1.5 sm:mr-2 flex-shrink-0" :class="selectedProfile === 'all' ? 'bg-indigo-400' : 'bg-emerald-400'"></span>
             <span class="text-slate-400 mr-1 hidden sm:inline">Profile:</span>
-            <span class="font-semibold text-white" x-text="selectedProfile === 'all' ? 'All Profiles' : selectedProfile"></span>
-            <svg class="w-3.5 h-3.5 ml-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <span class="font-semibold text-white truncate" x-text="selectedProfile === 'all' ? 'All Profiles' : selectedProfile"></span>
+            <svg class="w-3.5 h-3.5 ml-1 sm:ml-1.5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
 
           <div x-show="open" @click.away="open = false"
-               class="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 text-xs">
+               class="absolute right-0 mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 text-xs">
             <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800">
               Workspace Profiles
             </div>
             <button @click="selectProfile('all'); open = false;"
-                    class="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
+                    class="w-full text-left px-3 py-2.5 sm:py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
                     :class="selectedProfile === 'all' ? 'text-indigo-400 font-semibold bg-slate-800/40' : 'text-slate-300'">
-              <div class="flex items-center space-x-2">
-                <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-                <span>All Profiles (Aggregated)</span>
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0"></span>
+                <span class="truncate">All Profiles (Aggregated)</span>
               </div>
-              <span x-show="selectedProfile === 'all'" class="text-indigo-400 font-bold">✓</span>
+              <span x-show="selectedProfile === 'all'" class="text-indigo-400 font-bold ml-2">✓</span>
             </button>
             <template x-for="p in profiles" :key="p.name">
               <button @click="selectProfile(p.name); open = false;"
-                      class="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
+                      class="w-full text-left px-3 py-2.5 sm:py-2 hover:bg-slate-800 flex items-center justify-between transition-colors"
                       :class="selectedProfile === p.name ? 'text-indigo-400 font-semibold bg-slate-800/40' : 'text-slate-300'">
-                <div class="flex items-center space-x-2">
-                  <span class="w-2 h-2 rounded-full" :class="p.active ? 'bg-emerald-400' : 'bg-slate-500'"></span>
-                  <span x-text="p.name"></span>
-                  <span x-show="p.active" class="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-emerald-400 font-mono">active</span>
+                <div class="flex items-center space-x-2 min-w-0">
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.active ? 'bg-emerald-400' : 'bg-slate-500'"></span>
+                  <span class="truncate" x-text="p.name"></span>
+                  <span x-show="p.active" class="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-emerald-400 font-mono flex-shrink-0">active</span>
                 </div>
-                <span x-show="selectedProfile === p.name" class="text-indigo-400 font-bold">✓</span>
+                <span x-show="selectedProfile === p.name" class="text-indigo-400 font-bold ml-2">✓</span>
               </button>
             </template>
           </div>
         </div>
 
-        <!-- Auto-refresh Toggle -->
+        <!-- Mobile Auto-refresh Pill -->
+        <button type="button" @click="autoRefresh = !autoRefresh"
+                :aria-pressed="autoRefresh"
+                title="Toggle 5s auto-refresh"
+                :class="autoRefresh ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                class="md:hidden inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[36px] rounded-lg border text-xs font-medium transition-colors">
+          <span class="w-1.5 h-1.5 rounded-full" :class="autoRefresh ? 'bg-indigo-400 animate-pulse' : 'bg-slate-500'"></span>
+          <span>5s</span>
+        </button>
+
+        <!-- Desktop Auto-refresh Toggle -->
         <label class="hidden md:flex items-center space-x-2 text-xs text-slate-400 cursor-pointer select-none">
           <input type="checkbox" x-model="autoRefresh" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0">
           <span>Auto-refresh (5s)</span>
         </label>
 
         <!-- Refresh Button -->
-        <button @click="refreshAll()" :disabled="loading"
-                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium text-slate-200 transition-colors disabled:opacity-50">
-          <svg class="w-4 h-4 mr-1.5" :class="{'animate-spin': loading}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button @click="refreshAll()" :disabled="loading" aria-label="Refresh"
+                class="inline-flex items-center justify-center px-2.5 sm:px-3 py-1.5 min-h-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-medium text-slate-200 transition-colors disabled:opacity-50">
+          <svg class="w-4 h-4 sm:mr-1.5" :class="{'animate-spin': loading}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          Refresh
+          <span class="hidden sm:inline">Refresh</span>
         </button>
       </div>
     </div>
   </header>
 
   <!-- Main Content Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
     
     <!-- Tab Controls & Filter -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-      <nav class="flex space-x-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
-        <button @click="currentTab = 'builder'"
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-6">
+      <nav class="grid grid-cols-2 sm:inline-flex gap-1.5 sm:gap-2 bg-slate-900 p-1.5 sm:p-1 rounded-xl border border-slate-800 w-full lg:w-auto">
+        <button @click="currentTab = 'builder'; window.location.hash = 'builder'"
                 :class="currentTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center justify-center sm:justify-start gap-1.5 min-w-0">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span>Builder</span>
-          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+          <span class="truncate">Builder</span>
+          <span class="ml-0.5 px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs rounded-full bg-slate-800 text-slate-300 flex-shrink-0"
                 x-text="apps.length"></span>
         </button>
 
-        <button @click="currentTab = 'sandboxes'"
+        <button @click="currentTab = 'sandboxes'; window.location.hash = 'sandboxes'"
                 :class="currentTab === 'sandboxes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center justify-center sm:justify-start gap-1.5 min-w-0">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
           </svg>
-          <span>Sandboxes</span>
-          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+          <span class="truncate">Sandboxes</span>
+          <span class="ml-0.5 px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs rounded-full bg-slate-800 text-slate-300 flex-shrink-0"
                 x-text="runningCount"></span>
         </button>
 
-        <button @click="currentTab = 'snapshots'"
+        <button @click="currentTab = 'snapshots'; window.location.hash = 'snapshots'"
                 :class="currentTab === 'snapshots' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center justify-center sm:justify-start gap-1.5 min-w-0">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span>Snapshots</span>
-          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+          <span class="truncate">Snapshots</span>
+          <span class="ml-0.5 px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs rounded-full bg-slate-800 text-slate-300 flex-shrink-0"
                 x-text="snapshots.length"></span>
         </button>
 
         <button id="nav-tab-scratchpad"
                 @click="openScratchpadTab()"
                 :class="currentTab === 'scratchpad' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center justify-center sm:justify-start gap-1.5 min-w-0">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
-          <span>Scratchpad</span>
-          <span class="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300"
+          <span class="truncate">Scratchpad</span>
+          <span class="ml-0.5 px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs rounded-full bg-slate-800 text-slate-300 flex-shrink-0"
                 x-text="scratchpadNotes.length"></span>
         </button>
       </nav>
 
       <!-- Quick Filter & Actions -->
-      <div class="flex items-center space-x-3">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
         <div class="relative w-full sm:w-64">
           <input type="text" x-model="searchQuery" placeholder="Filter apps, IDs, profiles..."
-                 class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
-          <svg class="w-4 h-4 absolute left-3 top-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-8 py-2 text-base sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+          <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
+          <button x-show="searchQuery" type="button" @click="searchQuery = ''" aria-label="Clear filter"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs px-1 py-0.5">
+            ✕
+          </button>
         </div>
 
         <!-- Launch Fresh Sandbox Button -->
         <button x-show="currentTab === 'sandboxes'" @click="openFreshLaunchModal()"
-                class="inline-flex items-center px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors shadow-md flex-shrink-0">
+                class="inline-flex items-center justify-center px-3.5 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors shadow-md flex-shrink-0">
           <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
@@ -168,19 +183,19 @@
     </div>
 
     <!-- TAB 0: PROMPT BUILDER HOMEPAGE -->
-    <div x-show="currentTab === 'builder'" class="space-y-8">
+    <div x-show="currentTab === 'builder'" class="space-y-6 sm:space-y-8">
       <!-- Prompt Composer + Cached GitHub Repo Hero -->
-      <section class="bg-gradient-to-b from-slate-900 to-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-5">
-        <div class="space-y-1.5">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">What do you want to build?</h2>
+      <section class="bg-gradient-to-b from-slate-900 to-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl space-y-4 sm:space-y-5">
+        <div class="space-y-2">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <h2 class="text-xl sm:text-3xl font-bold tracking-tight text-white">What do you want to build?</h2>
             <!-- Prime Sandbox Status Pill -->
-            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 sm:py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs max-w-full">
               <span class="w-2 h-2 rounded-full flex-shrink-0"
                     :class="matchingPrimeSandbox?.runtime_status === 'running' ? 'bg-emerald-400 animate-pulse' : (matchingPrimeSandbox?.runtime_status === 'provisioning' ? 'bg-indigo-400 animate-pulse' : 'bg-slate-600')"></span>
               <template x-if="matchingPrimeSandbox?.runtime_status === 'running'">
-                <span class="text-slate-300">
-                  Prime Sandbox <span class="font-mono text-emerald-300" x-text="matchingPrimeSandbox.sandbox_id"></span>
+                <span class="text-slate-300 break-words">
+                  Prime Sandbox <span class="font-mono text-emerald-300 break-all" x-text="matchingPrimeSandbox.sandbox_id"></span>
                   <span class="text-slate-500" x-text="'(' + matchingPrimeSandbox.app_count + ' app' + (matchingPrimeSandbox.app_count === 1 ? '' : 's') + ')'"></span>
                 </span>
               </template>
@@ -191,33 +206,33 @@
                 <span class="text-slate-400">No active Prime Sandbox — first launch boots one</span>
               </template>
               <button type="button" @click="currentTab = 'sandboxes'; window.location.hash = 'sandboxes'"
-                      class="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline ml-1">
+                      class="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline font-medium">
                 Sandboxes
               </button>
             </div>
           </div>
-          <p class="text-sm text-slate-400">
+          <p class="text-xs sm:text-sm text-slate-400">
             Describe a new app or select a GitHub repository to open in the shared Prime Sandbox. Repository lists stay cached until you click Refresh.
           </p>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
           <!-- Left: Prompt Composer & Builder Controls -->
-          <div class="lg:col-span-7 flex flex-col justify-between space-y-3">
+          <div class="lg:col-span-7 flex flex-col justify-between space-y-3 min-w-0">
             <div class="space-y-3">
               <!-- Selected GitHub Repo Banner -->
               <div x-show="builderForm.repo"
-                   class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs">
+                   class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 sm:py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs">
                 <div class="flex flex-wrap items-center gap-2 min-w-0">
-                  <span class="px-2 py-0.5 rounded bg-indigo-600/30 text-indigo-200 font-semibold">Repo</span>
-                  <span class="font-mono text-white font-semibold truncate" x-text="builderForm.repo"></span>
+                  <span class="px-2 py-0.5 rounded bg-indigo-600/30 text-indigo-200 font-semibold flex-shrink-0">Repo</span>
+                  <span class="font-mono text-white font-semibold truncate max-w-full" x-text="builderForm.repo"></span>
                   <span class="text-slate-500">@</span>
                   <input id="builder-repo-branch" type="text" x-model="builderForm.branch" placeholder="main"
                          aria-label="Target branch"
-                         class="w-28 bg-slate-950 border border-slate-700 rounded-md px-2 py-0.5 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                         class="flex-1 min-w-[6rem] sm:flex-initial sm:w-28 bg-slate-950 border border-slate-700 rounded-md px-2 py-1 sm:py-0.5 font-mono text-base sm:text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                 </div>
                 <button type="button" @click="clearSelectedRepo()"
-                        class="text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
+                        class="self-start sm:self-auto text-slate-300 hover:text-white px-2.5 py-1 sm:py-0.5 rounded bg-slate-900/80 border border-slate-700 flex-shrink-0">
                   ✕ New from scratch
                 </button>
               </div>
@@ -226,16 +241,16 @@
                         @keydown.meta.enter.prevent="submitAppPrompt()"
                         @keydown.ctrl.enter.prevent="submitAppPrompt()"
                         :placeholder="builderForm.repo ? ('Optional prompt for ' + builderForm.repo + ' (leave empty to open directly in T3)...') : 'Build a personal habit tracker with daily streaks, analytics chart, and dark mode...'"
-                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
+                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
             </div>
 
             <!-- Compact Builder Controls -->
             <div class="space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <div class="flex flex-wrap items-center gap-2 text-xs">
+              <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 pt-1">
+                <div class="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto">
                   <!-- Model Selector -->
                   <select x-model.number="builderSelectedModelIndex" @change="onBuilderModelChange()"
-                          class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                          class="w-full sm:w-auto max-w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                     <template x-for="(m, idx) in availableModels" :key="idx">
                       <option :value="idx" x-text="m.label"></option>
                     </template>
@@ -244,7 +259,7 @@
                   <!-- Thinking Level Selector -->
                   <select x-show="selectedBuilderModel && selectedBuilderModel.thought_levels && selectedBuilderModel.thought_levels.length > 0"
                           x-model="builderForm.thought_level"
-                          class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                          class="w-full sm:w-auto max-w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                     <option value="">Thinking: Default</option>
                     <template x-for="opt in (selectedBuilderModel?.thought_levels || [])" :key="opt.id">
                       <option :value="opt.id" x-text="'Thinking: ' + opt.label"></option>
@@ -255,26 +270,26 @@
                   <div x-show="!builderForm.repo" class="inline-flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
                     <button type="button" @click="selectTemplate('nextjs')"
                             :class="builderForm.template === 'nextjs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
-                            class="px-2.5 py-1 rounded-md transition-colors">
+                            class="px-2.5 py-1.5 sm:py-1 rounded-md transition-colors">
                       Next.js App
                     </button>
                     <button type="button" @click="selectTemplate('blank')"
                             :class="builderForm.template === 'blank' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
-                            class="px-2.5 py-1 rounded-md transition-colors">
+                            class="px-2.5 py-1.5 sm:py-1 rounded-md transition-colors">
                       Blank Git Repo
                     </button>
                   </div>
 
                   <!-- Mobile App Toggle (Scratch Next.js only) -->
                   <label x-show="!builderForm.repo && builderForm.template === 'nextjs'"
-                         class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
+                         class="inline-flex items-center space-x-1.5 px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
                     <input type="checkbox" x-model="builderForm.mobile_app" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
                     <span>+ Mobile</span>
                   </label>
 
                   <!-- Web App Checkbox -->
                   <label title="When checked, appends run-app startup and preview port instructions to the prompt"
-                         class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
+                         class="inline-flex items-center space-x-1.5 px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
                     <input id="builder-webapp-checkbox" type="checkbox" x-model="builderForm.web_app"
                            class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
                     <span>web app</span>
@@ -282,14 +297,14 @@
 
                   <!-- Advanced Options Toggle -->
                   <button type="button" @click="builderShowAdvanced = !builderShowAdvanced"
-                          class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
+                          class="px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
                     <span x-text="builderShowAdvanced ? '▾ Advanced' : '▸ Advanced'"></span>
                   </button>
                 </div>
 
                 <button id="builder-submit-btn" type="button" @click="submitAppPrompt()"
                         :disabled="builderSubmitting || (!builderForm.repo && !builderForm.prompt.trim())"
-                        class="inline-flex items-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="w-full sm:w-auto inline-flex items-center justify-center px-5 py-3 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   <svg x-show="builderSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -302,12 +317,12 @@
                 <div>
                   <label class="block text-slate-400 mb-1">App / Workspace Name (optional)</label>
                   <input type="text" x-model="builderForm.name" placeholder="Auto-derived from repo or prompt"
-                         class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                         class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                 </div>
                 <div>
                   <label class="block text-slate-400 mb-1">Modal Profile</label>
                   <select x-model="builderForm.profile"
-                          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                     <option value="">Active Default Profile</option>
                     <template x-for="p in profiles" :key="p.name">
                       <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
@@ -315,7 +330,7 @@
                   </select>
                 </div>
                 <div class="flex items-end pb-1">
-                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
+                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer select-none py-1">
                     <input type="checkbox" x-model="builderForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
                     <span>VM Sandbox (Docker runtime)</span>
                   </label>
@@ -325,17 +340,17 @@
           </div>
 
           <!-- Right: Cached GitHub Repositories Picker -->
-          <div id="github-repos-panel" class="lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
-            <div class="space-y-2.5">
+          <div id="github-repos-panel" class="lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 sm:p-4 flex flex-col justify-between space-y-3 min-w-0">
+            <div class="space-y-2.5 min-w-0">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2 min-w-0">
-                  <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-300">GitHub Repositories</h3>
+                  <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-300 truncate">GitHub Repositories</h3>
                   <span x-show="repoCatalog.org"
-                        class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono truncate"
+                        class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono truncate max-w-[7rem]"
                         x-text="repoCatalog.org"></span>
                 </div>
                 <button id="refresh-github-repos-btn" type="button" @click="refreshGithubRepos()" :disabled="repoRefreshing"
-                        class="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors disabled:opacity-50">
+                        class="inline-flex items-center px-2.5 py-1.5 sm:py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors disabled:opacity-50 flex-shrink-0">
                   <svg class="w-3.5 h-3.5 mr-1" :class="{'animate-spin': repoRefreshing}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -344,27 +359,27 @@
               </div>
 
               <input id="github-repo-search" type="text" x-model="repoSearchQuery"
-                     placeholder="Filter cached repos or enter owner/repo..."
-                     class="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none">
+                     placeholder="Filter repos or enter owner/repo..."
+                     class="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 placeholder-slate-500 focus:outline-none">
 
               <button x-show="customRepoCandidate" type="button" @click="selectCustomRepo(customRepoCandidate)"
-                      class="w-full text-left px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-xs text-indigo-200 flex items-center justify-between">
-                <span>Use repository <span class="font-mono font-semibold" x-text="customRepoCandidate"></span></span>
-                <span class="text-[10px] text-indigo-300">Select</span>
+                      class="w-full text-left px-2.5 py-2 sm:py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-xs text-indigo-200 flex items-center justify-between gap-2">
+                <span class="truncate">Use repository <span class="font-mono font-semibold" x-text="customRepoCandidate"></span></span>
+                <span class="text-[10px] text-indigo-300 flex-shrink-0">Select</span>
               </button>
 
               <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                 <template x-for="repoItem in filteredGithubRepos" :key="repoItem.full_name">
                   <button type="button" @click="toggleSelectRepo(repoItem)"
                           :class="builderForm.repo === repoItem.full_name ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800 text-slate-300'"
-                          class="w-full text-left px-3 py-2 rounded-lg border transition-colors space-y-0.5">
+                          class="w-full text-left px-3 py-2.5 sm:py-2 rounded-lg border transition-colors space-y-0.5">
                     <div class="flex items-center justify-between gap-2">
-                      <span class="font-mono text-xs font-medium truncate" x-text="repoItem.name"></span>
+                      <span class="font-mono text-xs font-medium truncate min-w-0" x-text="repoItem.name"></span>
                       <div class="flex items-center gap-1 flex-shrink-0">
                         <span class="text-[10px] px-1.5 py-0.2 rounded font-mono"
                               :class="repoItem.private ? 'bg-amber-500/10 text-amber-300' : 'bg-slate-800 text-slate-400'"
                               x-text="repoItem.private ? 'private' : 'public'"></span>
-                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono"
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono max-w-[5.5rem] truncate"
                               x-text="repoItem.default_branch"></span>
                       </div>
                     </div>
@@ -381,7 +396,7 @@
               </div>
             </div>
 
-            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+            <div class="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500">
               <span x-text="repoCatalog.refreshed_at ? ('Updated ' + formatDate(repoCatalog.refreshed_at)) : 'Not fetched yet (manual refresh only)'"></span>
               <span x-text="repoCatalog.repos.length + ' repo' + (repoCatalog.repos.length === 1 ? '' : 's')"></span>
             </div>
@@ -390,53 +405,53 @@
       </section>
 
       <!-- Active Launch Progress Card -->
-      <section x-show="activeLaunch" class="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-xl space-y-4">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <div class="flex items-center gap-2">
+      <section x-show="activeLaunch" class="bg-slate-900 border border-indigo-500/30 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="text-xs font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300"
                     x-text="activeLaunch?.request?.status || 'queued'"></span>
-              <h3 class="text-base font-semibold text-white" x-text="activeLaunch?.app?.title || 'Launching Factory App'"></h3>
+              <h3 class="text-base font-semibold text-white break-words" x-text="activeLaunch?.app?.title || 'Launching Factory App'"></h3>
             </div>
-            <p class="text-xs text-slate-400 mt-1 line-clamp-2"
+            <p class="text-xs text-slate-400 mt-1 line-clamp-2 break-words"
                x-text="activeLaunch?.app?.prompt || (activeLaunch?.app?.repo ? ('Opening ' + activeLaunch.app.repo + (activeLaunch.app.branch ? ' @ ' + activeLaunch.app.branch : '')) : '')"></p>
           </div>
-          <button type="button" @click="dismissActiveLaunch()" class="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800">✕</button>
+          <button type="button" @click="dismissActiveLaunch()" class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded bg-slate-800 flex-shrink-0">✕</button>
         </div>
 
         <!-- Step Indicators -->
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 text-xs">
           <template x-for="step in (activeLaunch?.request?.steps || [])" :key="step.key">
-            <div class="p-3 rounded-xl border"
+            <div class="p-2.5 sm:p-3 rounded-xl border"
                  :class="step.status === 'done' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : (step.status === 'active' ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200' : (step.status === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-slate-950/60 border-slate-800 text-slate-500'))">
               <div class="font-medium flex items-center gap-1.5">
                 <span x-text="step.status === 'done' ? '✓' : (step.status === 'error' ? '✕' : (step.status === 'active' ? '●' : '○'))"></span>
-                <span x-text="step.label"></span>
+                <span class="truncate" x-text="step.label"></span>
               </div>
             </div>
           </template>
         </div>
 
         <!-- Error / Ready Controls -->
-        <div x-show="activeLaunch?.request?.status === 'failed'" class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200 flex items-center justify-between gap-3">
-          <span x-text="activeLaunch?.request?.error || 'Launch failed'"></span>
+        <div x-show="activeLaunch?.request?.status === 'failed'" class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <span class="break-words" x-text="activeLaunch?.request?.error || 'Launch failed'"></span>
           <button type="button" @click="relaunchFactoryApp(activeLaunch.app, { resume: true })"
-                  class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium flex-shrink-0">
+                  class="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium flex-shrink-0 text-center">
             Retry
           </button>
         </div>
 
         <div x-show="activeLaunch?.request?.status === 'ready' && activeLaunch?.request?.handoff_url"
-             class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 flex items-center justify-between gap-3">
+             class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <span>Workspace ready — redirecting into T3 Code chat...</span>
           <a :href="activeLaunch?.request?.handoff_url"
-             class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex-shrink-0">
+             class="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex-shrink-0 text-center">
             Open in T3
           </a>
         </div>
 
         <!-- Logs -->
-        <div x-show="(activeLaunch?.request?.logs || []).length > 0" class="bg-black/80 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-300 max-h-32 overflow-y-auto space-y-0.5">
+        <div x-show="(activeLaunch?.request?.logs || []).length > 0" class="bg-black/80 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-300 max-h-32 overflow-y-auto space-y-0.5 break-words">
           <template x-for="(line, idx) in (activeLaunch?.request?.logs || [])" :key="idx">
             <div x-text="line"></div>
           </template>
@@ -450,10 +465,10 @@
           <span class="text-xs text-slate-500" x-text="filteredApps.length + ' app(s)'"></span>
         </div>
 
-        <div x-show="filteredApps.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div x-show="filteredApps.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <template x-for="app in filteredApps" :key="app.app_id">
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-colors">
-              <div class="space-y-2.5">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-colors min-w-0">
+              <div class="space-y-2.5 min-w-0">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
                     <h4 class="text-base font-semibold text-white truncate" x-text="app.title"></h4>
@@ -464,58 +479,58 @@
                         x-text="app.runtime_status.toUpperCase()"></span>
                 </div>
 
-                <p x-show="app.prompt" class="text-xs text-slate-300 line-clamp-2" x-text="app.prompt"></p>
+                <p x-show="app.prompt" class="text-xs text-slate-300 line-clamp-2 break-words" x-text="app.prompt"></p>
                 <p x-show="!app.prompt" class="text-xs text-slate-500 italic">Opened repository without initial prompt</p>
 
                 <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
-                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300"
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 max-w-full truncate"
                         x-text="app.repo ? app.repo : (app.template === 'nextjs' ? (app.mobile_app ? 'Next.js + Expo' : 'Next.js') : 'Blank Git')"></span>
-                  <span x-show="app.repo && app.branch" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'@ ' + app.branch"></span>
-                  <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300" x-text="app.model"></span>
+                  <span x-show="app.repo && app.branch" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 max-w-full truncate" x-text="'@ ' + app.branch"></span>
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 max-w-full truncate" x-text="app.model"></span>
                   <span x-show="app.dev_port" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300" x-text="':' + app.dev_port"></span>
                   <span x-show="app.web_app && !app.dev_port" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300">web app</span>
-                  <span x-show="app.sandbox_id" class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-400" x-text="app.sandbox_id" :title="'Sandbox ' + app.sandbox_id"></span>
-                  <span x-show="app.database_name" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'DB: ' + app.database_name"></span>
+                  <span x-show="app.sandbox_id" class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 max-w-full truncate" x-text="app.sandbox_id" :title="'Sandbox ' + app.sandbox_id"></span>
+                  <span x-show="app.database_name" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 max-w-full truncate" x-text="'DB: ' + app.database_name"></span>
                 </div>
 
-                <div x-show="app.runtime_status === 'failed' && app.last_error" class="text-[11px] text-rose-400 line-clamp-2" x-text="app.last_error"></div>
+                <div x-show="app.runtime_status === 'failed' && app.last_error" class="text-[11px] text-rose-400 line-clamp-2 break-words" x-text="app.last_error"></div>
               </div>
 
-              <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
+              <div class="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                 <span class="text-slate-500" x-text="formatDate(app.created_at)"></span>
-                <div class="flex items-center gap-1.5">
+                <div class="flex flex-wrap items-center gap-1.5">
                   <button x-show="app.runtime_status === 'running'" type="button" @click="openFactoryApp(app)"
-                          class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
+                          class="px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
                     Open in T3
                   </button>
                   <button x-show="app.runtime_status === 'running' && app.sandbox_id" type="button"
                           @click="openSnapshotModal({ id: app.sandbox_id, name: app.sandbox_name || app.slug, profile: app.profile })"
                           title="Capture a filesystem snapshot of the shared Prime Sandbox (includes all hosted apps)"
-                          class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+                          class="px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
                     Snapshot Sandbox
                   </button>
                   <button x-show="app.runtime_status === 'provisioning' && app.latest_request_id" type="button"
                           @click="trackLaunch(app.latest_request_id)"
-                          class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-medium">
+                          class="px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 font-medium">
                     Progress
                   </button>
                   <button x-show="app.runtime_status === 'failed' && app.failed_step && app.sandbox_id" type="button"
                           @click="relaunchFactoryApp(app, { resume: true })"
-                          class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium">
+                          class="px-3 py-2 sm:py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium">
                     Retry Step
                   </button>
                   <button x-show="app.runtime_status === 'stopped' || app.runtime_status === 'failed'" type="button"
                           @click="relaunchFactoryApp(app, { resume: false })"
-                          class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
+                          class="px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
                     Relaunch
                   </button>
                   <button x-show="(app.runtime_status === 'stopped' || app.runtime_status === 'failed') && app.snapshot_image_id" type="button"
                           @click="openLaunchModal({ image_id: app.snapshot_image_id, name: app.snapshot_name || app.slug, profile: app.profile, is_vm: app.vm })"
-                          class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
+                          class="px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
                     Resume Snapshot
                   </button>
                   <button type="button" @click="deleteFactoryApp(app)" title="Delete Factory App"
-                          class="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-slate-700">
+                          class="px-2.5 py-2 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-slate-700">
                     ✕
                   </button>
                 </div>
@@ -524,27 +539,27 @@
           </template>
         </div>
 
-        <div x-show="filteredApps.length === 0" class="bg-slate-900/60 border border-dashed border-slate-800 rounded-2xl p-10 text-center text-sm text-slate-500">
+        <div x-show="filteredApps.length === 0" class="bg-slate-900/60 border border-dashed border-slate-800 rounded-2xl p-8 sm:p-10 text-center text-sm text-slate-500">
           No Factory Apps yet. Enter a prompt above to start your first app.
         </div>
       </section>
     </div>
 
     <!-- TAB 3: SCRATCHPAD IDEAS & NOTES -->
-    <div x-show="currentTab === 'scratchpad'" class="space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="text-2xl font-bold tracking-tight text-white">Scratchpad</h2>
-          <p class="text-sm text-slate-400">
+    <div x-show="currentTab === 'scratchpad'" class="space-y-5 sm:space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-white">Scratchpad</h2>
+          <p class="text-xs sm:text-sm text-slate-400 break-words">
             Capture rough ideas, refine them into clean Markdown with free OpenCode AI, and commit notes to
-            <span class="font-mono text-indigo-300" x-text="(scratchpadConfigRepo || 'config') + '/scratchpad/'"></span>.
+            <span class="font-mono text-indigo-300 break-words inline-block max-w-full" x-text="(scratchpadConfigRepo || 'config') + '/scratchpad/'"></span>.
           </p>
         </div>
         <button id="scratchpad-refresh-btn"
                 type="button"
                 @click="fetchScratchpadNotes(true)"
                 :disabled="scratchpadLoading"
-                class="inline-flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-50">
+                class="self-start sm:self-auto inline-flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0">
           <svg class="w-3.5 h-3.5 mr-1.5" :class="scratchpadLoading ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -552,13 +567,13 @@
         </button>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
         <!-- Left: Composer + Selected Note Viewer -->
-        <div class="lg:col-span-7 space-y-6">
-          <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="lg:col-span-7 space-y-5 sm:space-y-6 min-w-0">
+          <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
             <div class="flex items-center justify-between gap-2">
               <h3 class="text-base font-semibold text-white">New Idea / Plan</h3>
-              <span class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+              <span class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex-shrink-0">
                 Free AI Model
               </span>
             </div>
@@ -568,34 +583,34 @@
                      type="text"
                      x-model="scratchpadForm.titleHint"
                      placeholder="Optional title hint (AI suggests one if blank)..."
-                     class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none">
+                     class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-3.5 py-2.5 sm:py-2 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none">
 
               <textarea id="scratchpad-raw-input"
-                        rows="7"
+                        rows="6"
                         x-model="scratchpadForm.rawText"
                         @keydown.meta.enter.prevent="submitScratchpadIdea()"
                         @keydown.ctrl.enter.prevent="submitScratchpadIdea()"
                         placeholder="Jot down your idea, feature notes, architecture sketch, or rough prompt..."
-                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
+                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
             </div>
 
-            <div x-show="scratchpadError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300" x-text="scratchpadError"></div>
+            <div x-show="scratchpadError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 break-words" x-text="scratchpadError"></div>
 
             <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <span class="text-xs text-slate-500">Tip: Press Ctrl/Cmd + Enter to refine with AI</span>
-              <div class="flex items-center space-x-2.5">
+              <span class="hidden sm:inline text-xs text-slate-500">Tip: Press Ctrl/Cmd + Enter to refine with AI</span>
+              <div class="flex items-center gap-2.5 w-full sm:w-auto">
                 <button id="scratchpad-save-raw-btn"
                         type="button"
                         @click="saveRawScratchpadNote()"
                         :disabled="scratchpadSuggesting || scratchpadSaving || !scratchpadForm.rawText.trim()"
-                        class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition-colors disabled:opacity-50">
+                        class="flex-1 sm:flex-initial px-3.5 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition-colors disabled:opacity-50 text-center">
                   <span x-text="scratchpadSaving ? 'Saving...' : 'Save Raw'"></span>
                 </button>
                 <button id="scratchpad-submit-btn"
                         type="button"
                         @click="submitScratchpadIdea()"
                         :disabled="scratchpadSuggesting || scratchpadSaving || !scratchpadForm.rawText.trim()"
-                        class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                        class="flex-1 sm:flex-initial inline-flex items-center justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
                   <svg x-show="scratchpadSuggesting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -606,42 +621,42 @@
           </section>
 
           <!-- Selected Note Viewer -->
-          <section x-show="selectedScratchpadNote" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
+          <section x-show="selectedScratchpadNote" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-800 pb-4">
               <div class="min-w-0 space-y-1">
                 <h3 class="text-lg font-bold text-white break-words" x-text="selectedScratchpadNote?.title"></h3>
                 <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span class="font-mono text-indigo-300" x-text="selectedScratchpadNote?.path"></span>
+                  <span class="font-mono text-indigo-300 break-all" x-text="selectedScratchpadNote?.path"></span>
                   <a x-show="selectedScratchpadNote?.html_url"
                      :href="selectedScratchpadNote?.html_url"
                      target="_blank"
-                     class="text-slate-400 hover:text-white underline">
+                     class="text-slate-400 hover:text-white underline flex-shrink-0">
                     GitHub ↗
                   </a>
                 </div>
               </div>
-              <div class="flex items-center space-x-2">
+              <div class="flex items-center gap-2 w-full sm:w-auto flex-shrink-0">
                 <button type="button"
                         @click="copyText(selectedScratchpadNote?.content || '', 'Note Markdown copied!')"
-                        class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium">
+                        class="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium text-center">
                   Copy
                 </button>
                 <button id="scratchpad-use-in-builder-btn"
                         type="button"
                         @click="useScratchpadNoteInBuilder(selectedScratchpadNote)"
-                        class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm">
+                        class="flex-1 sm:flex-initial px-3.5 py-2 sm:py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm text-center">
                   Use in Builder →
                 </button>
               </div>
             </div>
             <pre id="scratchpad-note-content"
-                 class="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs sm:text-sm text-slate-200 whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto"
+                 class="bg-slate-950 border border-slate-800 rounded-xl p-3 sm:p-4 text-xs sm:text-sm text-slate-200 whitespace-pre-wrap break-words font-mono max-h-80 sm:max-h-96 overflow-y-auto"
                  x-text="selectedScratchpadNote?.content || ''"></pre>
           </section>
         </div>
 
         <!-- Right: Saved Notes Browser -->
-        <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 min-w-0">
           <div class="flex items-center justify-between gap-2">
             <h3 class="text-base font-semibold text-white">Saved Notes</h3>
             <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300"
@@ -652,7 +667,7 @@
                  type="text"
                  x-model="scratchpadFilter"
                  placeholder="Filter notes by title or filename..."
-                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
 
           <div x-show="scratchpadLoading && scratchpadNotes.length === 0" class="py-10 text-center text-sm text-slate-400">
             Loading notes from config/scratchpad/...
@@ -663,7 +678,7 @@
             No Scratchpad notes found yet. Submit an idea to create your first note.
           </div>
 
-          <div class="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+          <div class="space-y-2 max-h-96 lg:max-h-[34rem] overflow-y-auto pr-1">
             <template x-for="note in filteredScratchpadNotes" :key="note.filename">
               <button type="button"
                       @click="selectScratchpadNote(note.filename)"
@@ -671,7 +686,7 @@
                       :class="selectedScratchpadNote?.filename === note.filename ? 'bg-indigo-600/15 border-indigo-500/60' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'"
                       class="w-full text-left p-3 rounded-xl border transition-colors space-y-1">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-medium text-white truncate" x-text="note.title"></span>
+                  <span class="text-sm font-medium text-white truncate min-w-0" x-text="note.title"></span>
                   <span class="text-[11px] text-slate-500 font-mono flex-shrink-0" x-text="note.size + ' B'"></span>
                 </div>
                 <div class="text-xs font-mono text-indigo-300 truncate" x-text="note.path"></div>
@@ -684,7 +699,94 @@
 
     <!-- TAB 1: SANDBOXES LIST -->
     <div x-show="currentTab === 'sandboxes'" class="space-y-4">
-      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
+      <!-- Mobile Cards (< md) -->
+      <div class="md:hidden space-y-3">
+        <template x-for="sb in filteredSandboxes" :key="sb.id">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm">
+            <div class="flex items-center justify-between gap-2">
+              <template x-if="sb.running">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                  <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  RUNNING
+                </span>
+              </template>
+              <template x-if="!sb.running">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                  STOPPED <span x-show="sb.exit_code !== null" x-text="'(' + sb.exit_code + ')'" class="ml-1"></span>
+                </span>
+              </template>
+              <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono truncate max-w-[50%]"
+                    x-text="sb.profile || 'default'"></span>
+            </div>
+
+            <div class="min-w-0">
+              <div class="font-semibold text-white text-sm truncate" x-text="sb.name || '—'"></div>
+              <div class="text-xs text-slate-500 truncate" x-text="sb.app_name || 'default-app'"></div>
+            </div>
+
+            <div class="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-1.5 text-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-500 flex-shrink-0">Sandbox ID</span>
+                <div class="flex items-center gap-1.5 min-w-0 font-mono text-slate-200">
+                  <span class="truncate" x-text="sb.id"></span>
+                  <button @click="copyText(sb.id, 'Sandbox ID copied!')" title="Copy Sandbox ID"
+                          class="text-slate-400 hover:text-white p-1 flex-shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between gap-2 text-slate-400">
+                <span class="text-slate-500 flex-shrink-0">Created</span>
+                <span class="text-right break-words" x-text="formatDate(sb.created_at) + (sb.timeout_secs ? ' · ' + formatTimeout(sb.timeout_secs) : '')"></span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button @click="openSnapshotModal(sb)" :disabled="!sb.running"
+                      class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                </svg>
+                Snapshot
+              </button>
+
+              <button @click="copySshCommand(sb)" :disabled="!sb.running"
+                      :title="sb.ssh_config ? 'Copy ~/.ssh/config snippet' : 'Copy SSH command'"
+                      class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors disabled:opacity-40">
+                Copy SSH
+              </button>
+
+              <template x-if="sb.t3_pair_url">
+                <a :href="sb.t3_pair_url" target="_blank" rel="noopener noreferrer"
+                   class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition-colors">
+                  T3Code ↗
+                </a>
+              </template>
+              <template x-if="!sb.t3_pair_url">
+                <button disabled
+                        class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-slate-800 text-slate-500 border border-slate-700/50 text-xs font-medium cursor-not-allowed opacity-40">
+                  T3Code
+                </button>
+              </template>
+
+              <button @click="confirmTerminate(sb)" :disabled="!sb.running"
+                      class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Terminate
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="filteredSandboxes.length === 0"
+             class="bg-slate-900 rounded-xl border border-slate-800 px-4 py-10 text-center text-sm text-slate-500">
+          No matching sandboxes found in selected workspace profile.
+        </div>
+      </div>
+
+      <!-- Desktop Table (>= md) -->
+      <div class="hidden md:block bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
           <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -800,7 +902,73 @@
 
     <!-- TAB 2: SNAPSHOTS LIST -->
     <div x-show="currentTab === 'snapshots'" class="space-y-4">
-      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
+      <!-- Mobile Cards (< md) -->
+      <div class="md:hidden space-y-3">
+        <template x-for="snap in filteredSnapshots" :key="snap.image_id">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 space-y-1">
+                <div class="font-semibold text-white text-sm break-words" x-text="snap.name || 'Unnamed Snapshot'"></div>
+                <div class="flex items-center gap-1.5">
+                  <span x-show="snap.is_vm" class="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-300 font-mono">Linux VM</span>
+                  <span x-show="!snap.is_vm" class="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/20 text-blue-300 font-mono">Container</span>
+                </div>
+              </div>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-800 text-indigo-300 border border-slate-700 font-mono flex-shrink-0"
+                    x-text="snap.profile || 'any'"></span>
+            </div>
+
+            <div class="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-1.5 text-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-500 flex-shrink-0">Image ID</span>
+                <div class="flex items-center gap-1.5 min-w-0 font-mono text-slate-200">
+                  <span class="truncate" x-text="snap.image_id"></span>
+                  <button @click="copyText(snap.image_id, 'Image ID copied!')" title="Copy Image ID"
+                          class="text-slate-400 hover:text-white p-1 flex-shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-500 flex-shrink-0">Source</span>
+                <span class="font-mono text-slate-300 truncate" x-text="snap.sandbox_id || '—'"></span>
+              </div>
+              <div class="flex items-center justify-between gap-2 text-slate-400">
+                <span class="text-slate-500 flex-shrink-0">Created</span>
+                <span class="text-right break-words" x-text="formatDate(snap.created_at) + (snap.ttl_days ? ' · ' + snap.ttl_days + 'd TTL' : '')"></span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+              <button @click="openLaunchModal(snap)"
+                      class="flex-1 inline-flex items-center justify-center px-3 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors shadow-sm">
+                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Launch Sandbox
+              </button>
+
+              <button @click="deleteSnapshotRecord(snap)" title="Delete Snapshot Record"
+                      class="inline-flex items-center justify-center px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 border border-slate-700 text-xs transition-colors">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="filteredSnapshots.length === 0"
+             class="bg-slate-900 rounded-xl border border-slate-800 px-4 py-10 text-center text-sm text-slate-500">
+          No saved snapshots found in the registry.
+        </div>
+      </div>
+
+      <!-- Desktop Table (>= md) -->
+      <div class="hidden md:block bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
           <thead class="bg-slate-900/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -891,35 +1059,36 @@
   </main>
 
   <!-- MODAL: LAUNCH FRESH SANDBOX -->
-  <div x-show="freshLaunchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div @click.away="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+  <div x-show="freshLaunchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div @click.away="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92dvh] overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4 flex-shrink-0">
         <h3 class="text-base font-semibold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
           Launch Fresh Sandbox
         </h3>
-        <button @click="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+        <button @click="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" class="p-1.5 -mr-1 text-slate-400 hover:text-slate-200 text-sm">✕</button>
       </div>
 
+      <div class="flex-1 min-h-0 overflow-y-auto py-4 space-y-4">
       <!-- Mode Selector -->
       <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
         <button type="button" @click="freshLaunchForm.mode = 'repo'"
                 :class="freshLaunchForm.mode === 'repo' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
-                class="py-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="py-2.5 sm:py-2 px-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
+          <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
           </svg>
-          <span>Repository Sandbox</span>
+          <span class="truncate">Repository Sandbox</span>
         </button>
         <button type="button" @click="freshLaunchForm.mode = 'standalone'"
                 :class="freshLaunchForm.mode === 'standalone' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
-                class="py-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                class="py-2.5 sm:py-2 px-2 rounded-lg transition-colors flex items-center justify-center space-x-1.5">
+          <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
-          <span>Standalone Sandbox</span>
+          <span class="truncate">Standalone Sandbox</span>
         </button>
       </div>
 
@@ -928,7 +1097,7 @@
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1">Target Modal Profile Workspace</label>
           <select x-model="freshLaunchForm.profile"
-                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
             <template x-for="p in profiles" :key="p.name">
               <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
             </template>
@@ -941,28 +1110,28 @@
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">Target Repository (-r / --repo) <span class="text-rose-400">*</span></label>
               <input type="text" x-model="freshLaunchForm.repo" placeholder="software-factory"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-400 mb-1">Git Branch</label>
                 <input type="text" x-model="freshLaunchForm.github_branch" placeholder="main"
-                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
+                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500">
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-400 mb-1">App Name (optional)</label>
                 <input type="text" x-model="freshLaunchForm.name" placeholder="Derived from repo"
-                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
               </div>
             </div>
 
             <div class="space-y-2 pt-1">
-              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none py-0.5">
                 <input type="checkbox" x-model="freshLaunchForm.testing" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
                 <span>Target repository with test- prefix in default org</span>
               </label>
-              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+              <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none py-0.5">
                 <input type="checkbox" x-model="freshLaunchForm.full_clone" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
                 <span>Full Git clone (bypass depth 50 limit)</span>
               </label>
@@ -976,7 +1145,7 @@
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">Sandbox App Name (--name) <span class="text-rose-400">*</span></label>
               <input type="text" x-model="freshLaunchForm.name" placeholder="e.g. dev-sandbox"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
               <div class="text-[11px] text-slate-500 mt-1">Initializes clean environment with empty git repository at /root/&lt;name&gt;</div>
             </div>
           </div>
@@ -984,33 +1153,33 @@
 
         <!-- Runtime Mode -->
         <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-          <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer select-none">
+          <label class="flex items-center justify-between gap-3 text-xs text-slate-300 cursor-pointer select-none">
             <div>
               <div class="font-medium">Linux VM Sandbox Mode</div>
               <div class="text-slate-500 text-[11px]">Enables virtualized hardware and Docker daemon</div>
             </div>
-            <input type="checkbox" x-model="freshLaunchForm.vm" @change="if (freshLaunchForm.vm && !freshLaunchForm.memory) freshLaunchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+            <input type="checkbox" x-model="freshLaunchForm.vm" @change="if (freshLaunchForm.vm && !freshLaunchForm.memory) freshLaunchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0 flex-shrink-0">
           </label>
           <div x-show="freshLaunchForm.vm" class="pt-2 border-t border-slate-800">
             <label class="block text-[11px] font-medium text-slate-400 mb-1">RAM Memory (GB)</label>
             <input type="number" min="1" max="16" x-model.number="freshLaunchForm.memory" placeholder="1"
-                   class="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                   class="w-full sm:w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 sm:py-1 text-base sm:text-xs text-slate-200">
           </div>
         </div>
 
         <!-- Developer Tooling -->
         <div class="space-y-2">
           <label class="block text-xs font-medium text-slate-400">Integrated Tooling</label>
-          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="freshLaunchForm.t3" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>T3 Code Server</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="freshLaunchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>Modal SDK</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="freshLaunchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>SOPS</span>
             </label>
@@ -1028,7 +1197,7 @@
             </span>
             <button x-show="freshLaunchLogs.length > 0" type="button" @click="copyText(freshLaunchLogs.join('\n'), 'Launch logs copied!')" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Copy Logs</button>
           </div>
-          <div id="fresh-launch-log-box" class="bg-black/90 rounded-lg p-3 font-mono text-xs text-slate-300 h-36 overflow-y-auto border border-slate-800 space-y-1 select-text">
+          <div id="fresh-launch-log-box" class="bg-black/90 rounded-lg p-3 font-mono text-xs text-slate-300 h-36 overflow-y-auto border border-slate-800 space-y-1 select-text break-words">
             <template x-for="(log, idx) in freshLaunchLogs" :key="idx">
               <div :class="log.includes('❌') || log.toLowerCase().includes('error') ? 'text-rose-400 font-semibold' : (log.includes('✓') || log.includes('✨') ? 'text-emerald-400' : 'text-slate-300')" x-text="log"></div>
             </template>
@@ -1037,13 +1206,15 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+      </div>
+
+      <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800 flex-shrink-0">
         <button @click="if (!freshLaunchSubmitting) freshLaunchModalOpen = false" :disabled="freshLaunchSubmitting"
-                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 disabled:opacity-50">
+                class="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 disabled:opacity-50 text-center">
           Cancel
         </button>
         <button @click="executeFreshLaunch()" :disabled="freshLaunchSubmitting"
-                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
           <svg x-show="freshLaunchSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -1054,66 +1225,66 @@
   </div>
 
   <!-- MODAL: CREATE SNAPSHOT -->
-  <div x-show="snapshotModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div @click.away="snapshotModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+  <div x-show="snapshotModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div @click.away="snapshotModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92dvh] overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4 flex-shrink-0">
         <h3 class="text-base font-semibold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
           </svg>
           Capture Filesystem Snapshot
         </h3>
-        <button @click="snapshotModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+        <button @click="snapshotModalOpen = false" class="p-1.5 -mr-1 text-slate-400 hover:text-slate-200 text-sm">✕</button>
       </div>
 
-      <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-3">
+      <div class="space-y-4 flex-1 min-h-0 overflow-y-auto py-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1">Target Sandbox</label>
             <input type="text" :value="snapshotTarget?.id" disabled
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono cursor-not-allowed">
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-xs text-slate-300 font-mono cursor-not-allowed">
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1">Workspace Profile</label>
             <input type="text" :value="snapshotTarget?.profile || 'default'" disabled
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-indigo-300 font-mono cursor-not-allowed">
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-xs text-indigo-300 font-mono cursor-not-allowed">
           </div>
         </div>
 
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1">Snapshot Label / Description</label>
           <input type="text" x-model="snapshotForm.name" placeholder="e.g. dev-checkpoint-v1"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1">Retention TTL (Days)</label>
             <input type="number" min="1" max="365" x-model.number="snapshotForm.ttl_days"
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1">Timeout (Seconds)</label>
             <input type="number" min="10" max="600" x-model.number="snapshotForm.timeout" placeholder="180"
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
           </div>
         </div>
 
-        <div class="pt-2">
-          <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+        <div class="pt-1">
+          <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none py-0.5">
             <input type="checkbox" x-model="snapshotForm.terminate" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0">
             <span>Terminate target sandbox immediately after snapshot</span>
           </label>
         </div>
       </div>
 
-      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+      <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800 flex-shrink-0">
         <button @click="snapshotModalOpen = false"
-                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+                class="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 text-center">
           Cancel
         </button>
         <button @click="executeSnapshot()" :disabled="snapshotSubmitting"
-                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
           <svg x-show="snapshotSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -1124,24 +1295,24 @@
   </div>
 
   <!-- MODAL: LAUNCH FROM SNAPSHOT -->
-  <div x-show="launchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div @click.away="launchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+  <div x-show="launchModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div @click.away="launchModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92dvh] overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4 flex-shrink-0">
         <h3 class="text-base font-semibold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
           </svg>
           Launch Sandbox from Snapshot
         </h3>
-        <button @click="launchModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+        <button @click="launchModalOpen = false" class="p-1.5 -mr-1 text-slate-400 hover:text-slate-200 text-sm">✕</button>
       </div>
 
-      <div class="space-y-4">
+      <div class="space-y-4 flex-1 min-h-0 overflow-y-auto py-4">
         <!-- Target Profile Workspace -->
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1">Target Modal Profile Workspace</label>
           <select x-model="launchForm.profile"
-                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans">
             <template x-for="p in profiles" :key="p.name">
               <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
             </template>
@@ -1151,44 +1322,44 @@
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1">Snapshot Image ID</label>
           <input type="text" :value="launchTarget?.image_id" disabled
-                 class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 font-mono cursor-not-allowed">
+                 class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-300 font-mono cursor-not-allowed">
         </div>
 
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1">Sandbox App Name (--name)</label>
           <input type="text" x-model="launchForm.name" placeholder="resumed-sandbox"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
         </div>
 
         <!-- Runtime Mode -->
         <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-          <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer select-none">
+          <label class="flex items-center justify-between gap-3 text-xs text-slate-300 cursor-pointer select-none">
             <div>
               <div class="font-medium">Linux VM Sandbox Mode</div>
               <div class="text-slate-500 text-[11px]">Enables virtualized hardware and Docker daemon</div>
             </div>
-            <input type="checkbox" x-model="launchForm.vm" @change="if (launchForm.vm && !launchForm.memory) launchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+            <input type="checkbox" x-model="launchForm.vm" @change="if (launchForm.vm && !launchForm.memory) launchForm.memory = 1" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0 flex-shrink-0">
           </label>
           <div x-show="launchForm.vm" class="pt-2 border-t border-slate-800">
             <label class="block text-[11px] font-medium text-slate-400 mb-1">RAM Memory (GB)</label>
             <input type="number" min="1" max="16" x-model.number="launchForm.memory" placeholder="1"
-                   class="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                   class="w-full sm:w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 sm:py-1 text-base sm:text-xs text-slate-200">
           </div>
         </div>
 
         <!-- Developer Tooling -->
         <div class="space-y-2">
           <label class="block text-xs font-medium text-slate-400">Integrated Tooling</label>
-          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="launchForm.t3" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>T3 Code Server</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="launchForm.modal" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>Modal SDK</span>
             </label>
-            <label class="flex items-center space-x-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 cursor-pointer">
+            <label class="flex items-center space-x-2 bg-slate-950/60 p-2.5 sm:p-2 rounded-lg border border-slate-800 cursor-pointer">
               <input type="checkbox" x-model="launchForm.sops" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
               <span>SOPS</span>
             </label>
@@ -1196,13 +1367,13 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+      <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-800 flex-shrink-0">
         <button @click="launchModalOpen = false"
-                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300">
+                class="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 text-center">
           Cancel
         </button>
         <button @click="executeLaunch()" :disabled="launchSubmitting"
-                class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
+                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md disabled:opacity-50">
           <svg x-show="launchSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -1213,43 +1384,43 @@
   </div>
 
   <!-- MODAL: LAUNCH RESULT / CONNECTION DETAILS -->
-  <div x-show="resultModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div @click.away="resultModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+  <div x-show="resultModalOpen" class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div @click.away="resultModalOpen = false" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92dvh] overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4 flex-shrink-0">
         <h3 class="text-base font-semibold text-emerald-400 flex items-center gap-2">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Sandbox Launched Successfully!
+          <span>Sandbox Launched Successfully!</span>
         </h3>
-        <button @click="resultModalOpen = false" class="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+        <button @click="resultModalOpen = false" class="p-1.5 -mr-1 text-slate-400 hover:text-slate-200 text-sm">✕</button>
       </div>
 
-      <div class="space-y-4 text-sm">
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+      <div class="space-y-4 text-sm flex-1 min-h-0 overflow-y-auto py-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 min-w-0">
             <div class="text-slate-500">Sandbox ID</div>
-            <div class="font-mono text-slate-200 mt-0.5" x-text="launchResult?.sandbox_id"></div>
+            <div class="font-mono text-slate-200 mt-0.5 break-all" x-text="launchResult?.sandbox_id"></div>
           </div>
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 min-w-0">
             <div class="text-slate-500">App Name</div>
-            <div class="font-mono text-slate-200 mt-0.5" x-text="launchResult?.app_name"></div>
+            <div class="font-mono text-slate-200 mt-0.5 break-all" x-text="launchResult?.app_name"></div>
           </div>
         </div>
 
         <!-- SSH Connection Snippet (Config block vs Command toggle) -->
         <div class="space-y-1.5" x-data="{ sshMode: 'config' }">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <span class="text-xs text-slate-400 font-medium">SSH Connection</span>
             <div class="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[11px]">
               <button type="button" @click="sshMode = 'config'"
                       :class="sshMode === 'config' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'"
-                      class="px-2 py-0.5 rounded transition-colors">
+                      class="px-2 py-1 sm:py-0.5 rounded transition-colors">
                 ~/.ssh/config
               </button>
               <button type="button" @click="sshMode = 'command'"
                       :class="sshMode === 'command' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'"
-                      class="px-2 py-0.5 rounded transition-colors">
+                      class="px-2 py-1 sm:py-0.5 rounded transition-colors">
                 Direct Command
               </button>
             </div>
@@ -1257,9 +1428,9 @@
 
           <!-- ~/.ssh/config View -->
           <div x-show="sshMode === 'config'" class="space-y-1">
-            <div class="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/60 px-2.5 py-1 rounded border border-slate-800/80">
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400 bg-slate-900/60 px-2.5 py-1.5 rounded border border-slate-800/80">
               <span>Append to <code class="text-indigo-300">~/.ssh/config</code>, then connect:</span>
-              <span class="font-mono text-indigo-300" x-text="'ssh ' + (launchResult?.t3_ssh_host || launchResult?.sandbox_name || launchResult?.app_name || 'sandbox')"></span>
+              <span class="font-mono text-indigo-300 break-all" x-text="'ssh ' + (launchResult?.t3_ssh_host || launchResult?.sandbox_name || launchResult?.app_name || 'sandbox')"></span>
             </div>
             <div class="relative bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300">
               <button @click="copyText(getLaunchSshConfig(), 'SSH config snippet copied! Append to ~/.ssh/config')"
@@ -1275,9 +1446,9 @@
           </div>
 
           <!-- Direct Command View -->
-          <div x-show="sshMode === 'command'" class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
-            <span class="truncate mr-2 select-all" x-text="getLaunchSshCommand()"></span>
-            <button @click="copyText(getLaunchSshCommand(), 'SSH command copied!')" class="text-slate-400 hover:text-white flex-shrink-0" title="Copy SSH command">
+          <div x-show="sshMode === 'command'" class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 flex items-center justify-between gap-2">
+            <span class="truncate min-w-0 select-all" x-text="getLaunchSshCommand()"></span>
+            <button @click="copyText(getLaunchSshCommand(), 'SSH command copied!')" class="text-slate-400 hover:text-white flex-shrink-0 p-1" title="Copy SSH command">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
@@ -1289,7 +1460,7 @@
         <div x-show="launchResult?.t3_pair_url" class="space-y-1">
           <div class="text-xs text-slate-400 font-medium">T3 Code Server</div>
           <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs">
-            <a :href="launchResult?.t3_pair_url" target="_blank" class="text-indigo-400 underline" x-text="launchResult?.t3_pair_url"></a>
+            <a :href="launchResult?.t3_pair_url" target="_blank" class="text-indigo-400 underline break-all block" x-text="launchResult?.t3_pair_url"></a>
           </div>
         </div>
 
@@ -1303,7 +1474,7 @@
           <button @click="showLogs = !showLogs" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium">
             <span x-text="showLogs ? '▾ Hide Launch Transcript' : '▸ View Launch Transcript'"></span>
           </button>
-          <div x-show="showLogs" class="mt-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 max-h-40 overflow-y-auto space-y-0.5 select-text">
+          <div x-show="showLogs" class="mt-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 max-h-40 overflow-y-auto space-y-0.5 select-text break-words">
             <template x-for="(line, i) in lastLaunchLogs" :key="i">
               <div x-text="line"></div>
             </template>
@@ -1311,9 +1482,9 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-end pt-4 border-t border-slate-800">
-        <button @click="resultModalOpen = false; currentTab = 'sandboxes'; refreshAll();"
-                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md">
+      <div class="flex items-center justify-end pt-3 sm:pt-4 border-t border-slate-800 flex-shrink-0">
+        <button @click="resultModalOpen = false; currentTab = 'sandboxes'; window.location.hash = 'sandboxes'; refreshAll();"
+                class="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white shadow-md text-center">
           View in Sandboxes Table
         </button>
       </div>
@@ -1324,64 +1495,64 @@
   <div x-show="scratchpadModalOpen"
        x-transition.opacity
        @keydown.escape.window="if (scratchpadModalOpen) rejectScratchpadSuggestion()"
-       class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+       class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4"
        style="display: none;">
     <div id="scratchpad-suggestion-modal"
-         class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
-      <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
-        <div>
-          <h3 class="text-lg font-bold text-white">Review Suggested Note</h3>
+         class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 flex flex-col max-h-[92dvh] overflow-hidden">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3 flex-shrink-0">
+        <div class="min-w-0">
+          <h3 class="text-base sm:text-lg font-bold text-white">Review Suggested Note</h3>
           <p class="text-xs text-slate-400">
-            Generated with free model <span class="font-mono text-emerald-300" x-text="scratchpadSuggestion.model || 'opencode'"></span>. Edit before committing or reject to keep your draft.
+            Generated with free model <span class="font-mono text-emerald-300 break-all" x-text="scratchpadSuggestion.model || 'opencode'"></span>. Edit before committing or reject to keep your draft.
           </p>
         </div>
-        <button type="button" @click="rejectScratchpadSuggestion()" class="text-slate-400 hover:text-white px-2 py-1">✕</button>
+        <button type="button" @click="rejectScratchpadSuggestion()" class="text-slate-400 hover:text-white px-2 py-1 flex-shrink-0">✕</button>
       </div>
 
-      <div class="space-y-3">
+      <div class="space-y-3 flex-1 min-h-0 overflow-y-auto py-4">
         <div>
           <label for="scratchpad-modal-title" class="block text-xs font-medium text-slate-300 mb-1">Note Title</label>
           <input id="scratchpad-modal-title"
                  type="text"
                  x-model="scratchpadSuggestion.title"
-                 class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none">
-          <div class="mt-1.5 text-xs text-slate-400">
-            Target file: <span id="scratchpad-target-path-preview" class="font-mono text-indigo-300" x-text="previewScratchpadTargetPath()"></span>
+                 class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2 text-base sm:text-sm text-white focus:outline-none">
+          <div class="mt-1.5 text-xs text-slate-400 break-words">
+            Target file: <span id="scratchpad-target-path-preview" class="font-mono text-indigo-300 break-all" x-text="previewScratchpadTargetPath()"></span>
           </div>
         </div>
 
         <div>
           <label for="scratchpad-modal-content" class="block text-xs font-medium text-slate-300 mb-1">Markdown Body (committed below <code># Title</code>)</label>
           <textarea id="scratchpad-modal-content"
-                    rows="11"
+                    rows="8"
                     x-model="scratchpadSuggestion.content"
-                    class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-100 focus:outline-none resize-y"></textarea>
+                    class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3.5 py-2.5 text-base sm:text-sm font-mono text-slate-100 focus:outline-none resize-y"></textarea>
         </div>
       </div>
 
-      <div x-show="scratchpadModalError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300" x-text="scratchpadModalError"></div>
+      <div x-show="scratchpadModalError" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 break-words" x-text="scratchpadModalError"></div>
 
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+      <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-800 flex-shrink-0">
         <button id="scratchpad-reject-btn"
                 type="button"
                 @click="rejectScratchpadSuggestion()"
                 :disabled="scratchpadSaving"
-                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium disabled:opacity-50">
+                class="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium disabled:opacity-50 text-center">
           Reject
         </button>
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center gap-2 w-full sm:w-auto">
           <button id="scratchpad-modal-save-raw-btn"
                   type="button"
                   @click="saveRawFromModal()"
                   :disabled="scratchpadSaving"
-                  class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-sm font-medium disabled:opacity-50">
+                  class="flex-1 sm:flex-initial px-3.5 py-2.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-sm font-medium disabled:opacity-50 text-center">
             Save Raw
           </button>
           <button id="scratchpad-accept-btn"
                   type="button"
                   @click="acceptScratchpadSuggestion()"
                   :disabled="scratchpadSaving || !scratchpadSuggestion.title.trim() || !scratchpadSuggestion.content.trim()"
-                  class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md disabled:opacity-50">
+                  class="flex-1 sm:flex-initial px-4 py-2.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md disabled:opacity-50 text-center">
             <span x-text="scratchpadSaving ? 'Committing...' : 'Accept & Commit'"></span>
           </button>
         </div>
@@ -1391,7 +1562,7 @@
 
   <!-- TOAST NOTIFICATION -->
   <div x-show="toast.visible" x-transition
-       class="fixed bottom-6 right-6 z-50 bg-slate-900 border px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm max-w-md"
+       class="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 bg-slate-900 border px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 text-sm sm:max-w-md"
        :class="toast.type === 'error' ? 'border-red-500/50 text-red-200' : 'border-slate-700 text-slate-100'">
     <span :class="toast.type === 'error' ? 'text-red-400 font-bold' : 'text-indigo-400 font-bold'" x-text="toast.type === 'error' ? '⚠️' : 'ℹ'"></span>
     <span x-text="toast.message" class="break-words"></span>
@@ -2163,8 +2334,25 @@
         },
 
         copyText(text, msg = 'Copied to clipboard!') {
-          navigator.clipboard.writeText(text);
-          this.showToast(msg);
+          const fallbackCopy = () => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            document.body.removeChild(ta);
+            this.showToast(msg);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+              .then(() => this.showToast(msg))
+              .catch(fallbackCopy);
+          } else {
+            fallbackCopy();
+          }
         },
 
         getLaunchSshCommand() {
