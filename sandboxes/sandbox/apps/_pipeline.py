@@ -84,6 +84,7 @@ class PipelineDeps:
     no_t3_persist: bool = False
     prime_wait_timeout_secs: float = 300.0
     prime_poll_interval_secs: float = 1.0
+    resolve_bundle_fn: Callable[..., Any] | None = None
 
 
 def _record_progress(
@@ -194,8 +195,11 @@ def run_launch_pipeline(
         _assert_request_active(deps.store, app.app_id, request_id)
 
         dev_port = app.dev_port
-        if dev_port is None or not reused:
-            dev_port = allocate_dev_port(deps.store, prime_key, sandbox_id, request_id=request_id)
+        if app.web_app:
+            if dev_port is None or not reused:
+                dev_port = allocate_dev_port(deps.store, prime_key, sandbox_id, request_id=request_id)
+        else:
+            dev_port = None
         app = app.model_copy(update={"dev_port": dev_port, "prime_key": prime_key})
         deps.store.update_app_if_current_request(
             app.app_id,
@@ -211,14 +215,26 @@ def run_launch_pipeline(
         db_name = app.database_name if reused else None
         if not (reused and effective_resume in ("waiting_t3", "starting_thread") and workspace_ready):
             current_step = "scaffolding_workspace"
+            ws_label = f"Cloning {app.repo}" if app.repo else "Preparing local Git workspace"
+            port_note = f" (port {dev_port})" if dev_port is not None else ""
             _record_progress(
                 deps.store,
                 request_id,
                 "scaffolding_workspace",
-                "Preparing local Git workspace",
-                f"Sandbox {sandbox_id} online; preparing {app_dir} (port {dev_port})...",
+                ws_label,
+                f"Sandbox {sandbox_id} online; preparing {app_dir}{port_note}...",
             )
-            prepare_app_workspace(sb, app, app_dir, force=reused and not workspace_ready, dev_port=dev_port)
+            prepare_app_workspace(
+                sb,
+                app,
+                app_dir,
+                force=reused and not workspace_ready,
+                dev_port=dev_port,
+                env=deps.effective_env(),
+                resolve_bundle_fn=deps.resolve_bundle_fn,
+                log_cb=flusher.append,
+            )
+            flusher.flush()
             db_name = db_name or provision_optional_database(
                 sb, app, app_dir, env=deps.effective_env(), create_db_fn=deps.create_db_fn
             )
@@ -257,12 +273,13 @@ def run_launch_pipeline(
             )
 
         current_step = "starting_thread"
+        port_desc = f", port {dev_port}" if dev_port is not None else ""
         _record_progress(
             deps.store,
             request_id,
             "starting_thread",
             "Starting agent thread & pairing",
-            f"Registering workspace and starting thread ({instance_id}/{chosen_model}, port {dev_port})...",
+            f"Registering workspace and opening thread ({instance_id}/{chosen_model}{port_desc})...",
         )
         thread_id, project_id = ensure_project_and_start_thread(
             sb, app, app_dir, instance_id=instance_id, model=chosen_model, thought_level=thought_level

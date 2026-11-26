@@ -320,8 +320,12 @@ A scaffolded application deployed alongside the Resource Plane on the VPS (`/roo
 _Avoid_: Live app, production sandbox, VPS app
 
 **Factory App**:
-A prompt-initiated application created through the builder homepage, linking its initial prompt, local Git workspace, optional Resource Plane resources, Modal sandbox, T3 Code Server thread, and optional Hosted App.
+An application or repository workspace launched from the builder homepage, linking its target workspace (scaffolded template, blank Git repo, or cloned GitHub repository), optional initial prompt, optional Resource Plane resources, Modal sandbox, T3 Code Server thread, and optional Hosted App.
 _Avoid_: Builder project, prompt project, user app
+
+**Repository Catalog Cache**:
+A control-plane snapshot of accessible GitHub repositories persisted across dashboard loads and updated only when an operator explicitly triggers a refresh.
+_Avoid_: Repo cache, github cache, repo store
 
 **Launch Request**:
 A single idempotent provisioning attempt to create or reopen a Factory App, tracking request status, workspace metadata, Modal sandbox handle, and T3 Code Server thread identity.

@@ -12,6 +12,7 @@ from typing import Any, Callable, TypeVar
 import modal
 from pydantic import BaseModel
 
+from ._github_repos import RepositoryCatalogCache
 from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ class FactoryStateStore:
         self.apps_dir = self.root_dir / "apps"
         self.launches_dir = self.root_dir / "launches"
         self.primes_dir = self.root_dir / "primes"
+        self.github_repos_path = self.root_dir / "github-repos.json"
         self._lock = _get_lock_for_target(self.volume, self.root_dir)
 
     def _reload_volume(self) -> None:
@@ -358,6 +360,19 @@ class FactoryStateStore:
             path.unlink()
             self._commit_volume()
             return True
+
+    def get_repo_catalog(self, *, reload: bool = True) -> RepositoryCatalogCache:
+        """Loads the cached GitHub repository catalog without hitting the GitHub API."""
+        catalog = self._get_record(self.github_repos_path, RepositoryCatalogCache, reload=reload)
+        return catalog or RepositoryCatalogCache()
+
+    def save_repo_catalog(self, catalog: RepositoryCatalogCache) -> RepositoryCatalogCache:
+        """Persists the Repository Catalog Cache to github-repos.json and commits the volume."""
+        with self._lock:
+            self._ensure_dirs()
+            self._write_model_file(self.github_repos_path, catalog)
+            self._commit_volume()
+            return catalog
 
 
 _DEFAULT_STORE: FactoryStateStore | None = None

@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-import inspect
 import json
-import shlex
+import logging
+import re
 import time
 from typing import Any, Callable
 
 from sandbox.app_scaffolder._cloud import sanitize_db_name
 
+from ._idle_thread import create_idle_thread_via_ws
 from ._models import FactoryAppRecord, build_initial_thread_prompt
+from ._prompts import GENERIC_REPO_OPEN_PROMPT
+from ._workspace import (
+    clone_github_repo_in_sandbox,
+    configure_nextjs_dev_port,
+    ensure_blank_git_workspace,
+    exec_in_sandbox,
+    inject_vault_bundle_in_sandbox,
+    install_repo_dependencies_in_sandbox,
+)
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_T3_READY_TIMEOUT_SECS = 150
 
@@ -75,115 +87,6 @@ _ENV_WRITER_SCRIPT = (
 )
 
 
-def _exec_accepts_timeout(exec_fn: Any) -> bool:
-    try:
-        sig = inspect.signature(exec_fn)
-    except (TypeError, ValueError):
-        return True
-    params = sig.parameters
-    return "timeout" in params or any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-    )
-
-
-def exec_in_sandbox(
-    sb: Any,
-    *cmd: str,
-    stdin_text: str | None = None,
-    timeout: int = 300,
-) -> tuple[int, str, str]:
-    """Executes a command inside a Modal sandbox, streaming stdin cleanly when provided."""
-    if _exec_accepts_timeout(sb.exec):
-        proc = sb.exec(*cmd, timeout=timeout)
-    else:
-        proc = sb.exec(*cmd)
-    if stdin_text is not None:
-        proc.stdin.write(stdin_text)
-        proc.stdin.write_eof()
-        proc.stdin.drain()
-    rc = proc.wait()
-    stdout = proc.stdout.read() or ""
-    stderr = proc.stderr.read() or ""
-    return rc, stdout, stderr
-
-
-def ensure_blank_git_workspace(sb: Any, app_dir: str) -> None:
-    """Initializes a Git-backed empty workspace directory inside the sandbox for blank apps."""
-    q_dir = shlex.quote(app_dir)
-    script = (
-        f"mkdir -p {q_dir} && cd {q_dir} && "
-        "if [ ! -d .git ]; then "
-        "git init -b main . && "
-        "cat << 'EOF' > .gitignore\n"
-        ".env\n.env.*\nnode_modules/\ndist/\n.venv/\n__pycache__/\n*.pyc\n"
-        "EOF\n"
-        "git add .gitignore && "
-        "GIT_AUTHOR_NAME=\"${DEFAULT_GIT_NAME:-Factory Operator}\" "
-        "GIT_AUTHOR_EMAIL=\"${DEFAULT_GIT_EMAIL:-operator@software-factory.local}\" "
-        "GIT_COMMITTER_NAME=\"${DEFAULT_GIT_NAME:-Factory Operator}\" "
-        "GIT_COMMITTER_EMAIL=\"${DEFAULT_GIT_EMAIL:-operator@software-factory.local}\" "
-        "git commit -m 'initial commit' >/dev/null 2>&1 || true; "
-        "fi"
-    )
-    rc, out, err = exec_in_sandbox(sb, "bash", "-lc", script, timeout=60)
-    if rc != 0:
-        raise RuntimeError(f"Failed initializing blank Git workspace in {app_dir}: {err or out}")
-
-
-def configure_nextjs_dev_port(sb: Any, app_dir: str, dev_port: int) -> None:
-    """Pins the assigned dev_port in Next.js apps/web/package.json and workspace .env."""
-    script = (
-        "import json, os, re, subprocess, sys\n"
-        "app_dir, dev_port = sys.argv[1], int(sys.argv[2])\n"
-        "pkg_path = os.path.join(app_dir, 'apps', 'web', 'package.json')\n"
-        "changed_files = []\n"
-        "if os.path.isfile(pkg_path):\n"
-        "    with open(pkg_path, encoding='utf-8') as f:\n"
-        "        pkg = json.load(f)\n"
-        "    scripts = pkg.setdefault('scripts', {})\n"
-        "    desired = f'next dev -p {dev_port}'\n"
-        "    if scripts.get('dev') != desired:\n"
-        "        scripts['dev'] = desired\n"
-        "        with open(pkg_path, 'w', encoding='utf-8') as f:\n"
-        "            json.dump(pkg, f, indent=2)\n"
-        "            f.write('\\n')\n"
-        "        changed_files.append('apps/web/package.json')\n"
-        "env_path = os.path.join(app_dir, '.env')\n"
-        "lines = open(env_path, encoding='utf-8').read().splitlines(keepends=True) if os.path.isfile(env_path) else []\n"
-        "pattern = re.compile(r'^\\s*(export\\s+)?PORT\\s*=.*$')\n"
-        "out, replaced = [], False\n"
-        "for line in lines:\n"
-        "    if pattern.match(line):\n"
-        "        out.append(f'PORT={dev_port}\\n')\n"
-        "        replaced = True\n"
-        "    else:\n"
-        "        out.append(line)\n"
-        "if not replaced:\n"
-        "    if out and not out[-1].endswith('\\n'):\n"
-        "        out[-1] += '\\n'\n"
-        "    out.append(f'PORT={dev_port}\\n')\n"
-        "os.makedirs(app_dir, exist_ok=True)\n"
-        "with open(env_path, 'w', encoding='utf-8') as f:\n"
-        "    f.write(''.join(out))\n"
-        "try:\n"
-        "    os.chmod(env_path, 0o600)\n"
-        "except OSError:\n"
-        "    pass\n"
-        "if changed_files and os.path.isdir(os.path.join(app_dir, '.git')):\n"
-        "    has_head = subprocess.run(['git', '-C', app_dir, 'rev-parse', '--verify', 'HEAD'], capture_output=True).returncode == 0\n"
-        "    if has_head:\n"
-        "        subprocess.run(['git', '-C', app_dir, 'add', *changed_files], check=False)\n"
-        "        subprocess.run([\n"
-        "            'git', '-C', app_dir,\n"
-        "            '-c', 'user.name=Factory Operator', '-c', 'user.email=operator@software-factory.local',\n"
-        "            'commit', '--no-verify', '-m', f'chore: bind web dev port {dev_port}',\n"
-        "        ], capture_output=True, check=False)\n"
-    )
-    rc, out, err = exec_in_sandbox(sb, "python3", "-c", script, app_dir, str(dev_port), timeout=30)
-    if rc != 0:
-        raise RuntimeError(f"Failed configuring dev port {dev_port} in {app_dir}: {err or out}")
-
-
 def prepare_app_workspace(
     sb: Any,
     app: FactoryAppRecord,
@@ -191,8 +94,39 @@ def prepare_app_workspace(
     *,
     force: bool = False,
     dev_port: int | None = None,
+    env: dict[str, str] | None = None,
+    resolve_bundle_fn: Callable[..., Any] | None = None,
+    log_cb: Callable[[str], None] | None = None,
 ) -> None:
-    """Scaffolds a Next.js App Template or initializes a blank Git workspace inside the sandbox."""
+    """Clones an existing GitHub repo, scaffolds Next.js App Template, or initializes blank Git."""
+    if app.repo:
+        effective_env = env or {}
+        gh_token = effective_env.get("GH_TOKEN") or effective_env.get("GITHUB_TOKEN")
+        clone_github_repo_in_sandbox(
+            sb,
+            repo=app.repo,
+            branch=app.branch,
+            app_dir=app_dir,
+            gh_token=gh_token,
+            force=force,
+        )
+        try:
+            injected = inject_vault_bundle_in_sandbox(
+                sb,
+                repo=app.repo,
+                app_dir=app_dir,
+                env=effective_env,
+                resolve_bundle_fn=resolve_bundle_fn,
+            )
+            if injected and log_cb:
+                log_cb(f"🔐 Injected env-store secrets for {app.repo}")
+        except Exception as exc:
+            logger.warning("env-store injection skipped for %s: %s", app.repo, exc)
+            if log_cb:
+                log_cb(f"⚠️ env-store injection skipped: {exc}")
+        install_repo_dependencies_in_sandbox(sb, app_dir)
+        return
+
     if app.template == "nextjs":
         cmd = ["create-app", app_dir, "-y"]
         if app.mobile_app:
@@ -361,8 +295,8 @@ def provision_optional_database(
     env: dict[str, str],
     create_db_fn: Callable[..., Any],
 ) -> str | None:
-    """Provisions a Resource Plane database when configured and injects DATABASE_URL."""
-    if app.template != "nextjs":
+    """Provisions a Resource Plane database for scratch Next.js apps when configured."""
+    if app.repo or app.template != "nextjs":
         return None
     rp_domain = env.get("RESOURCE_PLANE_DOMAIN") or env.get("DB_HOST_DOMAIN")
     rp_token = env.get("RESOURCE_PLANE_ADMIN_TOKEN") or env.get("DB_HOST_ADMIN_TOKEN")
@@ -408,6 +342,11 @@ def list_project_threads(sb: Any, app_dir: str) -> list[dict[str, Any]]:
     return threads
 
 
+def _parse_added_project_id(output: str) -> str | None:
+    match = re.search(r"^(?:Added|Unarchived)\s+project\s+(\S+)", output.strip(), re.MULTILINE)
+    return match.group(1) if match else None
+
+
 def ensure_project_and_start_thread(
     sb: Any,
     app: FactoryAppRecord,
@@ -417,16 +356,31 @@ def ensure_project_and_start_thread(
     model: str,
     thought_level: str | None,
 ) -> tuple[str, str | None]:
-    """Registers app_dir with T3 and starts the initial thread idempotently via stdin."""
-    add_rc, _, add_err = exec_in_sandbox(
+    """Registers app_dir with T3 and opens an idle thread (empty repo prompt) or starts a turn."""
+    add_rc, add_out, add_err = exec_in_sandbox(
         sb, "t3", "project", "add", "--base-dir", "/root/.t3", "--title", app.title, app_dir, timeout=30
     )
+    added_project_id = _parse_added_project_id(add_out) if add_rc == 0 else None
     list_ok, existing = _probe_project_threads(sb, app_dir)
     if add_rc != 0 and not list_ok:
         raise RuntimeError(f"t3 project add failed: {add_err}")
 
     if existing and existing[0].get("threadId"):
-        return str(existing[0]["threadId"]), existing[0].get("projectId")
+        return str(existing[0]["threadId"]), existing[0].get("projectId") or added_project_id
+
+    if not app.prompt.strip() and not app.web_app:
+        try:
+            return create_idle_thread_via_ws(
+                sb,
+                app_dir=app_dir,
+                project_id=added_project_id,
+                title=app.title,
+                instance_id=instance_id,
+                model=model,
+                thought_level=thought_level,
+            )
+        except Exception as exc:
+            logger.warning("Idle thread RPC failed for %s; falling back to generic prompt: %s", app_dir, exc)
 
     cmd = [
         "t3", "thread", "start", app_dir, "-",
@@ -438,18 +392,25 @@ def ensure_project_and_start_thread(
         cmd.extend(["--option", f"thought_level={thought_level}"])
     cmd.extend(["--title", app.title, "--json"])
     full_prompt = build_initial_thread_prompt(
-        app.prompt, template=app.template, app_dir=app_dir, dev_port=app.dev_port
+        app.prompt,
+        template=app.template,
+        app_dir=app_dir,
+        dev_port=app.dev_port,
+        web_app=app.web_app,
+        repo=app.repo,
     )
+    if not full_prompt:
+        full_prompt = GENERIC_REPO_OPEN_PROMPT
     rc, out, err = exec_in_sandbox(sb, *cmd, stdin_text=full_prompt, timeout=60)
     if rc != 0:
         recovered = list_project_threads(sb, app_dir)
         if recovered and recovered[0].get("threadId"):
-            return str(recovered[0]["threadId"]), recovered[0].get("projectId")
+            return str(recovered[0]["threadId"]), recovered[0].get("projectId") or added_project_id
         raise RuntimeError(f"t3 thread start failed: {err or out}")
 
     started = json.loads(out)
     thread_id = started.get("threadId")
-    project_id = started.get("projectId") or (started.get("projection") or {}).get("projectId")
+    project_id = started.get("projectId") or (started.get("projection") or {}).get("projectId") or added_project_id
     if not thread_id:
         raise RuntimeError("t3 thread start did not return a threadId.")
     return str(thread_id), project_id

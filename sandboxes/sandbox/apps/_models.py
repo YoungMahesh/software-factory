@@ -1,21 +1,28 @@
-"""Domain schemas, slug derivation, URL builders, and prompt helpers for Factory Apps."""
+"""Domain schemas and launch step helpers for Factory Apps."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import hashlib
-import re
 from typing import Literal
-from urllib.parse import quote
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
+
+from ._prompts import (  # noqa: F401
+    MAX_SLUG_LENGTH,
+    MAX_TITLE_LENGTH,
+    AppTemplateKind,
+    build_direct_chat_url,
+    build_initial_thread_prompt,
+    derive_app_slug,
+    derive_app_title,
+    prime_compatibility_key,
+    prime_sandbox_app_name,
+)
 
 DEFAULT_BUILDER_PROVIDER = "antigravity"
 DEFAULT_BUILDER_MODEL = "gemini-4-hydrogen"
 DEFAULT_APP_BASE_PORT = 3001
 
-MAX_SLUG_LENGTH = 42
-MAX_TITLE_LENGTH = 60
 HANDOFF_TOKEN_TTL_SECONDS = 300
 MAX_LAUNCH_LOG_LINES = 80
 
@@ -30,8 +37,6 @@ LaunchStatus = Literal[
 ]
 
 PrimeStatus = Literal["provisioning", "ready", "failed", "stopped"]
-
-AppTemplateKind = Literal["nextjs", "blank"]
 
 
 def utc_now_iso(*, offset_seconds: int = 0) -> str:
@@ -55,131 +60,6 @@ def is_iso_expired(timestamp: str | None) -> bool:
     return parsed <= datetime.now(timezone.utc)
 
 
-def _sanitize_slug(raw: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
-    if not cleaned:
-        cleaned = "factory-app"
-    if cleaned[0].isdigit():
-        cleaned = f"app-{cleaned}"
-    return cleaned[:MAX_SLUG_LENGTH].rstrip("-") or "factory-app"
-
-
-def derive_app_slug(
-    prompt: str,
-    explicit_name: str | None = None,
-    existing_slugs: set[str] | None = None,
-) -> str:
-    """Derives a unique filesystem/sandbox-safe slug from explicit_name or prompt."""
-    if explicit_name and explicit_name.strip():
-        base = _sanitize_slug(explicit_name.strip())
-    else:
-        first_line = next((line.strip() for line in prompt.splitlines() if line.strip()), "")
-        words = re.findall(r"[a-zA-Z0-9]+", first_line)[:5]
-        base = _sanitize_slug("-".join(words)) if words else "factory-app"
-
-    used = existing_slugs or set()
-    if base not in used:
-        return base
-
-    suffix_num = 2
-    while True:
-        suffix = f"-{suffix_num}"
-        candidate = f"{base[:MAX_SLUG_LENGTH - len(suffix)].rstrip('-')}{suffix}"
-        if candidate not in used:
-            return candidate
-        suffix_num += 1
-
-
-def derive_app_title(prompt: str, explicit_name: str | None = None) -> str:
-    """Derives a concise single-line title from explicit_name or the prompt's first line."""
-    raw = explicit_name.strip() if explicit_name and explicit_name.strip() else ""
-    if not raw:
-        raw = next((line.strip() for line in prompt.splitlines() if line.strip()), "Untitled App")
-    raw = re.sub(r"\s+", " ", raw)
-    if len(raw) <= MAX_TITLE_LENGTH:
-        return raw
-    return raw[: MAX_TITLE_LENGTH - 3].rstrip() + "..."
-
-
-def prime_compatibility_key(
-    profile: str | None = None,
-    vm: bool = False,
-    mobile_app: bool = False,
-) -> str:
-    """Returns a filesystem-safe identifier partitioning Prime Sandboxes by runtime capabilities."""
-    clean_profile = (profile or "").strip()
-    if not clean_profile:
-        prof_part = "default"
-    else:
-        slug_part = _sanitize_slug(clean_profile)[:16]
-        digest = hashlib.sha256(clean_profile.encode("utf-8")).hexdigest()[:8]
-        prof_part = f"p-{slug_part}-{digest}"
-    return f"{prof_part}__vm-{1 if vm else 0}__mob-{1 if mobile_app else 0}"
-
-
-def prime_sandbox_app_name(*, vm: bool = False, mobile_app: bool = False) -> str:
-    """Returns the Modal App name used for a Prime Sandbox variant."""
-    parts = ["prime-sandbox"]
-    if vm:
-        parts.append("vm")
-    if mobile_app:
-        parts.append("mobile")
-    return "-".join(parts)
-
-
-def build_initial_thread_prompt(
-    raw_prompt: str,
-    *,
-    template: AppTemplateKind,
-    app_dir: str,
-    dev_port: int | None = None,
-) -> str:
-    """Appends the one-time run-app instruction (with dedicated port when set) to the T3 prompt."""
-    clean_prompt = raw_prompt.strip()
-    if template == "nextjs":
-        if dev_port is not None:
-            suffix = (
-                f"Once built and verified in {app_dir}, use the run-app workflow: "
-                f"run `pnpm run dev` (already configured on port {dev_port}) and open "
-                f"http://localhost:{dev_port} in the T3 Code browser so the live preview is open."
-            )
-        else:
-            suffix = (
-                f"Once built and verified in {app_dir}, use the run-app workflow: "
-                "run `pnpm run dev` and open its localhost URL in the T3 Code browser so the live preview is open."
-            )
-    else:
-        if dev_port is not None:
-            suffix = (
-                f"Workspace is initialized at {app_dir}. Once built, start the local web server "
-                f"on port {dev_port} (e.g. `PORT={dev_port}`) and open http://localhost:{dev_port} "
-                "in the T3 Code browser so the live preview is open."
-            )
-        else:
-            suffix = (
-                f"Workspace is initialized at {app_dir}. Once built, start the local web server "
-                "and open its localhost URL in the T3 Code browser so the live preview is open."
-            )
-    return f"{clean_prompt}\n\n{suffix}"
-
-
-def build_direct_chat_url(
-    t3_url: str,
-    environment_id: str,
-    thread_id: str,
-    token: str | None = None,
-) -> str:
-    """Builds the direct T3 Web chat route, optionally attaching a one-time pairing fragment."""
-    base = (
-        f"{t3_url.rstrip('/')}/"
-        f"{quote(environment_id, safe='')}/"
-        f"{quote(thread_id, safe='')}"
-    )
-    if token:
-        return f"{base}#token={quote(token, safe='')}"
-    return base
-
-
 class ModelOption(BaseModel):
     """Selectable option value for a model capability (e.g. thought_level)."""
 
@@ -201,9 +81,12 @@ class ModelChoice(BaseModel):
 class CreateAppPayload(BaseModel):
     """HTTP payload submitted from the builder homepage to launch a Factory App."""
 
-    prompt: str
+    prompt: str = ""
     name: str | None = None
+    repo: str | None = None
+    branch: str | None = None
     template: AppTemplateKind = "nextjs"
+    web_app: bool | None = None
     mobile_app: bool = False
     vm: bool = False
     profile: str | None = None
@@ -211,13 +94,21 @@ class CreateAppPayload(BaseModel):
     model: str = DEFAULT_BUILDER_MODEL
     thought_level: str | None = None
 
-    @field_validator("prompt")
-    @classmethod
-    def _validate_prompt(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
+    @model_validator(mode="after")
+    def _validate_inputs(self) -> CreateAppPayload:
+        self.prompt = (self.prompt or "").strip()
+        self.repo = self.repo.strip() if self.repo and self.repo.strip() else None
+        self.branch = self.branch.strip() if self.branch and self.branch.strip() else None
+        self.name = self.name.strip() if self.name and self.name.strip() else None
+        if self.repo is None and not self.prompt:
             raise ValueError("Prompt must not be empty.")
-        return stripped
+        return self
+
+    def resolved_web_app(self) -> bool:
+        """Returns explicit web_app choice, or defaults to True only for scratch Next.js apps."""
+        if self.web_app is not None:
+            return self.web_app
+        return self.repo is None and self.template == "nextjs"
 
 
 class LaunchStep(BaseModel):
@@ -229,13 +120,16 @@ class LaunchStep(BaseModel):
 
 
 class FactoryAppRecord(BaseModel):
-    """Persistent state for a Factory App linking prompt, workspace, sandbox, and T3 thread."""
+    """Persistent state for a Factory App linking prompt/repo, workspace, sandbox, and T3 thread."""
 
     app_id: str
     slug: str
     title: str
-    prompt: str
+    prompt: str = ""
+    repo: str | None = None
+    branch: str | None = None
     template: AppTemplateKind = "nextjs"
+    web_app: bool = True
     mobile_app: bool = False
     vm: bool = False
     profile: str | None = None
@@ -372,7 +266,7 @@ class OpenAppResponse(BaseModel):
 
 STEP_DEFINITIONS: tuple[tuple[LaunchStatus, str], ...] = (
     ("launching_sandbox", "Provisioning Modal sandbox"),
-    ("scaffolding_workspace", "Preparing local Git workspace"),
+    ("scaffolding_workspace", "Preparing Git workspace"),
     ("waiting_t3", "Waiting for T3 Code Server"),
     ("starting_thread", "Starting agent thread & pairing"),
 )

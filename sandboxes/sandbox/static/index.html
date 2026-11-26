@@ -157,7 +157,7 @@
 
     <!-- TAB 0: PROMPT BUILDER HOMEPAGE -->
     <div x-show="currentTab === 'builder'" class="space-y-8">
-      <!-- Prompt Composer Hero -->
+      <!-- Prompt Composer + Cached GitHub Repo Hero -->
       <section class="bg-gradient-to-b from-slate-900 to-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-5">
         <div class="space-y-1.5">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -176,7 +176,7 @@
                 <span class="text-indigo-300">Prime Sandbox booting — new prompts will attach automatically</span>
               </template>
               <template x-if="!matchingPrimeSandbox || !['running', 'provisioning'].includes(matchingPrimeSandbox.runtime_status)">
-                <span class="text-slate-400">No active Prime Sandbox — first prompt boots one</span>
+                <span class="text-slate-400">No active Prime Sandbox — first launch boots one</span>
               </template>
               <button type="button" @click="currentTab = 'sandboxes'; window.location.hash = 'sandboxes'"
                       class="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline ml-1">
@@ -185,97 +185,193 @@
             </div>
           </div>
           <p class="text-sm text-slate-400">
-            Describe your app below. The first prompt boots a shared Prime Sandbox; subsequent prompts attach new isolated workspaces and T3 Code threads inside it.
+            Describe a new app or select a GitHub repository to open in the shared Prime Sandbox. Repository lists stay cached until you click Refresh.
           </p>
         </div>
 
-        <div class="space-y-3">
-          <textarea id="builder-prompt-input" rows="4" x-model="builderForm.prompt"
-                    @keydown.meta.enter.prevent="submitAppPrompt()"
-                    @keydown.ctrl.enter.prevent="submitAppPrompt()"
-                    placeholder="Build a personal habit tracker with daily streaks, analytics chart, and dark mode..."
-                    class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
-
-          <!-- Compact Builder Controls -->
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <div class="flex flex-wrap items-center gap-2.5 text-xs">
-              <!-- Model Selector -->
-              <select x-model.number="builderSelectedModelIndex" @change="onBuilderModelChange()"
-                      class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
-                <template x-for="(m, idx) in availableModels" :key="idx">
-                  <option :value="idx" x-text="m.label"></option>
-                </template>
-              </select>
-
-              <!-- Thinking Level Selector -->
-              <select x-show="selectedBuilderModel && selectedBuilderModel.thought_levels && selectedBuilderModel.thought_levels.length > 0"
-                      x-model="builderForm.thought_level"
-                      class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
-                <option value="">Thinking: Default</option>
-                <template x-for="opt in (selectedBuilderModel?.thought_levels || [])" :key="opt.id">
-                  <option :value="opt.id" x-text="'Thinking: ' + opt.label"></option>
-                </template>
-              </select>
-
-              <!-- Workspace Template Toggle -->
-              <div class="inline-flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-                <button type="button" @click="builderForm.template = 'nextjs'"
-                        :class="builderForm.template === 'nextjs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
-                        class="px-2.5 py-1 rounded-md transition-colors">
-                  Next.js App
-                </button>
-                <button type="button" @click="builderForm.template = 'blank'; builderForm.mobile_app = false"
-                        :class="builderForm.template === 'blank' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
-                        class="px-2.5 py-1 rounded-md transition-colors">
-                  Blank Git Repo
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          <!-- Left: Prompt Composer & Builder Controls -->
+          <div class="lg:col-span-7 flex flex-col justify-between space-y-3">
+            <div class="space-y-3">
+              <!-- Selected GitHub Repo Banner -->
+              <div x-show="builderForm.repo"
+                   class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs">
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                  <span class="px-2 py-0.5 rounded bg-indigo-600/30 text-indigo-200 font-semibold">Repo</span>
+                  <span class="font-mono text-white font-semibold truncate" x-text="builderForm.repo"></span>
+                  <span class="text-slate-500">@</span>
+                  <input id="builder-repo-branch" type="text" x-model="builderForm.branch" placeholder="main"
+                         aria-label="Target branch"
+                         class="w-28 bg-slate-950 border border-slate-700 rounded-md px-2 py-0.5 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                </div>
+                <button type="button" @click="clearSelectedRepo()"
+                        class="text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
+                  ✕ New from scratch
                 </button>
               </div>
 
-              <!-- Mobile App Toggle -->
-              <label x-show="builderForm.template === 'nextjs'"
-                     class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
-                <input type="checkbox" x-model="builderForm.mobile_app" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-                <span>+ Mobile</span>
-              </label>
-
-              <!-- Advanced Options Toggle -->
-              <button type="button" @click="builderShowAdvanced = !builderShowAdvanced"
-                      class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
-                <span x-text="builderShowAdvanced ? '▾ Advanced' : '▸ Advanced'"></span>
-              </button>
+              <textarea id="builder-prompt-input" rows="5" x-model="builderForm.prompt"
+                        @keydown.meta.enter.prevent="submitAppPrompt()"
+                        @keydown.ctrl.enter.prevent="submitAppPrompt()"
+                        :placeholder="builderForm.repo ? ('Optional prompt for ' + builderForm.repo + ' (leave empty to open directly in T3)...') : 'Build a personal habit tracker with daily streaks, analytics chart, and dark mode...'"
+                        class="w-full bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none resize-y"></textarea>
             </div>
 
-            <button type="button" @click="submitAppPrompt()" :disabled="builderSubmitting || !builderForm.prompt.trim()"
-                    class="inline-flex items-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg x-show="builderSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span x-text="builderSubmitting ? 'Starting...' : 'Build App'"></span>
-            </button>
+            <!-- Compact Builder Controls -->
+            <div class="space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  <!-- Model Selector -->
+                  <select x-model.number="builderSelectedModelIndex" @change="onBuilderModelChange()"
+                          class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <template x-for="(m, idx) in availableModels" :key="idx">
+                      <option :value="idx" x-text="m.label"></option>
+                    </template>
+                  </select>
+
+                  <!-- Thinking Level Selector -->
+                  <select x-show="selectedBuilderModel && selectedBuilderModel.thought_levels && selectedBuilderModel.thought_levels.length > 0"
+                          x-model="builderForm.thought_level"
+                          class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">Thinking: Default</option>
+                    <template x-for="opt in (selectedBuilderModel?.thought_levels || [])" :key="opt.id">
+                      <option :value="opt.id" x-text="'Thinking: ' + opt.label"></option>
+                    </template>
+                  </select>
+
+                  <!-- Workspace Template Toggle (Scratch mode only) -->
+                  <div x-show="!builderForm.repo" class="inline-flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                    <button type="button" @click="selectTemplate('nextjs')"
+                            :class="builderForm.template === 'nextjs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                            class="px-2.5 py-1 rounded-md transition-colors">
+                      Next.js App
+                    </button>
+                    <button type="button" @click="selectTemplate('blank')"
+                            :class="builderForm.template === 'blank' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                            class="px-2.5 py-1 rounded-md transition-colors">
+                      Blank Git Repo
+                    </button>
+                  </div>
+
+                  <!-- Mobile App Toggle (Scratch Next.js only) -->
+                  <label x-show="!builderForm.repo && builderForm.template === 'nextjs'"
+                         class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
+                    <input type="checkbox" x-model="builderForm.mobile_app" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                    <span>+ Mobile</span>
+                  </label>
+
+                  <!-- Web App Checkbox -->
+                  <label title="When checked, appends run-app startup and preview port instructions to the prompt"
+                         class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 cursor-pointer select-none">
+                    <input id="builder-webapp-checkbox" type="checkbox" x-model="builderForm.web_app"
+                           class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                    <span>web app</span>
+                  </label>
+
+                  <!-- Advanced Options Toggle -->
+                  <button type="button" @click="builderShowAdvanced = !builderShowAdvanced"
+                          class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors">
+                    <span x-text="builderShowAdvanced ? '▾ Advanced' : '▸ Advanced'"></span>
+                  </button>
+                </div>
+
+                <button id="builder-submit-btn" type="button" @click="submitAppPrompt()"
+                        :disabled="builderSubmitting || (!builderForm.repo && !builderForm.prompt.trim())"
+                        class="inline-flex items-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                  <svg x-show="builderSubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span x-text="builderSubmitting ? 'Starting...' : (builderForm.repo ? 'Open Repo' : 'Build App')"></span>
+                </button>
+              </div>
+
+              <!-- Collapsed Advanced Controls -->
+              <div x-show="builderShowAdvanced" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs">
+                <div>
+                  <label class="block text-slate-400 mb-1">App / Workspace Name (optional)</label>
+                  <input type="text" x-model="builderForm.name" placeholder="Auto-derived from repo or prompt"
+                         class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                  <label class="block text-slate-400 mb-1">Modal Profile</label>
+                  <select x-model="builderForm.profile"
+                          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">Active Default Profile</option>
+                    <template x-for="p in profiles" :key="p.name">
+                      <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="flex items-end pb-1">
+                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
+                    <input type="checkbox" x-model="builderForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                    <span>VM Sandbox (Docker runtime)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Collapsed Advanced Controls -->
-          <div x-show="builderShowAdvanced" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs">
-            <div>
-              <label class="block text-slate-400 mb-1">App Name (optional)</label>
-              <input type="text" x-model="builderForm.name" placeholder="Auto-derived from prompt"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-              <label class="block text-slate-400 mb-1">Modal Profile</label>
-              <select x-model="builderForm.profile"
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
-                <option value="">Active Default Profile</option>
-                <template x-for="p in profiles" :key="p.name">
-                  <option :value="p.name" x-text="p.name + (p.active ? ' (active)' : '')"></option>
+          <!-- Right: Cached GitHub Repositories Picker -->
+          <div id="github-repos-panel" class="lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
+            <div class="space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-300">GitHub Repositories</h3>
+                  <span x-show="repoCatalog.org"
+                        class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono truncate"
+                        x-text="repoCatalog.org"></span>
+                </div>
+                <button id="refresh-github-repos-btn" type="button" @click="refreshGithubRepos()" :disabled="repoRefreshing"
+                        class="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors disabled:opacity-50">
+                  <svg class="w-3.5 h-3.5 mr-1" :class="{'animate-spin': repoRefreshing}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span x-text="repoRefreshing ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+              </div>
+
+              <input id="github-repo-search" type="text" x-model="repoSearchQuery"
+                     placeholder="Filter cached repos or enter owner/repo..."
+                     class="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none">
+
+              <button x-show="customRepoCandidate" type="button" @click="selectCustomRepo(customRepoCandidate)"
+                      class="w-full text-left px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-xs text-indigo-200 flex items-center justify-between">
+                <span>Use repository <span class="font-mono font-semibold" x-text="customRepoCandidate"></span></span>
+                <span class="text-[10px] text-indigo-300">Select</span>
+              </button>
+
+              <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                <template x-for="repoItem in filteredGithubRepos" :key="repoItem.full_name">
+                  <button type="button" @click="toggleSelectRepo(repoItem)"
+                          :class="builderForm.repo === repoItem.full_name ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800 text-slate-300'"
+                          class="w-full text-left px-3 py-2 rounded-lg border transition-colors space-y-0.5">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-mono text-xs font-medium truncate" x-text="repoItem.name"></span>
+                      <div class="flex items-center gap-1 flex-shrink-0">
+                        <span class="text-[10px] px-1.5 py-0.2 rounded font-mono"
+                              :class="repoItem.private ? 'bg-amber-500/10 text-amber-300' : 'bg-slate-800 text-slate-400'"
+                              x-text="repoItem.private ? 'private' : 'public'"></span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono"
+                              x-text="repoItem.default_branch"></span>
+                      </div>
+                    </div>
+                    <div x-show="repoItem.description" class="text-[11px] text-slate-400 line-clamp-1" x-text="repoItem.description"></div>
+                  </button>
                 </template>
-              </select>
+
+                <div x-show="repoCatalog.repos.length === 0" class="py-6 px-3 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                  No cached repositories yet. Click <span class="text-slate-300 font-medium">Refresh</span> to load from GitHub.
+                </div>
+                <div x-show="repoCatalog.repos.length > 0 && filteredGithubRepos.length === 0" class="py-6 px-3 text-center text-xs text-slate-500">
+                  No cached repositories match your filter.
+                </div>
+              </div>
             </div>
-            <div class="flex items-end pb-1">
-              <label class="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
-                <input type="checkbox" x-model="builderForm.vm" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
-                <span>VM Sandbox (Docker runtime)</span>
-              </label>
+
+            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+              <span x-text="repoCatalog.refreshed_at ? ('Updated ' + formatDate(repoCatalog.refreshed_at)) : 'Not fetched yet (manual refresh only)'"></span>
+              <span x-text="repoCatalog.repos.length + ' repo' + (repoCatalog.repos.length === 1 ? '' : 's')"></span>
             </div>
           </div>
         </div>
@@ -290,7 +386,8 @@
                     x-text="activeLaunch?.request?.status || 'queued'"></span>
               <h3 class="text-base font-semibold text-white" x-text="activeLaunch?.app?.title || 'Launching Factory App'"></h3>
             </div>
-            <p class="text-xs text-slate-400 mt-1 line-clamp-2" x-text="activeLaunch?.app?.prompt || ''"></p>
+            <p class="text-xs text-slate-400 mt-1 line-clamp-2"
+               x-text="activeLaunch?.app?.prompt || (activeLaunch?.app?.repo ? ('Opening ' + activeLaunch.app.repo + (activeLaunch.app.branch ? ' @ ' + activeLaunch.app.branch : '')) : '')"></p>
           </div>
           <button type="button" @click="dismissActiveLaunch()" class="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800">✕</button>
         </div>
@@ -355,12 +452,16 @@
                         x-text="app.runtime_status.toUpperCase()"></span>
                 </div>
 
-                <p class="text-xs text-slate-300 line-clamp-2" x-text="app.prompt"></p>
+                <p x-show="app.prompt" class="text-xs text-slate-300 line-clamp-2" x-text="app.prompt"></p>
+                <p x-show="!app.prompt" class="text-xs text-slate-500 italic">Opened repository without initial prompt</p>
 
                 <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
-                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300" x-text="app.template === 'nextjs' ? (app.mobile_app ? 'Next.js + Expo' : 'Next.js') : 'Blank Git'"></span>
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300"
+                        x-text="app.repo ? app.repo : (app.template === 'nextjs' ? (app.mobile_app ? 'Next.js + Expo' : 'Next.js') : 'Blank Git')"></span>
+                  <span x-show="app.repo && app.branch" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'@ ' + app.branch"></span>
                   <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300" x-text="app.model"></span>
                   <span x-show="app.dev_port" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300" x-text="':' + app.dev_port"></span>
+                  <span x-show="app.web_app && !app.dev_port" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300">web app</span>
                   <span x-show="app.sandbox_id" class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-400" x-text="app.sandbox_id" :title="'Sandbox ' + app.sandbox_id"></span>
                   <span x-show="app.database_name" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'DB: ' + app.database_name"></span>
                 </div>
@@ -1088,6 +1189,13 @@
 
         apps: [],
         primes: [],
+        repoCatalog: {
+          org: null,
+          refreshed_at: null,
+          repos: []
+        },
+        repoSearchQuery: '',
+        repoRefreshing: false,
         availableModels: [
           {
             provider: 'antigravity',
@@ -1108,7 +1216,10 @@
         builderForm: {
           prompt: '',
           name: '',
+          repo: null,
+          branch: '',
           template: 'nextjs',
+          web_app: true,
           mobile_app: false,
           vm: false,
           profile: '',
@@ -1185,7 +1296,7 @@
           if (hash === 'sandboxes' || hash === 'snapshots' || hash === 'builder') {
             this.currentTab = hash;
           }
-          await Promise.all([this.fetchProfiles(), this.fetchVersion(), this.fetchModels()]);
+          await Promise.all([this.fetchProfiles(), this.fetchVersion(), this.fetchModels(), this.fetchRepoCatalog()]);
           await this.refreshAll();
           const params = new URLSearchParams(window.location.search);
           const pendingLaunch = params.get('launch');
@@ -1235,10 +1346,97 @@
           }
         },
 
+        async fetchRepoCatalog() {
+          try {
+            const res = await fetch('/api/github/repos');
+            if (res.ok) {
+              this.repoCatalog = await res.json();
+            }
+          } catch (err) {
+            console.error('Failed loading cached GitHub repos:', err);
+          }
+        },
+
+        async refreshGithubRepos() {
+          if (this.repoRefreshing) return;
+          this.repoRefreshing = true;
+          try {
+            const res = await fetch('/api/github/repos/refresh', { method: 'POST' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `Server error (${res.status})`);
+            }
+            this.repoCatalog = await res.json();
+            this.showToast(`Loaded ${this.repoCatalog.repos.length} repositories.`);
+          } catch (err) {
+            this.showToast('Repo refresh failed: ' + err.message, 'error');
+          } finally {
+            this.repoRefreshing = false;
+          }
+        },
+
+        selectTemplate(tpl) {
+          this.builderForm.template = tpl;
+          if (tpl === 'blank') {
+            this.builderForm.mobile_app = false;
+          }
+          this.builderForm.web_app = (tpl === 'nextjs');
+        },
+
+        toggleSelectRepo(repoItem) {
+          if (this.builderForm.repo === repoItem.full_name) {
+            this.clearSelectedRepo();
+            return;
+          }
+          this.builderForm.repo = repoItem.full_name;
+          this.builderForm.branch = repoItem.default_branch || 'main';
+          this.builderForm.mobile_app = false;
+          this.builderForm.web_app = false;
+        },
+
+        selectCustomRepo(rawRepo) {
+          const clean = (rawRepo || '').trim();
+          if (!clean) return;
+          this.builderForm.repo = clean;
+          this.builderForm.branch = this.builderForm.branch || 'main';
+          this.builderForm.mobile_app = false;
+          this.builderForm.web_app = false;
+          this.repoSearchQuery = '';
+        },
+
+        clearSelectedRepo() {
+          this.builderForm.repo = null;
+          this.builderForm.branch = '';
+          this.builderForm.web_app = (this.builderForm.template === 'nextjs');
+        },
+
+        get filteredGithubRepos() {
+          const repos = this.repoCatalog?.repos || [];
+          const q = this.repoSearchQuery.toLowerCase().trim();
+          if (!q) return repos;
+          return repos.filter(r =>
+            (r.full_name && r.full_name.toLowerCase().includes(q)) ||
+            (r.name && r.name.toLowerCase().includes(q)) ||
+            (r.description && r.description.toLowerCase().includes(q))
+          );
+        },
+
+        get customRepoCandidate() {
+          const raw = this.repoSearchQuery.trim();
+          if (!raw || /\s/.test(raw)) return null;
+          const repos = this.repoCatalog?.repos || [];
+          const lower = raw.toLowerCase();
+          const exact = repos.some(r =>
+            (r.full_name && r.full_name.toLowerCase() === lower) ||
+            (r.name && r.name.toLowerCase() === lower)
+          );
+          return exact ? null : raw;
+        },
+
         get matchingPrimeSandbox() {
           const effProfile = this.builderForm.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : null);
           const vm = !!this.builderForm.vm;
-          const mobile = this.builderForm.template === 'nextjs' && !!this.builderForm.mobile_app;
+          const mobile = !this.builderForm.repo && this.builderForm.template === 'nextjs' && !!this.builderForm.mobile_app;
           return this.primes.find(p =>
             (p.profile || null) === (effProfile || null) &&
             !!p.vm === vm &&
@@ -1253,6 +1451,8 @@
           return this.apps.filter(a =>
             (a.title && a.title.toLowerCase().includes(q)) ||
             (a.slug && a.slug.toLowerCase().includes(q)) ||
+            (a.repo && a.repo.toLowerCase().includes(q)) ||
+            (a.branch && a.branch.toLowerCase().includes(q)) ||
             (a.prompt && a.prompt.toLowerCase().includes(q)) ||
             (a.model && a.model.toLowerCase().includes(q))
           );
@@ -1338,14 +1538,19 @@
         },
 
         async submitAppPrompt() {
-          if (!this.builderForm.prompt || !this.builderForm.prompt.trim() || this.builderSubmitting) return;
+          const hasRepo = !!(this.builderForm.repo && this.builderForm.repo.trim());
+          const hasPrompt = !!(this.builderForm.prompt && this.builderForm.prompt.trim());
+          if ((!hasRepo && !hasPrompt) || this.builderSubmitting) return;
           this.builderSubmitting = true;
           try {
             const payload = {
-              prompt: this.builderForm.prompt.trim(),
+              prompt: hasPrompt ? this.builderForm.prompt.trim() : '',
               name: this.builderForm.name.trim() || null,
+              repo: hasRepo ? this.builderForm.repo.trim() : null,
+              branch: hasRepo && this.builderForm.branch.trim() ? this.builderForm.branch.trim() : null,
               template: this.builderForm.template,
-              mobile_app: this.builderForm.template === 'nextjs' ? !!this.builderForm.mobile_app : false,
+              web_app: !!this.builderForm.web_app,
+              mobile_app: (!hasRepo && this.builderForm.template === 'nextjs') ? !!this.builderForm.mobile_app : false,
               vm: !!this.builderForm.vm,
               profile: this.builderForm.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : null),
               provider: this.builderForm.provider,
@@ -1364,6 +1569,9 @@
             const data = await res.json();
             this.builderForm.prompt = '';
             this.builderForm.name = '';
+            this.builderForm.repo = null;
+            this.builderForm.branch = '';
+            this.builderForm.web_app = (this.builderForm.template === 'nextjs');
             await this.refreshAll(true);
             await this.trackLaunch(data.request_id);
           } catch (err) {

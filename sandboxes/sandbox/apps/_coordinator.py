@@ -9,13 +9,20 @@ import uuid
 
 import modal
 
-from sandbox.config import resolve_factory_credentials
+from sandbox.config import DEFAULT_ORG, resolve_factory_credentials
 from sandbox.db_host import create_database_connection
+from sandbox.env_store import resolve_gh_token
 from sandbox.launcher import launch_sandbox
 from sandbox.lifecycle import terminate_sandbox
 from sandbox.profiles import get_client_for_profile
 from sandbox.snapshots import list_snapshots
 
+from ._github_repos import (
+    CachedGitHubRepo,
+    RepositoryCatalogCache,
+    fetch_github_org_repos,
+    normalize_repo_spec,
+)
 from ._models import (
     DEFAULT_ANTIGRAVITY_MODELS,
     DEFAULT_BUILDER_MODEL,
@@ -34,6 +41,7 @@ from ._models import (
     derive_app_title,
     initial_launch_steps,
     prime_compatibility_key,
+    utc_now_iso,
 )
 from ._pipeline import RESUMABLE_STEPS, PipelineDeps, run_launch_pipeline
 from ._prime import is_prime_sandbox_id
@@ -78,6 +86,8 @@ class LaunchCoordinator:
         no_t3_persist: bool = False,
         prime_wait_timeout_secs: float = 300.0,
         prime_poll_interval_secs: float = 1.0,
+        resolve_bundle_fn: Callable[..., Any] | None = None,
+        fetch_github_repos_fn: Callable[[str, str], list[CachedGitHubRepo]] | None = None,
     ) -> None:
         self.store = store or get_default_store()
         self.launch_fn = launch_fn or launch_sandbox
@@ -90,6 +100,8 @@ class LaunchCoordinator:
         self.no_t3_persist = no_t3_persist
         self.prime_wait_timeout_secs = prime_wait_timeout_secs
         self.prime_poll_interval_secs = prime_poll_interval_secs
+        self.resolve_bundle_fn = resolve_bundle_fn
+        self.fetch_github_repos_fn = fetch_github_repos_fn or fetch_github_org_repos
 
     def _effective_env(self) -> dict[str, str]:
         if self.env is not None:
@@ -107,27 +119,55 @@ class LaunchCoordinator:
             models.append(ModelChoice(provider="codex", model="gpt-5.4", label="Codex · Default"))
         return models
 
+    def get_repo_catalog(self) -> RepositoryCatalogCache:
+        """Returns the persisted Repository Catalog Cache without querying GitHub."""
+        return self.store.get_repo_catalog()
+
+    def refresh_repo_catalog(self) -> RepositoryCatalogCache:
+        """Fetches accessible GitHub repositories for GH_ORG_NAME and updates the persisted cache."""
+        env = self._effective_env()
+        org = (env.get("GH_ORG_NAME") or DEFAULT_ORG or "").strip()
+        if not org:
+            raise ValueError("GH_ORG_NAME is not configured on the control plane.")
+        token = resolve_gh_token(env.get("GH_TOKEN") or env.get("GITHUB_TOKEN"))
+        if not token:
+            raise ValueError("GH_TOKEN is not configured on the control plane.")
+        repos = self.fetch_github_repos_fn(org, token)
+        catalog = RepositoryCatalogCache(org=org, refreshed_at=utc_now_iso(), repos=repos)
+        return self.store.save_repo_catalog(catalog)
+
     def create_and_dispatch(
         self,
         payload: CreateAppPayload,
         dispatch_fn: Callable[[str], None] | None = None,
     ) -> tuple[FactoryAppRecord, LaunchRequestRecord]:
         """Persists a new Factory App + queued Launch Request and triggers background execution."""
+        repo_full: str | None = None
+        if payload.repo:
+            env = self._effective_env()
+            default_org = (env.get("GH_ORG_NAME") or DEFAULT_ORG or "").strip() or None
+            repo_full, _, _ = normalize_repo_spec(payload.repo, default_org=default_org)
+
         existing_slugs = {item.slug for item in self.store.list_apps()}
-        slug = derive_app_slug(payload.prompt, payload.name, existing_slugs=existing_slugs)
-        title = derive_app_title(payload.prompt, payload.name)
+        slug = derive_app_slug(payload.prompt, payload.name, existing_slugs=existing_slugs, repo=repo_full)
+        title = derive_app_title(payload.prompt, payload.name, repo=repo_full)
         app_id = f"app_{uuid.uuid4().hex[:12]}"
         request_id = f"req_{uuid.uuid4().hex[:12]}"
         profile = payload.profile or None
-        prime_key = prime_compatibility_key(profile, payload.vm, payload.mobile_app)
+        web_app = payload.resolved_web_app()
+        mobile_app = bool(payload.mobile_app) if (repo_full is None and payload.template == "nextjs") else False
+        prime_key = prime_compatibility_key(profile, payload.vm, mobile_app)
 
         app = FactoryAppRecord(
             app_id=app_id,
             slug=slug,
             title=title,
             prompt=payload.prompt,
+            repo=repo_full,
+            branch=payload.branch if repo_full else None,
             template=payload.template,
-            mobile_app=payload.mobile_app,
+            web_app=web_app,
+            mobile_app=mobile_app,
             vm=payload.vm,
             profile=profile,
             prime_key=prime_key,
@@ -254,6 +294,7 @@ class LaunchCoordinator:
             no_t3_persist=self.no_t3_persist,
             prime_wait_timeout_secs=self.prime_wait_timeout_secs,
             prime_poll_interval_secs=self.prime_poll_interval_secs,
+            resolve_bundle_fn=self.resolve_bundle_fn,
         )
         return run_launch_pipeline(deps, app, launch)
 

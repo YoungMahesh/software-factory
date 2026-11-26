@@ -8,6 +8,12 @@ from ._coordinator import (
     AppSandboxStoppedError,
     LaunchCoordinator,
 )
+from ._github_repos import (
+    CachedGitHubRepo,
+    RepositoryCatalogCache,
+    fetch_github_org_repos,
+    normalize_repo_spec,
+)
 from ._models import (
     DEFAULT_APP_BASE_PORT,
     DEFAULT_BUILDER_MODEL,
@@ -51,6 +57,7 @@ __all__ = [
     "AppNotFoundError",
     "AppNotReadyError",
     "AppSandboxStoppedError",
+    "CachedGitHubRepo",
     "CreateAppPayload",
     "DEFAULT_APP_BASE_PORT",
     "DEFAULT_BUILDER_MODEL",
@@ -71,14 +78,17 @@ __all__ = [
     "PrimeSandboxRecord",
     "PrimeSandboxView",
     "PrimeStatus",
+    "RepositoryCatalogCache",
     "apps_router",
     "build_direct_chat_url",
     "build_initial_thread_prompt",
     "derive_app_slug",
     "derive_app_title",
+    "fetch_github_org_repos",
     "get_coordinator",
     "get_default_store",
     "get_factory_state_volume",
+    "normalize_repo_spec",
     "prime_compatibility_key",
     "prime_sandbox_app_name",
     "set_coordinator_factory",

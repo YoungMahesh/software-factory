@@ -13,6 +13,7 @@ from ._coordinator import (
     AppSandboxStoppedError,
     LaunchCoordinator,
 )
+from ._github_repos import RepositoryCatalogCache
 from ._models import (
     CreateAppPayload,
     FactoryAppRecord,
@@ -76,6 +77,26 @@ def api_list_models() -> list[ModelChoice]:
     return get_coordinator().list_available_models()
 
 
+@apps_router.get("/api/github/repos", response_model=RepositoryCatalogCache)
+def api_get_github_repos() -> RepositoryCatalogCache:
+    """Returns cached GitHub repositories from factory-state-v1 without querying GitHub."""
+    return get_coordinator().get_repo_catalog()
+
+
+@apps_router.post("/api/github/repos/refresh", response_model=RepositoryCatalogCache)
+def api_refresh_github_repos() -> RepositoryCatalogCache:
+    """Refreshes the persisted GitHub Repository Catalog Cache on explicit operator request."""
+    try:
+        return get_coordinator().refresh_repo_catalog()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed refreshing GitHub repositories: {exc}",
+        ) from exc
+
+
 @apps_router.get("/api/apps", response_model=list[FactoryAppView])
 def api_list_apps(
     profile: str | None = Query(None, description="Optional Modal profile filter for snapshot lookup"),
@@ -98,10 +119,13 @@ def api_list_primes(
 def api_create_app(payload: CreateAppPayload) -> dict[str, Any]:
     """Creates a Factory App and spawns a durable Launch Request."""
     coordinator = get_coordinator()
-    app, launch = coordinator.create_and_dispatch(
-        payload,
-        dispatch_fn=lambda req_id: _dispatch_launch(req_id, coordinator),
-    )
+    try:
+        app, launch = coordinator.create_and_dispatch(
+            payload,
+            dispatch_fn=lambda req_id: _dispatch_launch(req_id, coordinator),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _launch_accepted_payload(app, launch)
 
 
