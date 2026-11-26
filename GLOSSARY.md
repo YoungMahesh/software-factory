@@ -327,3 +327,7 @@ _Avoid_: Builder project, prompt project, user app
 A single idempotent provisioning attempt to create or reopen a Factory App, tracking request status, workspace metadata, Modal sandbox handle, and T3 Code Server thread identity.
 _Avoid_: Build job, prompt job, start request
 
+**Prime Sandbox**:
+A long-lived, multi-tenant Modal sandbox provisioned lazily on demand that hosts multiple Factory Apps and T3 Code Server threads concurrently, eliminating container startup overhead for subsequent prompts.
+_Avoid_: Shared sandbox, warm sandbox, master sandbox, persistent container
+

@@ -130,12 +130,67 @@ def ensure_blank_git_workspace(sb: Any, app_dir: str) -> None:
         raise RuntimeError(f"Failed initializing blank Git workspace in {app_dir}: {err or out}")
 
 
+def configure_nextjs_dev_port(sb: Any, app_dir: str, dev_port: int) -> None:
+    """Pins the assigned dev_port in Next.js apps/web/package.json and workspace .env."""
+    script = (
+        "import json, os, re, subprocess, sys\n"
+        "app_dir, dev_port = sys.argv[1], int(sys.argv[2])\n"
+        "pkg_path = os.path.join(app_dir, 'apps', 'web', 'package.json')\n"
+        "changed_files = []\n"
+        "if os.path.isfile(pkg_path):\n"
+        "    with open(pkg_path, encoding='utf-8') as f:\n"
+        "        pkg = json.load(f)\n"
+        "    scripts = pkg.setdefault('scripts', {})\n"
+        "    desired = f'next dev -p {dev_port}'\n"
+        "    if scripts.get('dev') != desired:\n"
+        "        scripts['dev'] = desired\n"
+        "        with open(pkg_path, 'w', encoding='utf-8') as f:\n"
+        "            json.dump(pkg, f, indent=2)\n"
+        "            f.write('\\n')\n"
+        "        changed_files.append('apps/web/package.json')\n"
+        "env_path = os.path.join(app_dir, '.env')\n"
+        "lines = open(env_path, encoding='utf-8').read().splitlines(keepends=True) if os.path.isfile(env_path) else []\n"
+        "pattern = re.compile(r'^\\s*(export\\s+)?PORT\\s*=.*$')\n"
+        "out, replaced = [], False\n"
+        "for line in lines:\n"
+        "    if pattern.match(line):\n"
+        "        out.append(f'PORT={dev_port}\\n')\n"
+        "        replaced = True\n"
+        "    else:\n"
+        "        out.append(line)\n"
+        "if not replaced:\n"
+        "    if out and not out[-1].endswith('\\n'):\n"
+        "        out[-1] += '\\n'\n"
+        "    out.append(f'PORT={dev_port}\\n')\n"
+        "os.makedirs(app_dir, exist_ok=True)\n"
+        "with open(env_path, 'w', encoding='utf-8') as f:\n"
+        "    f.write(''.join(out))\n"
+        "try:\n"
+        "    os.chmod(env_path, 0o600)\n"
+        "except OSError:\n"
+        "    pass\n"
+        "if changed_files and os.path.isdir(os.path.join(app_dir, '.git')):\n"
+        "    has_head = subprocess.run(['git', '-C', app_dir, 'rev-parse', '--verify', 'HEAD'], capture_output=True).returncode == 0\n"
+        "    if has_head:\n"
+        "        subprocess.run(['git', '-C', app_dir, 'add', *changed_files], check=False)\n"
+        "        subprocess.run([\n"
+        "            'git', '-C', app_dir,\n"
+        "            '-c', 'user.name=Factory Operator', '-c', 'user.email=operator@software-factory.local',\n"
+        "            'commit', '--no-verify', '-m', f'chore: bind web dev port {dev_port}',\n"
+        "        ], capture_output=True, check=False)\n"
+    )
+    rc, out, err = exec_in_sandbox(sb, "python3", "-c", script, app_dir, str(dev_port), timeout=30)
+    if rc != 0:
+        raise RuntimeError(f"Failed configuring dev port {dev_port} in {app_dir}: {err or out}")
+
+
 def prepare_app_workspace(
     sb: Any,
     app: FactoryAppRecord,
     app_dir: str,
     *,
     force: bool = False,
+    dev_port: int | None = None,
 ) -> None:
     """Scaffolds a Next.js App Template or initializes a blank Git workspace inside the sandbox."""
     if app.template == "nextjs":
@@ -147,8 +202,75 @@ def prepare_app_workspace(
         rc, out, err = exec_in_sandbox(sb, *cmd, timeout=300)
         if rc != 0:
             raise RuntimeError(f"create-app failed in {app_dir}: {err or out}")
+        if dev_port is not None:
+            configure_nextjs_dev_port(sb, app_dir, dev_port)
     else:
         ensure_blank_git_workspace(sb, app_dir)
+
+
+def cleanup_app_workspace(sb: Any, app_dir: str, *, dev_port: int | None = None) -> None:
+    """Stops app-scoped processes, removes T3 project/threads, and deletes the workspace directory."""
+    if not app_dir.startswith("/root/") or app_dir.rstrip("/") == "/root":
+        raise ValueError(f"Refusing to delete unsafe workspace path: {app_dir!r}")
+
+    kill_script = (
+        "import os, signal, sys, time\n"
+        "app_dir = os.path.realpath(sys.argv[1])\n"
+        "port = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else ''\n"
+        "self_pid = os.getpid()\n"
+        "parent_pid = os.getppid()\n"
+        "targets = []\n"
+        "for name in os.listdir('/proc'):\n"
+        "    if not name.isdigit():\n"
+        "        continue\n"
+        "    pid = int(name)\n"
+        "    if pid in (1, self_pid, parent_pid):\n"
+        "        continue\n"
+        "    try:\n"
+        "        cwd = os.path.realpath(f'/proc/{pid}/cwd')\n"
+        "        raw_cmd = open(f'/proc/{pid}/cmdline', 'rb').read().decode('utf-8', 'ignore')\n"
+        "        args = [a for a in raw_cmd.split('\\x00') if a]\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "    if any('t3' == os.path.basename(a) for a in args[:2]):\n"
+        "        continue\n"
+        "    matches_dir = cwd == app_dir or cwd.startswith(app_dir + '/') or any(\n"
+        "        a == app_dir or a.startswith(app_dir + '/') for a in args\n"
+        "    )\n"
+        "    matches_port = bool(port) and (\n"
+        "        f'PORT={port}' in args or any(args[i:i+2] == ['-p', port] for i in range(len(args) - 1))\n"
+        "    )\n"
+        "    if matches_dir or matches_port:\n"
+        "        targets.append(pid)\n"
+        "for sig in (signal.SIGTERM, signal.SIGKILL):\n"
+        "    alive = []\n"
+        "    for pid in targets:\n"
+        "        try:\n"
+        "            os.kill(pid, sig)\n"
+        "            alive.append(pid)\n"
+        "        except ProcessLookupError:\n"
+        "            pass\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "    if not alive or sig == signal.SIGKILL:\n"
+        "        break\n"
+        "    time.sleep(0.4)\n"
+        "    targets = alive\n"
+    )
+    exec_in_sandbox(sb, "python3", "-c", kill_script, app_dir, str(dev_port or ""), timeout=20)
+    exec_in_sandbox(sb, "t3", "project", "remove", "--force", app_dir, "--base-dir", "/root/.t3", timeout=30)
+    exec_in_sandbox(sb, "rm", "-rf", app_dir, timeout=30)
+
+
+def probe_t3_ready(sb: Any, timeout: int = 15) -> dict[str, Any] | None:
+    """Performs a single non-blocking probe of T3 Code Server readiness inside the sandbox."""
+    try:
+        rc, out, _ = exec_in_sandbox(sb, "python3", "-c", _T3_PROBE_SCRIPT, timeout=timeout)
+        if rc == 0 and out.strip():
+            return json.loads(out)
+    except Exception:
+        pass
+    return None
 
 
 def wait_for_t3_ready(sb: Any, timeout_secs: int = DEFAULT_T3_READY_TIMEOUT_SECS) -> dict[str, Any]:
@@ -315,7 +437,9 @@ def ensure_project_and_start_thread(
     if thought_level:
         cmd.extend(["--option", f"thought_level={thought_level}"])
     cmd.extend(["--title", app.title, "--json"])
-    full_prompt = build_initial_thread_prompt(app.prompt, template=app.template, app_dir=app_dir)
+    full_prompt = build_initial_thread_prompt(
+        app.prompt, template=app.template, app_dir=app_dir, dev_port=app.dev_port
+    )
     rc, out, err = exec_in_sandbox(sb, *cmd, stdin_text=full_prompt, timeout=60)
     if rc != 0:
         recovered = list_project_threads(sb, app_dir)

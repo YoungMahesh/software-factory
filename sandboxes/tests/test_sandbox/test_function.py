@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -398,6 +399,16 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
     def test_validate_clean_working_tree_dirty_bypass(self, mock_prov):
         mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "1"}
         self.assertTrue(validate_clean_working_tree(Path("/tmp"), enforce=True))
+
+    @patch("sandbox.function.modal.is_local", return_value=False)
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_validate_clean_working_tree_skips_in_remote_container(self, mock_prov, _mock_local):
+        mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "1"}
+        with patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("PYTEST_CURRENT_TEST", None)
+            os.environ.pop("ALLOW_DIRTY_DEPLOY", None)
+            with patch("sandbox.function.sys.modules", {}):
+                self.assertTrue(validate_clean_working_tree(Path("/tmp")))
 
     @patch("sandbox.function.resolve_host_software_factory_provenance")
     def test_collect_control_plane_secrets_includes_provenance(self, mock_prov):

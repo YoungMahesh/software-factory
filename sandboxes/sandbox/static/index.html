@@ -160,9 +160,32 @@
       <!-- Prompt Composer Hero -->
       <section class="bg-gradient-to-b from-slate-900 to-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-5">
         <div class="space-y-1.5">
-          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">What do you want to build?</h2>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">What do you want to build?</h2>
+            <!-- Prime Sandbox Status Pill -->
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs">
+              <span class="w-2 h-2 rounded-full flex-shrink-0"
+                    :class="matchingPrimeSandbox?.runtime_status === 'running' ? 'bg-emerald-400 animate-pulse' : (matchingPrimeSandbox?.runtime_status === 'provisioning' ? 'bg-indigo-400 animate-pulse' : 'bg-slate-600')"></span>
+              <template x-if="matchingPrimeSandbox?.runtime_status === 'running'">
+                <span class="text-slate-300">
+                  Prime Sandbox <span class="font-mono text-emerald-300" x-text="matchingPrimeSandbox.sandbox_id"></span>
+                  <span class="text-slate-500" x-text="'(' + matchingPrimeSandbox.app_count + ' app' + (matchingPrimeSandbox.app_count === 1 ? '' : 's') + ')'"></span>
+                </span>
+              </template>
+              <template x-if="matchingPrimeSandbox?.runtime_status === 'provisioning'">
+                <span class="text-indigo-300">Prime Sandbox booting — new prompts will attach automatically</span>
+              </template>
+              <template x-if="!matchingPrimeSandbox || !['running', 'provisioning'].includes(matchingPrimeSandbox.runtime_status)">
+                <span class="text-slate-400">No active Prime Sandbox — first prompt boots one</span>
+              </template>
+              <button type="button" @click="currentTab = 'sandboxes'; window.location.hash = 'sandboxes'"
+                      class="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline ml-1">
+                Sandboxes
+              </button>
+            </div>
+          </div>
           <p class="text-sm text-slate-400">
-            Describe your app below. We'll scaffold a local Git workspace in an isolated Modal sandbox and open it directly in T3 Code chat.
+            Describe your app below. The first prompt boots a shared Prime Sandbox; subsequent prompts attach new isolated workspaces and T3 Code threads inside it.
           </p>
         </div>
 
@@ -337,6 +360,8 @@
                 <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
                   <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300" x-text="app.template === 'nextjs' ? (app.mobile_app ? 'Next.js + Expo' : 'Next.js') : 'Blank Git'"></span>
                   <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300" x-text="app.model"></span>
+                  <span x-show="app.dev_port" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300" x-text="':' + app.dev_port"></span>
+                  <span x-show="app.sandbox_id" class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-400" x-text="app.sandbox_id" :title="'Sandbox ' + app.sandbox_id"></span>
                   <span x-show="app.database_name" class="px-2 py-0.5 rounded bg-slate-800 text-emerald-300" x-text="'DB: ' + app.database_name"></span>
                 </div>
 
@@ -351,9 +376,10 @@
                     Open in T3
                   </button>
                   <button x-show="app.runtime_status === 'running' && app.sandbox_id" type="button"
-                          @click="openSnapshotModal({ id: app.sandbox_id, name: app.slug, profile: app.profile })"
+                          @click="openSnapshotModal({ id: app.sandbox_id, name: app.sandbox_name || app.slug, profile: app.profile })"
+                          title="Capture a filesystem snapshot of the shared Prime Sandbox (includes all hosted apps)"
                           class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
-                    Snapshot
+                    Snapshot Sandbox
                   </button>
                   <button x-show="app.runtime_status === 'provisioning' && app.latest_request_id" type="button"
                           @click="trackLaunch(app.latest_request_id)"
@@ -1061,6 +1087,7 @@
         version: null,
 
         apps: [],
+        primes: [],
         availableModels: [
           {
             provider: 'antigravity',
@@ -1208,6 +1235,18 @@
           }
         },
 
+        get matchingPrimeSandbox() {
+          const effProfile = this.builderForm.profile || (this.selectedProfile !== 'all' ? this.selectedProfile : null);
+          const vm = !!this.builderForm.vm;
+          const mobile = this.builderForm.template === 'nextjs' && !!this.builderForm.mobile_app;
+          return this.primes.find(p =>
+            (p.profile || null) === (effProfile || null) &&
+            !!p.vm === vm &&
+            !!p.mobile_app === mobile &&
+            (p.runtime_status === 'running' || p.runtime_status === 'provisioning')
+          ) || null;
+        },
+
         get filteredApps() {
           const q = this.searchQuery.toLowerCase().trim();
           if (!q) return this.apps;
@@ -1281,14 +1320,16 @@
             if (profileParam) sbParams.push(profileParam);
             const sbQuery = '?' + sbParams.join('&');
             const snapQuery = profileParam ? `?${profileParam}` : '';
-            const [sbRes, snapRes, appsRes] = await Promise.all([
+            const [sbRes, snapRes, appsRes, primesRes] = await Promise.all([
               fetch(`/api/sandboxes${sbQuery}`),
               fetch(`/api/snapshots${snapQuery}`),
-              fetch(`/api/apps${snapQuery}`)
+              fetch(`/api/apps${snapQuery}`),
+              fetch(`/api/primes${snapQuery}`)
             ]);
             if (sbRes.ok) this.sandboxes = await sbRes.json();
             if (snapRes.ok) this.snapshots = await snapRes.json();
             if (appsRes.ok) this.apps = await appsRes.json();
+            if (primesRes.ok) this.primes = await primesRes.json();
           } catch (err) {
             console.error('Failed refreshing data:', err);
           } finally {
@@ -1430,11 +1471,11 @@
 
         async deleteFactoryApp(app) {
           const msg = app.runtime_status === 'running'
-            ? `Delete "${app.title}" and terminate its running sandbox?`
+            ? `Delete "${app.title}" and remove its workspace from the sandbox? (Sibling apps in the Prime Sandbox keep running.)`
             : `Delete "${app.title}" from Factory Apps?`;
           if (!confirm(msg)) return;
           try {
-            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}?terminate_sandbox=true`, { method: 'DELETE' });
+            const res = await fetch(`/api/apps/${encodeURIComponent(app.app_id)}`, { method: 'DELETE' });
             if (!res.ok) {
               const err = await res.json().catch(() => ({}));
               throw new Error(err.detail || `Error (${res.status})`);

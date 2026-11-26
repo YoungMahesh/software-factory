@@ -115,7 +115,7 @@ def validate_clean_working_tree(root: Path, enforce: bool | None = None) -> bool
             or "PYTEST_CURRENT_TEST" in os.environ
             or any("pytest" in str(arg) for arg in sys.argv)
         )
-        should_enforce = not is_testing
+        should_enforce = modal.is_local() and not is_testing
     else:
         should_enforce = enforce
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 import uuid
 
 import modal
@@ -28,13 +28,16 @@ from ._models import (
     LaunchStatusResponse,
     ModelChoice,
     OpenAppResponse,
+    PrimeSandboxView,
     build_direct_chat_url,
     derive_app_slug,
     derive_app_title,
     initial_launch_steps,
+    prime_compatibility_key,
 )
 from ._pipeline import RESUMABLE_STEPS, PipelineDeps, run_launch_pipeline
-from ._sandbox_t3 import mint_pairing_token
+from ._prime import is_prime_sandbox_id
+from ._sandbox_t3 import cleanup_app_workspace, mint_pairing_token
 from ._store import FactoryStateStore, get_default_store
 
 logger = logging.getLogger(__name__)
@@ -73,6 +76,8 @@ class LaunchCoordinator:
         sandbox_from_id_fn: Callable[..., Any] | None = None,
         env: dict[str, str] | None = None,
         no_t3_persist: bool = False,
+        prime_wait_timeout_secs: float = 300.0,
+        prime_poll_interval_secs: float = 1.0,
     ) -> None:
         self.store = store or get_default_store()
         self.launch_fn = launch_fn or launch_sandbox
@@ -83,6 +88,8 @@ class LaunchCoordinator:
         self.sandbox_from_id_fn = sandbox_from_id_fn or modal.Sandbox.from_id
         self.env = env
         self.no_t3_persist = no_t3_persist
+        self.prime_wait_timeout_secs = prime_wait_timeout_secs
+        self.prime_poll_interval_secs = prime_poll_interval_secs
 
     def _effective_env(self) -> dict[str, str]:
         if self.env is not None:
@@ -111,6 +118,8 @@ class LaunchCoordinator:
         title = derive_app_title(payload.prompt, payload.name)
         app_id = f"app_{uuid.uuid4().hex[:12]}"
         request_id = f"req_{uuid.uuid4().hex[:12]}"
+        profile = payload.profile or None
+        prime_key = prime_compatibility_key(profile, payload.vm, payload.mobile_app)
 
         app = FactoryAppRecord(
             app_id=app_id,
@@ -120,7 +129,8 @@ class LaunchCoordinator:
             template=payload.template,
             mobile_app=payload.mobile_app,
             vm=payload.vm,
-            profile=payload.profile or None,
+            profile=profile,
+            prime_key=prime_key,
             provider=payload.provider or DEFAULT_BUILDER_PROVIDER,
             model=payload.model or DEFAULT_BUILDER_MODEL,
             thought_level=payload.thought_level or None,
@@ -147,29 +157,35 @@ class LaunchCoordinator:
         resume: bool = False,
         dispatch_fn: Callable[[str], None] | None = None,
     ) -> tuple[FactoryAppRecord, LaunchRequestRecord]:
-        """Starts a fresh Launch Request or resumes from the last failed step when alive."""
+        """Resumes from the failed step when live, else re-scaffolds onto an active Prime Sandbox."""
         app = self.store.get_app(app_id)
         if app is None:
             raise AppNotFoundError(f"Factory App '{app_id}' not found.")
 
         resume_step: LaunchStatus | None = None
+        existing_sb = self._get_running_sandbox(app.sandbox_id, app.profile) if app.sandbox_id else None
         if (
             resume
             and app.failed_step in RESUMABLE_STEPS
             and app.sandbox_id
             and app.t3_url
-            and self._get_running_sandbox(app.sandbox_id, app.profile) is not None
+            and existing_sb is not None
         ):
             resume_step = app.failed_step
-        elif app.sandbox_id and self._get_running_sandbox(app.sandbox_id, app.profile) is not None:
-            self._terminate_quietly(app.sandbox_id, profile=app.profile, reason="relaunch")
+        elif existing_sb is not None:
+            try:
+                cleanup_app_workspace(existing_sb, f"/root/{app.slug}", dev_port=app.dev_port)
+            except Exception as exc:
+                logger.warning("Best-effort workspace cleanup during relaunch failed for %s: %s", app_id, exc)
 
         request_id = f"req_{uuid.uuid4().hex[:12]}"
+        prime_key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
         if resume_step is not None:
             updated_app = app.model_copy(
                 update={
                     "status": "provisioning",
                     "latest_request_id": request_id,
+                    "prime_key": prime_key,
                     "failed_step": None,
                     "last_error": None,
                 }
@@ -180,6 +196,7 @@ class LaunchCoordinator:
                 update={
                     "status": "provisioning",
                     "latest_request_id": request_id,
+                    "prime_key": prime_key,
                     "failed_step": None,
                     "workspace_ready": False,
                     "sandbox_id": None,
@@ -190,6 +207,7 @@ class LaunchCoordinator:
                     "t3_url": None,
                     "chat_url": None,
                     "database_name": None,
+                    "dev_port": None,
                     "last_error": None,
                 }
             )
@@ -234,6 +252,8 @@ class LaunchCoordinator:
             get_running_sandbox=self._get_running_sandbox,
             effective_env=self._effective_env,
             no_t3_persist=self.no_t3_persist,
+            prime_wait_timeout_secs=self.prime_wait_timeout_secs,
+            prime_poll_interval_secs=self.prime_poll_interval_secs,
         )
         return run_launch_pipeline(deps, app, launch)
 
@@ -298,6 +318,40 @@ class LaunchCoordinator:
         snapshots = self._snapshot_index(profile=profile)
         return [self._to_app_view(app, snapshots) for app in apps]
 
+    def list_primes_with_status(self, *, profile: str | None = None) -> list[PrimeSandboxView]:
+        """Lists tracked Prime Sandboxes enriched with live running status and hosted app counts."""
+        primes = self.store.list_primes()
+        apps = self.store.list_apps()
+        apps_by_sb: dict[str, list[str]] = {}
+        for item in apps:
+            if item.sandbox_id:
+                apps_by_sb.setdefault(item.sandbox_id, []).append(item.app_id)
+
+        views: list[PrimeSandboxView] = []
+        for prime in primes:
+            if profile and prime.profile != profile:
+                continue
+            if prime.status == "provisioning":
+                runtime_status: Literal["provisioning", "running", "stopped", "failed"] = "provisioning"
+            elif prime.status == "failed":
+                runtime_status = "failed"
+            elif prime.status == "stopped":
+                runtime_status = "stopped"
+            elif self._get_running_sandbox(prime.sandbox_id, prime.profile) is not None:
+                runtime_status = "running"
+            else:
+                runtime_status = "stopped"
+            hosted = apps_by_sb.get(prime.sandbox_id or "", []) if prime.sandbox_id else []
+            views.append(
+                PrimeSandboxView(
+                    **prime.model_dump(),
+                    runtime_status=runtime_status,
+                    app_count=len(hosted),
+                    app_ids=hosted,
+                )
+            )
+        return views
+
     def open_factory_app(self, app_id: str) -> OpenAppResponse:
         """Mints a fresh short-lived pairing token for a running Factory App's T3 chat."""
         app = self.store.get_app(app_id)
@@ -320,15 +374,19 @@ class LaunchCoordinator:
         handoff_url = build_direct_chat_url(app.t3_url, app.environment_id, app.thread_id, token=token)
         return OpenAppResponse(app_id=app.app_id, handoff_url=handoff_url, chat_url=chat_url)
 
-    def delete_factory_app(self, app_id: str, *, terminate_active_sandbox: bool = True) -> bool:
-        """Deletes a Factory App record and optionally terminates its active sandbox."""
+    def delete_factory_app(self, app_id: str, *, terminate_active_sandbox: bool = False) -> bool:
+        """Deletes a Factory App record and cleans up its workspace without killing a Prime Sandbox."""
         app = self.store.get_app(app_id)
         if app is None:
             return False
-        if (
-            terminate_active_sandbox
-            and app.sandbox_id
-            and self._get_running_sandbox(app.sandbox_id, app.profile) is not None
-        ):
-            self._terminate_quietly(app.sandbox_id, profile=app.profile, reason=f"delete:{app_id}")
+        sb = self._get_running_sandbox(app.sandbox_id, app.profile) if app.sandbox_id else None
+        if sb is not None:
+            is_prime = app.prime_key is not None or is_prime_sandbox_id(self.store, app.sandbox_id)
+            if terminate_active_sandbox and not is_prime:
+                self._terminate_quietly(app.sandbox_id, profile=app.profile, reason=f"delete:{app_id}")
+            else:
+                try:
+                    cleanup_app_workspace(sb, f"/root/{app.slug}", dev_port=app.dev_port)
+                except Exception as exc:
+                    logger.warning("Failed cleaning workspace /root/%s on delete: %s", app.slug, exc)
         return self.store.delete_app(app_id)

@@ -12,7 +12,7 @@ from typing import Any, Callable, TypeVar
 import modal
 from pydantic import BaseModel
 
-from ._models import FactoryAppRecord, LaunchRequestRecord, utc_now_iso
+from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,7 @@ class FactoryStateStore:
 
         self.apps_dir = self.root_dir / "apps"
         self.launches_dir = self.root_dir / "launches"
+        self.primes_dir = self.root_dir / "primes"
         self._lock = _get_lock_for_target(self.volume, self.root_dir)
 
     def _reload_volume(self) -> None:
@@ -89,6 +90,7 @@ class FactoryStateStore:
     def _ensure_dirs(self) -> None:
         self.apps_dir.mkdir(parents=True, exist_ok=True)
         self.launches_dir.mkdir(parents=True, exist_ok=True)
+        self.primes_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _validate_id(record_id: str) -> str:
@@ -101,6 +103,9 @@ class FactoryStateStore:
 
     def _launch_path(self, request_id: str) -> Path:
         return self.launches_dir / f"{self._validate_id(request_id)}.json"
+
+    def _prime_path(self, prime_key: str) -> Path:
+        return self.primes_dir / f"{self._validate_id(prime_key)}.json"
 
     @staticmethod
     def _write_model_file(path: Path, model: BaseModel) -> None:
@@ -293,6 +298,66 @@ class FactoryStateStore:
             self._write_model_file(self._launch_path(saved_launch.request_id), saved_launch)
             self._commit_volume()
             return saved_app, saved_launch
+
+    def save_prime(self, prime: PrimeSandboxRecord) -> PrimeSandboxRecord:
+        """Persists a PrimeSandboxRecord and commits the volume."""
+        return self._save_record(self._prime_path(prime.prime_key), prime)
+
+    def get_prime(self, prime_key: str, *, reload: bool = True) -> PrimeSandboxRecord | None:
+        """Loads a PrimeSandboxRecord by compatibility key, returning None if missing or invalid."""
+        try:
+            path = self._prime_path(prime_key)
+        except ValueError:
+            return None
+        return self._get_record(path, PrimeSandboxRecord, reload=reload)
+
+    def modify_prime(
+        self,
+        prime_key: str,
+        fn: Callable[[PrimeSandboxRecord | None], PrimeSandboxRecord | None],
+    ) -> PrimeSandboxRecord | None:
+        """Atomically reloads, transforms (or initializes) a PrimeSandboxRecord, and commits."""
+        path = self._prime_path(prime_key)
+        with self._lock:
+            self._ensure_dirs()
+            self._reload_volume()
+            current = self._read_model_file(path, PrimeSandboxRecord)
+            updated = fn(current)
+            if updated is None:
+                return None
+            if current is None or updated.updated_at == current.updated_at:
+                updated = updated.model_copy(update={"updated_at": utc_now_iso()})
+            self._write_model_file(path, updated)
+            self._commit_volume()
+            return updated
+
+    def list_primes(self) -> list[PrimeSandboxRecord]:
+        """Lists all PrimeSandboxRecord entries ordered newest updated first."""
+        with self._lock:
+            self._reload_volume()
+            if not self.primes_dir.is_dir():
+                return []
+            items: list[PrimeSandboxRecord] = []
+            for entry in self.primes_dir.glob("*.json"):
+                record = self._read_model_file(entry, PrimeSandboxRecord)
+                if record is not None:
+                    items.append(record)
+            items.sort(key=lambda item: item.updated_at, reverse=True)
+            return items
+
+    def delete_prime(self, prime_key: str) -> bool:
+        """Deletes a PrimeSandboxRecord by compatibility key if present."""
+        try:
+            path = self._prime_path(prime_key)
+        except ValueError:
+            return False
+        with self._lock:
+            self._reload_volume()
+            if not path.is_file():
+                return False
+            path.unlink()
+            self._commit_volume()
+            return True
 
 
 _DEFAULT_STORE: FactoryStateStore | None = None

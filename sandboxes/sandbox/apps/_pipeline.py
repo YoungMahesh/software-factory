@@ -16,7 +16,14 @@ from ._models import (
     LaunchStatus,
     LaunchStatusResponse,
     build_direct_chat_url,
+    prime_compatibility_key,
     utc_now_iso,
+)
+from ._prime import (
+    acquire_sandbox_for_app,
+    allocate_dev_port,
+    mark_prime_ready,
+    release_prime_claim,
 )
 from ._sandbox_t3 import (
     ensure_project_and_start_thread,
@@ -75,6 +82,8 @@ class PipelineDeps:
     get_running_sandbox: Callable[[str | None, str | None], Any | None]
     effective_env: Callable[[], dict[str, str]]
     no_t3_persist: bool = False
+    prime_wait_timeout_secs: float = 300.0
+    prime_poll_interval_secs: float = 1.0
 
 
 def _record_progress(
@@ -96,63 +105,6 @@ def _assert_request_active(store: FactoryStateStore, app_id: str, request_id: st
         raise RuntimeError(f"Launch Request '{request_id}' was superseded or deleted.")
 
 
-def _acquire_sandbox(
-    deps: PipelineDeps,
-    app: FactoryAppRecord,
-    launch: LaunchRequestRecord,
-    flusher: _BufferedLogFlusher,
-) -> tuple[Any, LaunchResponse, LaunchStatus | None, bool]:
-    """Attaches to an existing live sandbox when resuming, else provisions a fresh one."""
-    resume_step = launch.resume_from_step
-    if resume_step in RESUMABLE_STEPS and app.sandbox_id and app.t3_url:
-        existing_sb = deps.get_running_sandbox(app.sandbox_id, app.profile)
-        if existing_sb is not None:
-            resp = LaunchResponse(
-                sandbox_id=app.sandbox_id,
-                app_name=app.slug,
-                sandbox_name=app.sandbox_name or app.slug,
-                t3_url=app.t3_url,
-            )
-            _record_progress(
-                deps.store,
-                launch.request_id,
-                resume_step,
-                "Resuming on active sandbox",
-                f"Reusing active sandbox {app.sandbox_id}; resuming from {resume_step}...",
-            )
-            return existing_sb, resp, resume_step, True
-        _record_progress(
-            deps.store,
-            launch.request_id,
-            "launching_sandbox",
-            "Provisioning Modal sandbox",
-            f"Previous sandbox {app.sandbox_id} stopped; launching fresh sandbox...",
-        )
-    else:
-        _record_progress(
-            deps.store, launch.request_id, "launching_sandbox", "Provisioning Modal sandbox", "Starting Modal sandbox..."
-        )
-
-    req = LaunchRequest(
-        repo=None,
-        name=app.slug,
-        vm=app.vm,
-        no_cloudflare=True,
-        t3=True,
-        no_t3_persist=deps.no_t3_persist,
-        react_native=app.mobile_app,
-        modal=False,
-        profile=app.profile,
-    )
-    running = deps.launch_fn(req, log_cb=flusher.append)
-    flusher.flush()
-    sb, launch_resp = (running.sandbox, running.response) if hasattr(running, "response") else running
-    if not launch_resp.t3_url:
-        deps.terminate_quietly(launch_resp.sandbox_id, profile=app.profile, reason="missing_t3_url")
-        raise RuntimeError("Modal sandbox did not expose a T3 Code Server tunnel URL.")
-    return sb, launch_resp, None, False
-
-
 def _handle_pipeline_failure(
     deps: PipelineDeps,
     app: FactoryAppRecord,
@@ -161,6 +113,9 @@ def _handle_pipeline_failure(
     current_step: LaunchStatus,
     sandbox_id: str | None,
     t3_url: str | None,
+    prime_key: str,
+    reused_prime: bool,
+    is_prime_owner: bool,
     exc: Exception,
 ) -> LaunchStatusResponse:
     err_msg = str(exc)
@@ -168,7 +123,7 @@ def _handle_pipeline_failure(
     cur_app = deps.store.get_app(app.app_id, reload=False)
     active_for_app = cur_app is not None and cur_app.latest_request_id == launch.request_id
     preserve_sandbox = active_for_app and current_step in RESUMABLE_STEPS and bool(sandbox_id and t3_url)
-    if not preserve_sandbox:
+    if not preserve_sandbox and not reused_prime:
         deps.terminate_quietly(sandbox_id, profile=app.profile, reason="launch_failure")
     updated_app = deps.store.update_app_if_current_request(
         app.app_id,
@@ -191,6 +146,8 @@ def _handle_pipeline_failure(
         )
     except KeyError:
         updated_launch = launch.with_stage("failed", "Launch failed", error=err_msg, failed_step=current_step)
+    if is_prime_owner:
+        release_prime_claim(deps.store, prime_key, launch.request_id, status="failed")
     return LaunchStatusResponse(request=updated_launch, app=updated_app or cur_app)
 
 
@@ -199,20 +156,55 @@ def run_launch_pipeline(
     app: FactoryAppRecord,
     launch: LaunchRequestRecord,
 ) -> LaunchStatusResponse:
-    """Executes the 4-stage Launch Request pipeline with step-level resume support."""
+    """Executes the 4-stage Launch Request pipeline with Prime Sandbox reuse and step resume."""
     request_id = launch.request_id
     app_dir = f"/root/{app.slug}"
+    prime_key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
     current_step: LaunchStatus = "launching_sandbox"
     sandbox_id: str | None = None
     t3_url: str | None = None
+    reused_prime = False
+    is_prime_owner = False
     flusher = _BufferedLogFlusher(deps.store, request_id)
     try:
-        sb, launch_resp, effective_resume, reused = _acquire_sandbox(deps, app, launch, flusher)
+        acquired = acquire_sandbox_for_app(
+            store=deps.store,
+            app=app,
+            launch=launch,
+            resumable_steps=RESUMABLE_STEPS,
+            get_running_sandbox=deps.get_running_sandbox,
+            launch_fn=deps.launch_fn,
+            terminate_quietly=deps.terminate_quietly,
+            no_t3_persist=deps.no_t3_persist,
+            log_cb=flusher.append,
+            record_progress=lambda st, lbl, log_line: _record_progress(deps.store, request_id, st, lbl, log_line),
+            assert_active=lambda: _assert_request_active(deps.store, app.app_id, request_id),
+            wait_timeout_secs=deps.prime_wait_timeout_secs,
+            poll_interval_secs=deps.prime_poll_interval_secs,
+        )
+        flusher.flush()
+        sb = acquired.sandbox
+        launch_resp = acquired.response
         sandbox_id = launch_resp.sandbox_id
         t3_url = launch_resp.t3_url
+        reused = acquired.reused_app_sandbox
+        reused_prime = acquired.reused_prime
+        is_prime_owner = acquired.is_prime_owner
+        effective_resume = acquired.resume_step
         _assert_request_active(deps.store, app.app_id, request_id)
+
+        dev_port = app.dev_port
+        if dev_port is None or not reused:
+            dev_port = allocate_dev_port(deps.store, prime_key, sandbox_id, request_id=request_id)
+        app = app.model_copy(update={"dev_port": dev_port, "prime_key": prime_key})
         deps.store.update_app_if_current_request(
-            app.app_id, request_id, sandbox_id=sandbox_id, sandbox_name=launch_resp.sandbox_name, t3_url=t3_url
+            app.app_id,
+            request_id,
+            sandbox_id=sandbox_id,
+            sandbox_name=launch_resp.sandbox_name,
+            t3_url=t3_url,
+            dev_port=dev_port,
+            prime_key=prime_key,
         )
 
         workspace_ready = app.workspace_ready if reused else False
@@ -224,9 +216,9 @@ def run_launch_pipeline(
                 request_id,
                 "scaffolding_workspace",
                 "Preparing local Git workspace",
-                f"Sandbox {sandbox_id} online; preparing {app_dir}...",
+                f"Sandbox {sandbox_id} online; preparing {app_dir} (port {dev_port})...",
             )
-            prepare_app_workspace(sb, app, app_dir, force=reused and not workspace_ready)
+            prepare_app_workspace(sb, app, app_dir, force=reused and not workspace_ready, dev_port=dev_port)
             db_name = db_name or provision_optional_database(
                 sb, app, app_dir, env=deps.effective_env(), create_db_fn=deps.create_db_fn
             )
@@ -245,11 +237,21 @@ def run_launch_pipeline(
             _record_progress(
                 deps.store, request_id, "waiting_t3", "Waiting for T3 Code Server", "Checking T3 server & model readiness..."
             )
-            t3_meta = wait_for_t3_ready(sb)
+            t3_meta = acquired.t3_meta or wait_for_t3_ready(sb)
             environment_id = t3_meta["environment_id"]
             instance_id, chosen_model, thought_level = resolve_provider_model(
                 t3_meta, app.provider, app.model, app.thought_level
             )
+            if is_prime_owner and t3_url:
+                mark_prime_ready(
+                    deps.store,
+                    prime_key,
+                    request_id=request_id,
+                    sandbox_id=sandbox_id,
+                    sandbox_name=launch_resp.sandbox_name,
+                    t3_url=t3_url,
+                    environment_id=environment_id,
+                )
             deps.store.update_app_if_current_request(
                 app.app_id, request_id, environment_id=environment_id, provider_instance_id=instance_id, model=chosen_model
             )
@@ -260,7 +262,7 @@ def run_launch_pipeline(
             request_id,
             "starting_thread",
             "Starting agent thread & pairing",
-            f"Registering workspace and starting thread ({instance_id}/{chosen_model})...",
+            f"Registering workspace and starting thread ({instance_id}/{chosen_model}, port {dev_port})...",
         )
         thread_id, project_id = ensure_project_and_start_thread(
             sb, app, app_dir, instance_id=instance_id, model=chosen_model, thought_level=thought_level
@@ -286,10 +288,19 @@ def run_launch_pipeline(
             t3_url=t3_url,
             chat_url=chat_url,
             database_name=db_name,
+            dev_port=dev_port,
+            prime_key=prime_key,
             last_error=None,
         )
         if updated_app is None:
-            deps.terminate_quietly(sandbox_id, profile=app.profile, reason="superseded_ready")
+            has_siblings = any(
+                other.app_id != app.app_id and other.sandbox_id == sandbox_id
+                for other in deps.store.list_apps()
+            )
+            if not reused_prime and not has_siblings:
+                deps.terminate_quietly(sandbox_id, profile=app.profile, reason="superseded_ready")
+            if is_prime_owner:
+                release_prime_claim(deps.store, prime_key, request_id, status="failed")
             try:
                 failed_launch = deps.store.modify_launch(
                     request_id,
@@ -319,5 +330,14 @@ def run_launch_pipeline(
     except Exception as exc:
         flusher.flush()
         return _handle_pipeline_failure(
-            deps, app, launch, current_step=current_step, sandbox_id=sandbox_id, t3_url=t3_url, exc=exc
+            deps,
+            app,
+            launch,
+            current_step=current_step,
+            sandbox_id=sandbox_id,
+            t3_url=t3_url,
+            prime_key=prime_key,
+            reused_prime=reused_prime,
+            is_prime_owner=is_prime_owner,
+            exc=exc,
         )

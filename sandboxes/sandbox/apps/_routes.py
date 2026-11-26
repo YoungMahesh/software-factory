@@ -21,6 +21,7 @@ from ._models import (
     LaunchStatusResponse,
     ModelChoice,
     OpenAppResponse,
+    PrimeSandboxView,
 )
 
 apps_router = APIRouter(tags=["apps"])
@@ -82,6 +83,15 @@ def api_list_apps(
     """Lists Factory Apps enriched with live sandbox runtime status and snapshots."""
     effective_profile = None if (not profile or profile == "all") else profile
     return get_coordinator().list_apps_with_status(profile=effective_profile)
+
+
+@apps_router.get("/api/primes", response_model=list[PrimeSandboxView])
+def api_list_primes(
+    profile: str | None = Query(None, description="Optional Modal profile filter"),
+) -> list[PrimeSandboxView]:
+    """Lists tracked Prime Sandboxes enriched with live runtime status and hosted app counts."""
+    effective_profile = None if (not profile or profile == "all") else profile
+    return get_coordinator().list_primes_with_status(profile=effective_profile)
 
 
 @apps_router.post("/api/apps", status_code=status.HTTP_202_ACCEPTED)
@@ -161,9 +171,9 @@ def api_relaunch_app(
 @apps_router.delete("/api/apps/{app_id}")
 def api_delete_app(
     app_id: str,
-    terminate_sandbox: bool = Query(True, description="Terminate running sandbox if still active"),
+    terminate_sandbox: bool = Query(False, description="Terminate running non-Prime sandbox if active"),
 ) -> dict[str, Any]:
-    """Removes a Factory App record and optionally terminates its active sandbox."""
+    """Removes a Factory App record and cleans up its workspace inside the sandbox."""
     deleted = get_coordinator().delete_factory_app(app_id, terminate_active_sandbox=terminate_sandbox)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Factory App '{app_id}' not found")

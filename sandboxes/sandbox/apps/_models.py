@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import re
 from typing import Literal
 from urllib.parse import quote
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_BUILDER_PROVIDER = "antigravity"
 DEFAULT_BUILDER_MODEL = "gemini-4-hydrogen"
+DEFAULT_APP_BASE_PORT = 3001
 
 MAX_SLUG_LENGTH = 42
 MAX_TITLE_LENGTH = 60
@@ -26,6 +28,8 @@ LaunchStatus = Literal[
     "ready",
     "failed",
 ]
+
+PrimeStatus = Literal["provisioning", "ready", "failed", "stopped"]
 
 AppTemplateKind = Literal["nextjs", "blank"]
 
@@ -97,19 +101,65 @@ def derive_app_title(prompt: str, explicit_name: str | None = None) -> str:
     return raw[: MAX_TITLE_LENGTH - 3].rstrip() + "..."
 
 
-def build_initial_thread_prompt(raw_prompt: str, *, template: AppTemplateKind, app_dir: str) -> str:
-    """Appends the one-time run-app instruction to the prompt submitted to T3."""
+def prime_compatibility_key(
+    profile: str | None = None,
+    vm: bool = False,
+    mobile_app: bool = False,
+) -> str:
+    """Returns a filesystem-safe identifier partitioning Prime Sandboxes by runtime capabilities."""
+    clean_profile = (profile or "").strip()
+    if not clean_profile:
+        prof_part = "default"
+    else:
+        slug_part = _sanitize_slug(clean_profile)[:16]
+        digest = hashlib.sha256(clean_profile.encode("utf-8")).hexdigest()[:8]
+        prof_part = f"p-{slug_part}-{digest}"
+    return f"{prof_part}__vm-{1 if vm else 0}__mob-{1 if mobile_app else 0}"
+
+
+def prime_sandbox_app_name(*, vm: bool = False, mobile_app: bool = False) -> str:
+    """Returns the Modal App name used for a Prime Sandbox variant."""
+    parts = ["prime-sandbox"]
+    if vm:
+        parts.append("vm")
+    if mobile_app:
+        parts.append("mobile")
+    return "-".join(parts)
+
+
+def build_initial_thread_prompt(
+    raw_prompt: str,
+    *,
+    template: AppTemplateKind,
+    app_dir: str,
+    dev_port: int | None = None,
+) -> str:
+    """Appends the one-time run-app instruction (with dedicated port when set) to the T3 prompt."""
     clean_prompt = raw_prompt.strip()
     if template == "nextjs":
-        suffix = (
-            f"Once built and verified in {app_dir}, use the run-app workflow: "
-            "run `pnpm run dev` and open its localhost URL in the T3 Code browser so the live preview is open."
-        )
+        if dev_port is not None:
+            suffix = (
+                f"Once built and verified in {app_dir}, use the run-app workflow: "
+                f"run `pnpm run dev` (already configured on port {dev_port}) and open "
+                f"http://localhost:{dev_port} in the T3 Code browser so the live preview is open."
+            )
+        else:
+            suffix = (
+                f"Once built and verified in {app_dir}, use the run-app workflow: "
+                "run `pnpm run dev` and open its localhost URL in the T3 Code browser so the live preview is open."
+            )
     else:
-        suffix = (
-            f"Workspace is initialized at {app_dir}. Once built, start the local web server "
-            "and open its localhost URL in the T3 Code browser so the live preview is open."
-        )
+        if dev_port is not None:
+            suffix = (
+                f"Workspace is initialized at {app_dir}. Once built, start the local web server "
+                f"on port {dev_port} (e.g. `PORT={dev_port}`) and open http://localhost:{dev_port} "
+                "in the T3 Code browser so the live preview is open."
+            )
+        else:
+            suffix = (
+                f"Workspace is initialized at {app_dir}. Once built, start the local web server "
+                "and open its localhost URL in the T3 Code browser so the live preview is open."
+            )
     return f"{clean_prompt}\n\n{suffix}"
 
 
@@ -205,6 +255,8 @@ class FactoryAppRecord(BaseModel):
     t3_url: str | None = None
     chat_url: str | None = None
     database_name: str | None = None
+    dev_port: int | None = None
+    prime_key: str | None = None
     last_error: str | None = None
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
@@ -216,6 +268,32 @@ class FactoryAppView(FactoryAppRecord):
     runtime_status: Literal["provisioning", "running", "stopped", "failed"] = "provisioning"
     snapshot_image_id: str | None = None
     snapshot_name: str | None = None
+
+
+class PrimeSandboxRecord(BaseModel):
+    """Persistent state for an active multi-app Prime Sandbox keyed by capability tuple."""
+
+    prime_key: str
+    profile: str | None = None
+    vm: bool = False
+    mobile_app: bool = False
+    status: PrimeStatus = "provisioning"
+    owner_request_id: str | None = None
+    sandbox_id: str | None = None
+    sandbox_name: str | None = None
+    t3_url: str | None = None
+    environment_id: str | None = None
+    next_port: int = DEFAULT_APP_BASE_PORT
+    created_at: str = Field(default_factory=utc_now_iso)
+    updated_at: str = Field(default_factory=utc_now_iso)
+
+
+class PrimeSandboxView(PrimeSandboxRecord):
+    """Prime Sandbox projection enriched with live runtime status and hosted app count."""
+
+    runtime_status: Literal["provisioning", "running", "stopped", "failed"] = "provisioning"
+    app_count: int = 0
+    app_ids: list[str] = Field(default_factory=list)
 
 
 class LaunchRequestRecord(BaseModel):

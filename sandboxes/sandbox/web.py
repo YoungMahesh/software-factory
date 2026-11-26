@@ -25,6 +25,8 @@ from pydantic import BaseModel
 
 from shared.image import DEFAULT_T3_USAGE_VOLUME
 from sandbox.apps import apps_router
+from sandbox.apps._prime import mark_prime_stopped
+from sandbox.apps._store import get_default_store
 from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
 )
@@ -346,6 +348,10 @@ def api_terminate_sandbox(sandbox_id: str, profile: str | None = Query(None, des
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Termination failed"),
         )
+    try:
+        mark_prime_stopped(get_default_store(), sandbox_id)
+    except Exception as exc:
+        logger.debug("Skipping prime state sync on terminate for %s: %s", sandbox_id, exc)
     return result
 
 

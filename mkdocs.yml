@@ -173,6 +173,7 @@ nav:
     - '0087: App Template and Python App Scaffolder Integration': adr/0087-app-template-and-scaffolder-integration.md
     - '0088: Wildcard Host Ingress and Hosted App Deployment': adr/0088-wildcard-host-ingress-and-hosted-app-deployment.md
     - '0089: Prompt Homepage and Durable T3 Launch Coordinator': adr/0089-prompt-homepage-and-t3-launch-coordinator.md
+    - '0090: Prime Sandbox Reuse for Multi-App Dashboard Prompts': adr/0090-prime-sandbox-multi-app-reuse.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md
