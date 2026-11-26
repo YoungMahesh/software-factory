@@ -37,6 +37,7 @@ LaunchStatus = Literal[
 ]
 
 PrimeStatus = Literal["provisioning", "ready", "failed", "stopped"]
+RESUMABLE_STEPS: tuple[LaunchStatus, ...] = ("scaffolding_workspace", "waiting_t3", "starting_thread")
 
 
 def utc_now_iso(*, offset_seconds: int = 0) -> str:
@@ -197,6 +198,9 @@ class LaunchRequestRecord(BaseModel):
     app_id: str
     kind: Literal["create", "relaunch"] = "create"
     resume_from_step: LaunchStatus | None = None
+    execution_started_at: str | None = None
+    created_sandbox_id: str | None = None
+    published_sandbox_id: str | None = None
     failed_step: LaunchStatus | None = None
     status: LaunchStatus = "queued"
     current_label: str = "Queued launch request"

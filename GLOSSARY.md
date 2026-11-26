@@ -339,3 +339,6 @@ _Avoid_: Memo tab, notepad, prompt history, draft buffer
 A Markdown file stored under `scratchpad/<slug>.md` in the Central Config Store (`config`), formatted with a `# <Title>` heading, a collision-disambiguated lowercase kebab-case filename, and structured Markdown content committed on explicit user confirmation (or raw save).
 _Avoid_: Brainstorm doc, quick note file, markdown memo
 
+**Factory State Authority**:
+The sole owner of durable Factory App, Launch Request, Prime Sandbox, and Repository Catalog Cache state, coordinating competing requests and enforcing ownership transitions.
+_Avoid_: State server, volume lock, metadata backend

@@ -119,7 +119,7 @@ class TestScratchpadOpenCodeBackend(unittest.TestCase):
 class TestScratchpadGitHubPersistence(unittest.TestCase):
     """Tests config/scratchpad GitHub Contents API read/list/commit helpers."""
 
-    @patch("sandbox.scratchpad._github._github_json_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_list_and_read_scratchpad_notes(self, mock_req):
         encoded = base64.b64encode(b"# Webhook Plan\n\n## Steps\n- Retry\n").decode("ascii")
         mock_req.side_effect = [
@@ -150,7 +150,7 @@ class TestScratchpadGitHubPersistence(unittest.TestCase):
         self.assertEqual(detail.title, "Webhook Plan")
         self.assertIn("## Steps", detail.content)
 
-    @patch("sandbox.scratchpad._github._github_json_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_commit_scratchpad_note_handles_collision_and_422_retry(self, mock_req):
         mock_req.side_effect = [
             (200, [{"type": "file", "name": "my-idea.md", "path": "scratchpad/my-idea.md", "sha": "s1", "size": 10}]),
@@ -168,7 +168,7 @@ class TestScratchpadGitHubPersistence(unittest.TestCase):
         self.assertEqual(saved.content, "# My Idea\n\nBody\n")
         self.assertGreater(saved.size, 0)
 
-    @patch("sandbox.scratchpad._github._github_json_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_commit_scratchpad_note_advances_taken_slugs_even_with_stale_list(self, mock_req):
         stale_list = [{"type": "file", "name": "dup.md", "path": "scratchpad/dup.md", "sha": "s1", "size": 5}]
         mock_req.side_effect = [

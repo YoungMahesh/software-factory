@@ -15,6 +15,12 @@ There is no implicit dashboard username. Missing credentials stop deploy/serve. 
 
 Configure provider tokens, `MODAL_TOKENS`, vault decryption, and ingress credentials for the capabilities you intend to expose. `--modal` inside child sandboxes requires valid `MODAL_TOKENS`. The launcher's SSH public key comes from the staged `shared/ssh-key.pub`; operators must provide users with its matching private key separately. See [setup](../getting-started/prerequisites.md) and [environment variables](../reference/environment.md).
 
+Factory App state is coordinated by the **Factory State Authority**, the sole reader and writer of `factory-state-v1`. Dashboard and launch workers call it remotely; the authority runs one container and one state operation at a time. Keep this function's concurrency limit at one. See [ADR 0094](../adr/0094-serialized-factory-state-authority.md).
+
+Before migrating from the earlier independently mounted workers, stop accepting new launches and drain the old web and launch containers. Also drain the authority before deploying a changed authority revision: old and new revisions must not write the state Volume concurrently. Existing records need no conversion.
+
+To verify state coordination against Modal without provisioning a sandbox or touching production state, run `python sandboxes/scripts/test_live_factory_state.py`. It uses an ephemeral App and Volume to check competing workers, ownership, workspace and port uniqueness, and duplicate execution.
+
 Deploy from a clean checkout:
 
 ```bash

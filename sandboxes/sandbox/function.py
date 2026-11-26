@@ -22,6 +22,7 @@ from sandbox.apps import (
     set_default_store,
     set_launch_dispatcher,
 )
+from sandbox.apps._state_rpc import FactoryStateClient, dispatch_state_operation
 from shared.image import SOPS_INSTALL_COMMANDS, stage_app_template_into_image
 from sandbox.config import (
     collect_control_plane_secrets_dict,
@@ -265,11 +266,23 @@ factory_state_volume = get_factory_state_volume()
     image=image,
     secrets=function_secrets,
     volumes={FACTORY_STATE_MOUNT_PATH: factory_state_volume},
+    max_containers=1,
+    timeout=60,
+)
+def factory_state_operation(operation: str, args: tuple, kwargs: dict):
+    """Sole Volume reader/writer: one container, one input at a time, no provisioning."""
+    store = FactoryStateStore(root_dir=FACTORY_STATE_MOUNT_PATH, volume=factory_state_volume)
+    return dispatch_state_operation(store, operation, args, kwargs)
+
+
+@app.function(
+    image=image,
+    secrets=function_secrets,
     timeout=600,
 )
 def run_launch_request(request_id: str) -> dict[str, Any]:
     """Modal background worker executing a Factory App Launch Request."""
-    store = FactoryStateStore(root_dir=FACTORY_STATE_MOUNT_PATH, volume=factory_state_volume)
+    store = FactoryStateClient(factory_state_operation.remote)
     set_default_store(store)
     result = LaunchCoordinator(store=store).execute_launch_request(request_id)
     return result.model_dump()
@@ -278,12 +291,11 @@ def run_launch_request(request_id: str) -> dict[str, Any]:
 @app.function(
     image=image,
     secrets=function_secrets,
-    volumes={FACTORY_STATE_MOUNT_PATH: factory_state_volume},
     timeout=180,
 )
 @modal.asgi_app()
 def fastapi_app():
     """Serves the control plane ASGI application."""
-    set_default_store(FactoryStateStore(root_dir=FACTORY_STATE_MOUNT_PATH, volume=factory_state_volume))
+    set_default_store(FactoryStateClient(factory_state_operation.remote))
     set_launch_dispatcher(lambda request_id: run_launch_request.spawn(request_id))
     return web_app

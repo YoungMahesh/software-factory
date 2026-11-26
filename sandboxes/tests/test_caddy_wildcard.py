@@ -183,6 +183,7 @@ class TestCaddyWildcard(unittest.TestCase):
         written = mock_prep.call_args.kwargs["files"]["conf/sites/apps-wildcard.caddy"]
         self.assertIn("https://kept.modal.run", written)
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_resolve_wildcard_dashboard_upstream_modes(self):
         ok_off, up_off, msg_off = resolve_wildcard_dashboard_upstream("apps.example.com", no_dashboard=True)
         self.assertTrue(ok_off)

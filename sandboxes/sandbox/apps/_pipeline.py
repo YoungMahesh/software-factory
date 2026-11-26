@@ -11,6 +11,7 @@ from sandbox.core import LaunchRequest, LaunchResponse
 
 from ._models import (
     HANDOFF_TOKEN_TTL_SECONDS,
+    RESUMABLE_STEPS,
     FactoryAppRecord,
     LaunchRequestRecord,
     LaunchStatus,
@@ -19,12 +20,7 @@ from ._models import (
     prime_compatibility_key,
     utc_now_iso,
 )
-from ._prime import (
-    acquire_sandbox_for_app,
-    allocate_dev_port,
-    mark_prime_ready,
-    release_prime_claim,
-)
+from ._prime import acquire_sandbox_for_app
 from ._sandbox_t3 import (
     ensure_project_and_start_thread,
     mint_pairing_token,
@@ -36,13 +32,6 @@ from ._sandbox_t3 import (
 from ._store import FactoryStateStore
 
 logger = logging.getLogger(__name__)
-
-RESUMABLE_STEPS: tuple[LaunchStatus, ...] = (
-    "scaffolding_workspace",
-    "waiting_t3",
-    "starting_thread",
-)
-
 
 class _BufferedLogFlusher:
     """Coalesces launcher log callbacks so volume commits happen at most every interval_secs."""
@@ -66,7 +55,7 @@ class _BufferedLogFlusher:
         self._pending.clear()
         self._last_flush = time.monotonic()
         try:
-            self._store.modify_launch(self._request_id, lambda cur: cur.with_appended_logs(batch))
+            self._store.append_launch_logs(self._request_id, batch)
         except Exception as exc:
             logger.debug("Skipping buffered log commit for %s: %s", self._request_id, exc)
 
@@ -94,16 +83,11 @@ def _record_progress(
     label: str,
     log_line: str | None = None,
 ) -> None:
-    store.modify_launch(
-        request_id,
-        lambda cur: cur.with_stage(status, label, log_lines=[log_line] if log_line else None),
-    )
+    store.record_launch_stage(request_id, status, label, log_lines=[log_line] if log_line else None)
 
 
 def _assert_request_active(store: FactoryStateStore, app_id: str, request_id: str) -> None:
-    current = store.get_app(app_id)
-    if current is None or current.latest_request_id != request_id:
-        raise RuntimeError(f"Launch Request '{request_id}' was superseded or deleted.")
+    store.assert_request_active(app_id, request_id)
 
 
 def _handle_pipeline_failure(
@@ -115,41 +99,17 @@ def _handle_pipeline_failure(
     sandbox_id: str | None,
     t3_url: str | None,
     prime_key: str,
-    reused_prime: bool,
-    is_prime_owner: bool,
     exc: Exception,
 ) -> LaunchStatusResponse:
     err_msg = str(exc)
     logger.error("Launch Request %s failed at %s: %s", launch.request_id, current_step, err_msg)
-    cur_app = deps.store.get_app(app.app_id, reload=False)
-    active_for_app = cur_app is not None and cur_app.latest_request_id == launch.request_id
-    preserve_sandbox = active_for_app and current_step in RESUMABLE_STEPS and bool(sandbox_id and t3_url)
-    if not preserve_sandbox and not reused_prime:
-        deps.terminate_quietly(sandbox_id, profile=app.profile, reason="launch_failure")
-    updated_app = deps.store.update_app_if_current_request(
-        app.app_id,
-        launch.request_id,
-        status="failed",
-        failed_step=current_step,
-        sandbox_id=sandbox_id if preserve_sandbox else None,
-        last_error=err_msg,
+    response, terminate = deps.store.fail_launch_request(
+        app, launch, current_step=current_step, sandbox_id=sandbox_id, t3_url=t3_url,
+        prime_key=prime_key, error=err_msg,
     )
-    try:
-        updated_launch = deps.store.modify_launch(
-            launch.request_id,
-            lambda cur: cur.with_stage(
-                "failed",
-                "Launch failed",
-                log_lines=[f"Error ({current_step}): {err_msg}"],
-                error=err_msg,
-                failed_step=current_step,
-            ),
-        )
-    except KeyError:
-        updated_launch = launch.with_stage("failed", "Launch failed", error=err_msg, failed_step=current_step)
-    if is_prime_owner:
-        release_prime_claim(deps.store, prime_key, launch.request_id, status="failed")
-    return LaunchStatusResponse(request=updated_launch, app=updated_app or cur_app)
+    if terminate:
+        deps.terminate_quietly(sandbox_id, profile=app.profile, reason="launch_failure")
+    return response
 
 
 def run_launch_pipeline(
@@ -164,7 +124,6 @@ def run_launch_pipeline(
     current_step: LaunchStatus = "launching_sandbox"
     sandbox_id: str | None = None
     t3_url: str | None = None
-    reused_prime = False
     is_prime_owner = False
     flusher = _BufferedLogFlusher(deps.store, request_id)
     try:
@@ -189,7 +148,6 @@ def run_launch_pipeline(
         sandbox_id = launch_resp.sandbox_id
         t3_url = launch_resp.t3_url
         reused = acquired.reused_app_sandbox
-        reused_prime = acquired.reused_prime
         is_prime_owner = acquired.is_prime_owner
         effective_resume = acquired.resume_step
         _assert_request_active(deps.store, app.app_id, request_id)
@@ -197,7 +155,7 @@ def run_launch_pipeline(
         dev_port = app.dev_port
         if app.web_app:
             if dev_port is None or not reused:
-                dev_port = allocate_dev_port(deps.store, prime_key, sandbox_id, request_id=request_id)
+                dev_port = deps.store.reserve_dev_port(prime_key, sandbox_id, request_id=request_id)
         else:
             dev_port = None
         app = app.model_copy(update={"dev_port": dev_port, "prime_key": prime_key})
@@ -259,8 +217,7 @@ def run_launch_pipeline(
                 t3_meta, app.provider, app.model, app.thought_level
             )
             if is_prime_owner and t3_url:
-                mark_prime_ready(
-                    deps.store,
+                deps.store.mark_prime_ready(
                     prime_key,
                     request_id=request_id,
                     sandbox_id=sandbox_id,
@@ -289,61 +246,17 @@ def run_launch_pipeline(
         handoff_url = build_direct_chat_url(t3_url, environment_id, thread_id, token=token)
         handoff_expires_at = utc_now_iso(offset_seconds=HANDOFF_TOKEN_TTL_SECONDS)
 
-        updated_app = deps.store.update_app_if_current_request(
-            app.app_id,
-            request_id,
-            status="ready",
-            failed_step=None,
-            workspace_ready=True,
-            provider_instance_id=instance_id,
-            model=chosen_model,
-            sandbox_id=sandbox_id,
-            sandbox_name=launch_resp.sandbox_name,
-            environment_id=environment_id,
-            project_id=project_id,
-            thread_id=thread_id,
-            t3_url=t3_url,
-            chat_url=chat_url,
-            database_name=db_name,
-            dev_port=dev_port,
-            prime_key=prime_key,
-            last_error=None,
+        return deps.store.complete_launch_request(
+            app.app_id, request_id,
+            updates={
+                "workspace_ready": True, "provider_instance_id": instance_id, "model": chosen_model,
+                "sandbox_id": sandbox_id, "sandbox_name": launch_resp.sandbox_name,
+                "environment_id": environment_id, "project_id": project_id, "thread_id": thread_id,
+                "t3_url": t3_url, "chat_url": chat_url, "database_name": db_name,
+                "dev_port": dev_port, "prime_key": prime_key,
+            },
+            handoff_url=handoff_url, handoff_expires_at=handoff_expires_at,
         )
-        if updated_app is None:
-            has_siblings = any(
-                other.app_id != app.app_id and other.sandbox_id == sandbox_id
-                for other in deps.store.list_apps()
-            )
-            if not reused_prime and not has_siblings:
-                deps.terminate_quietly(sandbox_id, profile=app.profile, reason="superseded_ready")
-            if is_prime_owner:
-                release_prime_claim(deps.store, prime_key, request_id, status="failed")
-            try:
-                failed_launch = deps.store.modify_launch(
-                    request_id,
-                    lambda cur: cur.with_stage(
-                        "failed", "Superseded or deleted", error="Launch Request was superseded or deleted."
-                    ),
-                )
-                return LaunchStatusResponse(request=failed_launch, app=deps.store.get_app(app.app_id, reload=False))
-            except KeyError:
-                return LaunchStatusResponse(
-                    request=launch.with_stage("failed", "Deleted", error="Factory App deleted during launch."),
-                    app=None,
-                )
-
-        updated_launch = deps.store.modify_launch(
-            request_id,
-            lambda cur: cur.with_stage(
-                "ready",
-                "Ready — opening T3 Code",
-                log_lines=[f"Ready: {chat_url}"],
-                handoff_url=handoff_url,
-                handoff_expires_at=handoff_expires_at,
-                error=None,
-            ),
-        )
-        return LaunchStatusResponse(request=updated_launch, app=updated_app)
     except Exception as exc:
         flusher.flush()
         return _handle_pipeline_failure(
@@ -354,7 +267,5 @@ def run_launch_pipeline(
             sandbox_id=sandbox_id,
             t3_url=t3_url,
             prime_key=prime_key,
-            reused_prime=reused_prime,
-            is_prime_owner=is_prime_owner,
             exc=exc,
         )

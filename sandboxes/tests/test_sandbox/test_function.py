@@ -315,7 +315,8 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
             validate_args(parser, args)
 
     @patch.dict("os.environ", {}, clear=True)
-    def test_remote_without_endpoint_url_errors(self):
+    @patch("sandbox.main.parse_env_file", return_value={})
+    def test_remote_without_endpoint_url_errors(self, _parse_env):
         parser = create_parser()
         args = parser.parse_args(["--remote", "--name", "app1"])
         with self.assertRaises(SystemExit):

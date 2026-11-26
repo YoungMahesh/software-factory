@@ -12,8 +12,9 @@ from typing import Any, Callable, TypeVar
 import modal
 from pydantic import BaseModel
 
+from ._coordination import StateTransitions
 from ._github_repos import RepositoryCatalogCache
-from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, utc_now_iso
+from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, derive_app_slug, utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def get_factory_state_volume(name: str = FACTORY_STATE_VOLUME_NAME) -> modal.Vol
     return modal.Volume.from_name(name, create_if_missing=True)
 
 
-class FactoryStateStore:
+class FactoryStateStore(StateTransitions):
     """Thread-safe per-record JSON persistence for Factory Apps and Launch Requests."""
 
     def __init__(
@@ -80,10 +81,7 @@ class FactoryStateStore:
 
     def _reload_volume(self) -> None:
         if self.volume is not None and hasattr(self.volume, "reload"):
-            try:
-                self.volume.reload()
-            except Exception as exc:
-                logger.warning("Failed reloading factory state volume: %s", exc)
+            self.volume.reload()
 
     def _commit_volume(self) -> None:
         if self.volume is not None and hasattr(self.volume, "commit"):
@@ -123,8 +121,7 @@ class FactoryStateStore:
         try:
             return model_cls.model_validate_json(path.read_text(encoding="utf-8"))
         except Exception as exc:
-            logger.warning("Failed parsing state file %s: %s", path, exc)
-            return None
+            raise RuntimeError(f"Failed parsing factory state file {path}") from exc
 
     def _save_record(self, path: Path, record: _TModel) -> _TModel:
         with self._lock:
@@ -166,7 +163,7 @@ class FactoryStateStore:
         return self._save_record(self._app_path(app.app_id), app)
 
     def get_app(self, app_id: str, *, reload: bool = True) -> FactoryAppRecord | None:
-        """Loads a FactoryAppRecord by ID, returning None if missing or invalid."""
+        """Loads a FactoryAppRecord by ID, returning None if missing or the ID is invalid."""
         try:
             path = self._app_path(app_id)
         except ValueError:
@@ -293,6 +290,10 @@ class FactoryStateStore:
         """Atomically writes a FactoryAppRecord and LaunchRequestRecord before a single commit."""
         with self._lock:
             self._ensure_dirs()
+            if self.get_app(app.app_id, reload=False) is None:
+                records = (self._read_model_file(path, FactoryAppRecord) for path in self.apps_dir.glob("*.json"))
+                slugs = {record.slug for record in records if record is not None}
+                app = app.model_copy(update={"slug": derive_app_slug(app.prompt, app.slug, existing_slugs=slugs)})
             now = utc_now_iso()
             saved_app = app.model_copy(update={"updated_at": now})
             saved_launch = launch.model_copy(update={"updated_at": now})
@@ -306,7 +307,7 @@ class FactoryStateStore:
         return self._save_record(self._prime_path(prime.prime_key), prime)
 
     def get_prime(self, prime_key: str, *, reload: bool = True) -> PrimeSandboxRecord | None:
-        """Loads a PrimeSandboxRecord by compatibility key, returning None if missing or invalid."""
+        """Loads a PrimeSandboxRecord by compatibility key, returning None if missing or the ID is invalid."""
         try:
             path = self._prime_path(prime_key)
         except ValueError:

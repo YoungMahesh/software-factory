@@ -19,13 +19,12 @@ import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 import modal
 from pydantic import BaseModel
 
 from shared.image import DEFAULT_T3_USAGE_VOLUME
 from sandbox.apps import apps_router
-from sandbox.apps._prime import mark_prime_stopped
 from sandbox.apps._store import get_default_store
 from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
@@ -350,7 +349,7 @@ def api_terminate_sandbox(sandbox_id: str, profile: str | None = Query(None, des
             detail=result.get("error", "Termination failed"),
         )
     try:
-        mark_prime_stopped(get_default_store(), sandbox_id)
+        get_default_store().mark_prime_stopped(sandbox_id)
     except Exception as exc:
         logger.debug("Skipping prime state sync on terminate for %s: %s", sandbox_id, exc)
     return result
@@ -430,6 +429,12 @@ def api_launch_from_snapshot(image_id: str, payload: SnapshotLaunchPayload) -> L
     except Exception as exc:
         logger.error("Failed to launch from snapshot %s: %s", image_id, exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to launch from snapshot: {exc}") from exc
+
+
+@router.get("/static/launch-observer.js")
+def launch_observer_script() -> FileResponse:
+    """Serves the dashboard's Launch Request observation module under dashboard auth."""
+    return FileResponse(STATIC_DIR / "launch-observer.js", media_type="text/javascript")
 
 
 @router.get("/", response_class=HTMLResponse)

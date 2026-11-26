@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Modal Sandbox Runner</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/launch-observer.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
@@ -1632,8 +1633,7 @@
           thought_level: ''
         },
         activeLaunch: null,
-        launchPollTimer: null,
-        redirectedLaunchId: null,
+        launchObserver: null,
 
         sandboxes: [],
         snapshots: [],
@@ -1718,6 +1718,18 @@
         },
 
         async init() {
+          this.launchObserver = createLaunchObserver({
+            request: (id, signal) => fetch(`/api/launches/${encodeURIComponent(id)}`, { signal }),
+            publish: data => { this.activeLaunch = data; },
+            refresh: () => this.refreshAll(true),
+            setRequestId: id => {
+              const url = new URL(window.location.href);
+              if (id) url.searchParams.set('launch', id);
+              else url.searchParams.delete('launch');
+              window.history.replaceState({}, '', url.toString());
+            },
+            navigate: url => window.location.assign(url),
+          });
           const hash = window.location.hash.replace(/^#/, '');
           if (hash === 'sandboxes' || hash === 'snapshots' || hash === 'builder' || hash === 'scratchpad') {
             this.currentTab = hash;
@@ -2013,63 +2025,17 @@
           }
         },
 
-        async trackLaunch(requestId) {
-          if (!requestId) return;
-          if (this.launchPollTimer) {
-            clearInterval(this.launchPollTimer);
-            this.launchPollTimer = null;
-          }
-          const url = new URL(window.location.href);
-          url.searchParams.set('launch', requestId);
-          window.history.replaceState({}, '', url.toString());
-
-          await this.pollLaunchOnce(requestId);
-          if (this.activeLaunch && !['ready', 'failed'].includes(this.activeLaunch.request?.status)) {
-            this.launchPollTimer = setInterval(() => this.pollLaunchOnce(requestId), 1500);
-          }
-        },
-
-        async pollLaunchOnce(requestId) {
-          try {
-            const res = await fetch(`/api/launches/${encodeURIComponent(requestId)}`);
-            if (!res.ok) {
-              if (res.status === 404 && this.launchPollTimer) {
-                clearInterval(this.launchPollTimer);
-                this.launchPollTimer = null;
-              }
-              return;
-            }
-            const data = await res.json();
-            this.activeLaunch = data;
-            const status = data.request?.status;
-            if (status === 'ready' || status === 'failed') {
-              if (this.launchPollTimer) {
-                clearInterval(this.launchPollTimer);
-                this.launchPollTimer = null;
-              }
-              await this.refreshAll(true);
-              if (status === 'ready' && data.request?.handoff_url && this.redirectedLaunchId !== requestId) {
-                this.redirectedLaunchId = requestId;
-                const clean = new URL(window.location.href);
-                clean.searchParams.delete('launch');
-                window.history.replaceState({}, '', clean.pathname + clean.search);
-                window.location.assign(data.request.handoff_url);
-              }
-            }
-          } catch (err) {
-            console.error('Launch polling failed:', err);
-          }
+        trackLaunch(requestId) {
+          return this.launchObserver.track(requestId);
         },
 
         dismissActiveLaunch() {
-          if (this.launchPollTimer) {
-            clearInterval(this.launchPollTimer);
-            this.launchPollTimer = null;
-          }
-          this.activeLaunch = null;
-          const clean = new URL(window.location.href);
-          clean.searchParams.delete('launch');
-          window.history.replaceState({}, '', clean.pathname + clean.search);
+          this.launchObserver.dismiss();
+        },
+
+        destroy() {
+          this.launchObserver?.destroy();
+          if (this.refreshTimer) clearInterval(this.refreshTimer);
         },
 
         async openFactoryApp(app) {

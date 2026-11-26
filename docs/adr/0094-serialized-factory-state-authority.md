@@ -1,0 +1,11 @@
+# Serialized Factory State Authority
+
+**Status**: Accepted (amends [ADR 0089](0089-prompt-homepage-and-t3-launch-coordinator.md) and [ADR 0090](0090-prime-sandbox-multi-app-reuse.md)).
+
+Factory App and Launch Request records remain JSON on `factory-state-v1`, but only the Factory State Authority mounts that Volume. The dashboard and launch workers call named state operations through a remote adapter. The authority function has `max_containers=1` and the default one input per container; provisioning and T3 operations remain outside it. This keeps the control plane independent of the Resource Plane while giving competing workers one serialization point for claims, workspace slugs, port reservations, readiness and failure disposition.
+
+A process-local lock and atomic file replacement cannot coordinate independent Volume mounts: concurrent same-file writes have last-write-wins semantics ([Modal Volume documentation](https://modal.com/docs/sdk/py/latest/Volume)). A shared Volume lock file or a generic remote callback would leave ownership rules in callers. Named transitions instead reject stale owners, persist port reservations before returning them, suppress duplicate Launch Request execution, and protect a published Prime Sandbox even before sibling attachments become visible.
+
+The trade-off is an additional remote call and a single state throughput limit. Keep transitions short; do not add input concurrency or increase the authority container limit. State reload failures fail closed. Deployments must drain old launch workers and the old authority before changing the authority deployment, including the first migration from independently mounted workers; separate deployment versions must not write this Volume concurrently. This change does not migrate existing records and is not a transactional multi-file database: a worker or authority crash can still require retrying a Launch Request. Provisioning claims become eligible for stale-owner takeover; retry creates a fresh Launch Request.
+
+Independent-process tests exercise the production dispatch seam for competing claims, slug and port reservations, stale-owner fencing, duplicate execution and shared-container preservation. Cloud verification remains separate from those deterministic tests.

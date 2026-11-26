@@ -127,7 +127,7 @@ networks:
         self.assertNotIn("alias_net", filtered)
         self.assertNotIn("real_missing_net", filtered)
 
-    @patch("sandbox.caddy_store._github._github_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_ensure_caddy_store_repo_creates_private_org_repo(self, mock_req):
         mock_req.side_effect = [
             (404, {"message": "Not Found"}),
@@ -140,13 +140,13 @@ networks:
         self.assertEqual(create_call.args[0], "https://api.github.com/orgs/sFactory0/repos")
         self.assertTrue(create_call.kwargs["payload"]["private"])
 
-    @patch("sandbox.caddy_store._github._github_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_ensure_caddy_store_repo_missing_without_create_raises(self, mock_req):
         mock_req.return_value = (404, {})
         with self.assertRaises(FileNotFoundError):
             ensure_caddy_store_repo("sFactory0", "tok", create_if_missing=False)
 
-    @patch("sandbox.caddy_store._github._github_request")
+    @patch("sandbox.config_store.github_json_request")
     def test_list_caddy_store_profile_blobs_filters_profile_and_handles_empty_repo(self, mock_req):
         mock_req.return_value = (409, {"message": "Git Repository is empty."})
         self.assertEqual(list_caddy_store_profile_blobs("sFactory0", "default", "tok"), {})

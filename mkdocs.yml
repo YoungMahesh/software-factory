@@ -177,6 +177,7 @@ nav:
     - '0091: GitHub Repository Catalog Cache, Prime Repo Launch, and Opt-In Web App Mode': adr/0091-github-repo-picker-and-opt-in-web-app-mode.md
     - '0092: Host Sandbox Web Dashboard on App Base Domain via Caddy Reverse Proxy': adr/0092-host-sandbox-dashboard-on-base-domain.md
     - '0093: Central Config Store and Dashboard Scratchpad': adr/0093-central-config-store-and-dashboard-scratchpad.md
+    - '0094: Serialized Factory State Authority': adr/0094-serialized-factory-state-authority.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

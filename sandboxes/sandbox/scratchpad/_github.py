@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
-import json
 import os
 from pathlib import Path
-import time
-from typing import Any
-import urllib.error
-import urllib.parse
-import urllib.request
 
+from sandbox.config_store import CentralConfigStore, ConfigStoreHTTPError
 from sandbox.config import resolve_factory_credentials
 from sandbox.env_store import DEFAULT_CONFIG_REPO, resolve_gh_token
 
@@ -97,37 +91,6 @@ def resolve_config_repo_context(
     return owner, token
 
 
-def _github_json_request(
-    url: str,
-    token: str,
-    *,
-    method: str = "GET",
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, Any]:
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "Cache-Control": "no-cache, max-age=0",
-        "Pragma": "no-cache",
-        "User-Agent": "software-factory-scratchpad",
-    }
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    if data is not None:
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read().decode("utf-8")
-            return resp.status, (json.loads(raw) if raw else {})
-    except urllib.error.HTTPError as exc:
-        err_raw = exc.read().decode("utf-8", errors="replace")
-        try:
-            body = json.loads(err_raw) if err_raw else {}
-        except json.JSONDecodeError:
-            body = {"message": err_raw}
-        return exc.code, body
-
-
 def list_scratchpad_notes(
     owner: str,
     token: str,
@@ -135,16 +98,7 @@ def list_scratchpad_notes(
     config_repo: str = DEFAULT_CONFIG_REPO,
 ) -> list[ScratchpadNoteSummary]:
     """Lists Markdown notes under scratchpad/ in github.com/<owner>/config."""
-    url = f"https://api.github.com/repos/{owner}/{config_repo}/contents/{SCRATCHPAD_DIR}?_cb={time.time_ns()}"
-    status_code, body = _github_json_request(url, token)
-    if status_code == 404:
-        return []
-    if status_code != 200:
-        msg = body.get("message", f"HTTP {status_code}") if isinstance(body, dict) else str(body)
-        raise RuntimeError(f"Failed listing '{owner}/{config_repo}/{SCRATCHPAD_DIR}': {msg}")
-    if not isinstance(body, list):
-        return []
-
+    body = CentralConfigStore(owner, token, config_repo).list_directory(SCRATCHPAD_DIR)
     notes: list[ScratchpadNoteSummary] = []
     for entry in body:
         if not isinstance(entry, dict) or entry.get("type") != "file":
@@ -177,25 +131,14 @@ def read_scratchpad_note(
 ) -> ScratchpadNoteDetail:
     """Reads and decodes a single Markdown note from github.com/<owner>/config/scratchpad/."""
     clean_name = validate_note_filename(filename)
-    quoted_name = urllib.parse.quote(clean_name, safe="")
-    url = f"https://api.github.com/repos/{owner}/{config_repo}/contents/{SCRATCHPAD_DIR}/{quoted_name}"
-    status_code, body = _github_json_request(url, token)
-    if status_code == 404:
+    file = CentralConfigStore(owner, token, config_repo).read(f"{SCRATCHPAD_DIR}/{clean_name}")
+    if file is None:
         raise FileNotFoundError(f"Scratchpad note '{SCRATCHPAD_DIR}/{clean_name}' was not found.")
-    if status_code != 200 or not isinstance(body, dict):
-        msg = body.get("message", f"HTTP {status_code}") if isinstance(body, dict) else str(body)
-        raise RuntimeError(f"Failed reading '{owner}/{config_repo}/{SCRATCHPAD_DIR}/{clean_name}': {msg}")
-
-    raw_b64 = str(body.get("content") or "")
-    content = base64.b64decode(raw_b64.encode("ascii")).decode("utf-8") if raw_b64 else ""
+    content = file.content.decode("utf-8")
     return ScratchpadNoteDetail(
-        filename=clean_name,
-        slug=Path(clean_name).stem,
-        path=str(body.get("path") or f"{SCRATCHPAD_DIR}/{clean_name}"),
-        title=extract_title_from_markdown(content, clean_name),
-        content=content,
-        sha=str(body.get("sha") or ""),
-        html_url=body.get("html_url"),
+        filename=clean_name, slug=Path(clean_name).stem, path=file.path,
+        title=extract_title_from_markdown(content, clean_name), content=content,
+        sha=file.sha, html_url=file.html_url,
     )
 
 
@@ -211,7 +154,6 @@ def commit_scratchpad_note(
     clean_title = " ".join((title or "").strip().splitlines()).strip() or "Untitled Note"
     normalized_md = normalize_note_markdown(clean_title, content)
     encoded_bytes = normalized_md.encode("utf-8")
-    encoded_b64 = base64.b64encode(encoded_bytes).decode("ascii")
     note_size = len(encoded_bytes)
     taken: set[str] = set()
 
@@ -219,33 +161,19 @@ def commit_scratchpad_note(
         existing = [n.filename for n in list_scratchpad_notes(owner, token, config_repo=config_repo)]
         slug, filename = resolve_unique_slug(clean_title, set(existing) | taken)
         rel_path = f"{SCRATCHPAD_DIR}/{filename}"
-        url = f"https://api.github.com/repos/{owner}/{config_repo}/contents/{rel_path}"
-        status_code, body = _github_json_request(
-            url,
-            token,
-            method="PUT",
-            payload={
-                "message": f"chore(scratchpad): add {filename}",
-                "content": encoded_b64,
-            },
-        )
-        if status_code in (200, 201) and isinstance(body, dict):
-            content_obj = body.get("content") if isinstance(body.get("content"), dict) else {}
-            commit_obj = body.get("commit") if isinstance(body.get("commit"), dict) else {}
-            return ScratchpadSaveResult(
-                filename=filename,
-                slug=slug,
-                path=str(content_obj.get("path") or rel_path),
-                title=clean_title,
-                sha=str(content_obj.get("sha") or commit_obj.get("sha") or ""),
-                content=normalized_md,
-                size=int(content_obj.get("size") or note_size),
-                html_url=content_obj.get("html_url"),
+        try:
+            commit = CentralConfigStore(owner, token, config_repo).write(
+                rel_path, encoded_bytes, f"chore(scratchpad): add {filename}",
             )
-        if status_code == 422 and attempt < 7:
-            taken.add(filename)
-            continue
-        msg = body.get("message", f"HTTP {status_code}") if isinstance(body, dict) else str(body)
-        raise RuntimeError(f"Failed committing '{rel_path}' to '{owner}/{config_repo}': {msg}")
+        except ConfigStoreHTTPError as error:
+            if error.creation_collision and attempt < 7:
+                taken.add(filename)
+                continue
+            raise
+        return ScratchpadSaveResult(
+            filename=filename, slug=slug, path=commit.path, title=clean_title,
+            sha=commit.sha or commit.commit_sha, content=normalized_md,
+            size=commit.size or note_size, html_url=commit.html_url,
+        )
 
     raise RuntimeError(f"Could not resolve a unique filename for scratchpad note '{clean_title}'.")

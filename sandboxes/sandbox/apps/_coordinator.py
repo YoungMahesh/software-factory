@@ -148,8 +148,7 @@ class LaunchCoordinator:
             default_org = (env.get("GH_ORG_NAME") or DEFAULT_ORG or "").strip() or None
             repo_full, _, _ = normalize_repo_spec(payload.repo, default_org=default_org)
 
-        existing_slugs = {item.slug for item in self.store.list_apps()}
-        slug = derive_app_slug(payload.prompt, payload.name, existing_slugs=existing_slugs, repo=repo_full)
+        slug = derive_app_slug(payload.prompt, payload.name, repo=repo_full)
         title = derive_app_title(payload.prompt, payload.name, repo=repo_full)
         app_id = f"app_{uuid.uuid4().hex[:12]}"
         request_id = f"req_{uuid.uuid4().hex[:12]}"
@@ -283,6 +282,9 @@ class LaunchCoordinator:
         app = self.store.get_app(launch.app_id)
         if app is None:
             raise AppNotFoundError(f"Factory App '{launch.app_id}' not found.")
+
+        if not self.store.claim_launch_execution(request_id):
+            return LaunchStatusResponse(request=launch, app=app)
 
         deps = PipelineDeps(
             store=self.store,

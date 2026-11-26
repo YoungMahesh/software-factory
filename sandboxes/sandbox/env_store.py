@@ -17,12 +17,11 @@ import shutil
 import subprocess
 import tempfile
 from typing import Any
-import urllib.error
-import urllib.request
 import warnings
 
+from sandbox.config_store import CentralConfigStore, DEFAULT_CONFIG_REPO
+
 DEFAULT_KEY_FILE = Path.home() / ".config" / "sops" / "age" / "keys.txt"
-DEFAULT_CONFIG_REPO = "config"
 DEFAULT_VAULT_REPO = DEFAULT_CONFIG_REPO
 ENV_STORE_PREFIX = "env"
 SOPS_SUPPORTED_EXTENSIONS = {".env", ".json", ".yaml", ".yml", ".ini"}
@@ -106,22 +105,9 @@ def resolve_gh_token(explicit_token: str | None = None) -> str | None:
     return None
 
 def fetch_github_file(owner: str, repo: str, path: str, token: str) -> str | None:
-    """Fetches a file from GitHub repository using the Contents REST API."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    req = urllib.request.Request(
-        url,
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "User-Agent": "software-factory-env-store"},
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return base64.b64decode(data["content"]).decode("utf-8") if isinstance(data, dict) and "content" in data else None
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
-    except Exception:
-        return None
+    """Read vault text; only a missing file returns None, failures propagate."""
+    file = CentralConfigStore(owner, token, repo).read(path)
+    return file.content.decode("utf-8") if file is not None else None
 
 def decrypt_sops_payload(ciphertext: str, age_private_key: str | None = None, target_filename: str | None = None) -> str:
     """Decrypts a SOPS-encrypted payload string returning plaintext."""

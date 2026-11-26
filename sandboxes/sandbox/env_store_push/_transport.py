@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass, field
-import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 from typing import Any
-import urllib.error
-import urllib.request
+
+from sandbox.config_store import CentralConfigStore
 
 DEFAULT_AGE_RECIPIENT = "age1zwr6flwyk3lt6k0xsd9wy0qy4dlytkdyv5aggvqu6zxqt3p2eyrsw5n4qj"
 
@@ -91,42 +89,12 @@ def commit_to_env_store(
     commit_message: str | None = None,
 ) -> str:
     """Commits or updates a file in Central Config Store using GitHub Contents REST API."""
-    url = f"https://api.github.com/repos/{owner}/{env_repo}/contents/{path}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "push-repo-env",
-    }
-    sha = None
-    try:
-        req_get = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req_get) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, dict) and "sha" in data:
-                sha = data["sha"]
-    except urllib.error.HTTPError as e:
-        if e.code != 404:
-            raise
-
     parts = [p for p in path.strip("/").split("/") if p]
     scope = parts[1] if len(parts) >= 3 and parts[0] in ("env", "caddy") else (parts[0] if parts else "config")
     filename = parts[-1] if parts else path
-    msg = commit_message or f"chore({scope}): update {filename}"
-    body: dict[str, str] = {
-        "message": msg,
-        "content": base64.b64encode(content_bytes).decode("ascii"),
-    }
-    if sha:
-        body["sha"] = sha
-
-    req_put = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={**headers, "Content-Type": "application/json"},
-        method="PUT",
-    )
-    with urllib.request.urlopen(req_put) as put_resp:
-        return json.loads(put_resp.read().decode("utf-8")).get("commit", {}).get("sha", "ok")
+    message = commit_message or f"chore({scope}): update {filename}"
+    commit = CentralConfigStore(owner, token, env_repo).upsert(path, content_bytes, message)
+    return commit.commit_sha or commit.sha
 
 
 def _encrypt_and_commit(
