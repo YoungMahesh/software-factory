@@ -19,7 +19,8 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `DEFAULT_GIT_NAME`, `DEFAULT_GIT_EMAIL` | Fallback sandbox Git authorship; repository-specific authorship comes from `config/env/<repo>/git.env` |
 | `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
 | `MODAL_SANDBOX_ENDPOINT_URL` | Public or Modal control plane base URL for CLI `--remote` and pool-wide Codex status (e.g. `https://apps.example.com`); `--endpoint-url` overrides it |
-| `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) proxied at `https://<APPS_BASE_DOMAIN>` by Caddy (auto-discovered via Modal SDK when unset) |
+| `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) used by Caddy apex/CLI route proxying and `modal-sandbox infra dashboard` (auto-discovered via Modal SDK when unset) |
+| `SANDBOX_CONTROL_PLANE_URL` | Modal Control Plane origin URL configured in the Next.js Sandbox Dashboard environment (`dashboard/` BFF proxy and `/opt/sandbox-dashboard/.env`) |
 | `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |

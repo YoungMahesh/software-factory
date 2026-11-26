@@ -4,7 +4,8 @@ Provision Modal development sandboxes, manage persistent PostgreSQL and S3 resou
 
 | Subsystem | Purpose |
 | :--- | :--- |
-| `sandboxes/` | Python CLI, hosted sandbox control plane, images, snapshots, and deployment tools |
+| `sandboxes/` | Python CLI, hosted FastAPI sandbox control plane, images, snapshots, and deployment tools |
+| `dashboard/` | Next.js 16 / React 19 Sandbox Web Dashboard and same-origin BFF proxy fronting the control plane |
 | `resource-plane/` | Next.js 16 / React 19 console and MCP API, PostgreSQL 16, and SeaweedFS S3 |
 | `app-template/` | Next.js 16 starter with optional Expo mobile client, database, authentication, and agent skills |
 
@@ -13,12 +14,13 @@ Provision Modal development sandboxes, manage persistent PostgreSQL and S3 resou
 ```mermaid
 flowchart LR
     CLI["CLI"] --> Launcher["Sandbox launcher"]
-    Dashboard["Hosted sandbox control plane"] --> Launcher
+    Dashboard["Sandbox Web Dashboard<br/>(dashboard/ BFF)"] --> ControlPlane["Modal Control Plane API<br/>(sandboxes/sandbox/function.py)"]
+    ControlPlane --> Launcher
     Launcher --> Sandbox["Modal container or VM<br/>SSH, T3 Code, optional Cloudflare ingress"]
     Template["app-template/"] --> Scaffold["create-app"]
     Scaffold --> App["Application repository"]
     App --> Deploy["deploy-app over SSH"]
-    Deploy --> VPS["VPS: Hosted Apps + /opt/caddy"]
+    Deploy --> VPS["VPS: Hosted Apps, dashboard/, /opt/caddy"]
     Sandbox --> Resources["Resource Plane<br/>Console, MCP, PostgreSQL, S3"]
     App --> Resources
 ```
@@ -73,13 +75,14 @@ Snapshots preserve files, including any credentials written to the filesystem. T
 
 ## Hosted sandbox control plane
 
-Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in the factory environment, then deploy from a clean checkout:
+Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in the factory environment, deploy the Modal Control Plane backend from a clean checkout, and optionally deploy the Next.js Sandbox Web Dashboard (`dashboard/`) to the VPS:
 
 ```bash
 modal deploy sandboxes/sandbox/function.py
+modal-sandbox infra dashboard --cutover
 ```
 
-The dashboard can launch, list, terminate, snapshot, and resume sandboxes across configured profiles. The CLI can use it through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md).
+The Next.js dashboard provides the Factory App builder (including Prime Sandbox reuse, GitHub repository picker, and model selection), live sandbox inspection with accrued Modal costs and lifespan timers, snapshot management, and Scratchpad (`Ideas` and `Raw` notes). The CLI can also use the backend through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md).
 
 ## Persistence and applications
 
@@ -105,6 +108,9 @@ Other installed commands include `deploy-infra`, `setup-caddy`, `push-repo-env`,
 pytest
 zensical build --strict
 zensical serve
+pnpm --dir dashboard test
+pnpm --dir dashboard typecheck
+pnpm --dir dashboard build
 ```
 
 For a fresh Software Factory repository sandbox with Modal tooling enabled, startup installs `requirements.txt`, including documentation dependencies. `--modal` requires valid `MODAL_TOKENS`. Existing or resumed sandboxes can install the current requirements manually.

@@ -135,7 +135,7 @@ modal-sandbox infra caddy --check-only
 
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
 - Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
-- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips, and routes the `<APPS_BASE_DOMAIN>` apex to the Modal Sandbox Web Dashboard (with `--dashboard-upstream` / `SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery, syncing empty `MODAL_SANDBOX_ENDPOINT_URL` in `.env`).
+- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips, and routes the `<APPS_BASE_DOMAIN>` apex either to the Modal Control Plane origin (`--dashboard-upstream` / `SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery, syncing empty `MODAL_SANDBOX_ENDPOINT_URL` in `.env`) or, after `modal-sandbox infra dashboard --cutover`, to `sandbox-dashboard-web:3000` while keeping `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` routed to Modal.
 
 #### Persisting and Restoring `/opt/caddy` via Central Config Store (`config/caddy/`)
 

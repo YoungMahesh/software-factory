@@ -51,4 +51,4 @@ cp .env.example .env
 
 Without a Cloudflare token, sandbox startup skips that tunnel. Use `--no-cloudflare` when you only need SSH or the separate T3 Code HTTPS endpoint.
 
-See [environment variables](../reference/environment.md) and [secrets](../architecture/secrets.md) for scope and precedence. Node.js and pnpm are needed for [application scaffolding](../guides/applications.md) and [Resource Plane local development](../guides/resource-plane-deployment.md#local-development).
+See [environment variables](../reference/environment.md) and [secrets](../architecture/secrets.md) for scope and precedence. Node.js and pnpm are needed for the [Sandbox Dashboard](../guides/control-plane.md), [application scaffolding](../guides/applications.md), and [Resource Plane local development](../guides/resource-plane-deployment.md#local-development).

@@ -159,11 +159,11 @@ The provider keys and service tokens used by OpenCode within the T3 Code integra
 _Avoid_: OpenCode tokens, opencode keys, mcp secrets
 
 **Shared Base Image**:
-The single cached Ubuntu 24.04 Modal image shared across Standard Sandboxes and VM Sandboxes as their foundational filesystem, pre-baked with core system, runtime, and developer utilities.
+The single cached Ubuntu 24.04 Modal image shared across Standard Sandboxes and VM Sandboxes as their foundational filesystem, pre-baked with Python 3.12, Node.js 24, pnpm 10, `uv`/`uvx`, pinned `ruff`, `cloudflared`, `sops`, `gh`, Docker CLI/Compose v2, database clients, and core CLI utilities.
 _Avoid_: Base container, root image, runner image
 
 **Browser Tooling**:
-A pre-baked, headless Google Chrome instance installed by the `--browser` flag and shared by the Playwright and Chrome DevTools MCP servers, launched with the sandbox-free flags required when running as root.
+Pre-baked headless Chromium installed by Playwright (`uvx playwright install --with-deps chromium`) when `--browser` or `--t3` is enabled (with `/opt/t3/t3 browser setup` added for `--t3`). Separately, `--xfce` installs full Google Chrome (`google-chrome-stable`) with sandbox-free flags for graphical desktop VMs.
 _Avoid_: Browser MCP, headless browser setup, chrome layer
 
 **Cloudflare Tunnel**:
@@ -211,11 +211,11 @@ A retired repository-local mapping of encrypted files to workspace destinations,
 _Avoid_: Secret mapping, repo env files, host secret mount
 
 **Hosted Sandbox Control Plane**:
-The cloud-hosted API and dashboard for provisioning and managing development sandboxes and their snapshots. It is separate from the Resource Plane persistence console.
+The Modal-hosted FastAPI backend (`sandboxes/sandbox/function.py`), Durable Launch Coordinator (`run_launch_request`), and serialized Factory State Authority (`factory-state-v1`) that provision and manage development sandboxes, Prime Sandboxes, Factory Apps, snapshots, and Scratchpad caches. Separate from the Resource Plane persistence console.
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:
-The browser interface of the Hosted Sandbox Control Plane for viewing, launching, terminating, and snapshotting development sandboxes and managing snapshot registry records, served on Modal and optionally exposed at the apex of the App Base Domain.
+The Next.js 16 + React 19 browser UI and same-origin BFF proxy (`dashboard/apps/web`) hosted on the VPS (`/opt/sandbox-dashboard`) for building Factory Apps, inspecting active sandboxes (with live lifespan timers and accrued Modal costs), managing snapshot registry records, and authoring Scratchpad Ideas/Raw notes. Exposed via Caddy at the apex of the App Base Domain (`--cutover`, split-routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal) or on a staging subdomain preview.
 _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
 
 **Snapshot Registry**:

@@ -84,7 +84,7 @@ pytest
 zensical build --strict
 ```
 
-The docs CI job installs the documentation extras and runs the site build and reference contract checks, so missing Zensical cannot silently skip the build there.
+The manually dispatched docs CI workflow installs the documentation extras and runs the site build and reference contract checks, so missing Zensical cannot silently skip the build there.
 
 All tests must pass cleanly without regressions.
 
@@ -119,7 +119,10 @@ modal-sandbox --name test-verify-box
 
 ## Subsystem development
 
-Install JavaScript dependencies with `pnpm install` from the monorepo root. Resource Plane development runs with `pnpm --dir resource-plane dev`; configure its web-local environment and Docker access as described in its README. Run its tests with `pnpm --dir resource-plane test`.
+Install JavaScript dependencies with `pnpm install` from the monorepo root.
+
+- **Sandbox Dashboard (`dashboard/`)**: Run local development with `pnpm --dir dashboard dev` (requires `SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, and `WEB_UI_PASSWORD`). Validate with `pnpm --dir dashboard test`, `pnpm --dir dashboard typecheck`, and `pnpm --dir dashboard build`. See `dashboard/README.md`.
+- **Resource Plane (`resource-plane/`)**: Run local development with `pnpm --dir resource-plane dev`; configure its web-local environment and Docker access as described in `resource-plane/README.md`. Run its tests with `pnpm --dir resource-plane test`.
 
 `app-template/` is a blueprint excluded from this workspace. Generate a temporary app with `create-app` to run its app commands. The root Python requirements include documentation tools; runtime-only installations can still use `python -m pip install -e .`.
 

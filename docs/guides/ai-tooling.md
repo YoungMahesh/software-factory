@@ -6,8 +6,8 @@ Modal Sandboxes provide pre-configured integrations for autonomous coding agent 
 
 | Tool | CLI Flag | Port / Ingress | Description |
 | :--- | :--- | :--- | :--- |
-| **T3 Code** | `--t3` | Port `3775` (Encrypted Tunnel) | Visual coding agent harness with terminal, file editor, worktree orchestration, and mobile pairing QR. Orchestrates Antigravity, OpenCode, and Codex providers. |
-| **Headless Chrome** | `--browser` | Local Headless | Pre-installed Google Chrome for Playwright, Puppeteer, and MCP servers (also implied by `--t3`). |
+| **T3 Code** | `--t3` | Port `3775` (Encrypted Tunnel) | Visual coding agent harness with terminal, file editor, worktree orchestration, and mobile pairing QR. Orchestrates Antigravity (`gemini-4-hydrogen` default builder model), OpenCode, and Codex providers. |
+| **Headless Chromium** | `--browser` | Local Headless | Pre-baked Playwright Chromium for headless browser automation and MCP tooling (also implied by `--t3`, which adds `/opt/t3/t3 browser setup`). Full Google Chrome is installed separately by `--xfce`. |
 
 ---
 
@@ -50,12 +50,12 @@ Set `CODEX_PROFILE_VOLUME_PREFIX` in the factory environment to enable three sav
 
 For pool-wide status, set the HTTPS `MODAL_SANDBOX_ENDPOINT_URL` and a random `CODEX_STATUS_SECRET` on both the launch host and the hosted control plane. Configure both for the same Modal workspace and environment. The launch host gives the sandbox a credential that only grants access to the profile status endpoint.
 
-## 2. Headless Chrome & Browser MCP (`--browser`)
+## 2. Headless Chromium & Browser Tooling (`--browser`)
 
-Passing `--browser` pre-bakes a complete Google Chrome installation and required dependencies into the sandbox image layer (see [ADR 0009](../adr/0009-prebaked-chrome-for-browser-mcp-tooling.md)):
-- Automatically enabled when `--t3` is passed.
-- Compatible with Playwright, Puppeteer, and Chrome DevTools Protocol.
-- Enables browser automation tools and MCP servers for visual verification and testing.
+Passing `--browser` pre-bakes Playwright Chromium (`uvx playwright install --with-deps chromium`) and system browser libraries into the sandbox image layer:
+- Automatically enabled when `--t3` is passed (which also runs `/opt/t3/t3 browser setup`).
+- Compatible with Playwright and headless browser automation tools inside containers without a display server.
+- Separate from `--xfce`, which installs full Google Chrome (`google-chrome-stable`) on desktop VMs (see [ADR 0070](../adr/0070-xfce-desktop-and-chrome-in-vm-sandboxes.md) and [runtimes](../architecture/runtimes.md)).
 
 ```bash
 modal-sandbox -r my-repo --browser

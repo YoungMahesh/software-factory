@@ -6,13 +6,13 @@ Modal Sandboxes supports two execution environments to balance startup speed wit
 
 | Dimension | Standard Container | Linux VM Sandbox (`--vm`) | XFCE Desktop VM (`--xfce`) |
 | :--- | :--- | :--- | :--- |
-| **Modal Runtime** | Standard (`runtime=None`) | Stable VM (`runtime="vm"`) | Stable VM (`runtime="vm"`) |
+| **Modal Runtime** | gVisor Container (`runtime="gvisor"`) | Stable VM (`runtime="vm"`) | Stable VM (`runtime="vm"`) |
 | **CLI Flag** | Default | `--vm` | `--xfce` (implies `--vm`) |
 | **Docker-in-Docker** | No (restricted permissions) | **Yes** (dockerd pre-configured) | **Yes** (dockerd pre-configured) |
 | **Kernel Privileges** | Restricted container namespace | Full Linux kernel privileges | Full Linux kernel privileges |
 | **RAM Configuration** | Burstable `(128, 16384)` MiB | Burstable `(128, 16384)` MiB | Burstable `(128, 16384)` MiB |
 | **Display Server** | None (headless) | None (headless) | **X11 Display :1 (TigerVNC + noVNC)** |
-| **Desktop / Browser** | None | Headless Chrome optional | **XFCE 4 Desktop + Google Chrome** |
+| **Desktop / Browser** | Headless Playwright Chromium optional (`--browser`) | Headless Playwright Chromium optional (`--browser`) | **XFCE 4 Desktop + Google Chrome** |
 | **Swapfile Support** | Disabled | Automatically allocated | Automatically allocated |
 | **Best For** | Python apps, web APIs, scripts, AI agents | Docker compose, integration tests, custom daemons | Visual E2E testing, browser UI debugging, web desktop |
 

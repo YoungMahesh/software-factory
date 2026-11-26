@@ -178,6 +178,8 @@ nav:
     - '0092: Host Sandbox Web Dashboard on App Base Domain via Caddy Reverse Proxy': adr/0092-host-sandbox-dashboard-on-base-domain.md
     - '0093: Central Config Store and Dashboard Scratchpad': adr/0093-central-config-store-and-dashboard-scratchpad.md
     - '0094: Serialized Factory State Authority': adr/0094-serialized-factory-state-authority.md
+    - '0095: Scratchpad Ideas/Raw Split and Persisted Catalog Cache': adr/0095-scratchpad-ideas-raw-split-and-catalog-cache.md
+    - '0096: Next.js Sandbox Dashboard and Same-Origin Control Plane BFF': adr/0096-nextjs-sandbox-dashboard-and-bff.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

@@ -24,7 +24,7 @@ modal-sandbox [OPTIONS]
 | `--xfce-password` | string | `None` | Optional password for VNC session authentication (defaults to passwordless). |
 | `--testing` | flag | `False` | Use testing mode. The `${GH_ORG_NAME}/software-factory` baseline keeps its repository name. Other targets receive a `test-` prefix if needed. |
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
-| `--browser` | flag | `False` | Pre-bake headless Google Chrome for Playwright and MCP tooling. |
+| `--browser` | flag | `False` | Pre-bake headless Playwright Chromium for browser automation (implied by `--t3`). |
 | `--react-native` | flag | `False` | Install Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel. |
 | `--modal` | flag | `False` | Create the sandbox virtualenv, install Modal and requirements.txt, and configure profiles from required `MODAL_TOKENS`. |
 | `--no-cloudflare` | flag | `False` | Disable Cloudflare application ingress; without a tunnel token startup also skips initialization. |
@@ -246,7 +246,7 @@ create-db my-service-db --write-env
 # Inject into custom variable name in custom env file
 create-db my-service-db --write-env --env-file .env.local --env-var ANALYTICS_DB_URL
 
-# Inject and immediately encrypt into the central env-store vault
+# Inject and immediately encrypt into the Central Config Store (config/env/)
 create-db my-service-db --write-env --push-vault
 
 # Output raw JSON for automation and agent scripts
@@ -291,7 +291,7 @@ create-s3 my-bucket --write-env
 # Inject with custom variable prefix (e.g. UPLOADS_AWS_ACCESS_KEY_ID)
 create-s3 my-bucket --write-env --prefix UPLOADS_
 
-# Inject and immediately encrypt into the central env-store vault
+# Inject and immediately encrypt into the Central Config Store (config/env/)
 create-s3 my-bucket --write-env --push-vault
 
 # Output raw JSON with credentials and code snippets (boto3, Node SDK, AWS CLI)

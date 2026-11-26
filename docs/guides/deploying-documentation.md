@@ -18,7 +18,7 @@ The requirements select `.[dev,docs]`, including pytest, Zensical, MkDocs Materi
 zensical serve
 ```
 
-This serves a local development preview. The static build output goes to `site/`. The documentation test builds in strict mode when Zensical is on `PATH`; CI installs the docs extras so this check is exercised. Contract checks cover local links, CLI option references, and registered MCP tool names.
+This serves a local development preview. The static build output goes to `site/`. The documentation test builds in strict mode when Zensical is on `PATH`; the manually dispatched CI workflow installs the docs extras so this check is exercised. Contract checks cover local links, CLI option references, registered MCP tool names, ADR indexing, and control plane API routes.
 
 ## Publish on Modal
 
@@ -68,6 +68,6 @@ CLOUDFLARE_PAGES_PROJECT=my-docs CLOUDFLARE_PAGES_BRANCH=staging \
 
 Use the deployment URL printed by Wrangler. To add a custom domain, open the Pages project in Cloudflare and configure its custom domain and DNS records.
 
-Publishing is separate from local verification. The [CI workflow](https://github.com/sFactory0/software-factory/blob/main/.github/workflows/docs.yml) builds and checks documentation without publishing it.
+Publishing is separate from local verification. The manually dispatched (`workflow_dispatch`) [CI workflow](https://github.com/sFactory0/software-factory/blob/main/.github/workflows/docs.yml) builds and checks documentation without publishing it.
 
 Related decisions: [ADR 0062](../adr/0062-publish-documentation-as-modal-web-function.md) and [ADR 0068](../adr/0068-migrate-documentation-generator-to-zensical.md).
