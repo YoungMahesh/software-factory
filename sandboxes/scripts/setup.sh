@@ -255,11 +255,35 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
         t3_cache_file = os.path.join(t3_cache_dir, f"{instance_id}.json")
         models_data = [
             {
+                "slug": "gemini-4-hydrogen",
+                "name": "Gemini 4 Hydrogen",
+                "isCustom": False,
+                "isDefault": True,
+                "aliases": [f"{instance_id}-default", "gemini-4-hydrogen-xhigh"],
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "thought_level",
+                            "label": "Thinking Level",
+                            "type": "select",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"},
+                                {"id": "xhigh", "label": "Extra"}
+                            ],
+                            "currentValue": "xhigh",
+                            "role": "reasoning"
+                        }
+                    ]
+                }
+            },
+            {
                 "slug": "gemini-3.8-flash",
                 "name": "Gemini 3.8 Flash",
                 "isCustom": False,
-                "isDefault": True,
-                "aliases": [f"{instance_id}-default", "gemini-3.8-flash-high"],
+                "isDefault": False,
+                "aliases": ["gemini-3.8-flash-high"],
                 "capabilities": {
                     "optionDescriptors": [
                         {
@@ -272,66 +296,6 @@ for instance_id, display_name, slug, refresh_token, is_primary in accounts:
                                 {"id": "high", "label": "High"}
                             ],
                             "currentValue": "high",
-                            "role": "reasoning"
-                        }
-                    ]
-                }
-            },
-            {
-                "slug": "claude-sonnet-4-6",
-                "name": "Claude Sonnet 4.6 (Thinking)",
-                "isCustom": False,
-                "capabilities": {
-                    "optionDescriptors": [
-                        {
-                            "id": "thought_level",
-                            "label": "Thinking Level",
-                            "type": "select",
-                            "options": [
-                                {"id": "low", "label": "Low"},
-                                {"id": "medium", "label": "Medium"},
-                                {"id": "high", "label": "High"}
-                            ],
-                            "role": "reasoning"
-                        }
-                    ]
-                }
-            },
-            {
-                "slug": "claude-opus-4-6-thinking",
-                "name": "Claude Opus 4.6 (Thinking)",
-                "isCustom": False,
-                "capabilities": {
-                    "optionDescriptors": [
-                        {
-                            "id": "thought_level",
-                            "label": "Thinking Level",
-                            "type": "select",
-                            "options": [
-                                {"id": "low", "label": "Low"},
-                                {"id": "medium", "label": "Medium"},
-                                {"id": "high", "label": "High"}
-                            ],
-                            "role": "reasoning"
-                        }
-                    ]
-                }
-            },
-            {
-                "slug": "gpt-oss-120b-medium",
-                "name": "GPT-OSS 120B (Medium)",
-                "isCustom": False,
-                "capabilities": {
-                    "optionDescriptors": [
-                        {
-                            "id": "thought_level",
-                            "label": "Thinking Level",
-                            "type": "select",
-                            "options": [
-                                {"id": "low", "label": "Low"},
-                                {"id": "medium", "label": "Medium"},
-                                {"id": "high", "label": "High"}
-                            ],
                             "role": "reasoning"
                         }
                     ]
@@ -418,7 +382,7 @@ default_agy_instance = configured_antigravity[0] if configured_antigravity else 
 if default_agy_instance:
     model_sel = {
         "instanceId": default_agy_instance,
-        "model": "gemini-3.8-flash-low"
+        "model": "gemini-4-hydrogen-low"
     }
     if not settings.get("sourceControlWriterModelSelection") or (settings.get("sourceControlWriterModelSelection", {}).get("instanceId") == "codex" and not settings["providerInstances"]["codex"]["enabled"]):
         settings["sourceControlWriterModelSelection"] = model_sel

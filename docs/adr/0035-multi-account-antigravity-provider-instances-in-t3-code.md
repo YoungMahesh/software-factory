@@ -17,7 +17,7 @@ We added support for multiple simultaneous Google Antigravity accounts inside Mo
   - Automatically decrypts the three tokens into `~/.gemini/antigravity-cli/profiles/{m47,mgh,anv}` and initializes `~/.gemini/antigravity-cli/antigravity-oauth-token` to `m47`.
   - For each account (`antigravity`, `antigravity-mgh`, `antigravity-anv`), generates an isolated ACP token (`/root/.t3/userdata/providers/antigravity/<sha256>/antigravity-acp/acp_token.json`) and settings.
   - Registers each instance in `/root/.t3/userdata/settings.json` under `providerInstances` with respective display names (`Antigravity`, `Antigravity (MGH)`, `Antigravity (ANV)`).
-  - Pre-seeds `/root/.t3/caches/{antigravity,antigravity-mgh,antigravity-anv}.json` with Gemini 3.8 models to eliminate initial UI sign-in and model probing latency.
+  - Pre-seeds `/root/.t3/caches/{antigravity,antigravity-mgh,antigravity-anv}.json` with Gemini 4 Hydrogen (default) and Gemini 3.8 Flash models to eliminate initial UI sign-in and model probing latency.
 - **Offline CLI Profile Switching (`scripts/agyprofile`)**: Updated to switch directly from `~/.gemini/antigravity-cli/profiles/<profile>` without requiring `/root/secrets/` (`switch-agy-profile.sh` retained as symlink).
 - **Secret Scrubbing**: All `/root/secrets/antigravity-oauth-token*.json` files are wiped from disk immediately following setup.
 - **Universal File Line Budget**: All modified code and test files remain strictly within the 500 line budget.

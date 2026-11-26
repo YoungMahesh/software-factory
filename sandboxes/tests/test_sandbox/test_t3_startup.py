@@ -59,12 +59,16 @@ class TestT3CodeStartup(unittest.TestCase):
             self.assertIn("providerInstances", content)
             self.assertIn("antigravity", content)
             self.assertIn("ANTIGRAVITY_TOKENS", content)
+            self.assertIn("gemini-4-hydrogen", content)
+            self.assertIn("gemini-4-hydrogen-xhigh", content)
+            self.assertIn("gemini-4-hydrogen-low", content)
             self.assertIn("gemini-3.8-flash-high", content)
+            self.assertNotIn("claude-sonnet-4-6", content)
+            self.assertNotIn("gpt-oss-120b-medium", content)
             self.assertNotIn("gemini-3.8-flash-medium", content)
             self.assertNotIn("Gemini 3.8 Flash (Low)", content)
             self.assertIn("sourceControlWriterModelSelection", content)
             self.assertIn("textGenerationModelSelection", content)
-            self.assertIn("gemini-3.8-flash-low", content)
             self.assertIn("existing_tok", content)
             self.assertIn("candidate_file", content)
 
@@ -99,11 +103,11 @@ class TestT3CodeStartup(unittest.TestCase):
             settings_data = json.loads(settings_path.read_text())
             self.assertEqual(
                 settings_data["sourceControlWriterModelSelection"],
-                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-4-hydrogen-low"},
             )
             self.assertEqual(
                 settings_data["textGenerationModelSelection"],
-                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-4-hydrogen-low"},
             )
 
     def test_setup_script_prioritizes_first_antigravity_token_profile(self):
@@ -128,11 +132,11 @@ class TestT3CodeStartup(unittest.TestCase):
             settings_data = json.loads(settings_path.read_text())
             self.assertEqual(
                 settings_data["sourceControlWriterModelSelection"],
-                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-4-hydrogen-low"},
             )
             self.assertEqual(
                 settings_data["textGenerationModelSelection"],
-                {"instanceId": "antigravity", "model": "gemini-3.8-flash-low"},
+                {"instanceId": "antigravity", "model": "gemini-4-hydrogen-low"},
             )
             self.assertIn("antigravity-mgh", settings_data["providerInstances"])
             self.assertEqual(settings_data["providerInstances"]["antigravity"]["displayName"], "ANV")
