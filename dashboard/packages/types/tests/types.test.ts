@@ -5,6 +5,8 @@ import {
   LaunchStatusResponseSchema,
   PrimeSandboxViewSchema,
   RepositoryCatalogCacheSchema,
+  SandboxCostSchema,
+  SandboxCostsResponseSchema,
   SandboxSummarySchema,
   ScratchpadCatalogResponseSchema,
   ScratchpadNoteDetailViewSchema,
@@ -129,5 +131,26 @@ describe("@dashboard/types Zod contracts", () => {
     expect(errEvt.type).toBe("error");
     expect(doneEvt.type).toBe("done");
     expect(() => FreshLaunchStreamEventSchema.parse({ type: "unknown" })).toThrow();
+
+    const cost = SandboxCostSchema.parse({
+      sandbox_id: "sb-1",
+      profile: "maheshghamand",
+      cost_usd: 0.929423,
+      cost_by_resource_usd: { CPU: 0.3091, Memory: 0.6203 },
+      duration_seconds: 35412,
+      source: "sandbox_stats",
+    });
+    expect(cost.cost_usd).toBeCloseTo(0.929423);
+    expect(cost.cached).toBe(false);
+
+    const costsResponse = SandboxCostsResponseSchema.parse({
+      fetched_at: "2026-11-26T13:02:00Z",
+      costs: {
+        "sb-1": cost,
+        "sb-2": { sandbox_id: "sb-2", cost_usd: null, source: "sandbox_stats" },
+      },
+    });
+    expect(costsResponse.costs["sb-2"].cost_usd).toBeNull();
+    expect(costsResponse.costs["sb-2"].cost_by_resource_usd).toEqual({});
   });
 });

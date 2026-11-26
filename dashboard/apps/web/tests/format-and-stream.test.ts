@@ -3,10 +3,14 @@ import type { FreshLaunchStreamEvent } from "@dashboard/types";
 import {
   consumeSseStream,
   extractApiError,
+  formatCostBreakdown,
+  formatDurationCompact,
+  formatUsdCost,
   getLaunchSshCommand,
   getLaunchSshConfig,
   getSandboxCopyTarget,
   previewScratchpadTargetPath,
+  summarizeSandboxCosts,
 } from "@/lib/format";
 
 describe("format and SSE stream utilities", () => {
@@ -84,5 +88,51 @@ describe("format and SSE stream utilities", () => {
       code: "sandbox_stopped",
       message: "Sandbox stopped",
     });
+  });
+
+  it("formats sandbox USD costs, resource breakdowns, durations, and summaries", () => {
+    expect(formatUsdCost(null)).toBe("—");
+    expect(formatUsdCost(0)).toBe("$0.00");
+    expect(formatUsdCost(0.00004)).toBe("<$0.0001");
+    expect(formatUsdCost(0.00419)).toBe("$0.0042");
+    expect(formatUsdCost(0.929423)).toBe("$0.93");
+
+    expect(
+      formatCostBreakdown({ Memory: 0.6203, H100: 1.5, CPU: 0.3091, Zero: 0 }),
+    ).toBe("CPU $0.31 · Mem $0.62 · H100 $1.50");
+    expect(formatCostBreakdown({})).toBe("");
+
+    expect(formatDurationCompact(30)).toBe("<1m");
+    expect(formatDurationCompact(900)).toBe("15m");
+    expect(formatDurationCompact(7200)).toBe("2h");
+    expect(formatDurationCompact(35412)).toBe("9h 50m");
+
+    const summary = summarizeSandboxCosts(
+      [{ id: "sb-1" }, { id: "sb-2" }],
+      {
+        "sb-1": {
+          sandbox_id: "sb-1",
+          cost_usd: 0.83,
+          cost_by_resource_usd: {},
+          source: "sandbox_stats",
+          cached: false,
+        },
+        "sb-2": {
+          sandbox_id: "sb-2",
+          cost_usd: null,
+          cost_by_resource_usd: {},
+          source: "sandbox_stats",
+          cached: false,
+        },
+        "sb-stale": {
+          sandbox_id: "sb-stale",
+          cost_usd: 99,
+          cost_by_resource_usd: {},
+          source: "sandbox_stats",
+          cached: false,
+        },
+      },
+    );
+    expect(summary).toEqual({ totalUsd: 0.83, knownCount: 1, pendingCount: 1 });
   });
 });

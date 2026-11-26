@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Software Development :: Build Tools",
 ]
 dependencies = [
-    "modal>=1.6.1",
+    "modal>=1.6.4",
     "qrcode>=7.4.2",
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",

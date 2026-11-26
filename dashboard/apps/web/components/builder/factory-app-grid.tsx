@@ -1,13 +1,14 @@
 "use client";
 
-import type { FactoryAppView } from "@dashboard/types";
+import type { FactoryAppView, SandboxCost } from "@dashboard/types";
 import { X } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatUsdCost } from "@/lib/format";
 import type { SnapshotTarget } from "@/components/modals/snapshot-create-modal";
 import type { SnapshotLaunchTarget } from "@/components/modals/snapshot-launch-modal";
 
 export function FactoryAppGrid({
   apps,
+  sandboxCosts,
   onOpen,
   onSnapshot,
   onTrackProgress,
@@ -16,6 +17,7 @@ export function FactoryAppGrid({
   onDelete,
 }: {
   apps: FactoryAppView[];
+  sandboxCosts?: Record<string, SandboxCost>;
   onOpen: (app: FactoryAppView) => void;
   onSnapshot: (target: SnapshotTarget) => void;
   onTrackProgress: (requestId: string) => void;
@@ -105,14 +107,21 @@ export function FactoryAppGrid({
                         </span>
                       )
                     )}
-                    {app.sandbox_id && (
-                      <span
-                        title={`Sandbox ${app.sandbox_id}`}
-                        className="px-2 py-0.5 rounded bg-canvas border border-hairline text-muted max-w-full truncate"
-                      >
-                        {app.sandbox_id}
-                      </span>
-                    )}
+                    {app.sandbox_id && (() => {
+                      const sbCost = sandboxCosts?.[app.sandbox_id]?.cost_usd;
+                      const costNote =
+                        typeof sbCost === "number"
+                          ? ` · est. host cost ${formatUsdCost(sbCost)} (shared)`
+                          : "";
+                      return (
+                        <span
+                          title={`Sandbox ${app.sandbox_id}${costNote}`}
+                          className="px-2 py-0.5 rounded bg-canvas border border-hairline text-muted max-w-full truncate"
+                        >
+                          {app.sandbox_id}
+                        </span>
+                      );
+                    })()}
                     {app.database_name && (
                       <span className="px-2 py-0.5 rounded bg-success/15 text-ink max-w-full truncate">
                         DB: {app.database_name}

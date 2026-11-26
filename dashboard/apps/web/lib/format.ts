@@ -2,6 +2,7 @@ import {
   FreshLaunchStreamEventSchema,
   type FreshLaunchStreamEvent,
   type LaunchResponse,
+  type SandboxCost,
   type SandboxSummary,
   type ScratchpadNoteSummaryView,
 } from "@dashboard/types";
@@ -46,6 +47,70 @@ export function formatTimeout(seconds: number | null | undefined): string {
   }
   const minutes = Math.round(seconds / 60);
   return `${minutes} ${minutes === 1 ? "minute" : "minutes"} timeout`;
+}
+
+export function formatUsdCost(cost: number | null | undefined): string {
+  if (cost === null || cost === undefined || !Number.isFinite(cost)) return "—";
+  if (cost <= 0) return "$0.00";
+  if (cost < 0.0001) return "<$0.0001";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+export function formatCostBreakdown(
+  costByResource: Record<string, number> | null | undefined,
+): string {
+  if (!costByResource) return "";
+  const priority: Record<string, number> = { CPU: 0, Memory: 1 };
+  const entries = Object.entries(costByResource)
+    .filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)
+    .sort(([a], [b]) => {
+      const pa = priority[a] ?? 99;
+      const pb = priority[b] ?? 99;
+      return pa !== pb ? pa - pb : a.localeCompare(b);
+    });
+  if (entries.length === 0) return "";
+  return entries
+    .map(([resource, value]) => {
+      const label = resource === "Memory" ? "Mem" : resource;
+      return `${label} ${formatUsdCost(value)}`;
+    })
+    .join(" · ");
+}
+
+export function formatDurationCompact(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) {
+    return "";
+  }
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 1) return "<1m";
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+export function summarizeSandboxCosts(
+  sandboxes: ReadonlyArray<{ id: string }>,
+  costs: Record<string, SandboxCost | undefined>,
+): { totalUsd: number | null; knownCount: number; pendingCount: number } {
+  let total = 0;
+  let knownCount = 0;
+  let pendingCount = 0;
+  for (const sb of sandboxes) {
+    const costVal = costs[sb.id]?.cost_usd;
+    if (typeof costVal === "number" && Number.isFinite(costVal)) {
+      total += costVal;
+      knownCount += 1;
+    } else {
+      pendingCount += 1;
+    }
+  }
+  return {
+    totalUsd: knownCount > 0 ? total : null,
+    knownCount,
+    pendingCount,
+  };
 }
 
 export function slugifyScratchpadTitle(title: string): string {

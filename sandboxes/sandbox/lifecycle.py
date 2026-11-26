@@ -40,11 +40,14 @@ def record_sandbox_connection_info(
 
 
 def clear_sandbox_metadata_cache(sandbox_id: str | None = None) -> None:
-    """Clears cached connection metadata for a specific sandbox or entirely."""
+    """Clears cached connection metadata and cost entries for a sandbox or entirely."""
+    from sandbox.costs import clear_sandbox_cost_cache
+
     if sandbox_id:
         _SANDBOX_METADATA_CACHE.pop(sandbox_id, None)
     else:
         _SANDBOX_METADATA_CACHE.clear()
+    clear_sandbox_cost_cache(sandbox_id)
 
 
 def resolve_sandbox_connection_info(sb: modal.Sandbox) -> tuple[str | None, str | None]:

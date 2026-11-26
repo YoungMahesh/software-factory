@@ -15,6 +15,28 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
+export const SandboxCostSchema = z.object({
+  sandbox_id: z.string(),
+  profile: z.string().nullable().optional(),
+  cost_usd: z.number().nullable(),
+  cost_by_resource_usd: z.record(z.string(), z.number()).optional().default({}),
+  duration_seconds: z.number().nullable().optional(),
+  billed_cpu_core_seconds: z.number().nullable().optional(),
+  billed_memory_gib_seconds: z.number().nullable().optional(),
+  since: z.string().nullable().optional(),
+  until: z.string().nullable().optional(),
+  source: z.enum(["sandbox_stats", "app_stats", "unavailable"]).optional().default("unavailable"),
+  cached: z.boolean().optional().default(false),
+  error: z.string().nullable().optional(),
+});
+export type SandboxCost = z.infer<typeof SandboxCostSchema>;
+
+export const SandboxCostsResponseSchema = z.object({
+  fetched_at: z.string(),
+  costs: z.record(z.string(), SandboxCostSchema).optional().default({}),
+});
+export type SandboxCostsResponse = z.infer<typeof SandboxCostsResponseSchema>;
+
 export const SnapshotSummarySchema = z.object({
   image_id: z.string(),
   sandbox_id: z.string().nullable().optional(),

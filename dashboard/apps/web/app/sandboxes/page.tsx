@@ -1,21 +1,92 @@
 "use client";
 
 import { useMemo } from "react";
-import { Camera, Copy, ExternalLink, Power } from "lucide-react";
+import type { SandboxCost } from "@dashboard/types";
+import { Camera, Copy, ExternalLink, Power, RefreshCw } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
 import {
   copyToClipboard,
+  formatCostBreakdown,
   formatDate,
+  formatDurationCompact,
   formatTimeout,
+  formatUsdCost,
   getSandboxCopyTarget,
+  summarizeSandboxCosts,
 } from "@/lib/format";
+
+function SandboxCostDisplay({
+  cost,
+  loading,
+  align = "right",
+}: {
+  cost: SandboxCost | undefined;
+  loading: boolean;
+  align?: "left" | "right";
+}) {
+  const breakdown = formatCostBreakdown(cost?.cost_by_resource_usd);
+  const duration = formatDurationCompact(cost?.duration_seconds);
+  const tooltipParts = [
+    breakdown,
+    duration ? `Billed runtime: ${duration}` : "",
+    cost?.error ? `Error: ${cost.error}` : "",
+    "Estimated Modal usage cost before workspace credits/adjustments",
+  ].filter(Boolean);
+  const alignClass = align === "right" ? "items-end text-right" : "items-start text-left";
+
+  if (cost && cost.cost_usd !== null && cost.cost_usd !== undefined) {
+    return (
+      <div className={`flex flex-col ${alignClass}`} title={tooltipParts.join(" · ")}>
+        <span className="font-mono font-semibold text-ink tabular-nums">
+          {formatUsdCost(cost.cost_usd)}
+        </span>
+        {breakdown && (
+          <span className="font-sans text-[11px] text-muted">{breakdown}</span>
+        )}
+      </div>
+    );
+  }
+
+  if (loading && !cost) {
+    return (
+      <span className="font-mono text-xs text-muted animate-pulse" title="Fetching Modal usage cost...">
+        ...
+      </span>
+    );
+  }
+
+  if (cost?.error) {
+    return (
+      <span className="font-sans text-xs text-muted" title={tooltipParts.join(" · ")}>
+        Unavailable
+      </span>
+    );
+  }
+
+  if (cost && (cost.source === "sandbox_stats" || cost.source === "app_stats")) {
+    return (
+      <span
+        className="font-sans text-xs text-muted"
+        title="Modal has not recorded usage samples for this sandbox yet"
+      >
+        Pending
+      </span>
+    );
+  }
+
+  return <span className="font-mono text-xs text-muted">—</span>;
+}
 
 export default function SandboxesPage() {
   const {
     sandboxes,
+    sandboxCosts,
+    costsLoading,
+    costsFetchedAt,
     searchQuery,
     openSnapshotModal,
     terminateSandbox,
+    refreshSandboxCosts,
     showToast,
   } = useDashboard();
 
@@ -32,6 +103,11 @@ export default function SandboxesPage() {
     );
   }, [sandboxes, searchQuery]);
 
+  const costSummary = useMemo(
+    () => summarizeSandboxCosts(filteredSandboxes, sandboxCosts),
+    [filteredSandboxes, sandboxCosts],
+  );
+
   async function handleCopySsh(sb: (typeof sandboxes)[number]) {
     const { text, toast } = getSandboxCopyTarget(sb);
     await copyToClipboard(text);
@@ -40,6 +116,49 @@ export default function SandboxesPage() {
 
   return (
     <div className="space-y-4">
+      {filteredSandboxes.length > 0 && (
+        <div className="bg-surface-soft border border-hairline rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-2xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-muted">
+              Running:{" "}
+              <span className="font-mono font-semibold text-ink">
+                {filteredSandboxes.length}
+              </span>
+            </span>
+            <span className="text-hairline hidden sm:inline">|</span>
+            <span className="text-muted">
+              Total Accrued Cost:{" "}
+              <span className="font-mono font-semibold text-ink tabular-nums">
+                {costsLoading && costSummary.totalUsd === null
+                  ? "..."
+                  : formatUsdCost(costSummary.totalUsd)}
+              </span>
+              {costSummary.knownCount > 0 && costSummary.pendingCount > 0 && (
+                <span className="ml-1 text-[11px] text-muted">
+                  ({costSummary.pendingCount} pending)
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 text-[11px] text-muted">
+            <span>
+              Est. compute/memory spend · lags a few min
+              {costsFetchedAt ? ` · Updated ${formatDate(costsFetchedAt)}` : ""}
+            </span>
+            <button
+              type="button"
+              disabled={costsLoading}
+              onClick={() => void refreshSandboxCosts(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-canvas hover:bg-surface-card border border-hairline text-xs font-medium text-ink transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${costsLoading ? "animate-spin text-primary" : ""}`} />
+              <span>Refresh Costs</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="md:hidden space-y-3">
         {filteredSandboxes.map((sb) => (
           <div
@@ -98,6 +217,10 @@ export default function SandboxesPage() {
                   {formatDate(sb.created_at)}
                   {sb.timeout_secs ? ` · ${formatTimeout(sb.timeout_secs)}` : ""}
                 </span>
+              </div>
+              <div className="flex items-start justify-between gap-2 text-body">
+                <span className="text-muted flex-shrink-0">Cost</span>
+                <SandboxCostDisplay cost={sandboxCosts[sb.id]} loading={costsLoading} />
               </div>
             </div>
 
@@ -182,6 +305,9 @@ export default function SandboxesPage() {
                   Created / Timeout
                 </th>
                 <th scope="col" className="px-6 py-4 text-right">
+                  Cost
+                </th>
+                <th scope="col" className="px-6 py-4 text-right">
                   Actions
                 </th>
               </tr>
@@ -238,6 +364,10 @@ export default function SandboxesPage() {
                   <td className="px-6 py-4 whitespace-nowrap font-sans text-xs text-body">
                     <div>{formatDate(sb.created_at)}</div>
                     <div className="text-muted">{formatTimeout(sb.timeout_secs)}</div>
+                  </td>
+
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <SandboxCostDisplay cost={sandboxCosts[sb.id]} loading={costsLoading} />
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-right font-sans space-x-2">
@@ -300,7 +430,7 @@ export default function SandboxesPage() {
               {filteredSandboxes.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-12 text-center text-muted font-sans"
                   >
                     No matching sandboxes found in selected workspace profile.

@@ -7,12 +7,13 @@ import { ChevronDown, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
 import { FactoryAppGrid } from "@/components/builder/factory-app-grid";
 import { LaunchProgressCard } from "@/components/builder/launch-progress-card";
 import { useDashboard } from "@/components/dashboard-provider";
-import { formatDate } from "@/lib/format";
+import { formatCostBreakdown, formatDate, formatUsdCost } from "@/lib/format";
 
 export default function BuilderPage() {
   const {
     apps,
     primes,
+    sandboxCosts,
     models,
     profiles,
     selectedProfile,
@@ -64,6 +65,11 @@ export default function BuilderPage() {
       ) ?? null
     );
   }, [primes, builderDraft, selectedProfile]);
+
+  const matchingPrimeCost = matchingPrimeSandbox?.sandbox_id
+    ? sandboxCosts[matchingPrimeSandbox.sandbox_id]
+    : undefined;
+  const matchingPrimeBreakdown = formatCostBreakdown(matchingPrimeCost?.cost_by_resource_usd);
 
   const filteredGithubRepos = useMemo(() => {
     const repos = repoCatalog.repos ?? [];
@@ -159,9 +165,20 @@ export default function BuilderPage() {
                   <span className="font-mono text-ink font-medium break-all">
                     {matchingPrimeSandbox.sandbox_id}
                   </span>{" "}
-                  <span className="text-muted">
+                  <span
+                    className="text-muted"
+                    title={
+                      matchingPrimeBreakdown
+                        ? `Accrued sandbox compute/memory cost: ${matchingPrimeBreakdown}`
+                        : undefined
+                    }
+                  >
                     ({matchingPrimeSandbox.app_count} app
-                    {matchingPrimeSandbox.app_count === 1 ? "" : "s"})
+                    {matchingPrimeSandbox.app_count === 1 ? "" : "s"}
+                    {typeof matchingPrimeCost?.cost_usd === "number"
+                      ? ` · ${formatUsdCost(matchingPrimeCost.cost_usd)}`
+                      : ""}
+                    )
                   </span>
                 </span>
               ) : matchingPrimeSandbox?.runtime_status === "provisioning" ? (
@@ -603,6 +620,7 @@ export default function BuilderPage() {
 
       <FactoryAppGrid
         apps={filteredApps}
+        sandboxCosts={sandboxCosts}
         onOpen={(app) => void openFactoryApp(app)}
         onSnapshot={(target) => openSnapshotModal(target)}
         onTrackProgress={(requestId) => void trackLaunch(requestId)}

@@ -139,7 +139,7 @@ def validate_clean_working_tree(root: Path, enforce: bool | None = None) -> bool
 
 
 CONTROL_PLANE_PIP_PACKAGES: tuple[str, ...] = (
-    "modal>=1.6.1",
+    "modal>=1.6.4",
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",
     "qrcode>=7.4.2",

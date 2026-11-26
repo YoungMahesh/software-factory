@@ -20,6 +20,8 @@ import type {
   PrimeSandboxView,
   ProfileInfo,
   RepositoryCatalogCache,
+  SandboxCost,
+  SandboxCostsResponse,
   SandboxSummary,
   ScratchpadCatalogResponse,
   ScratchpadNoteDetailView,
@@ -87,6 +89,9 @@ interface DashboardContextValue {
   repoCatalog: RepositoryCatalogCache;
   repoRefreshing: boolean;
   sandboxes: SandboxSummary[];
+  sandboxCosts: Record<string, SandboxCost>;
+  costsLoading: boolean;
+  costsFetchedAt: string | null;
   snapshots: SnapshotSummary[];
 
   builderDraft: BuilderDraftState;
@@ -109,6 +114,7 @@ interface DashboardContextValue {
   setRawDraft: React.Dispatch<React.SetStateAction<{ title: string; content: string }>>;
 
   refreshAll: (silent?: boolean) => Promise<void>;
+  refreshSandboxCosts: (force?: boolean) => Promise<void>;
   refreshGithubRepos: () => Promise<void>;
   fetchScratchpadNotes: () => Promise<void>;
   refreshScratchpadNotes: () => Promise<void>;
@@ -161,6 +167,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   });
   const [repoRefreshing, setRepoRefreshing] = useState(false);
   const [sandboxes, setSandboxes] = useState<SandboxSummary[]>([]);
+  const [sandboxCosts, setSandboxCosts] = useState<Record<string, SandboxCost>>({});
+  const [costsLoading, setCostsLoading] = useState(false);
+  const [costsFetchedAt, setCostsFetchedAt] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
 
   const [builderDraft, setBuilderDraft] = useState<BuilderDraftState>({
@@ -233,13 +242,60 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const selectedProfileRef = useRef(selectedProfile);
+  const lastCostFetchAtRef = useRef(0);
+  const costRequestSeqRef = useRef(0);
   useEffect(() => {
     selectedProfileRef.current = selectedProfile;
   }, [selectedProfile]);
 
+  const fetchSandboxCosts = useCallback(
+    async ({ profile, force = false }: { profile?: string; force?: boolean } = {}) => {
+      const prof = profile ?? selectedProfileRef.current;
+      const seq = ++costRequestSeqRef.current;
+      setCostsLoading(true);
+      try {
+        const params = new URLSearchParams({ all_apps: "true" });
+        if (prof) params.set("profile", prof);
+        if (force) params.set("refresh", "true");
+        const res = await fetch(`/api/sandboxes/costs?${params.toString()}`, {
+          cache: "no-store",
+        });
+        if (!res.ok || seq !== costRequestSeqRef.current) return;
+        const data = (await res.json()) as SandboxCostsResponse;
+        if (seq !== costRequestSeqRef.current) return;
+        setSandboxCosts(data.costs ?? {});
+        setCostsFetchedAt(data.fetched_at ?? null);
+        lastCostFetchAtRef.current = Date.now();
+      } catch (err) {
+        console.error("Failed refreshing sandbox costs:", err);
+      } finally {
+        if (seq === costRequestSeqRef.current) {
+          setCostsLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const refreshSandboxCosts = useCallback(
+    async (force = true) => {
+      await fetchSandboxCosts({ force });
+    },
+    [fetchSandboxCosts],
+  );
+
   const refreshAll = useCallback(async (silent = false, profileOverride?: string) => {
     if (!silent) setLoading(true);
     const prof = profileOverride ?? selectedProfileRef.current;
+    const nowMs = Date.now();
+    const shouldFetchCosts =
+      !silent || profileOverride !== undefined || nowMs - lastCostFetchAtRef.current >= 60_000;
+    if (shouldFetchCosts) {
+      void fetchSandboxCosts({
+        profile: prof,
+        force: !silent && profileOverride === undefined,
+      });
+    }
     try {
       const profileParam = prof ? `profile=${encodeURIComponent(prof)}` : "";
       const sbParams = ["all_apps=true"];
@@ -263,7 +319,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [fetchSandboxCosts]);
 
   const { track: trackLaunch, dismiss: dismissActiveLaunch } = useLaunchObserver({
     onStatus: setActiveLaunch,
@@ -615,6 +671,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           throw new Error(err.message);
         }
         showToast(`Sandbox ${sb.id} terminated.`);
+        setSandboxCosts((prev) => {
+          if (!(sb.id in prev)) return prev;
+          const next = { ...prev };
+          delete next[sb.id];
+          return next;
+        });
         await refreshAll();
       } catch (err) {
         showToast(
@@ -683,6 +745,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       repoCatalog,
       repoRefreshing,
       sandboxes,
+      sandboxCosts,
+      costsLoading,
+      costsFetchedAt,
       snapshots,
       builderDraft,
       setBuilderDraft,
@@ -700,6 +765,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       rawDraft,
       setRawDraft,
       refreshAll,
+      refreshSandboxCosts,
       refreshGithubRepos,
       fetchScratchpadNotes,
       refreshScratchpadNotes,
@@ -730,6 +796,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       repoCatalog,
       repoRefreshing,
       sandboxes,
+      sandboxCosts,
+      costsLoading,
+      costsFetchedAt,
       snapshots,
       builderDraft,
       builderSubmitting,
@@ -743,6 +812,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       ideasDraft,
       rawDraft,
       refreshAll,
+      refreshSandboxCosts,
       refreshGithubRepos,
       fetchScratchpadNotes,
       refreshScratchpadNotes,
