@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { SandboxCost } from "@dashboard/types";
 import { Camera, Copy, ExternalLink, Power, RefreshCw } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
+import { SandboxLifespan } from "@/components/sandbox-lifespan";
 import {
   copyToClipboard,
   formatCostBreakdown,
@@ -212,11 +213,17 @@ export default function SandboxesPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 text-body">
-                <span className="text-muted flex-shrink-0">Created</span>
-                <span className="text-right break-words">
-                  {formatDate(sb.created_at)}
-                  {sb.timeout_secs ? ` · ${formatTimeout(sb.timeout_secs)}` : ""}
-                </span>
+                {sb.running && sb.created_at && sb.timeout_secs ? (
+                  <SandboxLifespan createdAt={sb.created_at} timeoutSecs={sb.timeout_secs} compact />
+                ) : (
+                  <>
+                    <span className="text-muted flex-shrink-0">Started</span>
+                    <span className="text-right break-words">
+                      {formatDate(sb.created_at)}
+                      {sb.timeout_secs ? ` · ${formatTimeout(sb.timeout_secs)}` : ""}
+                    </span>
+                  </>
+                )}
               </div>
               <div className="flex items-start justify-between gap-2 text-body">
                 <span className="text-muted flex-shrink-0">Cost</span>
@@ -302,7 +309,7 @@ export default function SandboxesPage() {
                   Sandbox ID
                 </th>
                 <th scope="col" className="px-6 py-4">
-                  Created / Timeout
+                  Lifespan
                 </th>
                 <th scope="col" className="px-6 py-4 text-right">
                   Cost
@@ -361,9 +368,15 @@ export default function SandboxesPage() {
                     </div>
                   </td>
 
-                  <td className="px-6 py-4 whitespace-nowrap font-sans text-xs text-body">
-                    <div>{formatDate(sb.created_at)}</div>
-                    <div className="text-muted">{formatTimeout(sb.timeout_secs)}</div>
+                  <td className="px-6 py-4 font-sans text-xs text-body">
+                    {sb.running && sb.created_at && sb.timeout_secs ? (
+                      <SandboxLifespan createdAt={sb.created_at} timeoutSecs={sb.timeout_secs} />
+                    ) : (
+                      <>
+                        <div>{formatDate(sb.created_at)}</div>
+                        <div className="text-muted">{formatTimeout(sb.timeout_secs)}</div>
+                      </>
+                    )}
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-right">
