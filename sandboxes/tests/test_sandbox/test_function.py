@@ -13,6 +13,7 @@ import modal
 from sandbox.cli import create_parser, validate_args
 from sandbox.core import LaunchResponse, SnapshotResponse
 from sandbox.function import (
+    CONTROL_PLANE_PIP_PACKAGES,
     collect_control_plane_secrets,
     image as control_plane_image,
     resolve_and_validate_web_credentials,
@@ -263,6 +264,9 @@ class TestSandboxFunctionAPI(unittest.TestCase):
         dep_reprs = [repr(dep) for dep in image_dependencies(control_plane_image)]
         self.assertTrue(any("run_commands" in r for r in dep_reprs))
         self.assertTrue(any("apt_install" in r for r in dep_reprs))
+        pkgs_joined = "\n".join(CONTROL_PLANE_PIP_PACKAGES)
+        for pkg in ("modal", "fastapi", "pydantic", "qrcode", "httpx", "python-dotenv"):
+            self.assertIn(pkg, pkgs_joined)
 
     def test_control_plane_image_uploads_dashboard_and_support_files(self):
         mounted_files = {

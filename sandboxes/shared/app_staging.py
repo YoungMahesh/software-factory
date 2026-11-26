@@ -69,8 +69,24 @@ def stage_sandbox_runtime_into_image(
 ) -> modal.Image:
     """Stages sandboxes/sandbox and sandboxes/shared into /opt/sandboxes on Python site-packages."""
     sandboxes_root = Path(__file__).resolve().parent.parent
-    pkg_dir = sandbox_pkg_dir or (sandboxes_root / "sandbox")
-    shared_dir = shared_pkg_dir or (sandboxes_root / "shared")
+    pkg_dir = sandbox_pkg_dir
+    if pkg_dir is None:
+        candidate = sandboxes_root / "sandbox"
+        if (candidate / "__init__.py").is_file():
+            pkg_dir = candidate
+        else:
+            try:
+                import sandbox as _sandbox_pkg
+
+                pkg_dir = Path(_sandbox_pkg.__file__).resolve().parent
+            except Exception:
+                pkg_dir = candidate
+
+    shared_dir = shared_pkg_dir
+    if shared_dir is None:
+        candidate_shared = sandboxes_root / "shared"
+        shared_dir = candidate_shared if (candidate_shared / "image.py").is_file() else Path(__file__).resolve().parent
+
     staged_any = False
     if pkg_dir.is_dir():
         image = image.add_local_dir(

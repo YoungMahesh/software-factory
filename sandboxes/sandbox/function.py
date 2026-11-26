@@ -133,16 +133,20 @@ def validate_clean_working_tree(root: Path, enforce: bool | None = None) -> bool
     return True
 
 
+CONTROL_PLANE_PIP_PACKAGES: tuple[str, ...] = (
+    "modal>=1.6.1",
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "qrcode>=7.4.2",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+)
+
 image = (
     modal.Image.debian_slim()
     .apt_install("curl")
     .run_commands(*SOPS_INSTALL_COMMANDS)
-    .pip_install(
-        "modal>=1.6.1",
-        "fastapi>=0.100.0",
-        "pydantic>=2.0.0",
-        "qrcode>=7.4.2",
-    )
+    .pip_install(*CONTROL_PLANE_PIP_PACKAGES)
     .add_local_python_source("sandbox")
     .add_local_dir(execution_root / "shared", "/root/shared", ignore=["**/__pycache__"])
     .add_local_dir(execution_root / "scripts", "/root/.scripts", ignore=["**/__pycache__"])
