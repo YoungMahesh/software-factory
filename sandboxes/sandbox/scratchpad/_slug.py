@@ -7,11 +7,34 @@ from pathlib import Path
 import re
 import unicodedata
 
+from sandbox.apps._scratchpad_cache import ScratchpadSection
+
 SCRATCHPAD_DIR = "scratchpad"
+RAW_SCRATCHPAD_DIR = "raw"
+SECTION_DIRS: dict[ScratchpadSection, str] = {
+    "ideas": SCRATCHPAD_DIR,
+    "raw": RAW_SCRATCHPAD_DIR,
+}
 MAX_SLUG_LENGTH = 80
 FILENAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 _HEADING_H1_RE = re.compile(r"^#\s+(.+?)\s*$")
+
+
+def resolve_section_dir(section: str) -> tuple[ScratchpadSection, str]:
+    """Validates a Scratchpad section identifier and returns (section, config_directory)."""
+    if section == "ideas":
+        return "ideas", SCRATCHPAD_DIR
+    if section == "raw":
+        return "raw", RAW_SCRATCHPAD_DIR
+    raise ValueError(f"Unsupported scratchpad section: '{section}'.")
+
+
+def derive_title_from_body(body: str, fallback: str = "Untitled Note") -> str:
+    """Derives a short display/slug title from the first non-empty line of a note."""
+    first_line = next((ln.strip().lstrip("#").strip() for ln in (body or "").splitlines() if ln.strip()), "")
+    words = first_line.split()[:7]
+    return " ".join(words) if words else fallback
 
 
 def slugify_title(title: str, fallback: str = "untitled-note") -> str:

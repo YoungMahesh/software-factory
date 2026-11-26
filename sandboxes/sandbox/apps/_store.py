@@ -15,6 +15,13 @@ from pydantic import BaseModel
 from ._coordination import StateTransitions
 from ._github_repos import RepositoryCatalogCache
 from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, derive_app_slug, utc_now_iso
+from ._scratchpad_cache import (
+    CachedScratchpadNote,
+    ScratchpadCatalogCache,
+    apply_scratchpad_body,
+    apply_scratchpad_commit,
+    merge_refreshed_scratchpad_catalog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +84,7 @@ class FactoryStateStore(StateTransitions):
         self.launches_dir = self.root_dir / "launches"
         self.primes_dir = self.root_dir / "primes"
         self.github_repos_path = self.root_dir / "github-repos.json"
+        self.scratchpad_catalog_path = self.root_dir / "scratchpad-catalog.json"
         self._lock = _get_lock_for_target(self.volume, self.root_dir)
 
     def _reload_volume(self) -> None:
@@ -374,6 +382,58 @@ class FactoryStateStore(StateTransitions):
             self._write_model_file(self.github_repos_path, catalog)
             self._commit_volume()
             return catalog
+
+    def get_scratchpad_catalog(self, *, reload: bool = True) -> ScratchpadCatalogCache:
+        """Loads the cached Scratchpad catalog without querying GitHub."""
+        catalog = self._get_record(self.scratchpad_catalog_path, ScratchpadCatalogCache, reload=reload)
+        return catalog or ScratchpadCatalogCache()
+
+    def _mutate_scratchpad_catalog(
+        self,
+        transform: Callable[[ScratchpadCatalogCache], ScratchpadCatalogCache],
+    ) -> ScratchpadCatalogCache:
+        with self._lock:
+            self._reload_volume()
+            current = self._read_model_file(self.scratchpad_catalog_path, ScratchpadCatalogCache) or ScratchpadCatalogCache()
+            updated = transform(current)
+            self._ensure_dirs()
+            self._write_model_file(self.scratchpad_catalog_path, updated)
+            self._commit_volume()
+            return updated
+
+    def save_scratchpad_catalog(
+        self,
+        config_repo: str,
+        refreshed_at: str,
+        ideas: list[CachedScratchpadNote],
+        raw: list[CachedScratchpadNote],
+    ) -> ScratchpadCatalogCache:
+        """Persists refreshed Idea/Raw lists while retaining valid matching-SHA body caches."""
+        return self._mutate_scratchpad_catalog(
+            lambda cur: merge_refreshed_scratchpad_catalog(cur, config_repo, refreshed_at, ideas, raw)
+        )
+
+    def record_scratchpad_commit(
+        self,
+        config_repo: str,
+        note: CachedScratchpadNote,
+        content: str,
+    ) -> ScratchpadCatalogCache:
+        """Records a newly committed Idea or Raw note and its body in the Scratchpad Catalog Cache."""
+        return self._mutate_scratchpad_catalog(
+            lambda cur: apply_scratchpad_commit(cur, config_repo, note, content)
+        )
+
+    def cache_scratchpad_body(
+        self,
+        config_repo: str,
+        note: CachedScratchpadNote,
+        content: str,
+    ) -> ScratchpadCatalogCache:
+        """Caches an individual lazily fetched Scratchpad note body."""
+        return self._mutate_scratchpad_catalog(
+            lambda cur: apply_scratchpad_body(cur, config_repo, note, content)
+        )
 
 
 _DEFAULT_STORE: FactoryStateStore | None = None

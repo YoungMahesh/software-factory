@@ -179,7 +179,7 @@ The single-organization GitHub access configuration defined via `GH_TOKEN` and `
 _Avoid_: Org token file, github orgs secret, project fetch secret
 
 **Central Config Store**:
-A single private GitHub repository (`config` under `${GH_ORG_NAME}`) housing SOPS-encrypted environment files (`env/<repo>/`), plaintext Host Ingress Proxy configurations (`caddy/<profile>/`), and Markdown Scratchpad notes (`scratchpad/<slug>.md`). Supersedes the retired `env-store` and `caddy-store` repositories.
+A single private GitHub repository (`config` under `${GH_ORG_NAME}`) housing SOPS-encrypted environment files (`env/<repo>/`), plaintext Host Ingress Proxy configurations (`caddy/<profile>/`), **Idea Notes** (`scratchpad/<slug>.md`), and **Raw Notes** (`raw/<slug>.md`). Supersedes the retired `env-store` and `caddy-store` repositories.
 _Avoid_: Central secrets repo, env-store, caddy-store, config bucket, secret bucket
 
 **Environment Mapping Manifest (`env.map`)**:
@@ -332,13 +332,21 @@ A long-lived, multi-tenant Modal sandbox provisioned lazily on demand that hosts
 _Avoid_: Shared sandbox, warm sandbox, master sandbox, persistent container
 
 **Scratchpad**:
-The idea-capture and AI-assisted note workflow in the Sandbox Web Dashboard (`#scratchpad`), where operators refine rough prompts or architecture drafts with a free OpenCode model, review or edit the suggestion in a confirmation modal, browse saved notes, and send a note into the Builder composer.
+The note-capture surface in the Sandbox Web Dashboard (`#scratchpad`) partitioned into **Ideas** (AI-assisted refinement with review before commit) and **Raw** (direct verbatim Git commit without AI). Operators can browse, read, copy, and send notes from either section into the Builder composer.
 _Avoid_: Memo tab, notepad, prompt history, draft buffer
 
-**Scratchpad Note**:
-A Markdown file stored under `scratchpad/<slug>.md` in the Central Config Store (`config`), formatted with a `# <Title>` heading, a collision-disambiguated lowercase kebab-case filename, and structured Markdown content committed on explicit user confirmation (or raw save).
-_Avoid_: Brainstorm doc, quick note file, markdown memo
+**Idea Note**:
+An AI-refined Markdown note stored under `scratchpad/<slug>.md` in the Central Config Store (`config`), formatted with a `# <Title>` heading and collision-disambiguated filename on explicit user confirmation.
+_Avoid_: Brainstorm doc, quick note file, markdown memo, scratchpad note
+
+**Raw Note**:
+An unedited UTF-8 note committed directly from the **Raw** section to `raw/<slug>.md` in the Central Config Store (`config`) without AI transformation or review modal, using an optional title solely for `<slug>.md` naming.
+_Avoid_: Unrefined note, raw idea, direct dump, scratchpad note
+
+**Scratchpad Catalog Cache**:
+A persisted index of **Idea Note** and **Raw Note** metadata (and lazily cached note bodies) retained across dashboard loads and updated on UI commits or explicit operator refresh.
+_Avoid_: Notes cache, scratchpad store, github notes cache
 
 **Factory State Authority**:
-The sole owner of durable Factory App, Launch Request, Prime Sandbox, and Repository Catalog Cache state, coordinating competing requests and enforcing ownership transitions.
+The sole owner of durable Factory App, Launch Request, Prime Sandbox, **Repository Catalog Cache**, and **Scratchpad Catalog Cache** state, coordinating competing requests and enforcing ownership transitions.
 _Avoid_: State server, volume lock, metadata backend

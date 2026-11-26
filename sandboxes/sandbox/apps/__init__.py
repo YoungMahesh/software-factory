@@ -44,6 +44,12 @@ from ._routes import (
     set_coordinator_factory,
     set_launch_dispatcher,
 )
+from ._scratchpad_cache import (
+    CachedScratchpadBody,
+    CachedScratchpadNote,
+    ScratchpadCatalogCache,
+    ScratchpadSection,
+)
 from ._store import (
     FACTORY_STATE_MOUNT_PATH,
     FACTORY_STATE_VOLUME_NAME,
@@ -58,6 +64,8 @@ __all__ = [
     "AppNotReadyError",
     "AppSandboxStoppedError",
     "CachedGitHubRepo",
+    "CachedScratchpadBody",
+    "CachedScratchpadNote",
     "CreateAppPayload",
     "DEFAULT_APP_BASE_PORT",
     "DEFAULT_BUILDER_MODEL",
@@ -79,6 +87,8 @@ __all__ = [
     "PrimeSandboxView",
     "PrimeStatus",
     "RepositoryCatalogCache",
+    "ScratchpadCatalogCache",
+    "ScratchpadSection",
     "apps_router",
     "build_direct_chat_url",
     "build_initial_thread_prompt",

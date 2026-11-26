@@ -1,4 +1,4 @@
-"""GitHub Central Config Store persistence for Scratchpad Markdown notes."""
+"""GitHub Central Config Store persistence for Scratchpad Idea and Raw notes."""
 
 from __future__ import annotations
 
@@ -6,15 +6,17 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
+from sandbox.apps._scratchpad_cache import ScratchpadSection
 from sandbox.config_store import CentralConfigStore, ConfigStoreHTTPError
 from sandbox.config import resolve_factory_credentials
 from sandbox.env_store import DEFAULT_CONFIG_REPO, resolve_gh_token
 
 from ._slug import (
     FILENAME_RE,
-    SCRATCHPAD_DIR,
+    derive_title_from_body,
     extract_title_from_markdown,
     normalize_note_markdown,
+    resolve_section_dir,
     resolve_unique_slug,
     title_from_filename,
     validate_note_filename,
@@ -23,7 +25,7 @@ from ._slug import (
 
 @dataclass(frozen=True)
 class ScratchpadNoteSummary:
-    """Lightweight metadata for one note stored in config/scratchpad/."""
+    """Lightweight metadata for one note stored in config/scratchpad/ or config/raw/."""
 
     filename: str
     slug: str
@@ -32,11 +34,12 @@ class ScratchpadNoteSummary:
     sha: str
     size: int
     html_url: str | None = None
+    section: ScratchpadSection = "ideas"
 
 
 @dataclass(frozen=True)
 class ScratchpadNoteDetail:
-    """Full Markdown note retrieved from config/scratchpad/."""
+    """Full UTF-8 note retrieved from config/scratchpad/ or config/raw/."""
 
     filename: str
     slug: str
@@ -45,11 +48,12 @@ class ScratchpadNoteDetail:
     content: str
     sha: str
     html_url: str | None = None
+    section: ScratchpadSection = "ideas"
 
 
 @dataclass(frozen=True)
 class ScratchpadSaveResult:
-    """Result of committing a new Scratchpad note to config/scratchpad/."""
+    """Result of committing a new Idea Note or Raw Note to Central Config Store."""
 
     filename: str
     slug: str
@@ -59,6 +63,7 @@ class ScratchpadSaveResult:
     content: str
     size: int = 0
     html_url: str | None = None
+    section: ScratchpadSection = "ideas"
 
 
 def resolve_config_repo_context(
@@ -95,10 +100,12 @@ def list_scratchpad_notes(
     owner: str,
     token: str,
     *,
+    section: ScratchpadSection = "ideas",
     config_repo: str = DEFAULT_CONFIG_REPO,
 ) -> list[ScratchpadNoteSummary]:
-    """Lists Markdown notes under scratchpad/ in github.com/<owner>/config."""
-    body = CentralConfigStore(owner, token, config_repo).list_directory(SCRATCHPAD_DIR)
+    """Lists Markdown notes under scratchpad/ (ideas) or raw/ in github.com/<owner>/config."""
+    clean_section, directory = resolve_section_dir(section)
+    body = CentralConfigStore(owner, token, config_repo).list_directory(directory)
     notes: list[ScratchpadNoteSummary] = []
     for entry in body:
         if not isinstance(entry, dict) or entry.get("type") != "file":
@@ -109,9 +116,10 @@ def list_scratchpad_notes(
         slug = Path(name).stem
         notes.append(
             ScratchpadNoteSummary(
+                section=clean_section,
                 filename=name,
                 slug=slug,
-                path=str(entry.get("path") or f"{SCRATCHPAD_DIR}/{name}"),
+                path=str(entry.get("path") or f"{directory}/{name}"),
                 title=title_from_filename(name),
                 sha=str(entry.get("sha") or ""),
                 size=int(entry.get("size") or 0),
@@ -122,23 +130,48 @@ def list_scratchpad_notes(
     return notes
 
 
+def list_all_scratchpad_notes(
+    owner: str,
+    token: str,
+    *,
+    config_repo: str = DEFAULT_CONFIG_REPO,
+) -> tuple[list[ScratchpadNoteSummary], list[ScratchpadNoteSummary]]:
+    """Lists both Ideas (scratchpad/) and Raw (raw/) directories from Central Config Store."""
+    return (
+        list_scratchpad_notes(owner, token, section="ideas", config_repo=config_repo),
+        list_scratchpad_notes(owner, token, section="raw", config_repo=config_repo),
+    )
+
+
 def read_scratchpad_note(
     owner: str,
     filename: str,
     token: str,
     *,
+    section: ScratchpadSection = "ideas",
     config_repo: str = DEFAULT_CONFIG_REPO,
 ) -> ScratchpadNoteDetail:
-    """Reads and decodes a single Markdown note from github.com/<owner>/config/scratchpad/."""
+    """Reads and decodes a single note from config/scratchpad/ or config/raw/."""
+    clean_section, directory = resolve_section_dir(section)
     clean_name = validate_note_filename(filename)
-    file = CentralConfigStore(owner, token, config_repo).read(f"{SCRATCHPAD_DIR}/{clean_name}")
+    file = CentralConfigStore(owner, token, config_repo).read(f"{directory}/{clean_name}")
     if file is None:
-        raise FileNotFoundError(f"Scratchpad note '{SCRATCHPAD_DIR}/{clean_name}' was not found.")
+        raise FileNotFoundError(f"Scratchpad note '{directory}/{clean_name}' was not found.")
     content = file.content.decode("utf-8")
+    title = (
+        extract_title_from_markdown(content, clean_name)
+        if clean_section == "ideas"
+        else title_from_filename(clean_name)
+    )
     return ScratchpadNoteDetail(
-        filename=clean_name, slug=Path(clean_name).stem, path=file.path,
-        title=extract_title_from_markdown(content, clean_name), content=content,
-        sha=file.sha, html_url=file.html_url,
+        section=clean_section,
+        filename=clean_name,
+        slug=Path(clean_name).stem,
+        path=file.path,
+        title=title,
+        content=content,
+        sha=file.sha,
+        html_url=file.html_url,
     )
 
 
@@ -148,22 +181,35 @@ def commit_scratchpad_note(
     title: str,
     content: str,
     token: str,
+    section: ScratchpadSection = "ideas",
     config_repo: str = DEFAULT_CONFIG_REPO,
 ) -> ScratchpadSaveResult:
-    """Commits a new Scratchpad note to github.com/<owner>/config/scratchpad/<slug>.md."""
-    clean_title = " ".join((title or "").strip().splitlines()).strip() or "Untitled Note"
-    normalized_md = normalize_note_markdown(clean_title, content)
-    encoded_bytes = normalized_md.encode("utf-8")
+    """Commits an Idea Note (normalized Markdown) or Raw Note (verbatim UTF-8) to GitHub."""
+    clean_section, directory = resolve_section_dir(section)
+    clean_title = " ".join((title or "").strip().splitlines()).strip() or derive_title_from_body(content)
+    if clean_section == "ideas":
+        if not (content or "").strip():
+            raise ValueError("Note content cannot be empty.")
+        payload_text = normalize_note_markdown(clean_title, content)
+    else:
+        if not content or not content.strip():
+            raise ValueError("Raw note content cannot be empty.")
+        payload_text = content
+
+    encoded_bytes = payload_text.encode("utf-8")
     note_size = len(encoded_bytes)
     taken: set[str] = set()
 
     for attempt in range(8):
-        existing = [n.filename for n in list_scratchpad_notes(owner, token, config_repo=config_repo)]
+        existing = [
+            n.filename
+            for n in list_scratchpad_notes(owner, token, section=clean_section, config_repo=config_repo)
+        ]
         slug, filename = resolve_unique_slug(clean_title, set(existing) | taken)
-        rel_path = f"{SCRATCHPAD_DIR}/{filename}"
+        rel_path = f"{directory}/{filename}"
         try:
             commit = CentralConfigStore(owner, token, config_repo).write(
-                rel_path, encoded_bytes, f"chore(scratchpad): add {filename}",
+                rel_path, encoded_bytes, f"chore({directory}): add {filename}",
             )
         except ConfigStoreHTTPError as error:
             if error.creation_collision and attempt < 7:
@@ -171,9 +217,15 @@ def commit_scratchpad_note(
                 continue
             raise
         return ScratchpadSaveResult(
-            filename=filename, slug=slug, path=commit.path, title=clean_title,
-            sha=commit.sha or commit.commit_sha, content=normalized_md,
-            size=commit.size or note_size, html_url=commit.html_url,
+            section=clean_section,
+            filename=filename,
+            slug=slug,
+            path=commit.path,
+            title=clean_title,
+            sha=commit.sha or commit.commit_sha,
+            content=payload_text,
+            size=commit.size or note_size,
+            html_url=commit.html_url,
         )
 
-    raise RuntimeError(f"Could not resolve a unique filename for scratchpad note '{clean_title}'.")
+    raise RuntimeError(f"Could not resolve a unique filename for {clean_section} note '{clean_title}'.")

@@ -10,8 +10,9 @@ _OPERATIONS = frozenset({
     "get_launch", "create_app_and_launch", "record_launch_stage", "append_launch_logs",
     "get_prime", "list_primes", "claim_prime", "bind_prime_sandbox", "mark_prime_ready",
     "mark_prime_stopped", "release_prime_claim", "reserve_dev_port", "fail_launch_request",
-    "get_repo_catalog", "save_repo_catalog", "claim_launch_execution", "assert_request_active",
-    "complete_launch_request",
+    "get_repo_catalog", "save_repo_catalog", "get_scratchpad_catalog", "save_scratchpad_catalog",
+    "record_scratchpad_commit", "cache_scratchpad_body", "claim_launch_execution",
+    "assert_request_active", "complete_launch_request",
 })
 
 
