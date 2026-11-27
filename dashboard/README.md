@@ -9,7 +9,7 @@ Next.js 16 + React 19 web dashboard and same-origin Basic-Auth BFF proxy for the
 - **`/snapshots` (Snapshots)**: Persistent snapshot registry listing, snapshot launch modal, and record deletion.
 - **`/scratchpad` (Scratchpad)**: **Ideas** (`config/scratchpad/`) with AI-assisted refinement (`POST /api/scratchpad/suggest`) and **Raw** (`config/raw/`) verbatim notes behind a persisted cache.
 - **API Proxy & Health**: `/api/health` provides an unauthenticated container health check (including `apps_base_domain` and `dashboard_commit` metadata for the UI); `/api/[...path]` forwards `GET`, `POST`, and `DELETE` requests to `SANDBOX_CONTROL_PLANE_URL` with Basic Auth and unbuffered SSE pass-through. Next.js middleware enforces Basic Auth against `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` (returning `500` in production if unset).
-- **UI Self-Deploy Header Action**: Each hosted dashboard shows an opposite-target deploy button in its header (`Deploy dashboard.<APPS_BASE_DOMAIN>` when browsing the apex, or `Deploy <APPS_BASE_DOMAIN>` when browsing the staging subdomain) backed by `POST /api/dashboard/deploy` on the Modal Control Plane. Triggering it prompts for confirmation, clones `main` asynchronously inside Modal, rebuilds only that isolated `dashboard/` VPS stack and Caddy route (without redeploying Modal functions), and polls until completion.
+- **Standalone Deployment Console**: Production deploys from GitHub `main` to `https://<APPS_BASE_DOMAIN>` can be triggered from the standalone **Dashboard Deployer** app ([dashboard-deployer/README.md](../dashboard-deployer/README.md), hosted at `https://deploy.<APPS_BASE_DOMAIN>`).
 
 ## Local Development
 
@@ -35,14 +35,14 @@ pnpm --dir dashboard build
 
 ## Production Deployment
 
-Deploy isolated production and staging dashboard stacks from `.env` configuration (`RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, Cloudflare DNS-01 token):
+Deploy the production **Sandbox Web Dashboard** and standalone **Dashboard Deployer** from `.env` configuration (`RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, Cloudflare DNS-01 token):
 
 ```bash
-# Deploy isolated staging build to /opt/sandbox-dashboard-staging (https://dashboard.<APPS_BASE_DOMAIN>)
-modal-sandbox infra dashboard --subdomain
-
 # Build and deploy production dashboard to /opt/sandbox-dashboard (https://<APPS_BASE_DOMAIN>)
 modal-sandbox infra dashboard
+
+# Build and deploy standalone Dashboard Deployer to /opt/dashboard-deployer (https://deploy.<APPS_BASE_DOMAIN>)
+modal-sandbox infra deployer
 ```
 
-Apex deployment wires `/opt/caddy/conf/sites/apps-wildcard.caddy` to route `https://<APPS_BASE_DOMAIN>` to `sandbox-dashboard-web:3000` while forwarding `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` directly to the Modal Control Plane origin, leaving `/opt/sandbox-dashboard-staging` untouched. Staging (`--subdomain`) builds `sandbox-dashboard-staging-web:3000` and routes `https://dashboard.<APPS_BASE_DOMAIN>` without modifying the apex stack. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` so the UI displays its deployed commit beside the Control Plane commit badge.
+Apex deployment wires `/opt/caddy/conf/sites/apps-wildcard.caddy` to route `https://<APPS_BASE_DOMAIN>` to `sandbox-dashboard-web:3000` while forwarding `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` directly to the Modal Control Plane origin, and cleans up any retired `/opt/sandbox-dashboard-staging` stack or route. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` so the UI displays its deployed commit beside the Control Plane commit badge.

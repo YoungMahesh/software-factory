@@ -5,3 +5,4 @@ packages:
   - "dashboard"
   - "dashboard/packages/*"
   - "dashboard/apps/*"
+  - "dashboard-deployer"

@@ -166,7 +166,7 @@ ghclone my-service
 
 ## Resource Plane & VPS Infrastructure Deployment
 
-Running bare `modal-sandbox infra` prints help for its explicit subcommands (`deploy`, `dashboard`, and `caddy`). All `infra` subcommands read `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_USER`, `RESOURCE_PLANE_SSH_PORT`, and `RESOURCE_PLANE_SSH_KEY` from the root `.env` or environment and target canonical `/opt/*` VPS directories.
+Running bare `modal-sandbox infra` prints help for its explicit subcommands (`deploy`, `dashboard`, `deployer`, and `caddy`). All `infra` subcommands read `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_USER`, `RESOURCE_PLANE_SSH_PORT`, and `RESOURCE_PLANE_SSH_KEY` from the root `.env` or environment and target canonical `/opt/*` VPS directories.
 
 ### `modal-sandbox infra deploy`
 Automates turnkey deployment of the persistent **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js control console) to `/opt/resource-plane` on a remote Linux VPS over SSH.
@@ -188,24 +188,24 @@ modal-sandbox infra deploy
 | `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
 
 ### `modal-sandbox infra dashboard`
-Deploys the Next.js **Sandbox Dashboard** (`dashboard/`) to isolated VPS Compose stacks using `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, `SANDBOX_DASHBOARD_UPSTREAM` (or Modal SDK auto-discovery), and Cloudflare DNS-01 configuration from `.env`. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` into the dashboard build so its commit badge appears alongside the Control Plane badge.
+Deploys the Next.js **Sandbox Web Dashboard** (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS using `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, `SANDBOX_DASHBOARD_UPSTREAM` (or Modal SDK auto-discovery), and Cloudflare DNS-01 configuration from `.env`. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` into the dashboard build so its commit badge appears alongside the Control Plane badge, configures Caddy split apex routing on `https://<APPS_BASE_DOMAIN>` (routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal), and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or Caddy route.
 
 ```bash
 # Build and deploy production dashboard to /opt/sandbox-dashboard (https://<APPS_BASE_DOMAIN>)
 modal-sandbox infra dashboard
-
-# Build and deploy isolated staging stack to /opt/sandbox-dashboard-staging (https://dashboard.<APPS_BASE_DOMAIN>)
-modal-sandbox infra dashboard --subdomain
 ```
 
-- **Default (apex)**: Updates `/opt/sandbox-dashboard` (`sandbox-dashboard-web:3000`) and configures Caddy split apex routing on `https://<APPS_BASE_DOMAIN>` while routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal, leaving staging untouched.
-- **Staging (`--subdomain`)**: Updates `/opt/sandbox-dashboard-staging` (`sandbox-dashboard-staging-web:3000`) and routes `https://dashboard.<APPS_BASE_DOMAIN>`, leaving the apex container and route untouched (keeping Modal CLI routes active at apex with HTTP `404` on browser paths if apex has not been deployed).
+Takes no additional flags; configuration is read from `.env`.
 
-#### `infra dashboard` Options
+### `modal-sandbox infra deployer`
+Deploys the standalone Next.js **Dashboard Deployer** (`dashboard-deployer/`) to `/opt/dashboard-deployer` (`dashboard-deployer-web:3000`) on the VPS, wires `https://deploy.<APPS_BASE_DOMAIN>` through `/opt/caddy/conf/apps/dashboard-deployer.caddy`, and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or Caddy route.
 
-| Flag | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--subdomain` | flag | `False` | Deploy the isolated staging stack to `/opt/sandbox-dashboard-staging` at `dashboard.<APPS_BASE_DOMAIN>` instead of the apex production stack. |
+```bash
+# Build and deploy standalone Dashboard Deployer to /opt/dashboard-deployer (https://deploy.<APPS_BASE_DOMAIN>)
+modal-sandbox infra deployer
+```
+
+Takes no additional flags; configuration is read from `.env`.
 
 ---
 

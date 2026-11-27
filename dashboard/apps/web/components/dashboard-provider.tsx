@@ -13,9 +13,6 @@ import {
 import { useRouter } from "next/navigation";
 import type {
   AppTemplateKind,
-  DashboardDeployRecord,
-  DashboardDeployStatusResponse,
-  DashboardDeployTarget,
   FactoryAppView,
   HealthCheckResponse,
   LaunchResponse,
@@ -47,7 +44,6 @@ import {
 import { T3LinksModal } from "@/components/modals/t3-links-modal";
 import { ToastViewport, type ToastKind, type ToastMessage } from "@/components/toast";
 import { useLaunchObserver } from "@/hooks/use-launch-observer";
-import { isActiveDashboardDeploy, normalizeDeployHost } from "@/lib/dashboard-deploy";
 import { extractApiError } from "@/lib/format";
 
 export interface BuilderDraftState {
@@ -106,10 +102,7 @@ interface DashboardContextValue {
   selectProfile: (profile: string) => void;
   profiles: ProfileInfo[];
   version: VersionInfo | null;
-  appsBaseDomain: string | null;
   dashboardCommit: string | null;
-  dashboardDeploy: DashboardDeployRecord | null;
-  deploySubmitting: boolean;
 
   apps: FactoryAppView[];
   primes: PrimeSandboxView[];
@@ -163,7 +156,6 @@ interface DashboardContextValue {
   deleteFactoryApp: (app: FactoryAppView) => Promise<void>;
   terminateSandbox: (sb: SandboxSummary) => Promise<void>;
   deleteSnapshotRecord: (snap: SnapshotSummary) => Promise<void>;
-  triggerDashboardDeploy: (target: DashboardDeployTarget) => Promise<void>;
 
   openFreshLaunchModal: () => void;
   openSnapshotModal: (target: SnapshotTarget) => void;
@@ -191,11 +183,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedProfile, setSelectedProfile] = useState("all");
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [version, setVersion] = useState<VersionInfo | null>(null);
-  const [appsBaseDomain, setAppsBaseDomain] = useState<string | null>(null);
   const [dashboardCommit, setDashboardCommit] = useState<string | null>(null);
-  const [dashboardDeploy, setDashboardDeploy] = useState<DashboardDeployRecord | null>(null);
-  const [deploySubmitting, setDeploySubmitting] = useState(false);
-  const lastNotifiedDeployRef = useRef<string | null>(null);
 
   const [apps, setApps] = useState<FactoryAppView[]>([]);
   const [primes, setPrimes] = useState<PrimeSandboxView[]>([]);
@@ -504,20 +492,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           .then((r) => (r.ok ? r.json() : null))
           .then((data: HealthCheckResponse | null) => {
             if (!data) return;
-            setAppsBaseDomain(data.apps_base_domain ?? null);
             setDashboardCommit(data.dashboard_commit ?? null);
           })
           .catch((e) => console.error("Failed fetching health:", e)),
-        fetch("/api/dashboard/deploy", { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data: DashboardDeployStatusResponse | null) => {
-            const dep = data?.deploy ?? null;
-            if (dep && !isActiveDashboardDeploy(dep)) {
-              lastNotifiedDeployRef.current = `${dep.deploy_id}:${dep.status}`;
-            }
-            setDashboardDeploy(dep);
-          })
-          .catch((e) => console.error("Failed fetching dashboard deploy status:", e)),
         fetch("/api/models", { cache: "no-store" })
           .then((r) => (r.ok ? r.json() : []))
           .then((items: ModelChoice[]) => {
@@ -879,93 +856,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [confirmAction, showToast],
   );
 
-  const activeDeployId = isActiveDashboardDeploy(dashboardDeploy)
-    ? (dashboardDeploy?.deploy_id ?? null)
-    : null;
-
-  useEffect(() => {
-    if (!activeDeployId) return;
-    let cancelled = false;
-    const timer = setInterval(async () => {
-      try {
-        const res = await fetch(
-          `/api/dashboard/deploy/${encodeURIComponent(activeDeployId)}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok || cancelled) return;
-        const next = (await res.json()) as DashboardDeployRecord;
-        if (cancelled) return;
-        setDashboardDeploy(next);
-        if (!isActiveDashboardDeploy(next)) {
-          const key = `${next.deploy_id}:${next.status}`;
-          if (lastNotifiedDeployRef.current !== key) {
-            lastNotifiedDeployRef.current = key;
-            if (next.status === "ready") {
-              const shaSuffix = next.commit_short ? ` (${next.commit_short})` : "";
-              showToast(`Deployed ${next.target_url || next.target}${shaSuffix}.`);
-            } else if (next.status === "failed") {
-              showToast(
-                `Dashboard deploy failed: ${next.error || next.current_label}`,
-                "error",
-              );
-            }
-          }
-        }
-      } catch {
-        // Polling is best-effort; retry on next tick.
-      }
-    }, 2500);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [activeDeployId, showToast]);
-
-  const triggerDashboardDeploy = useCallback(
-    async (target: DashboardDeployTarget) => {
-      if (deploySubmitting || isActiveDashboardDeploy(dashboardDeploy)) return;
-      const base = normalizeDeployHost(appsBaseDomain);
-      const targetLabel =
-        target === "subdomain"
-          ? base
-            ? `dashboard.${base}`
-            : "dashboard subdomain"
-          : (base ?? "app base domain");
-
-      const accepted = await confirmAction({
-        title: `Deploy ${targetLabel}`,
-        message: `Pull latest main from GitHub and rebuild & deploy only the Sandbox Web Dashboard (dashboard/ and Caddy routing) to ${targetLabel}? Modal Control Plane functions will not be redeployed.`,
-        confirmLabel: `Deploy ${targetLabel}`,
-        destructive: false,
-      });
-      if (!accepted) return;
-
-      setDeploySubmitting(true);
-      try {
-        const res = await fetch("/api/dashboard/deploy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target }),
-        });
-        if (!res.ok) {
-          const err = await extractApiError(res);
-          throw new Error(err.message);
-        }
-        const record = (await res.json()) as DashboardDeployRecord;
-        setDashboardDeploy(record);
-        showToast(`Deploying ${record.target_url || targetLabel}...`);
-      } catch (err) {
-        showToast(
-          `Dashboard deploy failed to start: ${err instanceof Error ? err.message : String(err)}`,
-          "error",
-        );
-      } finally {
-        setDeploySubmitting(false);
-      }
-    },
-    [appsBaseDomain, confirmAction, dashboardDeploy, deploySubmitting, showToast],
-  );
-
   const value = useMemo<DashboardContextValue>(
     () => ({
       loading,
@@ -977,10 +867,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectProfile,
       profiles,
       version,
-      appsBaseDomain,
       dashboardCommit,
-      dashboardDeploy,
-      deploySubmitting,
       apps,
       primes,
       models,
@@ -1020,7 +907,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       deleteFactoryApp,
       terminateSandbox,
       deleteSnapshotRecord,
-      triggerDashboardDeploy,
       openFreshLaunchModal: () => setFreshModalOpen(true),
       openSnapshotModal: (target) => setSnapshotTarget(target),
       openLaunchFromSnapshotModal: (target) => setLaunchSnapshotTarget(target),
@@ -1035,10 +921,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectProfile,
       profiles,
       version,
-      appsBaseDomain,
       dashboardCommit,
-      dashboardDeploy,
-      deploySubmitting,
       apps,
       primes,
       models,
@@ -1074,7 +957,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       deleteFactoryApp,
       terminateSandbox,
       deleteSnapshotRecord,
-      triggerDashboardDeploy,
       showToast,
     ],
   );

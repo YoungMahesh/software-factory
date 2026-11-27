@@ -215,8 +215,12 @@ The Modal-hosted FastAPI backend (`sandboxes/sandbox/function.py`), Durable Laun
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:
-The Next.js 16 + React 19 browser UI and same-origin BFF proxy (`dashboard/apps/web`) hosted on the VPS for building Factory Apps, inspecting active sandboxes (with live lifespan timers and accrued Modal costs), managing snapshot registry records, and authoring Scratchpad Ideas/Raw notes. Runs as an isolated production apex instance (`/opt/sandbox-dashboard`) on the App Base Domain and an isolated staging instance (`/opt/sandbox-dashboard-staging`) on `dashboard.<APPS_BASE_DOMAIN>`.
+The Next.js 16 + React 19 browser UI and same-origin BFF proxy (`dashboard/apps/web`) hosted on the VPS at `/opt/sandbox-dashboard` on the **App Base Domain** for building Factory Apps, inspecting active sandboxes (with live lifespan timers and accrued Modal costs), managing snapshot registry records, and authoring Scratchpad Ideas/Raw notes.
 _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
+
+**Dashboard Deployer**:
+The standalone Next.js 16 + React 19 deployment console (`dashboard-deployer/`) hosted on the VPS at `/opt/dashboard-deployer` (`https://deploy.<APPS_BASE_DOMAIN>`) that triggers and monitors **Hosted Sandbox Control Plane** deployments of **Sandbox Web Dashboard** from GitHub `main` to the **App Base Domain**.
+_Avoid_: Staging dashboard, self-deploy UI, deployer console
 
 **Snapshot Registry**:
 The catalog of captured filesystem image identifiers and their associated sandbox metadata. Removing a catalog entry does not delete the retained image.
@@ -308,7 +312,7 @@ _Avoid_: Project generator, bootstrap script, create-base-app
 
 
 **App Base Domain**:
-The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers the apex Sandbox Web Dashboard, its staging subdomain (`dashboard.<APPS_BASE_DOMAIN>`), and subdomains assigned to Hosted Apps on the VPS.
+The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers the apex Sandbox Web Dashboard, the Dashboard Deployer (`deploy.<APPS_BASE_DOMAIN>`), and subdomains assigned to Hosted Apps on the VPS.
 _Avoid_: Root domain, tunnel domain, resource plane domain
 
 **Hosted App**:

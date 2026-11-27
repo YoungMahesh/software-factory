@@ -76,11 +76,12 @@ flowchart TD
 - **`sandboxes/shared/startup.sh`**: Runs as the entrypoint inside the sandbox container. Starts `sshd`, executes cloudflared ingress, configures AI developer harnesses, clones target repositories, and materializes local `.env` files.
 - **Filesystem Snapshots & Volumes**: Copy-on-write image capture leveraging `modal.Image.from_id()` and persistent storage for agent usage metrics (`t3code-usage-v1`) and Factory App metadata (`factory-state-v1`) via `modal.Volume`.
 
-### 2. Sandbox Dashboard (`dashboard/`)
+### 2. Sandbox Dashboard (`dashboard/`) & Dashboard Deployer (`dashboard-deployer/`)
 
 - **`dashboard/apps/web`**: Next.js 16 + React 19 UI providing the Builder (`/`), Sandboxes (`/sandboxes`), Snapshots (`/snapshots`), and Scratchpad (`/scratchpad` Ideas & Raw) views.
-- **Same-Origin BFF Proxy**: Next.js middleware enforces HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) and forwards `/api/[...path]` (with SSE streaming support) to `SANDBOX_CONTROL_PLANE_URL`.
-- **VPS & Isolated Stacks**: Deployed to `/opt/sandbox-dashboard` (`https://<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard` and to `/opt/sandbox-dashboard-staging` (`https://dashboard.<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard --subdomain`, keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal. Opposite-target UI self-deploy triggers enqueue async `main` clones and VPS deploys via `POST /api/dashboard/deploy` on the Modal Control Plane.
+- **`dashboard-deployer/`**: Standalone Next.js 16 + React 19 deployment console (`/opt/dashboard-deployer`, `https://deploy.<APPS_BASE_DOMAIN>`, deployed via `modal-sandbox infra deployer`) that triggers async GitHub `main` builds and deploys of `dashboard/` to `https://<APPS_BASE_DOMAIN>` via `POST /api/dashboard/deploy` on the Modal Control Plane.
+- **Same-Origin BFF Proxy**: Next.js middleware enforces HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) and forwards `/api/[...path]` (with SSE streaming support in `dashboard/`) to `SANDBOX_CONTROL_PLANE_URL`.
+- **VPS Stack**: **Sandbox Web Dashboard** is deployed to `/opt/sandbox-dashboard` (`https://<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard`, keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal.
 
 ### 3. Resource Plane (`resource-plane/`)
 

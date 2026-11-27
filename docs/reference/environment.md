@@ -20,8 +20,8 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
 | `MODAL_SANDBOX_ENDPOINT_URL` | Public or Modal control plane base URL for CLI `--remote` and pool-wide Codex status (e.g. `https://apps.example.com`); `--endpoint-url` overrides it |
 | `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) used by Caddy apex/CLI route proxying and `modal-sandbox infra dashboard` (auto-discovered via Modal SDK when unset) |
-| `SANDBOX_CONTROL_PLANE_URL` | Modal Control Plane origin URL configured in the Next.js Sandbox Dashboard environment (`dashboard/` BFF proxy, `/opt/sandbox-dashboard/.env`, and `/opt/sandbox-dashboard-staging/.env`) |
-| `NEXT_PUBLIC_DASHBOARD_COMMIT` | Optional short commit badge baked into the Next.js Sandbox Dashboard build and `/api/health` output by `modal-sandbox infra dashboard` |
+| `SANDBOX_CONTROL_PLANE_URL` | Modal Control Plane origin URL configured in the Next.js Sandbox Web Dashboard and Dashboard Deployer environments (`dashboard/`, `dashboard-deployer/`, `/opt/sandbox-dashboard/.env`, and `/opt/dashboard-deployer/.env`) |
+| `NEXT_PUBLIC_DASHBOARD_COMMIT` | Optional short commit badge baked into the Next.js Sandbox Web Dashboard and Dashboard Deployer builds and `/api/health` output by `modal-sandbox infra dashboard` / `deployer` |
 | `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |

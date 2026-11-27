@@ -18,14 +18,11 @@ from pydantic import BaseModel, Field
 
 from sandbox.apps._models import MAX_LAUNCH_LOG_LINES, utc_now_iso
 from sandbox.caddy_wildcard import is_subdomain_of, normalize_base_domain, resolve_apps_base_domain
-from sandbox.dashboard_deploy import (
-    DEFAULT_STAGING_SUBDOMAIN,
-    deploy_dashboard,
-)
+from sandbox.dashboard_deploy import deploy_dashboard
 from sandbox.env_store import fetch_vault_env_raw, resolve_gh_token
 from sandbox.infra_deploy import resolve_vps_ssh_config
 
-DashboardDeployTargetKind = Literal["apex", "subdomain"]
+DashboardDeployTargetKind = Literal["apex"]
 DashboardDeployStatus = Literal["queued", "cloning", "deploying", "ready", "failed"]
 
 ACTIVE_DEPLOY_STATUSES: frozenset[str] = frozenset({"queued", "cloning", "deploying"})
@@ -46,16 +43,16 @@ class DashboardDeployConflictError(RuntimeError):
 
 
 class DashboardDeployPayload(BaseModel):
-    """HTTP payload submitted from the Sandbox Web Dashboard deploy header controls."""
+    """HTTP payload submitted from Dashboard Deployer to deploy main to App Base Domain."""
 
-    target: DashboardDeployTargetKind
+    target: DashboardDeployTargetKind = "apex"
 
 
 class DashboardDeployRecord(BaseModel):
     """Durable state record for a Control-Plane-triggered dashboard deployment."""
 
     deploy_id: str
-    target: DashboardDeployTargetKind
+    target: DashboardDeployTargetKind = "apex"
     status: DashboardDeployStatus = "queued"
     current_label: str = "Queued dashboard deployment"
     target_url: str | None = None
@@ -109,7 +106,7 @@ class DashboardDeployStateMixin:
 
     def create_dashboard_deploy(
         self,
-        target: DashboardDeployTargetKind,
+        target: DashboardDeployTargetKind = "apex",
         *,
         control_plane_url: str | None = None,
     ) -> DashboardDeployRecord:
@@ -123,15 +120,10 @@ class DashboardDeployStateMixin:
                         f"Dashboard deployment '{existing.deploy_id}' ({existing.target}) is already {existing.status}."
                     )
             deploy_id = f"dash-{uuid.uuid4().hex[:12]}"
-            label = (
-                "Queued staging deploy (dashboard subdomain)"
-                if target == "subdomain"
-                else "Queued production deploy (App Base Domain)"
-            )
             record = DashboardDeployRecord(
                 deploy_id=deploy_id,
                 target=target,
-                current_label=label,
+                current_label="Queued production deploy (App Base Domain)",
                 control_plane_url=control_plane_url,
             )
             self._write_model_file(self._dashboard_deploy_path(deploy_id), record)
@@ -270,7 +262,6 @@ def execute_dashboard_self_deploy(
     if record is None:
         raise KeyError(f"Dashboard deploy '{deploy_id}' not found.")
 
-    is_sub = record.target == "subdomain"
     logs: list[str] = []
 
     def _log(msg: str) -> None:
@@ -304,12 +295,12 @@ def execute_dashboard_self_deploy(
             deploy_id,
             status="deploying",
             commit_short=commit_short,
-            current_label=f"Deploying {commit_short} to {'staging subdomain' if is_sub else 'App Base Domain'}",
+            current_label=f"Deploying {commit_short} to App Base Domain",
             append_logs=logs[-1:],
         )
 
         clean_base = resolve_apps_base_domain(None, dotenv=dict(os.environ))
-        target_url = f"https://{DEFAULT_STAGING_SUBDOMAIN}.{clean_base}" if is_sub else f"https://{clean_base}"
+        target_url = f"https://{clean_base}"
 
         runner = deploy_fn or deploy_dashboard
         code = runner(
@@ -317,7 +308,6 @@ def execute_dashboard_self_deploy(
             factory_root=repo_dir,
             dotenv=dict(os.environ),
             control_plane_url=record.control_plane_url,
-            subdomain=is_sub,
             dashboard_commit=commit_short,
             stream=False,
             log_cb=_log,
@@ -383,16 +373,17 @@ def _dispatch_dashboard_deploy(deploy_id: str) -> None:
     status_code=status.HTTP_202_ACCEPTED,
 )
 def api_trigger_dashboard_deploy(
-    payload: DashboardDeployPayload,
     request: Request,
+    payload: DashboardDeployPayload | None = None,
 ) -> DashboardDeployRecord:
-    """Queues an async deployment of dashboard/ (main branch) to apex or staging subdomain."""
+    """Queues an async deployment of dashboard/ (main branch) to App Base Domain."""
     from sandbox.apps._store import get_default_store
 
     store = get_default_store()
     cp_url = _infer_control_plane_url(request)
+    target = payload.target if payload is not None else "apex"
     try:
-        record = store.create_dashboard_deploy(payload.target, control_plane_url=cp_url)
+        record = store.create_dashboard_deploy(target, control_plane_url=cp_url)
     except DashboardDeployConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     _dispatch_dashboard_deploy(record.deploy_id)

@@ -1,4 +1,4 @@
-"""Unit tests for Control-Plane-backed dashboard self-deployment."""
+"""Unit tests for Control-Plane-backed dashboard deployment."""
 
 from __future__ import annotations
 
@@ -47,17 +47,17 @@ class TestDashboardSelfDeploy(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_store_create_single_flight_and_stale_recovery(self):
-        rec = self.store.create_dashboard_deploy("subdomain", control_plane_url="https://cp.modal.run")
-        self.assertEqual(rec.target, "subdomain")
+        rec = self.store.create_dashboard_deploy(control_plane_url="https://cp.modal.run")
+        self.assertEqual(rec.target, "apex")
         self.assertEqual(rec.status, "queued")
         self.assertEqual(self.store.get_latest_dashboard_deploy().deploy_id, rec.deploy_id)
 
         with self.assertRaises(DashboardDeployConflictError):
-            self.store.create_dashboard_deploy("apex")
+            self.store.create_dashboard_deploy()
 
         stale_ts = (datetime.now(timezone.utc) - timedelta(minutes=25)).isoformat()
         self.store.update_dashboard_deploy(rec.deploy_id, updated_at=stale_ts)
-        rec2 = self.store.create_dashboard_deploy("apex")
+        rec2 = self.store.create_dashboard_deploy()
         self.assertEqual(rec2.target, "apex")
         self.assertNotEqual(rec2.deploy_id, rec.deploy_id)
 
@@ -108,7 +108,7 @@ class TestDashboardSelfDeploy(unittest.TestCase):
         self.assertIn("main", clone_args)
 
     def test_execute_dashboard_self_deploy_success_and_failure(self):
-        rec = self.store.create_dashboard_deploy("subdomain", control_plane_url="https://cp.modal.run")
+        rec = self.store.create_dashboard_deploy(control_plane_url="https://cp.modal.run")
         env = {
             "GH_ORG_NAME": "sFactory0",
             "GH_TOKEN": "ghp_tok",
@@ -121,7 +121,7 @@ class TestDashboardSelfDeploy(unittest.TestCase):
 
         def _fake_deploy(vps_cfg, **kwargs):
             seen_calls.append({"vps": vps_cfg, **kwargs})
-            kwargs["log_cb"]("Deployed staging")
+            kwargs["log_cb"]("Deployed apex")
             return 0
 
         with patch.dict(os.environ, env, clear=True), patch("sandbox.dashboard_self_deploy.ensure_headless_ssh_config"):
@@ -133,13 +133,13 @@ class TestDashboardSelfDeploy(unittest.TestCase):
                 deploy_fn=_fake_deploy,
             )
         self.assertEqual(done.status, "ready")
-        self.assertEqual(done.target_url, "https://dashboard.apps.example.com")
+        self.assertEqual(done.target_url, "https://apps.example.com")
         self.assertEqual(done.commit_short, "deadbee")
-        self.assertTrue(seen_calls[0]["subdomain"])
+        self.assertNotIn("subdomain", seen_calls[0])
         self.assertEqual(seen_calls[0]["dashboard_commit"], "deadbee")
         self.assertFalse(seen_calls[0]["vps"].key_path.exists())
 
-        rec_fail = self.store.create_dashboard_deploy("apex")
+        rec_fail = self.store.create_dashboard_deploy()
         with patch.dict(os.environ, env, clear=True), patch("sandbox.dashboard_self_deploy.ensure_headless_ssh_config"):
             failed = execute_dashboard_self_deploy(
                 rec_fail.deploy_id,
@@ -160,13 +160,17 @@ class TestDashboardSelfDeploy(unittest.TestCase):
             self.assertEqual(empty_res.status_code, 200)
             self.assertIsNone(empty_res.json()["deploy"])
 
-            create_res = client.post(
+            bad_res = client.post(
                 "/api/dashboard/deploy",
                 headers=BASIC_AUTH,
                 json={"target": "subdomain"},
             )
+            self.assertEqual(bad_res.status_code, 422)
+
+            create_res = client.post("/api/dashboard/deploy", headers=BASIC_AUTH)
             self.assertEqual(create_res.status_code, 202)
             body = DashboardDeployRecord.model_validate(create_res.json())
+            self.assertEqual(body.target, "apex")
             self.assertEqual(dispatched, [body.deploy_id])
 
             conflict_res = client.post(

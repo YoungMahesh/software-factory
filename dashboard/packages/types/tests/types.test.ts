@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   CreateAppPayloadSchema,
-  DashboardDeployRecordSchema,
-  DashboardDeployStatusResponseSchema,
   FactoryAppViewSchema,
   FreshLaunchStreamEventSchema,
   FreshSandboxLaunchPayloadSchema,
@@ -208,20 +206,5 @@ describe("@dashboard/types Zod contracts", () => {
     expect(() =>
       T3PairingLinkEntrySchema.parse({ url: "https://t3.modal.host", status: "revoked" }),
     ).toThrow();
-
-    const deployRec = DashboardDeployRecordSchema.parse({
-      deploy_id: "dash-123",
-      target: "subdomain",
-      status: "ready",
-      current_label: "Live at https://dashboard.apps.example.com",
-      target_url: "https://dashboard.apps.example.com",
-      commit_short: "abc1234",
-      created_at: "2026-11-27T11:00:00Z",
-      updated_at: "2026-11-27T11:01:00Z",
-    });
-    expect(deployRec.target).toBe("subdomain");
-    expect(DashboardDeployStatusResponseSchema.parse({ deploy: deployRec }).deploy?.commit_short).toBe(
-      "abc1234",
-    );
   });
 });

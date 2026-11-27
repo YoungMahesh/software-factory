@@ -10,7 +10,10 @@ import pytest
 from sandbox.app_deploy._cli import build_deploy_app_parser
 from sandbox.caddy_deploy import build_caddy_parser
 from sandbox.cli import create_parser as launch_parser
-from sandbox.dashboard_deploy import build_dashboard_deploy_parser
+from sandbox.dashboard_deploy import (
+    build_dashboard_deploy_parser,
+    build_deployer_deploy_parser,
+)
 from sandbox.function import web_app
 from sandbox.infra_deploy import create_parser as infra_parser
 from scripts.create_app import create_parser as scaffold_parser
@@ -26,7 +29,8 @@ CONTROL_PLANE_GUIDE = ROOT / "docs/guides/control-plane.md"
     [
         (launch_parser, "## Command Options", "## Common Usage Examples"),
         (infra_parser, "## Resource Plane & VPS", "## Database & Storage"),
-        (build_dashboard_deploy_parser, "### `modal-sandbox infra dashboard`", "## Database & Storage"),
+        (build_dashboard_deploy_parser, "### `modal-sandbox infra dashboard`", "### `modal-sandbox infra deployer`"),
+        (build_deployer_deploy_parser, "### `modal-sandbox infra deployer`", "## Database & Storage"),
         (scaffold_parser, "## Application Scaffolding", "## Deploying Hosted Apps"),
         (build_deploy_app_parser, "## Deploying Hosted Apps", "## Host Ingress"),
         (build_caddy_parser, "## Host Ingress", None),

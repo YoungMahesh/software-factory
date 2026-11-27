@@ -37,19 +37,18 @@ The deployed control plane receives captured factory configuration (including `R
 
 ## Next.js Dashboard & Custom Base Domain via Caddy
 
-After deploying `sandboxes/sandbox/function.py` to Modal and configuring `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, and `CLOUDFLARE_DNS_API_TOKEN` (or `CLOUDFLARE_API_TOKEN`) in root `.env`, deploy the Next.js Sandbox Web Dashboard (`dashboard/`) to isolated production (`/opt/sandbox-dashboard`) and staging (`/opt/sandbox-dashboard-staging`) stacks on the VPS:
+After deploying `sandboxes/sandbox/function.py` to Modal and configuring `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, and `CLOUDFLARE_DNS_API_TOKEN` (or `CLOUDFLARE_API_TOKEN`) in root `.env`, deploy the Next.js **Sandbox Web Dashboard** (`dashboard/`) and standalone **Dashboard Deployer** (`dashboard-deployer/`) to the VPS:
 
 ```bash
-# Stage an isolated build on https://dashboard.<APPS_BASE_DOMAIN> without affecting apex
-modal-sandbox infra dashboard --subdomain
-
-# Build and deploy the production dashboard to https://<APPS_BASE_DOMAIN>
+# Build and deploy the production Sandbox Web Dashboard to https://<APPS_BASE_DOMAIN>
 modal-sandbox infra dashboard
+
+# Build and deploy the standalone Dashboard Deployer to https://deploy.<APPS_BASE_DOMAIN>
+modal-sandbox infra deployer
 ```
 
-- **Production (`modal-sandbox infra dashboard`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard`, writes `.env` (`SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `APPS_BASE_DOMAIN`, `DASHBOARD_CONTAINER_NAME=sandbox-dashboard-web`, `DASHBOARD_COMPOSE_PROJECT=sandbox-dashboard`, `NEXT_PUBLIC_DASHBOARD_COMMIT`), builds/starts `sandbox-dashboard-web:3000` on `dbhost-network`, and configures `/opt/caddy/conf/sites/apps-wildcard.caddy` so apex browser UI and `/api/*` go to `sandbox-dashboard-web:3000` while `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` route directly to Modal.
-- **Staging (`modal-sandbox infra dashboard --subdomain`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard-staging`, runs an independent container (`sandbox-dashboard-staging-web:3000`, Compose project `sandbox-dashboard-staging`), and wires `https://dashboard.<APPS_BASE_DOMAIN>` without modifying `/opt/sandbox-dashboard`. Broken changes on staging do not take down the apex dashboard. When staging is deployed before apex, Caddy keeps Modal CLI routes active at apex with HTTP `404` on browser paths until apex is deployed.
-- **UI Self-Deploy Header Buttons**: On `https://<APPS_BASE_DOMAIN>`, the header renders only **Deploy `dashboard.<APPS_BASE_DOMAIN>`**; on `https://dashboard.<APPS_BASE_DOMAIN>`, it renders only **Deploy `<APPS_BASE_DOMAIN>`** (local `localhost` development shows both). Confirming prompts `POST /api/dashboard/deploy` on the Modal Control Plane to clone `main` from `${GH_ORG_NAME}/software-factory` asynchronously, build/deploy only the target `dashboard/` stack and its Caddy route (without redeploying Modal backend functions), and report live completion status.
+- **Production Dashboard (`modal-sandbox infra dashboard`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard`, writes `.env` (`SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `APPS_BASE_DOMAIN`, `DASHBOARD_CONTAINER_NAME=sandbox-dashboard-web`, `DASHBOARD_COMPOSE_PROJECT=sandbox-dashboard`, `NEXT_PUBLIC_DASHBOARD_COMMIT`), builds/starts `sandbox-dashboard-web:3000` on `dbhost-network`, configures `/opt/caddy/conf/sites/apps-wildcard.caddy` so apex browser UI and `/api/*` go to `sandbox-dashboard-web:3000` while `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` route directly to Modal, and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or route.
+- **Dashboard Deployer (`modal-sandbox infra deployer`)**: Syncs `dashboard-deployer/` to `/opt/dashboard-deployer`, builds/starts an independent container (`dashboard-deployer-web:3000`, Compose project `dashboard-deployer`) behind the same `WEB_UI_USERNAME` / `WEB_UI_PASSWORD` Basic Auth middleware, and wires `https://deploy.<APPS_BASE_DOMAIN>` via `/opt/caddy/conf/apps/dashboard-deployer.caddy`. Its **Deploy Sandbox Web Dashboard** button triggers `POST /api/dashboard/deploy` on the Modal Control Plane to clone `main` from `${GH_ORG_NAME}/software-factory` asynchronously, rebuild/deploy `dashboard/` to `https://<APPS_BASE_DOMAIN>` (without redeploying Modal backend functions), and stream live status/logs.
 
 Running `modal-sandbox infra caddy --wildcard` directly configures wildcard DNS-01 TLS and Modal CLI apex routes (`404` for browser paths) until `modal-sandbox infra dashboard` deploys the apex Next.js UI.
 
@@ -111,7 +110,7 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 | `GET` | `/api/snapshots` | Basic | List snapshot registry records |
 | `DELETE` | `/api/snapshots/{image_id}` | Basic | Delete registry record; leaves the underlying image intact |
 | `POST` | `/api/snapshots/{image_id}/launch` | Basic | Restore an image with launch options |
-| `POST` | `/api/dashboard/deploy` | Basic | Queue async build and deploy of `dashboard/` (`main`) to `apex` or `subdomain` |
+| `POST` | `/api/dashboard/deploy` | Basic | Queue async build and deploy of `dashboard/` (`main`) to the App Base Domain |
 | `GET` | `/api/dashboard/deploy` | Basic | Return latest dashboard self-deployment record and status |
 | `GET` | `/api/dashboard/deploy/{deploy_id}` | Basic | Poll status and logs for one dashboard self-deployment job |
 | `POST` | `/launch` | Basic | Headless `LaunchRequest` provisioning |
