@@ -82,7 +82,26 @@ class _RepoFakeSandbox:
                 stderr_val = "ws rpc unavailable"
             else:
                 self._thread_seq += 1
-                stdout_val = json.dumps({"threadId": f"idle-thread-{self._thread_seq}", "projectId": "proj:ws"})
+                branch = "sf/wt"
+                if stdin_chunks:
+                    try:
+                        branch = json.loads("".join(stdin_chunks)).get("branch") or branch
+                    except Exception:
+                        pass
+                stdout_val = json.dumps({
+                    "threadId": f"idle-thread-{self._thread_seq}",
+                    "projectId": "proj:ws",
+                    "worktreePath": f"/root/.t3/worktrees/acme-api/wt-{self._thread_seq}",
+                    "branch": branch,
+                })
+        elif cmd[:3] == ("t3", "thread", "show"):
+            stdout_val = json.dumps({
+                "threadId": cmd[3] if len(cmd) > 3 else "thread:fb",
+                "worktreePath": "/root/.t3/worktrees/cli-tool/wt-fb",
+                "branch": "sf/fb",
+            })
+        elif cmd[:3] == ("t3", "thread", "send"):
+            stdout_val = json.dumps({"delivered": True})
         elif cmd[:3] == ("t3", "thread", "start"):
             self._thread_seq += 1
             stdout_val = json.dumps({"threadId": f"thread:{self._thread_seq}", "projectId": "proj:cli"})
@@ -245,6 +264,8 @@ class TestGitHubRepoPickerAndWebAppToggle(unittest.TestCase):
             self.assertEqual(res1.request.status, "ready")
             self.assertEqual(res1.app.repo, "my-org/acme-api")
             self.assertEqual(res1.app.branch, "develop")
+            self.assertEqual(res1.app.repo_base_path, "/root/acme-api")
+            self.assertEqual(res1.app.workspace_path, "/root/.t3/worktrees/acme-api/wt-1")
             self.assertIsNone(res1.app.dev_port)
             self.assertEqual(res1.app.thread_id, "idle-thread-1")
             mock_db.assert_not_called()
@@ -253,23 +274,31 @@ class TestGitHubRepoPickerAndWebAppToggle(unittest.TestCase):
             for cmd, _ in sb.calls:
                 self.assertNotIn("ghp_tok123", " ".join(cmd))
             self.assertFalse(any(c[:3] == ("t3", "thread", "start") for c, _ in sb.calls))
+            self.assertFalse(any(c[:3] == ("t3", "thread", "send") for c, _ in sb.calls))
             self.assertTrue(any(c[:2] == ("node", "-e") for c, _ in sb.calls))
-            self.assertTrue(any("pnpm-lock.yaml" in " ".join(c) for c, _ in sb.calls))
+            # Dependency installation is skipped when web_app is unchecked
+            self.assertFalse(any("pnpm-lock.yaml" in " ".join(c) for c, _ in sb.calls))
             vault_calls = [stdin for c, stdin in sb.calls if stdin and "SECRET_KEY=xyz" in base64.b64decode(json.loads(stdin).get("dotenv_b64", "") or "e30=").decode("utf-8", "ignore") if c[:2] == ("python3", "-c") and "encoded_bundle" in stdin]
             self.assertEqual(len(vault_calls), 1)
 
-            # Re-opening same repo isolates into /root/acme-api-2 on same Prime Sandbox
+            # Re-opening same repo creates a second worktree on the shared /root/acme-api base checkout,
+            # installs dependencies inside the worktree only because web_app=True, and sends prompt via thread send
             app2, req2 = coord.create_and_dispatch(
                 CreateAppPayload(repo="my-org/acme-api", prompt="Run dev server", web_app=True)
             )
             res2 = coord.execute_launch_request(req2.request_id)
             self.assertEqual(mock_launch.call_count, 1)
-            self.assertEqual(app2.slug, "acme-api-2")
+            self.assertEqual(res2.app.repo_base_path, "/root/acme-api")
+            self.assertEqual(res2.app.workspace_path, "/root/.t3/worktrees/acme-api/wt-2")
             self.assertEqual(res2.app.dev_port, 3001)
             self.assertFalse(any("chore: bind web dev port" in " ".join(c) for c, _ in sb.calls))
-            t_start = next((c, s) for c, s in sb.calls if c[:3] == ("t3", "thread", "start"))
-            self.assertEqual(t_start[0][3], "/root/acme-api-2")
-            self.assertIn("PORT=3001", t_start[1])
+            dep_cmds = [" ".join(c) for c, _ in sb.calls if "pnpm-lock.yaml" in " ".join(c)]
+            self.assertEqual(len(dep_cmds), 1)
+            self.assertIn("/root/.t3/worktrees/acme-api/wt-2", dep_cmds[0])
+            t_send = next((c, s) for c, s in sb.calls if c[:3] == ("t3", "thread", "send"))
+            self.assertEqual(t_send[0][3], "idle-thread-2")
+            self.assertIn("/root/.t3/worktrees/acme-api/wt-2", t_send[1])
+            self.assertIn("PORT=3001", t_send[1])
 
     def test_idle_thread_fallback_and_webapp_false_skips_port(self):
         with tempfile.TemporaryDirectory() as tmpdir:

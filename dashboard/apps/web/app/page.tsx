@@ -30,7 +30,6 @@ export default function BuilderPage() {
     submitAppPrompt,
     openFactoryApp,
     relaunchFactoryApp,
-    deleteFactoryApp,
     openSnapshotModal,
     openLaunchFromSnapshotModal,
   } = useDashboard();
@@ -50,11 +49,13 @@ export default function BuilderPage() {
   const matchingPrimeSandbox = useMemo(() => {
     const effProfile =
       builderDraft.profile || (selectedProfile !== "all" ? selectedProfile : null);
-    const vm = Boolean(builderDraft.vm);
-    const mobile =
-      !builderDraft.repo &&
-      builderDraft.template === "nextjs" &&
-      Boolean(builderDraft.mobile_app);
+    const vm = Boolean(builderDraft.vm || builderDraft.xfce);
+    const mobile = Boolean(
+      builderDraft.react_native ||
+        (!builderDraft.repo &&
+          builderDraft.template === "nextjs" &&
+          builderDraft.mobile_app),
+    );
     return (
       primes.find(
         (p) =>
@@ -284,7 +285,7 @@ export default function BuilderPage() {
                         model: next.model,
                         thought_level:
                           next.thought_levels && next.thought_levels.length > 0
-                            ? prev.thought_level
+                            ? (next.default_thought_level ?? "")
                             : "",
                       }));
                     }}
@@ -432,51 +433,315 @@ export default function BuilderPage() {
               </div>
 
               {showAdvanced && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-hairline text-xs">
-                  <div>
-                    <label className="block text-muted mb-1">
-                      App / Workspace Name (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={builderDraft.name}
-                      onChange={(e) =>
-                        setBuilderDraft((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      placeholder="Auto-derived from repo or prompt"
-                      className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-ink focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-muted mb-1">Modal Profile</label>
-                    <select
-                      value={builderDraft.profile}
-                      onChange={(e) =>
-                        setBuilderDraft((prev) => ({ ...prev, profile: e.target.value }))
-                      }
-                      className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-ink focus:outline-none focus:border-primary"
-                    >
-                      <option value="">Active Default Profile</option>
-                      {profiles.map((p) => (
-                        <option key={p.name} value={p.name}>
-                          {p.name}
-                          {p.active ? " (active)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 text-body cursor-pointer select-none py-1">
+                <div className="space-y-4 pt-3 border-t border-hairline text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-muted mb-1">
+                        App / Workspace Name (optional)
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={builderDraft.vm}
+                        type="text"
+                        value={builderDraft.name}
                         onChange={(e) =>
-                          setBuilderDraft((prev) => ({ ...prev, vm: e.target.checked }))
+                          setBuilderDraft((prev) => ({ ...prev, name: e.target.value }))
                         }
-                        className="rounded border-hairline text-primary focus:ring-0"
+                        placeholder="Auto-derived from repo or prompt"
+                        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-ink focus:outline-none focus:border-primary"
                       />
-                      <span>VM Sandbox (Docker runtime)</span>
-                    </label>
+                    </div>
+                    <div>
+                      <label className="block text-muted mb-1">Modal Profile</label>
+                      <select
+                        value={builderDraft.profile}
+                        onChange={(e) =>
+                          setBuilderDraft((prev) => ({ ...prev, profile: e.target.value }))
+                        }
+                        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-ink focus:outline-none focus:border-primary"
+                      >
+                        <option value="">Active Default Profile</option>
+                        {profiles.map((p) => (
+                          <option key={p.name} value={p.name}>
+                            {p.name}
+                            {p.active ? " (active)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-muted mb-1">
+                        VM Swap Memory (GB)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        disabled={!builderDraft.vm && !builderDraft.xfce}
+                        value={
+                          builderDraft.vm || builderDraft.xfce
+                            ? (builderDraft.memory ?? "")
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const parsed = raw ? Number.parseInt(raw, 10) : null;
+                          setBuilderDraft((prev) => ({
+                            ...prev,
+                            memory: parsed && parsed >= 1 ? parsed : null,
+                          }));
+                        }}
+                        placeholder={builderDraft.vm || builderDraft.xfce ? "1" : "VM off"}
+                        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-xs text-ink focus:outline-none focus:border-primary disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-canvas/70 border border-hairline rounded-xl p-3 space-y-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                      Sandbox Creation Options
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-body">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.vm || builderDraft.xfce}
+                          disabled={builderDraft.xfce}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              vm: checked,
+                              memory: checked ? (prev.memory ?? 1) : null,
+                            }));
+                          }}
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Linux VM Sandbox Mode (Docker runtime)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-not-allowed select-none opacity-85">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.t3}
+                          disabled
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>T3 Code Server (required for Builder)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.modal}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({ ...prev, modal: e.target.checked }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Modal SDK &amp; Credentials</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.sops}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({ ...prev, sops: e.target.checked }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Retain SOPS / Age Secret Keys</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={!builderDraft.no_t3_persist}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              no_t3_persist: !e.target.checked,
+                            }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Persist T3 Usage Volume</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.no_cloudflare}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              no_cloudflare: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Disable Cloudflare Tunnel</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.full_clone}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              full_clone: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Full Git Clone (no depth limit)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.testing}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({ ...prev, testing: e.target.checked }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Testing Mode (--testing)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.browser}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({ ...prev, browser: e.target.checked }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>Headless Google Chrome</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.react_native || builderDraft.mobile_app}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              react_native: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>React Native &amp; Android SDK</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={builderDraft.xfce}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              xfce: checked,
+                              vm: checked ? true : prev.vm,
+                              memory: checked ? (prev.memory ?? 1) : prev.memory,
+                            }));
+                          }}
+                          className="rounded border-hairline text-primary focus:ring-0"
+                        />
+                        <span>XFCE Desktop + noVNC (implies VM)</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-hairline">
+                      <div>
+                        <label className="block text-muted mb-1">T3 Usage Volume</label>
+                        <input
+                          type="text"
+                          value={builderDraft.t3_usage_volume}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({
+                              ...prev,
+                              t3_usage_volume: e.target.value,
+                            }))
+                          }
+                          className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-muted mb-1">T3 Server Port</label>
+                        <input
+                          type="number"
+                          min={1024}
+                          max={65535}
+                          value={builderDraft.t3_port}
+                          onChange={(e) => {
+                            const val = Number.parseInt(e.target.value, 10);
+                            if (Number.isFinite(val)) {
+                              setBuilderDraft((prev) => ({ ...prev, t3_port: val }));
+                            }
+                          }}
+                          className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-muted mb-1">T3 SSH Host (optional)</label>
+                        <input
+                          type="text"
+                          value={builderDraft.t3_ssh_host}
+                          onChange={(e) =>
+                            setBuilderDraft((prev) => ({ ...prev, t3_ssh_host: e.target.value }))
+                          }
+                          placeholder="Sandbox instance name"
+                          className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                        />
+                      </div>
+                      {(builderDraft.react_native || builderDraft.mobile_app) && (
+                        <div>
+                          <label className="block text-muted mb-1">Metro Bundler Port</label>
+                          <input
+                            type="number"
+                            min={1024}
+                            max={65535}
+                            value={builderDraft.metro_port}
+                            onChange={(e) => {
+                              const val = Number.parseInt(e.target.value, 10);
+                              if (Number.isFinite(val)) {
+                                setBuilderDraft((prev) => ({ ...prev, metro_port: val }));
+                              }
+                            }}
+                            className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                          />
+                        </div>
+                      )}
+                      {builderDraft.xfce && (
+                        <>
+                          <div>
+                            <label className="block text-muted mb-1">XFCE noVNC Port</label>
+                            <input
+                              type="number"
+                              min={1024}
+                              max={65535}
+                              value={builderDraft.xfce_port}
+                              onChange={(e) => {
+                                const val = Number.parseInt(e.target.value, 10);
+                                if (Number.isFinite(val)) {
+                                  setBuilderDraft((prev) => ({ ...prev, xfce_port: val }));
+                                }
+                              }}
+                              className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-muted mb-1">XFCE VNC Password (optional)</label>
+                            <input
+                              type="password"
+                              value={builderDraft.xfce_password}
+                              onChange={(e) =>
+                                setBuilderDraft((prev) => ({
+                                  ...prev,
+                                  xfce_password: e.target.value,
+                                }))
+                              }
+                              placeholder="Passwordless if blank"
+                              className="w-full bg-surface-soft border border-hairline rounded-lg px-2.5 py-1.5 text-ink font-mono"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -626,7 +891,6 @@ export default function BuilderPage() {
         onTrackProgress={(requestId) => void trackLaunch(requestId)}
         onRelaunch={(app, resume) => void relaunchFactoryApp(app, { resume })}
         onResumeSnapshot={(target) => openLaunchFromSnapshotModal(target)}
-        onDelete={(app) => void deleteFactoryApp(app)}
       />
     </div>
   );

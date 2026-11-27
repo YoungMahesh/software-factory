@@ -430,7 +430,7 @@ class TestWebAPI(unittest.TestCase):
         self.assertIn("Modal Sandbox Control Plane API", response.text)
 
         shell_src = (Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web" / "components" / "dashboard-shell.tsx").read_text(encoding="utf-8")
-        for label in ("Modal Sandbox Runner", "Sandboxes", "Snapshots", "Scratchpad"):
+        for label in ("Sandbox Web Dashboard", "Sandboxes", "Snapshots", "Scratchpad"):
             self.assertIn(label, shell_src)
 
     def test_index_page_contains_updated_launch_defaults(self):

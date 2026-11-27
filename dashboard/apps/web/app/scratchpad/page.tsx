@@ -6,7 +6,7 @@ import type {
   ScratchpadSection,
   ScratchpadSuggestResponse,
 } from "@dashboard/types";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
 import { ScratchpadSuggestionModal } from "@/components/scratchpad/suggestion-modal";
 import { copyToClipboard, extractApiError, formatDate } from "@/lib/format";
@@ -26,6 +26,7 @@ export default function ScratchpadPage() {
     fetchScratchpadNotes,
     refreshScratchpadNotes,
     selectScratchpadNote,
+    deleteScratchpadNote,
     loadNoteIntoBuilder,
     showToast,
   } = useDashboard();
@@ -458,6 +459,21 @@ export default function ScratchpadPage() {
                     Copy
                   </button>
                   <button
+                    id="scratchpad-delete-note-btn"
+                    type="button"
+                    onClick={() =>
+                      void deleteScratchpadNote(
+                        selectedNote.section,
+                        selectedNote.filename,
+                        selectedNote.title,
+                      )
+                    }
+                    className="inline-flex items-center justify-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-canvas hover:bg-error/15 text-muted hover:text-error border border-hairline text-xs font-medium transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                  <button
                     id="scratchpad-use-in-builder-btn"
                     type="button"
                     onClick={() => loadNoteIntoBuilder(selectedNote)}
@@ -531,13 +547,9 @@ export default function ScratchpadPage() {
             {filteredNotes.map((note) => {
               const isSelected = selectedNote?.filename === note.filename;
               return (
-                <button
+                <div
                   key={`${note.section}:${note.filename}`}
-                  type="button"
-                  data-note-filename={note.filename}
-                  data-note-section={note.section}
-                  onClick={() => void selectScratchpadNote(section, note.filename)}
-                  className={`w-full text-left p-3 rounded-xl border transition-colors space-y-1 ${
+                  className={`flex items-start justify-between gap-2 p-3 rounded-xl border transition-colors ${
                     isSelected
                       ? section === "raw"
                         ? "bg-accent-teal/15 border-accent-teal"
@@ -545,22 +557,41 @@ export default function ScratchpadPage() {
                       : "bg-canvas border-hairline hover:border-muted-soft hover:bg-surface-card/40"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-ink truncate min-w-0">
-                      {note.title}
-                    </span>
-                    <span className="text-[11px] text-muted font-mono flex-shrink-0">
-                      {note.size} B
-                    </span>
-                  </div>
-                  <div
-                    className={`text-xs font-mono truncate ${
-                      section === "raw" ? "text-ink" : "text-primary-active"
-                    }`}
+                  <button
+                    type="button"
+                    data-note-filename={note.filename}
+                    data-note-section={note.section}
+                    onClick={() => void selectScratchpadNote(section, note.filename)}
+                    className="flex-1 min-w-0 text-left space-y-1"
                   >
-                    {note.path}
-                  </div>
-                </button>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-ink truncate min-w-0">
+                        {note.title}
+                      </span>
+                      <span className="text-[11px] text-muted font-mono flex-shrink-0">
+                        {note.size} B
+                      </span>
+                    </div>
+                    <div
+                      className={`text-xs font-mono truncate ${
+                        section === "raw" ? "text-ink" : "text-primary-active"
+                      }`}
+                    >
+                      {note.path}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    title={`Delete ${note.title}`}
+                    aria-label={`Delete ${note.title}`}
+                    onClick={() =>
+                      void deleteScratchpadNote(note.section, note.filename, note.title)
+                    }
+                    className="p-1.5 rounded-lg text-muted hover:text-error hover:bg-error/15 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               );
             })}
           </div>

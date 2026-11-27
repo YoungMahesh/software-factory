@@ -18,8 +18,10 @@ from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, 
 from ._scratchpad_cache import (
     CachedScratchpadNote,
     ScratchpadCatalogCache,
+    ScratchpadSection,
     apply_scratchpad_body,
     apply_scratchpad_commit,
+    apply_scratchpad_delete,
     merge_refreshed_scratchpad_catalog,
 )
 
@@ -433,6 +435,17 @@ class FactoryStateStore(StateTransitions):
         """Caches an individual lazily fetched Scratchpad note body."""
         return self._mutate_scratchpad_catalog(
             lambda cur: apply_scratchpad_body(cur, config_repo, note, content)
+        )
+
+    def delete_scratchpad_note_cache(
+        self,
+        config_repo: str,
+        section: ScratchpadSection,
+        filename: str,
+    ) -> ScratchpadCatalogCache:
+        """Removes a deleted note summary and cached body from Scratchpad Catalog Cache."""
+        return self._mutate_scratchpad_catalog(
+            lambda cur: apply_scratchpad_delete(cur, config_repo, section, filename)
         )
 
 

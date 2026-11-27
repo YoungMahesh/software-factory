@@ -51,7 +51,7 @@ export function unauthorizedBasicResponse(): Response {
   return new Response("Authentication required.\n", {
     status: 401,
     headers: {
-      "WWW-Authenticate": 'Basic realm="Modal Sandbox Runner", charset="UTF-8"',
+      "WWW-Authenticate": 'Basic realm="Sandbox Web Dashboard", charset="UTF-8"',
       "Content-Type": "text/plain; charset=utf-8",
     },
   });

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import shlex
 from typing import Any, Callable
 
@@ -19,9 +20,18 @@ app_dir = cfg["app_dir"]
 token = (cfg.get("gh_token") or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
 force = bool(cfg.get("force"))
 full_clone = bool(cfg.get("full_clone"))
+shared = bool(cfg.get("shared"))
 
+existing_valid_repo = False
 if os.path.exists(app_dir):
-    if force:
+    is_git_repo = os.path.isdir(os.path.join(app_dir, ".git"))
+    has_head = is_git_repo and subprocess.run(
+        ["git", "-C", app_dir, "rev-parse", "--verify", "HEAD"],
+        capture_output=True,
+    ).returncode == 0
+    if shared and has_head:
+        existing_valid_repo = True
+    elif force or (shared and not os.path.isdir(os.path.join(app_dir, ".git", "worktrees"))):
         shutil.rmtree(app_dir)
     else:
         sys.stderr.write(f"Target directory already exists: {app_dir}\\n")
@@ -44,26 +54,42 @@ try:
         env["GIT_ASKPASS"] = askpass_path
         env["SF_GIT_TOKEN"] = token
 
-    cmd = ["git", "clone", "--quiet"]
-    if not full_clone:
-        cmd.extend(["--depth", "50"])
-    if branch:
-        cmd.extend(["--branch", branch, "--single-branch"])
-    cmd.extend([f"https://github.com/{repo}.git", app_dir])
+    if existing_valid_repo:
+        subprocess.run(
+            ["git", "-C", app_dir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
+            check=False,
+        )
+        fetch_cmd = ["git", "-C", app_dir, "fetch", "--quiet"]
+        if not full_clone:
+            fetch_cmd.extend(["--depth", "50"])
+        fetch_cmd.append("origin")
+        if branch:
+            fetch_cmd.append(f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+        res = subprocess.run(fetch_cmd, env=env, capture_output=True, text=True, check=False)
+        if res.returncode != 0:
+            sys.stderr.write(res.stderr or res.stdout or "git fetch failed\\n")
+            raise SystemExit(res.returncode or 1)
+    else:
+        cmd = ["git", "clone", "--quiet"]
+        if not full_clone:
+            cmd.extend(["--depth", "50"])
+        if branch:
+            cmd.extend(["--branch", branch, "--single-branch"])
+        cmd.extend([f"https://github.com/{repo}.git", app_dir])
 
-    res = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
-    if res.returncode != 0:
-        sys.stderr.write(res.stderr or res.stdout or "git clone failed\\n")
-        raise SystemExit(res.returncode or 1)
+        res = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
+        if res.returncode != 0:
+            sys.stderr.write(res.stderr or res.stdout or "git clone failed\\n")
+            raise SystemExit(res.returncode or 1)
 
-    subprocess.run(
-        ["git", "-C", app_dir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
-        check=False,
-    )
-    head_res = subprocess.run(["git", "-C", app_dir, "symbolic-ref", "-q", "HEAD"], capture_output=True, text=True)
-    if head_res.returncode != 0:
-        sys.stderr.write(f"Branch '{branch or 'HEAD'}' resolved to a detached ref; only Git branches are supported.\\n")
-        raise SystemExit(1)
+        subprocess.run(
+            ["git", "-C", app_dir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
+            check=False,
+        )
+        head_res = subprocess.run(["git", "-C", app_dir, "symbolic-ref", "-q", "HEAD"], capture_output=True, text=True)
+        if head_res.returncode != 0:
+            sys.stderr.write(f"Branch '{branch or 'HEAD'}' resolved to a detached ref; only Git branches are supported.\\n")
+            raise SystemExit(1)
 
     if shutil.which("gh") and token:
         gh_env = os.environ.copy()
@@ -251,6 +277,15 @@ def configure_nextjs_dev_port(sb: Any, app_dir: str, dev_port: int) -> None:
         raise RuntimeError(f"Failed configuring dev port {dev_port} in {app_dir}: {err or out}")
 
 
+def shared_repo_base_dir(repo: str) -> str:
+    """Returns the shared base checkout directory under /root for a GitHub owner/repo."""
+    bare = (repo or "").strip().split("/")[-1]
+    if bare.endswith(".git"):
+        bare = bare[:-4]
+    clean = re.sub(r"[^a-zA-Z0-9._-]+", "-", bare).strip("-") or "repo"
+    return f"/root/{clean}"
+
+
 def clone_github_repo_in_sandbox(
     sb: Any,
     *,
@@ -260,8 +295,9 @@ def clone_github_repo_in_sandbox(
     gh_token: str | None = None,
     force: bool = False,
     full_clone: bool = False,
+    shared: bool = False,
 ) -> None:
-    """Clones a GitHub repository into app_dir inside the sandbox without leaking tokens in argv."""
+    """Clones (or fetches when shared=True) a GitHub repo into app_dir without leaking tokens in argv."""
     payload = json.dumps(
         {
             "repo": repo,
@@ -270,6 +306,7 @@ def clone_github_repo_in_sandbox(
             "gh_token": gh_token or "",
             "force": force,
             "full_clone": full_clone,
+            "shared": shared,
         }
     )
     rc, out, err = exec_in_sandbox(
@@ -277,6 +314,29 @@ def clone_github_repo_in_sandbox(
     )
     if rc != 0:
         raise RuntimeError(f"Failed cloning {repo} into {app_dir}: {err or out}")
+
+
+def ensure_shared_repo_checkout(
+    sb: Any,
+    *,
+    repo: str,
+    branch: str | None,
+    base_dir: str,
+    gh_token: str | None = None,
+    force: bool = False,
+    full_clone: bool = False,
+) -> None:
+    """Ensures a shared base Git checkout exists at base_dir and has the target branch fetched."""
+    clone_github_repo_in_sandbox(
+        sb,
+        repo=repo,
+        branch=branch,
+        app_dir=base_dir,
+        gh_token=gh_token,
+        force=force,
+        full_clone=full_clone,
+        shared=True,
+    )
 
 
 def inject_vault_bundle_in_sandbox(

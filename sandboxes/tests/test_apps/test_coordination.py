@@ -50,7 +50,7 @@ def _create_and_claim(authority, index):
 
 def _reserve(authority, request_id):
     return FactoryStateClient(authority.send).reserve_dev_port(
-        prime_compatibility_key(None, False, False), "sb-shared", request_id=request_id,
+        prime_compatibility_key(None, True, False), "sb-shared", request_id=request_id,
     )
 
 
@@ -63,7 +63,7 @@ def test_independent_workers_share_one_owner_unique_slugs_and_ports(authority):
         assert all(executed for _, _, executed, _ in records)
         client = FactoryStateClient(authority.send)
         owner = owners.pop()
-        key = prime_compatibility_key(None, False, False)
+        key = prime_compatibility_key(None, True, False)
         assert client.bind_prime_sandbox(key, owner, "sb-shared", "prime", "https://t3.test")
         client.mark_prime_ready(key, request_id=owner, sandbox_id="sb-shared", sandbox_name="prime",
                                 t3_url="https://t3.test", environment_id="env-1")

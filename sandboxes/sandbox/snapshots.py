@@ -37,6 +37,7 @@ class SnapshotResult:
     profile: str | None = None
     software_factory_commit: str | None = None
     software_factory_dirty: str | None = None
+    rootfs_bytes: int | None = None
 
     def to_response(self) -> Any:
         from sandbox.core import SnapshotResponse
@@ -47,6 +48,7 @@ class SnapshotResult:
             ttl_days=self.ttl_days,
             ttl_seconds=self.ttl_seconds,
             terminated=self.terminated,
+            rootfs_bytes=self.rootfs_bytes,
         )
 
 
@@ -98,6 +100,7 @@ def record_snapshot(
     store_name: str = SNAPSHOT_DICT_NAME,
     software_factory_commit: str | None = None,
     software_factory_dirty: str | None = None,
+    rootfs_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Records metadata for a captured snapshot in the registry."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -123,6 +126,7 @@ def record_snapshot(
         "profile": profile,
         "software_factory_commit": software_factory_commit,
         "software_factory_dirty": software_factory_dirty or "0",
+        "rootfs_bytes": rootfs_bytes,
     }
 
     modal_dict = _get_modal_dict(store_name)
@@ -209,6 +213,35 @@ def delete_snapshot(image_id: str, store_name: str = SNAPSHOT_DICT_NAME) -> bool
     return deleted
 
 
+def _measure_rootfs_used_bytes(sandbox: modal.Sandbox) -> int | None:
+    """Measures apparent used bytes of `/` inside a live sandbox before snapshot capture.
+
+    Returns exact used bytes via `df -B1 /` or `df -Pk /`, or None if unavailable.
+    """
+    try:
+        proc = sandbox.exec(
+            "sh",
+            "-c",
+            "df -B1 / 2>/dev/null | awk 'NR==2 {print $3}'",
+        )
+        if proc.wait() == 0:
+            raw = (proc.stdout.read() or "").strip()
+            if raw.isdigit():
+                return int(raw)
+        fallback = sandbox.exec(
+            "sh",
+            "-c",
+            "df -Pk / 2>/dev/null | awk 'NR==2 {print $3}'",
+        )
+        if fallback.wait() == 0:
+            raw_kb = (fallback.stdout.read() or "").strip()
+            if raw_kb.isdigit():
+                return int(raw_kb) * 1024
+    except Exception:
+        return None
+    return None
+
+
 def capture_sandbox_snapshot(
     sandbox_id: str,
     ttl_days: int = 30,
@@ -271,6 +304,8 @@ def capture_sandbox_snapshot(
             "(/var/lib/docker) are ephemeral and not persisted in root filesystem snapshots."
         )
 
+    rootfs_bytes = _measure_rootfs_used_bytes(sandbox)
+
     ttl_seconds = ttl_days * 86400
     if echo:
         print(f"📸 Capturing filesystem snapshot (retention: {ttl_days} days, timeout: {timeout}s)...")
@@ -279,15 +314,18 @@ def capture_sandbox_snapshot(
 
     record: dict[str, Any] | None = None
     try:
-        record = record_snapshot(
-            image_id=image_id,
-            sandbox_id=sandbox_id,
-            name=name,
-            ttl_days=ttl_days,
-            is_vm=is_vm,
-            profile=target_profile,
-            store_name=store_name,
-        )
+        record_kwargs: dict[str, Any] = {
+            "image_id": image_id,
+            "sandbox_id": sandbox_id,
+            "name": name,
+            "ttl_days": ttl_days,
+            "is_vm": is_vm,
+            "profile": target_profile,
+            "store_name": store_name,
+        }
+        if rootfs_bytes is not None:
+            record_kwargs["rootfs_bytes"] = rootfs_bytes
+        record = record_snapshot(**record_kwargs)
     except Exception as exc:
         logger.warning("Failed to record snapshot %s in registry: %s", image_id, exc)
 
@@ -321,4 +359,5 @@ def capture_sandbox_snapshot(
         profile=target_profile,
         software_factory_commit=record.get("software_factory_commit") if record else None,
         software_factory_dirty=record.get("software_factory_dirty") if record else None,
+        rootfs_bytes=rootfs_bytes,
     )

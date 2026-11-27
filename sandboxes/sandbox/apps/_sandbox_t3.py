@@ -14,13 +14,14 @@ from ._idle_thread import create_idle_thread_via_ws
 from ._models import FactoryAppRecord, build_initial_thread_prompt
 from ._prompts import GENERIC_REPO_OPEN_PROMPT
 from ._workspace import (
-    clone_github_repo_in_sandbox,
     configure_nextjs_dev_port,
     ensure_blank_git_workspace,
+    ensure_shared_repo_checkout,
     exec_in_sandbox,
     inject_vault_bundle_in_sandbox,
-    install_repo_dependencies_in_sandbox,
+    shared_repo_base_dir,
 )
+from ._worktree_t3 import start_worktree_thread_for_repo
 
 logger = logging.getLogger(__name__)
 
@@ -98,23 +99,25 @@ def prepare_app_workspace(
     resolve_bundle_fn: Callable[..., Any] | None = None,
     log_cb: Callable[[str], None] | None = None,
 ) -> None:
-    """Clones an existing GitHub repo, scaffolds Next.js App Template, or initializes blank Git."""
+    """Clones/updates shared GitHub base checkout + secrets, or scaffolds Next.js / blank Git."""
     if app.repo:
         effective_env = env or {}
         gh_token = effective_env.get("GH_TOKEN") or effective_env.get("GITHUB_TOKEN")
-        clone_github_repo_in_sandbox(
+        base_dir = app_dir or shared_repo_base_dir(app.repo)
+        ensure_shared_repo_checkout(
             sb,
             repo=app.repo,
             branch=app.branch,
-            app_dir=app_dir,
+            base_dir=base_dir,
             gh_token=gh_token,
             force=force,
+            full_clone=app.full_clone,
         )
         try:
             injected = inject_vault_bundle_in_sandbox(
                 sb,
                 repo=app.repo,
-                app_dir=app_dir,
+                app_dir=base_dir,
                 env=effective_env,
                 resolve_bundle_fn=resolve_bundle_fn,
             )
@@ -124,7 +127,6 @@ def prepare_app_workspace(
             logger.warning("Central Config Store secret injection skipped for %s: %s", app.repo, exc)
             if log_cb:
                 log_cb(f"⚠️ Secret injection from config repo skipped: {exc}")
-        install_repo_dependencies_in_sandbox(sb, app_dir)
         return
 
     if app.template == "nextjs":
@@ -142,8 +144,15 @@ def prepare_app_workspace(
         ensure_blank_git_workspace(sb, app_dir)
 
 
-def cleanup_app_workspace(sb: Any, app_dir: str, *, dev_port: int | None = None) -> None:
-    """Stops app-scoped processes, removes T3 project/threads, and deletes the workspace directory."""
+def cleanup_app_workspace(
+    sb: Any,
+    app_dir: str,
+    *,
+    dev_port: int | None = None,
+    repo_base_dir: str | None = None,
+    keep_base_repo: bool = False,
+) -> None:
+    """Stops app-scoped processes, removes worktree or T3 project, and deletes the workspace."""
     if not app_dir.startswith("/root/") or app_dir.rstrip("/") == "/root":
         raise ValueError(f"Refusing to delete unsafe workspace path: {app_dir!r}")
 
@@ -192,8 +201,16 @@ def cleanup_app_workspace(sb: Any, app_dir: str, *, dev_port: int | None = None)
         "    targets = alive\n"
     )
     exec_in_sandbox(sb, "python3", "-c", kill_script, app_dir, str(dev_port or ""), timeout=20)
-    exec_in_sandbox(sb, "t3", "project", "remove", "--force", app_dir, "--base-dir", "/root/.t3", timeout=30)
-    exec_in_sandbox(sb, "rm", "-rf", app_dir, timeout=30)
+    if repo_base_dir and app_dir != repo_base_dir:
+        exec_in_sandbox(sb, "git", "-C", repo_base_dir, "worktree", "remove", "--force", app_dir, timeout=30)
+        exec_in_sandbox(sb, "rm", "-rf", app_dir, timeout=30)
+        if not keep_base_repo:
+            exec_in_sandbox(sb, "t3", "project", "remove", "--force", repo_base_dir, "--base-dir", "/root/.t3", timeout=30)
+            exec_in_sandbox(sb, "rm", "-rf", repo_base_dir, timeout=30)
+        return
+    if not keep_base_repo:
+        exec_in_sandbox(sb, "t3", "project", "remove", "--force", app_dir, "--base-dir", "/root/.t3", timeout=30)
+        exec_in_sandbox(sb, "rm", "-rf", app_dir, timeout=30)
 
 
 def probe_t3_ready(sb: Any, timeout: int = 15) -> dict[str, Any] | None:
@@ -347,7 +364,7 @@ def _parse_added_project_id(output: str) -> str | None:
     return match.group(1) if match else None
 
 
-def ensure_project_and_start_thread(
+def ensure_worktree_or_app_thread(
     sb: Any,
     app: FactoryAppRecord,
     app_dir: str,
@@ -355,22 +372,38 @@ def ensure_project_and_start_thread(
     instance_id: str,
     model: str,
     thought_level: str | None,
-) -> tuple[str, str | None]:
-    """Registers app_dir with T3 and opens an idle thread (empty repo prompt) or starts a turn."""
+    log_cb: Callable[[str], None] | None = None,
+) -> tuple[str, str | None, str, str | None]:
+    """Registers project, creates a per-conversation T3 worktree for repos, or opens scratch thread."""
+    project_title = app.repo.split("/", 1)[-1] if app.repo else app.title
     add_rc, add_out, add_err = exec_in_sandbox(
-        sb, "t3", "project", "add", "--base-dir", "/root/.t3", "--title", app.title, app_dir, timeout=30
+        sb, "t3", "project", "add", "--base-dir", "/root/.t3", "--title", project_title, app_dir, timeout=30
     )
     added_project_id = _parse_added_project_id(add_out) if add_rc == 0 else None
     list_ok, existing = _probe_project_threads(sb, app_dir)
     if add_rc != 0 and not list_ok:
         raise RuntimeError(f"t3 project add failed: {add_err}")
 
+    if app.repo:
+        thread_id, project_id, wt_path, wt_branch = start_worktree_thread_for_repo(
+            sb,
+            app,
+            app_dir,
+            added_project_id=added_project_id,
+            existing_threads=existing,
+            instance_id=instance_id,
+            model=model,
+            thought_level=thought_level,
+            log_cb=log_cb,
+        )
+        return thread_id, project_id, wt_path, wt_branch
+
     if existing and existing[0].get("threadId"):
-        return str(existing[0]["threadId"]), existing[0].get("projectId") or added_project_id
+        return str(existing[0]["threadId"]), existing[0].get("projectId") or added_project_id, app_dir, None
 
     if not app.prompt.strip() and not app.web_app:
         try:
-            return create_idle_thread_via_ws(
+            thread_id, project_id = create_idle_thread_via_ws(
                 sb,
                 app_dir=app_dir,
                 project_id=added_project_id,
@@ -379,6 +412,7 @@ def ensure_project_and_start_thread(
                 model=model,
                 thought_level=thought_level,
             )
+            return thread_id, project_id, app_dir, None
         except Exception as exc:
             logger.warning("Idle thread RPC failed for %s; falling back to generic prompt: %s", app_dir, exc)
 
@@ -405,7 +439,7 @@ def ensure_project_and_start_thread(
     if rc != 0:
         recovered = list_project_threads(sb, app_dir)
         if recovered and recovered[0].get("threadId"):
-            return str(recovered[0]["threadId"]), recovered[0].get("projectId") or added_project_id
+            return str(recovered[0]["threadId"]), recovered[0].get("projectId") or added_project_id, app_dir, None
         raise RuntimeError(f"t3 thread start failed: {err or out}")
 
     started = json.loads(out)
@@ -413,7 +447,28 @@ def ensure_project_and_start_thread(
     project_id = started.get("projectId") or (started.get("projection") or {}).get("projectId") or added_project_id
     if not thread_id:
         raise RuntimeError("t3 thread start did not return a threadId.")
-    return str(thread_id), project_id
+    return str(thread_id), project_id, app_dir, None
+
+
+def ensure_project_and_start_thread(
+    sb: Any,
+    app: FactoryAppRecord,
+    app_dir: str,
+    *,
+    instance_id: str,
+    model: str,
+    thought_level: str | None,
+) -> tuple[str, str | None]:
+    """Registers app_dir with T3 and opens an idle thread (empty repo prompt) or starts a turn."""
+    thread_id, project_id, _, _ = ensure_worktree_or_app_thread(
+        sb,
+        app,
+        app_dir,
+        instance_id=instance_id,
+        model=model,
+        thought_level=thought_level,
+    )
+    return thread_id, project_id
 
 
 def mint_pairing_token(sb: Any) -> str:

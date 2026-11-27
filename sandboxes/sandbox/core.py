@@ -84,6 +84,7 @@ class SnapshotResponse(BaseModel):
     ttl_days: int
     ttl_seconds: int
     terminated: bool
+    rootfs_bytes: int | None = None
 
 
 def validate_launch_request(req: LaunchRequest) -> None:

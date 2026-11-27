@@ -170,7 +170,10 @@ class TestLaunchCoordinator(unittest.TestCase):
             launch_req_arg = mock_launch.call_args[0][0]
             self.assertTrue(launch_req_arg.no_cloudflare)
             self.assertTrue(launch_req_arg.t3)
-            self.assertFalse(launch_req_arg.modal)
+            self.assertTrue(launch_req_arg.modal)
+            self.assertTrue(launch_req_arg.sops)
+            self.assertTrue(launch_req_arg.vm)
+            self.assertEqual(launch_req_arg.memory, 1)
             self.assertIsNone(launch_req_arg.repo)
 
             cmds = [" ".join(cmd) for cmd, _ in fake_sb.calls]

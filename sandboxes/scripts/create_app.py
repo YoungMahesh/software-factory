@@ -9,9 +9,12 @@ import sys
 
 # Ensure sandboxes package root is on sys.path when invoked directly as script
 _SANDBOXES_ROOT = Path(__file__).resolve().parent.parent
-for _candidate in (_SANDBOXES_ROOT, Path("/opt/sandboxes")):
-    if _candidate.is_dir() and str(_candidate) not in sys.path:
-        sys.path.insert(0, str(_candidate))
+if _SANDBOXES_ROOT.is_dir():
+    _root_str = str(_SANDBOXES_ROOT)
+    if sys.path[:1] != [_root_str]:
+        sys.path.insert(0, _root_str)
+elif Path("/opt/sandboxes").is_dir() and "/opt/sandboxes" not in sys.path:
+    sys.path.append("/opt/sandboxes")
 
 from sandbox.app_scaffolder import (
     AppScaffoldRequest,

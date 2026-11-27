@@ -1,4 +1,4 @@
-"""Web API routes and router for Modal Sandbox Runner Control Plane.
+"""Web API routes and router for Sandbox Web Dashboard Control Plane.
 
 Provides REST endpoints for inspecting and terminating sandboxes, capturing
 and listing filesystem snapshots, launching from snapshots, Factory Apps, and
@@ -80,14 +80,14 @@ def check_authentication(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
-            headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
+            headers={"WWW-Authenticate": 'Basic realm="Sandbox Web Dashboard"'},
         )
 
     if not auth_header.startswith("Basic "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication scheme; expected Basic authentication",
-            headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
+            headers={"WWW-Authenticate": 'Basic realm="Sandbox Web Dashboard"'},
         )
 
     try:
@@ -98,14 +98,14 @@ def check_authentication(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Basic authentication encoding",
-            headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
+            headers={"WWW-Authenticate": 'Basic realm="Sandbox Web Dashboard"'},
         )
 
     if not (secrets.compare_digest(username, expected_user) and secrets.compare_digest(password, expected_pass)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect authentication credentials",
-            headers={"WWW-Authenticate": 'Basic realm="Modal Sandbox Runner"'},
+            headers={"WWW-Authenticate": 'Basic realm="Sandbox Web Dashboard"'},
         )
 
 
@@ -160,8 +160,8 @@ class FreshSandboxLaunchPayload(BaseModel):
     full_clone: bool = False
     name: str | None = None
     profile: str | None = None
-    vm: bool = False
-    memory: int | None = None
+    vm: bool = True
+    memory: int | None = 1
     no_cloudflare: bool = False
     t3: bool = True
     t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
@@ -230,6 +230,11 @@ def _build_fresh_launch_request(payload: FreshSandboxLaunchPayload) -> LaunchReq
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid launch mode '{payload.mode}'; expected 'repo' or 'standalone'.")
 
+    resolved_memory = (
+        None
+        if (not payload.vm and "memory" not in payload.model_fields_set)
+        else payload.memory
+    )
     return LaunchRequest(
         repo=payload.repo.strip() if payload.repo else None,
         testing=payload.testing,
@@ -237,7 +242,7 @@ def _build_fresh_launch_request(payload: FreshSandboxLaunchPayload) -> LaunchReq
         full_clone=payload.full_clone,
         name=payload.name.strip() if payload.name else None,
         vm=payload.vm,
-        memory=payload.memory,
+        memory=resolved_memory,
         no_cloudflare=payload.no_cloudflare,
         t3=payload.t3,
         t3_usage_volume=payload.t3_usage_volume,
@@ -347,9 +352,9 @@ def api_terminate_sandbox(sandbox_id: str, profile: str | None = Query(None, des
             detail=result.get("error", "Termination failed"),
         )
     try:
-        get_default_store().mark_prime_stopped(sandbox_id)
+        get_default_store().delete_apps_for_sandbox(sandbox_id)
     except Exception as exc:
-        logger.debug("Skipping prime state sync on terminate for %s: %s", sandbox_id, exc)
+        logger.debug("Skipping Factory App cleanup on terminate for %s: %s", sandbox_id, exc)
     return result
 
 
@@ -448,7 +453,7 @@ router.include_router(scratchpad_router)
 def create_app() -> FastAPI:
     """Constructs the standalone FastAPI app for testing and inspection."""
     app_instance = FastAPI(
-        title="Modal Sandbox Runner Web UI",
+        title="Sandbox Web Dashboard",
         description="Web UI and REST API for managing Modal sandboxes and filesystem snapshots across multi-tenant profiles.",
         version="1.0.0",
     )

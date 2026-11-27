@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Literal
+
+import modal
 
 from sandbox.core import LaunchRequest, LaunchResponse
 
@@ -13,7 +15,7 @@ from ._models import (
     FactoryAppRecord,
     LaunchRequestRecord,
     LaunchStatus,
-    prime_compatibility_key,
+    prime_compatibility_key_for_app,
     prime_sandbox_app_name,
 )
 from ._sandbox_t3 import probe_t3_ready
@@ -46,6 +48,44 @@ def is_prime_sandbox_id(store: FactoryStateStore, sandbox_id: str | None) -> boo
     ))
 
 
+def has_sibling_repo_app(store: FactoryStateStore, app: FactoryAppRecord) -> bool:
+    """Returns True when another app on the same sandbox shares app.repo_base_path."""
+    if not (app.sandbox_id and app.repo_base_path):
+        return False
+    return any(
+        other.app_id != app.app_id
+        and other.sandbox_id == app.sandbox_id
+        and other.repo_base_path == app.repo_base_path
+        for other in store.list_apps()
+    )
+
+
+def probe_sandbox_liveness(
+    client_for_profile_fn: Callable[[str], Any],
+    sandbox_from_id_fn: Callable[..., Any],
+    sandbox_id: str | None,
+    profile: str | None,
+) -> Literal["running", "terminated", "unknown"]:
+    """Checks whether a sandbox is alive, confirmed terminated/missing, or transiently unreachable."""
+    if not sandbox_id:
+        return "unknown"
+    try:
+        client = client_for_profile_fn(profile) if profile else None
+        sb = sandbox_from_id_fn(sandbox_id, client=client) if client else sandbox_from_id_fn(sandbox_id)
+    except modal.exception.NotFoundError:
+        return "terminated"
+    except Exception:
+        return "unknown"
+    if sb is None:
+        return "terminated"
+    try:
+        return "running" if sb.poll() is None else "terminated"
+    except modal.exception.NotFoundError:
+        return "terminated"
+    except Exception:
+        return "unknown"
+
+
 def acquire_sandbox_for_app(
     *,
     store: FactoryStateStore,
@@ -64,7 +104,7 @@ def acquire_sandbox_for_app(
     stale_secs: float = PRIME_PROVISION_STALE_SECS,
 ) -> AcquiredSandbox:
     """Resumes an app's preserved sandbox, reuses an active Prime Sandbox, or provisions one."""
-    prime_key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
+    prime_key = app.prime_key or prime_compatibility_key_for_app(app)
     resume_step = launch.resume_from_step
     if resume_step in resumable_steps and app.sandbox_id and app.t3_url:
         existing_sb = get_running_sandbox(app.sandbox_id, app.profile)
@@ -126,16 +166,30 @@ def acquire_sandbox_for_app(
     sb = None
     launch_resp = None
     try:
+        effective_vm = bool(app.vm or app.xfce)
+        effective_rn = bool(app.mobile_app or app.react_native)
         req = LaunchRequest(
             repo=None,
-            name=prime_sandbox_app_name(vm=app.vm, mobile_app=app.mobile_app),
-            vm=app.vm,
-            no_cloudflare=True,
-            t3=True,
-            no_t3_persist=no_t3_persist,
-            react_native=app.mobile_app,
-            modal=False,
+            testing=app.testing,
+            full_clone=app.full_clone,
+            name=prime_sandbox_app_name(vm=effective_vm, mobile_app=effective_rn),
+            vm=effective_vm,
+            memory=app.memory if effective_vm else None,
+            no_cloudflare=app.no_cloudflare,
+            t3=app.t3,
+            t3_port=app.t3_port,
+            t3_ssh_host=app.t3_ssh_host,
+            t3_usage_volume=app.t3_usage_volume,
+            no_t3_persist=no_t3_persist or app.no_t3_persist,
+            react_native=effective_rn,
+            metro_port=app.metro_port,
+            modal=app.modal,
             profile=app.profile,
+            sops=app.sops,
+            browser=app.browser,
+            xfce=app.xfce,
+            xfce_port=app.xfce_port,
+            xfce_password=app.xfce_password,
         )
         running = launch_fn(req, log_cb=log_cb)
         sb, launch_resp = (running.sandbox, running.response) if hasattr(running, "response") else running

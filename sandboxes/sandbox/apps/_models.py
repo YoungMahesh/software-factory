@@ -15,9 +15,14 @@ from ._prompts import (  # noqa: F401
     build_initial_thread_prompt,
     derive_app_slug,
     derive_app_title,
+    derive_worktree_branch,
     prime_compatibility_key,
+    prime_compatibility_key_for_app,
     prime_sandbox_app_name,
 )
+from ._workspace import shared_repo_base_dir
+from sandbox.config import DEFAULT_METRO_PORT, DEFAULT_T3_PORT, DEFAULT_XFCE_PORT
+from shared.image import DEFAULT_T3_USAGE_VOLUME
 
 DEFAULT_BUILDER_PROVIDER = "antigravity"
 DEFAULT_BUILDER_MODEL = "gemini-4-hydrogen"
@@ -89,7 +94,24 @@ class CreateAppPayload(BaseModel):
     template: AppTemplateKind = "nextjs"
     web_app: bool | None = None
     mobile_app: bool = False
-    vm: bool = False
+    vm: bool = True
+    memory: int | None = 1
+    testing: bool = False
+    full_clone: bool = False
+    t3: bool = True
+    no_t3_persist: bool = False
+    t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
+    t3_port: int = DEFAULT_T3_PORT
+    t3_ssh_host: str | None = None
+    metro_port: int = DEFAULT_METRO_PORT
+    modal: bool = True
+    sops: bool = True
+    browser: bool = False
+    react_native: bool = False
+    no_cloudflare: bool = True
+    xfce: bool = False
+    xfce_port: int = DEFAULT_XFCE_PORT
+    xfce_password: str | None = None
     profile: str | None = None
     provider: str = DEFAULT_BUILDER_PROVIDER
     model: str = DEFAULT_BUILDER_MODEL
@@ -101,8 +123,21 @@ class CreateAppPayload(BaseModel):
         self.repo = self.repo.strip() if self.repo and self.repo.strip() else None
         self.branch = self.branch.strip() if self.branch and self.branch.strip() else None
         self.name = self.name.strip() if self.name and self.name.strip() else None
+        self.t3_ssh_host = self.t3_ssh_host.strip() if self.t3_ssh_host and self.t3_ssh_host.strip() else None
+        self.xfce_password = self.xfce_password.strip() if self.xfce_password and self.xfce_password.strip() else None
+        self.t3_usage_volume = (self.t3_usage_volume or DEFAULT_T3_USAGE_VOLUME).strip() or DEFAULT_T3_USAGE_VOLUME
         if self.repo is None and not self.prompt:
             raise ValueError("Prompt must not be empty.")
+        if not self.t3:
+            raise ValueError("T3 Code Server must remain enabled for Builder.")
+        if self.xfce:
+            self.vm = True
+        if not self.vm:
+            if "memory" in self.model_fields_set and self.memory is not None:
+                raise ValueError("--memory can only be used with VM Sandbox mode.")
+            self.memory = None
+        elif self.memory is not None and self.memory < 1:
+            raise ValueError("--memory must be at least 1 GB.")
         return self
 
     def resolved_web_app(self) -> bool:
@@ -129,10 +164,30 @@ class FactoryAppRecord(BaseModel):
     prompt: str = ""
     repo: str | None = None
     branch: str | None = None
+    worktree_branch: str | None = None
+    workspace_path: str | None = None
+    repo_base_path: str | None = None
     template: AppTemplateKind = "nextjs"
     web_app: bool = True
     mobile_app: bool = False
-    vm: bool = False
+    vm: bool = True
+    memory: int | None = 1
+    testing: bool = False
+    full_clone: bool = False
+    t3: bool = True
+    no_t3_persist: bool = False
+    t3_usage_volume: str = DEFAULT_T3_USAGE_VOLUME
+    t3_port: int = DEFAULT_T3_PORT
+    t3_ssh_host: str | None = None
+    metro_port: int = DEFAULT_METRO_PORT
+    modal: bool = True
+    sops: bool = True
+    browser: bool = False
+    react_native: bool = False
+    no_cloudflare: bool = True
+    xfce: bool = False
+    xfce_port: int = DEFAULT_XFCE_PORT
+    xfce_password: str | None = None
     profile: str | None = None
     provider_instance_id: str | None = None
     provider: str = DEFAULT_BUILDER_PROVIDER
@@ -287,7 +342,7 @@ DEFAULT_ANTIGRAVITY_MODELS: list[ModelChoice] = [
             ModelOption(id="high", label="High"),
             ModelOption(id="xhigh", label="Extra"),
         ],
-        default_thought_level="high",
+        default_thought_level="xhigh",
     ),
     ModelChoice(
         provider="antigravity",
@@ -313,6 +368,93 @@ DEFAULT_ANTIGRAVITY_MODELS: list[ModelChoice] = [
         default_thought_level="high",
     ),
 ]
+
+
+def resolve_default_thought_level(
+    provider: str,
+    model: str,
+    explicit: str | None = None,
+) -> str | None:
+    """Returns explicit thought_level when provided, else the catalog default for provider/model."""
+    clean = (explicit or "").strip()
+    if clean:
+        return clean
+    for choice in DEFAULT_ANTIGRAVITY_MODELS:
+        if choice.provider == provider and choice.model == model:
+            return choice.default_thought_level
+    return None
+
+
+def build_factory_app_record(
+    payload: CreateAppPayload,
+    *,
+    app_id: str,
+    request_id: str,
+    repo_full: str | None,
+) -> FactoryAppRecord:
+    """Constructs a FactoryAppRecord from a validated CreateAppPayload and resolved repo."""
+    slug = derive_app_slug(payload.prompt, payload.name, repo=repo_full)
+    title = derive_app_title(payload.prompt, payload.name, repo=repo_full)
+    profile = payload.profile or None
+    web_app = payload.resolved_web_app()
+    mobile_app = bool(payload.mobile_app) if (repo_full is None and payload.template == "nextjs") else False
+    effective_vm = bool(payload.vm or payload.xfce)
+    effective_rn = bool(payload.react_native or mobile_app)
+    effective_memory = payload.memory if effective_vm else None
+    provider = payload.provider or DEFAULT_BUILDER_PROVIDER
+    model = payload.model or DEFAULT_BUILDER_MODEL
+    thought_level = resolve_default_thought_level(provider, model, payload.thought_level)
+    repo_base_path = shared_repo_base_dir(repo_full) if repo_full else None
+    worktree_branch = derive_worktree_branch(slug, app_id) if repo_full else None
+    prime_key = prime_compatibility_key_for_app(
+        payload.model_copy(
+            update={
+                "profile": profile,
+                "vm": effective_vm,
+                "mobile_app": mobile_app,
+                "react_native": effective_rn,
+                "memory": effective_memory,
+            }
+        )
+    )
+    return FactoryAppRecord(
+        app_id=app_id,
+        slug=slug,
+        title=title,
+        prompt=payload.prompt,
+        repo=repo_full,
+        branch=payload.branch if repo_full else None,
+        worktree_branch=worktree_branch,
+        repo_base_path=repo_base_path,
+        template=payload.template,
+        web_app=web_app,
+        mobile_app=mobile_app,
+        vm=effective_vm,
+        memory=effective_memory,
+        testing=payload.testing,
+        full_clone=payload.full_clone,
+        t3=payload.t3,
+        no_t3_persist=payload.no_t3_persist,
+        t3_usage_volume=payload.t3_usage_volume,
+        t3_port=payload.t3_port,
+        t3_ssh_host=payload.t3_ssh_host,
+        metro_port=payload.metro_port,
+        modal=payload.modal,
+        sops=payload.sops,
+        browser=payload.browser,
+        react_native=effective_rn,
+        no_cloudflare=payload.no_cloudflare,
+        xfce=payload.xfce,
+        xfce_port=payload.xfce_port,
+        xfce_password=payload.xfce_password,
+        profile=profile,
+        prime_key=prime_key,
+        provider=provider,
+        model=model,
+        thought_level=thought_level,
+        status="provisioning",
+        latest_request_id=request_id,
+    )
 
 
 def initial_launch_steps(*, resume_from: LaunchStatus | None = None) -> list[LaunchStep]:

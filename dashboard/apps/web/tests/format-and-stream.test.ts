@@ -3,6 +3,7 @@ import type { FreshLaunchStreamEvent } from "@dashboard/types";
 import {
   consumeSseStream,
   extractApiError,
+  formatBytes,
   formatCostBreakdown,
   formatDurationCompact,
   formatUsdCost,
@@ -134,5 +135,11 @@ describe("format and SSE stream utilities", () => {
       },
     );
     expect(summary).toEqual({ totalUsd: 0.83, knownCount: 1, pendingCount: 1 });
+
+    expect(formatBytes(null)).toBe("—");
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(1024 * 1024 * 256)).toBe("256 MB");
+    expect(formatBytes(2.5 * 1024 ** 3)).toBe("2.5 GB");
   });
 });

@@ -55,10 +55,10 @@ Before Next.js cutover, `modal-sandbox infra caddy --wildcard` proxies the apex 
 
 The Next.js dashboard provides four App Router views:
 
-- **Builder (`/`)**: Prompt-first Factory App launcher with **Prime Sandbox** reuse per `(profile, vm, mobile_app)` tuple, manually refreshed **GitHub Repository Catalog** picker (`GET /api/github/repos`, `POST /api/github/repos/refresh`), builder model/thought-level selection (`gemini-4-hydrogen` default), opt-in `web_app` mode, live launch progress, and one-click T3 Code redirect (`#token=`).
-- **Sandboxes (`/sandboxes`)**: Active sandbox discovery across apps/profiles, **Prime** badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal cost estimates (`GET /api/sandboxes/costs`), SSE streaming launch modal, terminate actions, and filesystem snapshot capture.
-- **Snapshots (`/snapshots`)**: Persistent snapshot registry listing, snapshot resume modal, and registry record deletion.
-- **Scratchpad (`/scratchpad`)**: Split **Ideas** (`config/scratchpad/` with AI-assisted refinement) and **Raw** (`config/raw/` verbatim capture) note views backed by a persisted `factory-state-v1` cache.
+- **Builder (`/`)**: Prompt-first Factory App launcher with **Prime Sandbox** reuse partitioned by runtime capabilities (`vm=True`, `memory=1`, `t3=True`, `modal=True`, `sops=True`, and full sandbox-creation options under `Advanced`), manually refreshed **GitHub Repository Catalog** picker (`GET /api/github/repos`, `POST /api/github/repos/refresh`), builder model/thought-level selection (`gemini-4-hydrogen` with `Thinking: Extra` default), T3-managed Git worktrees per repo conversation (running `pnpm install` only when `web_app` is enabled), automatic card removal on sandbox termination, live launch progress, and one-click T3 Code redirect (`#token=`).
+- **Sandboxes (`/sandboxes`)**: Active sandbox discovery across apps/profiles, **Prime** badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal cost estimates (`GET /api/sandboxes/costs`), SSE streaming launch modal (`vm=True`, `memory=1` default), terminate actions, and filesystem snapshot capture.
+- **Snapshots (`/snapshots`)**: Persistent snapshot registry listing with capture-time apparent **Rootfs Size** (`df`), snapshot resume modal, and registry record deletion.
+- **Scratchpad (`/scratchpad`)**: Split **Ideas** (`config/scratchpad/` with AI-assisted refinement) and **Raw** (`config/raw/` verbatim capture) note views backed by a persisted `factory-state-v1` cache, with copy, Builder load, and delete actions.
 
 Factory App, Launch Request, Repository Catalog Cache, and Scratchpad Catalog Cache state is stored in `modal.Volume` (`factory-state-v1`).
 
@@ -83,6 +83,7 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 | `GET` | `/api/scratchpad/notes/{filename}` | Basic | Read an Idea Note or Raw Note (`?section=ideas|raw`), fetching lazily from GitHub on cache miss |
 | `POST` | `/api/scratchpad/suggest` | Basic | Refine raw Idea draft into title + Markdown via free OpenCode CLI model |
 | `POST` | `/api/scratchpad/notes` | Basic | Commit an Idea Note (`config/scratchpad/<slug>.md`) or verbatim Raw Note (`config/raw/<slug>.md`) |
+| `DELETE` | `/api/scratchpad/notes/{filename}` | Basic | Delete an Idea Note or Raw Note (`?section=ideas|raw`) from GitHub and update cache |
 | `GET` | `/health` | None | Control plane liveness |
 | `GET` | `/api/version` | Basic | Deployed factory provenance |
 | `GET` | `/api/profiles` | Basic | Modal workspace profiles |

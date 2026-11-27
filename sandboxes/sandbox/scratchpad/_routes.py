@@ -20,6 +20,7 @@ from sandbox.env_store import DEFAULT_CONFIG_REPO
 from ._ai import MAX_RAW_NOTE_CHARS, suggest_scratchpad_note
 from ._github import (
     commit_scratchpad_note,
+    delete_scratchpad_note,
     list_scratchpad_notes,
     read_scratchpad_note,
     resolve_config_repo_context,
@@ -41,6 +42,7 @@ _SUGGEST_FN: Callable[..., Any] | None = None
 _LIST_NOTES_FN: Callable[..., Any] | None = None
 _READ_NOTE_FN: Callable[..., Any] | None = None
 _COMMIT_NOTE_FN: Callable[..., Any] | None = None
+_DELETE_NOTE_FN: Callable[..., Any] | None = None
 _CONTEXT_FN: Callable[..., tuple[str, str]] | None = None
 _STORE_FN: Callable[[], Any] | None = None
 
@@ -51,15 +53,17 @@ def set_scratchpad_overrides(
     list_notes_fn: Callable[..., Any] | None = None,
     read_note_fn: Callable[..., Any] | None = None,
     commit_note_fn: Callable[..., Any] | None = None,
+    delete_note_fn: Callable[..., Any] | None = None,
     context_fn: Callable[..., tuple[str, str]] | None = None,
     store_fn: Callable[[], Any] | None = None,
 ) -> None:
     """Overrides backend collaborators and state store for unit testing."""
-    global _SUGGEST_FN, _LIST_NOTES_FN, _READ_NOTE_FN, _COMMIT_NOTE_FN, _CONTEXT_FN, _STORE_FN
+    global _SUGGEST_FN, _LIST_NOTES_FN, _READ_NOTE_FN, _COMMIT_NOTE_FN, _DELETE_NOTE_FN, _CONTEXT_FN, _STORE_FN
     _SUGGEST_FN = suggest_fn
     _LIST_NOTES_FN = list_notes_fn
     _READ_NOTE_FN = read_note_fn
     _COMMIT_NOTE_FN = commit_note_fn
+    _DELETE_NOTE_FN = delete_note_fn
     _CONTEXT_FN = context_fn
     _STORE_FN = store_fn
 
@@ -402,3 +406,41 @@ def post_scratchpad_note(payload: ScratchpadSaveRequest) -> ScratchpadSaveRespon
         html_url=saved.html_url,
         config_repo=config_repo,
     )
+
+
+@scratchpad_router.delete("/notes/{filename}")
+def delete_scratchpad_note_route(
+    filename: str,
+    section: ScratchpadSection = Query("ideas", description="Scratchpad section ('ideas' or 'raw')"),
+) -> dict[str, Any]:
+    """Deletes an Idea Note (config/scratchpad/) or Raw Note (config/raw/) and removes it from cache."""
+    try:
+        clean_section, _ = resolve_section_dir(section)
+        clean_filename = validate_note_filename(filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        owner, token = _resolve_context()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    delete_fn = _DELETE_NOTE_FN or delete_scratchpad_note
+    try:
+        deleted_path = delete_fn(owner, filename=clean_filename, token=token, section=clean_section)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Failed deleting %s note %s: %s", clean_section, clean_filename, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    config_repo = f"{owner}/{DEFAULT_CONFIG_REPO}"
+    _get_store().delete_scratchpad_note_cache(config_repo, clean_section, clean_filename)
+    return {
+        "section": clean_section,
+        "filename": clean_filename,
+        "path": deleted_path,
+        "deleted": True,
+    }

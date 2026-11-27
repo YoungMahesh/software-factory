@@ -96,7 +96,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </Link>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-lg font-semibold tracking-tight text-ink flex flex-wrap items-center gap-1.5 sm:gap-2 leading-tight">
-                <span className="truncate">Modal Sandbox Runner</span>
+                <span className="truncate">Sandbox Web Dashboard</span>
                 <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary-active font-mono">
                   Control Plane
                 </span>

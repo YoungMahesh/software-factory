@@ -1,4 +1,4 @@
-# Sandbox Dashboard
+# Sandbox Web Dashboard
 
 Next.js 16 + React 19 web dashboard and same-origin Basic-Auth BFF proxy for the Modal Sandbox Control Plane ([sandboxes/sandbox/web.py](../sandboxes/sandbox/web.py) and [sandboxes/sandbox/function.py](../sandboxes/sandbox/function.py)).
 

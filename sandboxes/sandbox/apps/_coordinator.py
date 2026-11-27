@@ -25,8 +25,6 @@ from ._github_repos import (
 )
 from ._models import (
     DEFAULT_ANTIGRAVITY_MODELS,
-    DEFAULT_BUILDER_MODEL,
-    DEFAULT_BUILDER_PROVIDER,
     CreateAppPayload,
     FactoryAppRecord,
     FactoryAppView,
@@ -37,14 +35,13 @@ from ._models import (
     OpenAppResponse,
     PrimeSandboxView,
     build_direct_chat_url,
-    derive_app_slug,
-    derive_app_title,
+    build_factory_app_record,
     initial_launch_steps,
-    prime_compatibility_key,
+    prime_compatibility_key_for_app,
     utc_now_iso,
 )
 from ._pipeline import RESUMABLE_STEPS, PipelineDeps, run_launch_pipeline
-from ._prime import is_prime_sandbox_id
+from ._prime import has_sibling_repo_app, is_prime_sandbox_id, probe_sandbox_liveness
 from ._sandbox_t3 import cleanup_app_workspace, mint_pairing_token
 from ._store import FactoryStateStore, get_default_store
 
@@ -148,34 +145,9 @@ class LaunchCoordinator:
             default_org = (env.get("GH_ORG_NAME") or DEFAULT_ORG or "").strip() or None
             repo_full, _, _ = normalize_repo_spec(payload.repo, default_org=default_org)
 
-        slug = derive_app_slug(payload.prompt, payload.name, repo=repo_full)
-        title = derive_app_title(payload.prompt, payload.name, repo=repo_full)
         app_id = f"app_{uuid.uuid4().hex[:12]}"
         request_id = f"req_{uuid.uuid4().hex[:12]}"
-        profile = payload.profile or None
-        web_app = payload.resolved_web_app()
-        mobile_app = bool(payload.mobile_app) if (repo_full is None and payload.template == "nextjs") else False
-        prime_key = prime_compatibility_key(profile, payload.vm, mobile_app)
-
-        app = FactoryAppRecord(
-            app_id=app_id,
-            slug=slug,
-            title=title,
-            prompt=payload.prompt,
-            repo=repo_full,
-            branch=payload.branch if repo_full else None,
-            template=payload.template,
-            web_app=web_app,
-            mobile_app=mobile_app,
-            vm=payload.vm,
-            profile=profile,
-            prime_key=prime_key,
-            provider=payload.provider or DEFAULT_BUILDER_PROVIDER,
-            model=payload.model or DEFAULT_BUILDER_MODEL,
-            thought_level=payload.thought_level or None,
-            status="provisioning",
-            latest_request_id=request_id,
-        )
+        app = build_factory_app_record(payload, app_id=app_id, request_id=request_id, repo_full=repo_full)
         launch = LaunchRequestRecord(
             request_id=request_id,
             app_id=app_id,
@@ -213,12 +185,18 @@ class LaunchCoordinator:
             resume_step = app.failed_step
         elif existing_sb is not None:
             try:
-                cleanup_app_workspace(existing_sb, f"/root/{app.slug}", dev_port=app.dev_port)
+                cleanup_app_workspace(
+                    existing_sb,
+                    app.workspace_path or app.repo_base_path or f"/root/{app.slug}",
+                    dev_port=app.dev_port,
+                    repo_base_dir=app.repo_base_path,
+                    keep_base_repo=has_sibling_repo_app(self.store, app),
+                )
             except Exception as exc:
                 logger.warning("Best-effort workspace cleanup during relaunch failed for %s: %s", app_id, exc)
 
         request_id = f"req_{uuid.uuid4().hex[:12]}"
-        prime_key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
+        prime_key = app.prime_key or prime_compatibility_key_for_app(app)
         if resume_step is not None:
             updated_app = app.model_copy(
                 update={
@@ -356,10 +334,30 @@ class LaunchCoordinator:
         return self._to_app_view(app, snapshots)
 
     def list_apps_with_status(self, *, profile: str | None = None) -> list[FactoryAppView]:
-        """Lists Factory Apps enriched with live sandbox running/stopped state and snapshots."""
+        """Lists Factory Apps, auto-pruning ready apps whose sandbox is confirmed terminated."""
         apps = self.store.list_apps()
+        liveness_cache: dict[tuple[str, str | None], Literal["running", "terminated", "unknown"]] = {}
+        pruned_sandboxes: set[str] = set()
+        for app in apps:
+            if app.status != "ready" or not app.sandbox_id or app.sandbox_id in pruned_sandboxes:
+                continue
+            key = (app.sandbox_id, app.profile)
+            state = liveness_cache.get(key)
+            if state is None:
+                state = probe_sandbox_liveness(
+                    self.client_for_profile_fn,
+                    self.sandbox_from_id_fn,
+                    app.sandbox_id,
+                    app.profile,
+                )
+                liveness_cache[key] = state
+            if state == "terminated":
+                self.store.delete_apps_for_sandbox(app.sandbox_id, keep_provisioning=True)
+                pruned_sandboxes.add(app.sandbox_id)
+
+        remaining = self.store.list_apps() if pruned_sandboxes else apps
         snapshots = self._snapshot_index(profile=profile)
-        return [self._to_app_view(app, snapshots) for app in apps]
+        return [self._to_app_view(app, snapshots) for app in remaining]
 
     def list_primes_with_status(self, *, profile: str | None = None) -> list[PrimeSandboxView]:
         """Lists tracked Prime Sandboxes enriched with live running status and hosted app counts."""
@@ -429,7 +427,13 @@ class LaunchCoordinator:
                 self._terminate_quietly(app.sandbox_id, profile=app.profile, reason=f"delete:{app_id}")
             else:
                 try:
-                    cleanup_app_workspace(sb, f"/root/{app.slug}", dev_port=app.dev_port)
+                    cleanup_app_workspace(
+                        sb,
+                        app.workspace_path or app.repo_base_path or f"/root/{app.slug}",
+                        dev_port=app.dev_port,
+                        repo_base_dir=app.repo_base_path,
+                        keep_base_repo=has_sibling_repo_app(self.store, app),
+                    )
                 except Exception as exc:
                     logger.warning("Failed cleaning workspace /root/%s on delete: %s", app.slug, exc)
         return self.store.delete_app(app_id)

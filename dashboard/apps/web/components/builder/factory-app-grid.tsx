@@ -1,7 +1,6 @@
 "use client";
 
 import type { FactoryAppView, SandboxCost } from "@dashboard/types";
-import { X } from "lucide-react";
 import { formatDate, formatUsdCost } from "@/lib/format";
 import type { SnapshotTarget } from "@/components/modals/snapshot-create-modal";
 import type { SnapshotLaunchTarget } from "@/components/modals/snapshot-launch-modal";
@@ -14,7 +13,6 @@ export function FactoryAppGrid({
   onTrackProgress,
   onRelaunch,
   onResumeSnapshot,
-  onDelete,
 }: {
   apps: FactoryAppView[];
   sandboxCosts?: Record<string, SandboxCost>;
@@ -23,7 +21,6 @@ export function FactoryAppGrid({
   onTrackProgress: (requestId: string) => void;
   onRelaunch: (app: FactoryAppView, resume: boolean) => void;
   onResumeSnapshot: (target: SnapshotLaunchTarget) => void;
-  onDelete: (app: FactoryAppView) => void;
 }) {
   return (
     <section className="space-y-4">
@@ -66,7 +63,7 @@ export function FactoryAppGrid({
                         {app.title}
                       </h4>
                       <div className="text-xs font-mono text-muted truncate">
-                        /root/{app.slug}
+                        {app.workspace_path || `/root/${app.slug}`}
                       </div>
                     </div>
                     <span
@@ -88,9 +85,9 @@ export function FactoryAppGrid({
                     <span className="px-2 py-0.5 rounded bg-surface-card text-body-strong border border-hairline max-w-full truncate">
                       {workspaceBadge}
                     </span>
-                    {app.repo && app.branch && (
+                    {(app.worktree_branch || (app.repo && app.branch)) && (
                       <span className="px-2 py-0.5 rounded bg-success/15 text-ink max-w-full truncate">
-                        @ {app.branch}
+                        @ {app.worktree_branch || app.branch}
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-primary/10 text-primary-active max-w-full truncate">
@@ -212,15 +209,6 @@ export function FactoryAppGrid({
                           Resume Snapshot
                         </button>
                       )}
-                    <button
-                      type="button"
-                      onClick={() => onDelete(app)}
-                      title="Delete Factory App"
-                      aria-label={`Delete ${app.title}`}
-                      className="px-2.5 py-2 sm:py-1.5 rounded-lg bg-canvas hover:bg-error/15 text-muted hover:text-error border border-hairline"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
               </div>

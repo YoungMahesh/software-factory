@@ -229,3 +229,26 @@ def commit_scratchpad_note(
         )
 
     raise RuntimeError(f"Could not resolve a unique filename for {clean_section} note '{clean_title}'.")
+
+
+def delete_scratchpad_note(
+    owner: str,
+    *,
+    filename: str,
+    token: str,
+    section: ScratchpadSection = "ideas",
+    config_repo: str = DEFAULT_CONFIG_REPO,
+) -> str:
+    """Deletes an Idea Note or Raw Note Markdown file from the Central Config Store on GitHub."""
+    clean_section, directory = resolve_section_dir(section)
+    clean_name = validate_note_filename(filename)
+    rel_path = f"{directory}/{clean_name}"
+    store = CentralConfigStore(owner, token, config_repo)
+    metadata = store._file_metadata(rel_path)
+    if metadata is None:
+        raise FileNotFoundError(f"Scratchpad note '{clean_name}' not found in {rel_path}.")
+    sha = str(metadata.get("sha") or "").strip()
+    if not sha:
+        raise RuntimeError(f"GitHub did not return a blob sha for '{rel_path}'.")
+    store.delete(rel_path, sha, f"chore({directory}): delete {clean_name}")
+    return rel_path

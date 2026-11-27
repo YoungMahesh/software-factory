@@ -148,3 +148,26 @@ def apply_scratchpad_body(
         raw=replaced if note.section == "raw" else raw,
         bodies=bodies,
     )
+
+
+def apply_scratchpad_delete(
+    existing: ScratchpadCatalogCache,
+    config_repo: str,
+    section: ScratchpadSection,
+    filename: str,
+) -> ScratchpadCatalogCache:
+    """Removes a deleted Idea or Raw note and its cached body from the Scratchpad Catalog Cache."""
+    if existing.config_repo and existing.config_repo != config_repo:
+        return existing
+    ideas = [n for n in existing.ideas if not (section == "ideas" and n.filename == filename)]
+    raw = [n for n in existing.raw if not (section == "raw" and n.filename == filename)]
+    directory = "scratchpad" if section == "ideas" else "raw"
+    target_path = f"{directory}/{filename}"
+    bodies = {path: body for path, body in existing.bodies.items() if path != target_path}
+    return ScratchpadCatalogCache(
+        config_repo=existing.config_repo or config_repo,
+        refreshed_at=existing.refreshed_at,
+        ideas=ideas,
+        raw=raw,
+        bodies=bodies,
+    )

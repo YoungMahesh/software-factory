@@ -17,18 +17,19 @@ from ._models import (
     LaunchStatus,
     LaunchStatusResponse,
     build_direct_chat_url,
-    prime_compatibility_key,
+    prime_compatibility_key_for_app,
     utc_now_iso,
 )
 from ._prime import acquire_sandbox_for_app
 from ._sandbox_t3 import (
-    ensure_project_and_start_thread,
+    ensure_worktree_or_app_thread,
     mint_pairing_token,
     prepare_app_workspace,
     provision_optional_database,
     resolve_provider_model,
     wait_for_t3_ready,
 )
+from ._workspace import shared_repo_base_dir
 from ._store import FactoryStateStore
 
 logger = logging.getLogger(__name__)
@@ -119,8 +120,9 @@ def run_launch_pipeline(
 ) -> LaunchStatusResponse:
     """Executes the 4-stage Launch Request pipeline with Prime Sandbox reuse and step resume."""
     request_id = launch.request_id
-    app_dir = f"/root/{app.slug}"
-    prime_key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
+    app_dir = shared_repo_base_dir(app.repo) if app.repo else f"/root/{app.slug}"
+    repo_base_path = app_dir if app.repo else None
+    prime_key = app.prime_key or prime_compatibility_key_for_app(app)
     current_step: LaunchStatus = "launching_sandbox"
     sandbox_id: str | None = None
     t3_url: str | None = None
@@ -158,7 +160,7 @@ def run_launch_pipeline(
                 dev_port = deps.store.reserve_dev_port(prime_key, sandbox_id, request_id=request_id)
         else:
             dev_port = None
-        app = app.model_copy(update={"dev_port": dev_port, "prime_key": prime_key})
+        app = app.model_copy(update={"dev_port": dev_port, "prime_key": prime_key, "repo_base_path": repo_base_path})
         deps.store.update_app_if_current_request(
             app.app_id,
             request_id,
@@ -167,6 +169,7 @@ def run_launch_pipeline(
             t3_url=t3_url,
             dev_port=dev_port,
             prime_key=prime_key,
+            repo_base_path=repo_base_path,
         )
 
         workspace_ready = app.workspace_ready if reused else False
@@ -238,9 +241,16 @@ def run_launch_pipeline(
             "Starting agent thread & pairing",
             f"Registering workspace and opening thread ({instance_id}/{chosen_model}{port_desc})...",
         )
-        thread_id, project_id = ensure_project_and_start_thread(
-            sb, app, app_dir, instance_id=instance_id, model=chosen_model, thought_level=thought_level
+        thread_id, project_id, workspace_path, worktree_branch = ensure_worktree_or_app_thread(
+            sb,
+            app,
+            app_dir,
+            instance_id=instance_id,
+            model=chosen_model,
+            thought_level=thought_level,
+            log_cb=flusher.append,
         )
+        flusher.flush()
         token = mint_pairing_token(sb)
         chat_url = build_direct_chat_url(t3_url, environment_id, thread_id)
         handoff_url = build_direct_chat_url(t3_url, environment_id, thread_id, token=token)
@@ -254,6 +264,8 @@ def run_launch_pipeline(
                 "environment_id": environment_id, "project_id": project_id, "thread_id": thread_id,
                 "t3_url": t3_url, "chat_url": chat_url, "database_name": db_name,
                 "dev_port": dev_port, "prime_key": prime_key,
+                "workspace_path": workspace_path, "repo_base_path": repo_base_path,
+                "worktree_branch": worktree_branch,
             },
             handoff_url=handoff_url, handoff_expires_at=handoff_expires_at,
         )

@@ -75,3 +75,11 @@ export const ScratchpadSaveResponseSchema = z.object({
   config_repo: z.string(),
 });
 export type ScratchpadSaveResponse = z.infer<typeof ScratchpadSaveResponseSchema>;
+
+export const ScratchpadDeleteResponseSchema = z.object({
+  section: ScratchpadSectionSchema,
+  filename: z.string(),
+  path: z.string(),
+  deleted: z.boolean(),
+});
+export type ScratchpadDeleteResponse = z.infer<typeof ScratchpadDeleteResponseSchema>;

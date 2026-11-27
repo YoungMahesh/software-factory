@@ -36,8 +36,8 @@ function FreshSandboxModalContent({
   const [name, setName] = useState("");
   const [testing, setTesting] = useState(false);
   const [fullClone, setFullClone] = useState(false);
-  const [vm, setVm] = useState(false);
-  const [memory, setMemory] = useState<number | null>(null);
+  const [vm, setVm] = useState(true);
+  const [memory, setMemory] = useState<number | null>(1);
   const [t3, setT3] = useState(true);
   const [modalSdk, setModalSdk] = useState(true);
   const [sops, setSops] = useState(true);

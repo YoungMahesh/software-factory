@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from ._models import (
     DEFAULT_APP_BASE_PORT, RESUMABLE_STEPS, FactoryAppRecord, LaunchRequestRecord, LaunchStatus, LaunchStatusResponse,
-    PrimeSandboxRecord, prime_compatibility_key, utc_now_iso,
+    PrimeSandboxRecord, prime_compatibility_key_for_app, utc_now_iso,
 )
 
 
@@ -81,7 +81,7 @@ class StateTransitions:
             self._reload_volume()
             self.assert_request_active(app_id, request_id)
             app = self.get_app(app_id, reload=False)
-            key = app.prime_key or prime_compatibility_key(app.profile, app.vm, app.mobile_app)
+            key = app.prime_key or prime_compatibility_key_for_app(app)
             current = self.get_prime(key, reload=False)
             if current is not None and current.status == "ready":
                 return current
@@ -142,6 +142,22 @@ class StateTransitions:
             for current in self.list_primes():
                 if current.sandbox_id == sandbox_id and current.status in ("ready", "provisioning"):
                     self.save_prime(current.model_copy(update={"status": "stopped", "owner_request_id": None}))
+
+    def delete_apps_for_sandbox(self, sandbox_id: str | None, *, keep_provisioning: bool = False) -> int:
+        """Deletes Factory Apps (and launches) bound to a terminated sandbox_id and marks Prime stopped."""
+        if not sandbox_id:
+            return 0
+        with self._lock:
+            self.mark_prime_stopped(sandbox_id)
+            deleted = 0
+            for app in self.list_apps():
+                if app.sandbox_id != sandbox_id:
+                    continue
+                if keep_provisioning and app.status == "provisioning":
+                    continue
+                if self.delete_app(app.app_id):
+                    deleted += 1
+            return deleted
 
     def release_prime_claim(self, prime_key: str, request_id: str) -> None:
         with self._lock:

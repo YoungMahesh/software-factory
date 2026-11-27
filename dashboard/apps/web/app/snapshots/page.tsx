@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Copy, Play, Trash2 } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
-import { copyToClipboard, formatDate } from "@/lib/format";
+import { copyToClipboard, formatBytes, formatDate } from "@/lib/format";
 
 export default function SnapshotsPage() {
   const {
@@ -80,6 +80,17 @@ export default function SnapshotsPage() {
                   {snap.sandbox_id || "—"}
                 </span>
               </div>
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className="text-muted flex-shrink-0"
+                  title="Apparent rootfs bytes used at capture time (includes shared base image)"
+                >
+                  Rootfs Size
+                </span>
+                <span className="font-mono text-body truncate">
+                  {formatBytes(snap.rootfs_bytes)}
+                </span>
+              </div>
               <div className="flex items-center justify-between gap-2 text-body">
                 <span className="text-muted flex-shrink-0">Created</span>
                 <span className="text-right break-words">
@@ -135,6 +146,13 @@ export default function SnapshotsPage() {
                 </th>
                 <th scope="col" className="px-6 py-4">
                   Source Sandbox
+                </th>
+                <th
+                  scope="col"
+                  className="px-6 py-4"
+                  title="Apparent rootfs bytes used at capture time (includes shared base image)"
+                >
+                  Rootfs Size
                 </th>
                 <th scope="col" className="px-6 py-4">
                   Created / TTL
@@ -194,6 +212,13 @@ export default function SnapshotsPage() {
                     {snap.sandbox_id || "—"}
                   </td>
 
+                  <td
+                    className="px-6 py-4 whitespace-nowrap text-body text-xs"
+                    title="Apparent rootfs bytes used at capture time (includes shared base image)"
+                  >
+                    {formatBytes(snap.rootfs_bytes)}
+                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap font-sans text-xs text-body">
                     <div>{formatDate(snap.created_at)}</div>
                     <div className="text-muted">
@@ -226,7 +251,7 @@ export default function SnapshotsPage() {
               {filteredSnapshots.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-12 text-center text-muted font-sans"
                   >
                     No saved snapshots found in the registry.

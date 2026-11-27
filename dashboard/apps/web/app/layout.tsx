@@ -4,7 +4,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Modal Sandbox Runner",
+  title: "Sandbox Web Dashboard",
   description: "Software Factory Control Plane dashboard for sandboxes, Factory Apps, snapshots, and Scratchpad",
 };
 

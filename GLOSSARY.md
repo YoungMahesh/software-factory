@@ -316,7 +316,7 @@ A scaffolded application deployed alongside the Resource Plane on the VPS (`/roo
 _Avoid_: Live app, production sandbox, VPS app
 
 **Factory App**:
-An application or repository workspace launched from the builder homepage, linking its target workspace (scaffolded template, blank Git repo, or cloned GitHub repository), optional initial prompt, optional Resource Plane resources, Modal sandbox, T3 Code Server thread, and optional Hosted App.
+An application or repository workspace launched from the builder homepage, linking its target workspace (scaffolded template, blank Git repo, or T3-managed Git worktree on a shared GitHub repository checkout), optional initial prompt, optional Resource Plane resources, Modal sandbox, T3 Code Server thread, and optional Hosted App. Cards are automatically removed when their backing sandbox terminates.
 _Avoid_: Builder project, prompt project, user app
 
 **Repository Catalog Cache**:
@@ -328,11 +328,11 @@ A single idempotent provisioning attempt to create or reopen a Factory App, trac
 _Avoid_: Build job, prompt job, start request
 
 **Prime Sandbox**:
-A long-lived, multi-tenant Modal sandbox provisioned lazily on demand that hosts multiple Factory Apps and T3 Code Server threads concurrently, eliminating container startup overhead for subsequent prompts.
+A long-lived, multi-tenant Modal sandbox provisioned lazily on demand and partitioned by runtime capabilities (`profile`, **VM Sandbox** mode, Mobile/React Native, and sandbox flags) that hosts multiple Factory Apps and T3 Code Server threads concurrently, eliminating container startup overhead for subsequent prompts.
 _Avoid_: Shared sandbox, warm sandbox, master sandbox, persistent container
 
 **Scratchpad**:
-The note-capture surface in the Sandbox Web Dashboard (`#scratchpad`) partitioned into **Ideas** (AI-assisted refinement with review before commit) and **Raw** (direct verbatim Git commit without AI). Operators can browse, read, copy, and send notes from either section into the Builder composer.
+The note-capture surface in the Sandbox Web Dashboard (`/scratchpad`) partitioned into **Ideas** (AI-assisted refinement with review before commit) and **Raw** (direct verbatim Git commit without AI). Operators can browse, read, copy, delete, and send notes from either section into the Builder composer.
 _Avoid_: Memo tab, notepad, prompt history, draft buffer
 
 **Idea Note**:

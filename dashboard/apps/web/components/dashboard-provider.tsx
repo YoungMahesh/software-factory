@@ -53,6 +53,23 @@ export interface BuilderDraftState {
   web_app: boolean;
   mobile_app: boolean;
   vm: boolean;
+  memory: number | null;
+  testing: boolean;
+  full_clone: boolean;
+  t3: boolean;
+  no_t3_persist: boolean;
+  t3_usage_volume: string;
+  t3_port: number;
+  t3_ssh_host: string;
+  metro_port: number;
+  modal: boolean;
+  sops: boolean;
+  browser: boolean;
+  react_native: boolean;
+  no_cloudflare: boolean;
+  xfce: boolean;
+  xfce_port: number;
+  xfce_password: string;
   profile: string;
   provider: string;
   model: string;
@@ -70,6 +87,7 @@ const DEFAULT_MODEL: ModelChoice = {
     { id: "high", label: "High" },
     { id: "xhigh", label: "Extra" },
   ],
+  default_thought_level: "xhigh",
 };
 
 interface DashboardContextValue {
@@ -119,6 +137,11 @@ interface DashboardContextValue {
   fetchScratchpadNotes: () => Promise<void>;
   refreshScratchpadNotes: () => Promise<void>;
   selectScratchpadNote: (section: ScratchpadSection, filename: string) => Promise<void>;
+  deleteScratchpadNote: (
+    section: ScratchpadSection,
+    filename: string,
+    title?: string,
+  ) => Promise<void>;
   loadNoteIntoBuilder: (note: ScratchpadNoteDetailView) => void;
 
   submitAppPrompt: () => Promise<void>;
@@ -180,11 +203,28 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     template: "nextjs",
     web_app: true,
     mobile_app: false,
-    vm: false,
+    vm: true,
+    memory: 1,
+    testing: false,
+    full_clone: false,
+    t3: true,
+    no_t3_persist: false,
+    t3_usage_volume: "t3code-usage-v1",
+    t3_port: 3775,
+    t3_ssh_host: "",
+    metro_port: 8081,
+    modal: true,
+    sops: true,
+    browser: false,
+    react_native: false,
+    no_cloudflare: true,
+    xfce: false,
+    xfce_port: 3000,
+    xfce_password: "",
     profile: "",
     provider: "antigravity",
     model: "gemini-4-hydrogen",
-    thought_level: "",
+    thought_level: "xhigh",
   });
   const [builderSubmitting, setBuilderSubmitting] = useState(false);
   const [activeLaunch, setActiveLaunch] = useState<LaunchStatusResponse | null>(null);
@@ -452,6 +492,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 provider: def.provider,
                 model: def.model,
+                thought_level:
+                  prev.provider === def.provider &&
+                  prev.model === def.model &&
+                  prev.thought_level
+                    ? prev.thought_level
+                    : (def.default_thought_level ?? ""),
               }));
             }
           })
@@ -514,6 +560,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
     setBuilderSubmitting(true);
     try {
+      const effectiveVm = Boolean(builderDraft.vm || builderDraft.xfce);
+      const effectiveMobile =
+        !hasRepo && builderDraft.template === "nextjs" ? builderDraft.mobile_app : false;
+      const effectiveReactNative = Boolean(builderDraft.react_native || effectiveMobile);
       const payload = {
         prompt: hasPrompt ? builderDraft.prompt.trim() : "",
         name: builderDraft.name.trim() || null,
@@ -521,9 +571,25 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         branch: hasRepo && builderDraft.branch.trim() ? builderDraft.branch.trim() : null,
         template: builderDraft.template,
         web_app: builderDraft.web_app,
-        mobile_app:
-          !hasRepo && builderDraft.template === "nextjs" ? builderDraft.mobile_app : false,
-        vm: builderDraft.vm,
+        mobile_app: effectiveMobile,
+        vm: effectiveVm,
+        memory: effectiveVm ? builderDraft.memory : null,
+        testing: builderDraft.testing,
+        full_clone: builderDraft.full_clone,
+        t3: builderDraft.t3,
+        no_t3_persist: builderDraft.no_t3_persist,
+        t3_usage_volume: builderDraft.t3_usage_volume.trim() || "t3code-usage-v1",
+        t3_port: builderDraft.t3_port,
+        t3_ssh_host: builderDraft.t3_ssh_host.trim() || null,
+        metro_port: builderDraft.metro_port,
+        modal: builderDraft.modal,
+        sops: builderDraft.sops,
+        browser: builderDraft.browser,
+        react_native: effectiveReactNative,
+        no_cloudflare: builderDraft.no_cloudflare,
+        xfce: builderDraft.xfce,
+        xfce_port: builderDraft.xfce_port,
+        xfce_password: builderDraft.xfce_password.trim() || null,
         profile:
           builderDraft.profile || (selectedProfile !== "all" ? selectedProfile : null),
         provider: builderDraft.provider,
@@ -728,6 +794,55 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [router, showToast],
   );
 
+  const deleteScratchpadNote = useCallback(
+    async (noteSection: ScratchpadSection, filename: string, title?: string) => {
+      const displayTitle = title || filename;
+      const accepted = await confirmAction({
+        title: "Delete Note",
+        message: `Permanently delete "${displayTitle}" from ${
+          noteSection === "raw" ? "config/raw" : "config/scratchpad"
+        }?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+      if (!accepted) return;
+
+      try {
+        const res = await fetch(
+          `/api/scratchpad/notes/${encodeURIComponent(filename)}?section=${encodeURIComponent(noteSection)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          const err = await extractApiError(res);
+          throw new Error(err.message);
+        }
+        setScratchpadCatalog((prev) => ({
+          ...prev,
+          ideas:
+            noteSection === "ideas"
+              ? (prev.ideas ?? []).filter((n) => n.filename !== filename)
+              : prev.ideas,
+          raw:
+            noteSection === "raw"
+              ? (prev.raw ?? []).filter((n) => n.filename !== filename)
+              : prev.raw,
+        }));
+        setSelectedNotes((prev) =>
+          prev[noteSection]?.filename === filename
+            ? { ...prev, [noteSection]: null }
+            : prev,
+        );
+        showToast(`Deleted "${displayTitle}".`);
+      } catch (err) {
+        showToast(
+          `Delete failed: ${err instanceof Error ? err.message : String(err)}`,
+          "error",
+        );
+      }
+    },
+    [confirmAction, showToast],
+  );
+
   const value = useMemo<DashboardContextValue>(
     () => ({
       loading,
@@ -770,6 +885,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchScratchpadNotes,
       refreshScratchpadNotes,
       selectScratchpadNote,
+      deleteScratchpadNote,
       loadNoteIntoBuilder,
       submitAppPrompt,
       openFactoryApp,
@@ -817,6 +933,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchScratchpadNotes,
       refreshScratchpadNotes,
       selectScratchpadNote,
+      deleteScratchpadNote,
       loadNoteIntoBuilder,
       submitAppPrompt,
       openFactoryApp,

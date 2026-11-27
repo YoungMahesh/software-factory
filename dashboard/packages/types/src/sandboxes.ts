@@ -48,6 +48,7 @@ export const SnapshotSummarySchema = z.object({
   profile: z.string().nullable().optional(),
   software_factory_commit: z.string().nullable().optional(),
   software_factory_dirty: z.string().nullable().optional(),
+  rootfs_bytes: z.number().int().nullable().optional(),
 });
 export type SnapshotSummary = z.infer<typeof SnapshotSummarySchema>;
 
@@ -59,7 +60,7 @@ export const FreshSandboxLaunchPayloadSchema = z.object({
   full_clone: z.boolean().default(false),
   name: z.string().nullable().optional(),
   profile: z.string().nullable().optional(),
-  vm: z.boolean().default(false),
+  vm: z.boolean().default(true),
   memory: z.number().int().nullable().optional(),
   no_cloudflare: z.boolean().default(false),
   t3: z.boolean().default(true),
@@ -124,6 +125,7 @@ export const SnapshotResponseSchema = z.object({
   ttl_days: z.number().int(),
   ttl_seconds: z.number().int(),
   terminated: z.boolean(),
+  rootfs_bytes: z.number().int().nullable().optional(),
 });
 export type SnapshotResponse = z.infer<typeof SnapshotResponseSchema>;
 

@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  CreateAppPayloadSchema,
   FactoryAppViewSchema,
   FreshLaunchStreamEventSchema,
+  FreshSandboxLaunchPayloadSchema,
   LaunchStatusResponseSchema,
   PrimeSandboxViewSchema,
   RepositoryCatalogCacheSchema,
@@ -9,6 +11,7 @@ import {
   SandboxCostsResponseSchema,
   SandboxSummarySchema,
   ScratchpadCatalogResponseSchema,
+  ScratchpadDeleteResponseSchema,
   ScratchpadNoteDetailViewSchema,
   SnapshotSummarySchema,
 } from "../src/index";
@@ -114,8 +117,32 @@ describe("@dashboard/types Zod contracts", () => {
       name: "snap-1",
       ttl_days: 30,
       is_vm: true,
+      rootfs_bytes: 1073741824,
     });
     expect(snap.is_vm).toBe(true);
+    expect(snap.rootfs_bytes).toBe(1073741824);
+
+    const createDefaults = CreateAppPayloadSchema.parse({ prompt: "Build CRM" });
+    expect(createDefaults.vm).toBe(true);
+    expect(createDefaults.memory).toBe(1);
+    expect(createDefaults.t3).toBe(true);
+    expect(createDefaults.modal).toBe(true);
+    expect(createDefaults.sops).toBe(true);
+    expect(createDefaults.no_cloudflare).toBe(true);
+
+    const freshDefaults = FreshSandboxLaunchPayloadSchema.parse({});
+    expect(freshDefaults.vm).toBe(true);
+    expect(freshDefaults.t3).toBe(true);
+    expect(freshDefaults.modal).toBe(true);
+    expect(freshDefaults.sops).toBe(true);
+
+    const deleted = ScratchpadDeleteResponseSchema.parse({
+      section: "ideas",
+      filename: "my-idea.md",
+      path: "scratchpad/my-idea.md",
+      deleted: true,
+    });
+    expect(deleted.deleted).toBe(true);
 
     const logEvt = FreshLaunchStreamEventSchema.parse({ type: "log", message: "Starting..." });
     const errEvt = FreshLaunchStreamEventSchema.parse({ type: "error", detail: "Boom" });
