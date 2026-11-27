@@ -183,9 +183,11 @@ class TestCaddyDeploy(unittest.TestCase):
     def test_cli_bootstrap_only_without_domain(self, mock_setup, mock_cfg):
         mock_cfg.return_value = self.vps_config
         mock_setup.return_value = (True, "Bootstrapped")
-        ret = caddy_main(["--bootstrap", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
+        ret = caddy_main(["--bootstrap"])
         self.assertEqual(ret, 0)
         mock_setup.assert_called_once()
+        self.assertIsNone(mock_setup.call_args.kwargs["domain"])
+        self.assertTrue(mock_setup.call_args.kwargs["bootstrap"])
 
     @patch("sandbox.caddy_deploy.resolve_vps_ssh_config")
     @patch("sandbox.caddy_deploy.check_caddy_running")
@@ -197,12 +199,22 @@ class TestCaddyDeploy(unittest.TestCase):
         mock_net.return_value = (True, "connected")
         mock_val.return_value = (True, "validated")
 
-        ret = caddy_main(["--check-only", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
+        ret = caddy_main(["--check-only"])
         self.assertEqual(ret, 0)
 
-    def test_cli_rejects_from_store_without_bootstrap(self):
-        ret = caddy_main(["--from-store", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
-        self.assertEqual(ret, 1)
+    def test_cli_rejects_removed_flags(self):
+        parser = build_caddy_parser()
+        for bad in (
+            ["--host", "1.2.3.4"],
+            ["--upstream", "app:3000"],
+            ["--from-store"],
+            ["--sync"],
+            ["--dashboard"],
+            ["--no-dashboard"],
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                parser.parse_args(bad)
+            self.assertEqual(ctx.exception.code, 2)
 
     @patch("sandbox.caddy_store.run_caddy_store_subcommand")
     def test_cli_dispatches_backup_and_restore_subcommands(self, mock_sub):
@@ -213,32 +225,18 @@ class TestCaddyDeploy(unittest.TestCase):
         mock_sub.assert_called_with("restore", ["--prune"])
 
     @patch("sandbox.caddy_deploy.resolve_vps_ssh_config")
-    @patch("sandbox.caddy_store._cli.restore_caddy_from_store")
     @patch("sandbox.caddy_deploy.setup_reverse_proxy")
-    def test_cli_bootstrap_from_store_does_not_clobber_without_explicit_domain(
-        self, mock_setup, mock_restore, mock_cfg
-    ):
-        mock_cfg.return_value = self.vps_config
-        mock_restore.return_value = MagicMock(success=True, message="Restored")
-        with patch.dict("os.environ", {"RESOURCE_PLANE_DOMAIN": "env.example.com"}):
-            ret = caddy_main(["--bootstrap", "--from-store", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
-        self.assertEqual(ret, 0)
-        mock_restore.assert_called_once()
-        mock_setup.assert_not_called()
-
-    @patch("sandbox.caddy_deploy.resolve_vps_ssh_config")
-    @patch("sandbox.caddy_deploy.setup_reverse_proxy")
-    @patch("sandbox.caddy_store._cli.backup_caddy_to_store")
-    def test_cli_domain_with_sync_triggers_backup(self, mock_backup, mock_setup, mock_cfg):
+    def test_cli_normalizes_domain_and_ignores_env_domain_when_omitted(self, mock_setup, mock_cfg):
         mock_cfg.return_value = self.vps_config
         mock_setup.return_value = (True, "Updated")
-        mock_backup.return_value = MagicMock(success=True, message="Synced")
-        ret = caddy_main([
-            "--domain", "db.example.com", "--sync", "--profile", "prod",
-            "--host", "1.2.3.4", "--key", str(self.dummy_key),
-        ])
-        self.assertEqual(ret, 0)
-        mock_backup.assert_called_once_with(self.vps_config, profile="prod")
+        with patch.dict("os.environ", {"RESOURCE_PLANE_DOMAIN": "env.example.com"}):
+            ret_boot = caddy_main(["--bootstrap"])
+            self.assertEqual(ret_boot, 0)
+            self.assertIsNone(mock_setup.call_args.kwargs["domain"])
+
+            ret_dom = caddy_main(["--domain", "https://db.example.com/"])
+            self.assertEqual(ret_dom, 0)
+            self.assertEqual(mock_setup.call_args.kwargs["domain"], "db.example.com")
 
 
 if __name__ == "__main__":

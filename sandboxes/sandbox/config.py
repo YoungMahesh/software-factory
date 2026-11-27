@@ -38,6 +38,14 @@ CONTROL_PLANE_SECRET_KEYS: tuple[str, ...] = (
     "MODAL_SANDBOX_ENDPOINT_URL",
     "RESOURCE_PLANE_DOMAIN",
     "RESOURCE_PLANE_ADMIN_TOKEN",
+    "RESOURCE_PLANE_SSH_HOST",
+    "RESOURCE_PLANE_SSH_USER",
+    "RESOURCE_PLANE_SSH_PORT",
+    "RESOURCE_PLANE_SSH_PRIVATE_KEY",
+    "APPS_BASE_DOMAIN",
+    "CLOUDFLARE_DNS_API_TOKEN",
+    "CLOUDFLARE_API_TOKEN",
+    "SANDBOX_DASHBOARD_UPSTREAM",
     "DB_HOST_DOMAIN",
     "DB_HOST_ADMIN_TOKEN",
 )
@@ -322,6 +330,21 @@ def collect_control_plane_secrets_dict(
         val = (env.get(key) if env is not None else None) or os.environ.get(key)
         if val and key not in secrets:
             secrets[key] = val
+
+    if not secrets.get("RESOURCE_PLANE_SSH_PRIVATE_KEY"):
+        raw_ssh_key = (
+            secrets.get("RESOURCE_PLANE_SSH_KEY")
+            or (env.get("RESOURCE_PLANE_SSH_KEY") if env is not None else None)
+            or os.environ.get("RESOURCE_PLANE_SSH_KEY")
+        )
+        if raw_ssh_key and raw_ssh_key.strip():
+            key_path = Path(raw_ssh_key.strip()).expanduser()
+            if not key_path.is_absolute():
+                key_path = (target_root / key_path).resolve()
+            if key_path.is_file():
+                key_text = key_path.read_text(encoding="utf-8")
+                if key_text.strip():
+                    secrets["RESOURCE_PLANE_SSH_PRIVATE_KEY"] = key_text
 
     return secrets
 

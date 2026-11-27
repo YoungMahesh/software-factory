@@ -13,6 +13,7 @@ _OPERATIONS = frozenset({
     "get_repo_catalog", "save_repo_catalog", "get_scratchpad_catalog", "save_scratchpad_catalog",
     "record_scratchpad_commit", "cache_scratchpad_body", "delete_scratchpad_note_cache",
     "claim_launch_execution", "assert_request_active", "complete_launch_request",
+    "create_dashboard_deploy", "get_dashboard_deploy", "get_latest_dashboard_deploy", "update_dashboard_deploy",
 })
 
 

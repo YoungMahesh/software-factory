@@ -91,6 +91,8 @@ def ensure_app_caddy_route(
     *,
     base_domain: str | None = None,
     cf_dns_token: str | None = None,
+    dashboard_upstream: str | None = None,
+    apex_cli_only: bool = False,
     caddy_dir: str = DEFAULT_CADDY_DIR,
     container_name: str = DEFAULT_CADDY_CONTAINER,
     network: str = DEFAULT_CADDY_NETWORK,
@@ -115,7 +117,14 @@ def ensure_app_caddy_route(
     if not wc_content.strip():
         if base_domain and cf_dns_token:
             wc_ok, wc_msg = ensure_wildcard_caddy(
-                vps_config, base_domain, cf_dns_token, caddy_dir=caddy_dir, container_name=container_name, network=network
+                vps_config,
+                base_domain,
+                cf_dns_token,
+                dashboard_upstream=dashboard_upstream,
+                apex_cli_only=apex_cli_only,
+                caddy_dir=caddy_dir,
+                container_name=container_name,
+                network=network,
             )
             if not wc_ok:
                 return False, wc_msg

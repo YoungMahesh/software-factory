@@ -14,7 +14,7 @@ Software Factory provides a cohesive monorepo architecture partitioning cloud ex
 ```mermaid
 flowchart TD
     subgraph ControlSurfaces["Control Surfaces"]
-        CLI["modal-sandbox & deploy-infra CLI<br/>(sandboxes/sandbox/main.py)"]
+        CLI["modal-sandbox CLI<br/>(sandboxes/sandbox/main.py)"]
         DashboardWeb["Next.js Sandbox Dashboard & BFF<br/>(dashboard/ -> /opt/sandbox-dashboard)"]
         Dashboard["Modal Control Plane API & Coordinator<br/>(sandboxes/sandbox/function.py)"]
         RPConsole["Resource Plane Console & MCP<br/>(resource-plane/apps/web)"]
@@ -80,7 +80,7 @@ flowchart TD
 
 - **`dashboard/apps/web`**: Next.js 16 + React 19 UI providing the Builder (`/`), Sandboxes (`/sandboxes`), Snapshots (`/snapshots`), and Scratchpad (`/scratchpad` Ideas & Raw) views.
 - **Same-Origin BFF Proxy**: Next.js middleware enforces HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) and forwards `/api/[...path]` (with SSE streaming support) to `SANDBOX_CONTROL_PLANE_URL`.
-- **VPS & Apex Routing**: Deployed to `/opt/sandbox-dashboard` via `modal-sandbox infra dashboard` and served at `https://<APPS_BASE_DOMAIN>` under Caddy split apex routing (`--cutover`), keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal.
+- **VPS & Isolated Stacks**: Deployed to `/opt/sandbox-dashboard` (`https://<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard` and to `/opt/sandbox-dashboard-staging` (`https://dashboard.<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard --subdomain`, keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal. Opposite-target UI self-deploy triggers enqueue async `main` clones and VPS deploys via `POST /api/dashboard/deploy` on the Modal Control Plane.
 
 ### 3. Resource Plane (`resource-plane/`)
 

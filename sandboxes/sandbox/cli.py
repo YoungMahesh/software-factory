@@ -36,7 +36,14 @@ class SnapshotTimeoutAction(argparse.Action):
 
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress"
+        description="Launch a repository in a Modal Sandbox (Standard Container or Linux VM) with SSH & Cloudflare Ingress",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Subcommands:\n"
+            "  modal-sandbox infra <deploy|dashboard|caddy>   Manage VPS Resource Plane, Dashboard, and Caddy\n"
+            "  modal-sandbox create-app [OPTIONS]             Scaffold a new Next.js / Expo application\n"
+            "  modal-sandbox deploy-app [OPTIONS]             Deploy a Hosted App to the VPS"
+        ),
     )
     # Remote execution flags
     parser.add_argument(

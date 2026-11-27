@@ -19,21 +19,29 @@ if [ ! -f ".env" ]; then
   exit 1
 fi
 
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+
+CONTAINER_NAME="${DASHBOARD_CONTAINER_NAME:-sandbox-dashboard-web}"
+COMPOSE_PROJECT="${DASHBOARD_COMPOSE_PROJECT:-sandbox-dashboard}"
+
 if ! docker network inspect dbhost-network >/dev/null 2>&1; then
   docker network create dbhost-network >/dev/null 2>&1 || true
 fi
 
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -p "${COMPOSE_PROJECT}" -f docker-compose.prod.yml up -d --build
 
 for _ in $(seq 1 45); do
-  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' sandbox-dashboard-web 2>/dev/null || true)"
+  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${CONTAINER_NAME}" 2>/dev/null || true)"
   if [ "${status}" = "healthy" ]; then
-    echo "sandbox-dashboard-web is healthy."
+    echo "${CONTAINER_NAME} is healthy."
     exit 0
   fi
   sleep 1
 done
 
-docker compose -f docker-compose.prod.yml logs --tail=40 web >&2 || true
-echo "[ERROR] sandbox-dashboard-web failed health check." >&2
+docker compose -p "${COMPOSE_PROJECT}" -f docker-compose.prod.yml logs --tail=40 web >&2 || true
+echo "[ERROR] ${CONTAINER_NAME} failed health check." >&2
 exit 1

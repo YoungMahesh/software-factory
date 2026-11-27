@@ -245,6 +245,7 @@ def ensure_wildcard_caddy(
     dashboard_upstream: str | None = None,
     dashboard_web_upstream: str | None = None,
     preserve_dashboard: bool = False,
+    apex_cli_only: bool = False,
     caddy_dir: str = DEFAULT_CADDY_DIR,
     container_name: str = DEFAULT_CADDY_CONTAINER,
     network: str = DEFAULT_CADDY_NETWORK,
@@ -276,6 +277,7 @@ def ensure_wildcard_caddy(
         clean_base,
         dashboard_upstream=effective_upstream,
         dashboard_web_upstream=effective_web_upstream,
+        apex_cli_only=apex_cli_only and not effective_web_upstream,
     )
     result = prepare_runtime(
         vps_config, source_dir=source_dir, bootstrap=bootstrap, email=email,

@@ -227,6 +227,7 @@ def render_wildcard_site(
     *,
     dashboard_upstream: str | None = None,
     dashboard_web_upstream: str | None = None,
+    apex_cli_only: bool = False,
 ) -> str:
     """Renders the Caddy wildcard site block backed by Cloudflare DNS-01."""
     clean = normalize_base_domain(base_domain)
@@ -234,12 +235,13 @@ def render_wildcard_site(
     has_web = bool(dashboard_web_upstream and dashboard_web_upstream.strip())
 
     handles: list[str] = []
-    if has_modal and has_web:
+    if has_modal and (has_web or apex_cli_only):
         normalized_modal = normalize_dashboard_upstream(dashboard_upstream, base_domain=clean)
-        normalized_web = normalize_dashboard_web_upstream(dashboard_web_upstream, base_domain=clean)
         cli_decl = f"\t@sandbox_dashboard_cli {{\n\t\thost {clean}\n\t\tpath /launch /snapshot /health /api/codex/profiles\n\t}}\n"
         handles.append(_format_proxy_handle("sandbox_dashboard_cli", cli_decl, normalized_modal, preserve_host=True))
-        handles.append(_format_proxy_handle("sandbox_dashboard", f"\t@sandbox_dashboard host {clean}\n", normalized_web))
+        if has_web:
+            normalized_web = normalize_dashboard_web_upstream(dashboard_web_upstream, base_domain=clean)
+            handles.append(_format_proxy_handle("sandbox_dashboard", f"\t@sandbox_dashboard host {clean}\n", normalized_web))
     elif has_web:
         normalized_web = normalize_dashboard_web_upstream(dashboard_web_upstream, base_domain=clean)
         handles.append(_format_proxy_handle("sandbox_dashboard", f"\t@sandbox_dashboard host {clean}\n", normalized_web))

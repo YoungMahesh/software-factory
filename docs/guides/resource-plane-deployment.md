@@ -10,11 +10,9 @@ Software Factory includes a turnkey infrastructure deployment command:
 
 ```bash
 modal-sandbox infra deploy
-# or using the dedicated CLI alias:
-deploy-infra
 ```
 
-The deployment automation operates entirely over SSH using native `subprocess` and `tar`, verifying remote requirements, synchronizing the `resource-plane/` directory, and executing the production startup script remotely.
+The deployment automation operates entirely over SSH using native `subprocess` and `tar`, verifying remote requirements, synchronizing the `resource-plane/` directory to canonical `/opt/resource-plane`, and executing the production startup script remotely.
 
 ### Prerequisites
 
@@ -34,7 +32,6 @@ RESOURCE_PLANE_SSH_HOST=203.0.113.10
 RESOURCE_PLANE_SSH_USER=root
 RESOURCE_PLANE_SSH_PORT=22
 RESOURCE_PLANE_SSH_KEY=.secrets/resource_plane_ssh
-RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 ```
 
 | Variable | Default | Description |
@@ -43,7 +40,6 @@ RESOURCE_PLANE_REMOTE_DIR=/opt/resource-plane
 | `RESOURCE_PLANE_SSH_USER` | `root` | SSH user with permissions to run Docker. |
 | `RESOURCE_PLANE_SSH_PORT` | `22` | Remote SSH port. |
 | `RESOURCE_PLANE_SSH_KEY` | *(Required)* | Path to private SSH key file (canonically placed in `.secrets/resource_plane_ssh`). Ambient fallbacks are disabled. |
-| `RESOURCE_PLANE_REMOTE_DIR` | `/opt/resource-plane` | Destination folder on the remote VPS. |
 
 #### SSH Key Storage and Central Config Store (`config/env/`)
 
@@ -84,9 +80,9 @@ modal-sandbox infra deploy
 The pipeline executes the following stages automatically:
 1. **Connectivity Check**: Tests SSH reachability.
 2. **Environment Validation**: Runs `docker info` remotely to verify the daemon.
-3. **File Synchronization**: Streams `resource-plane/` to `RESOURCE_PLANE_REMOTE_DIR` using SSH and tar. The archive excludes `.env`, `.data`, `.git`, `node_modules`, and `.next`.
+3. **File Synchronization**: Streams `resource-plane/` to `/opt/resource-plane` using SSH and tar. The archive excludes `.env`, `.data`, `.git`, `node_modules`, and `.next`.
 4. **Idempotent Container Orchestration**: Executes `./deploy.sh` remotely, ensuring the `dbhost-network` Docker bridge network exists, starting/rebuilding containers via Docker Compose, applying migrations, and polling the health endpoint.
-5. **Deterministic Credential Synchronization**: Automatically retrieves the remote `ADMIN_TOKEN` and writes `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env` (preserving any existing values, or bypassed via `--no-sync-env`).
+5. **Deterministic Credential Synchronization**: Automatically retrieves the remote `ADMIN_TOKEN` and writes `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env` (preserving any existing values).
 
    Output on completion:
 ```text
@@ -121,21 +117,16 @@ modal-sandbox infra caddy --domain db-host.example.com
 # Provision /opt/caddy on a brand-new VPS with a single wildcard certificate for APPS_BASE_DOMAIN:
 modal-sandbox infra caddy --bootstrap --wildcard --domain db-host.example.com
 
-# Or upgrade an existing /opt/caddy stack in-place to caddy-dns/cloudflare + wildcard ingress
-# (auto-routes https://<APPS_BASE_DOMAIN> to the deployed Modal Sandbox Web Dashboard when available):
-modal-sandbox infra caddy --wildcard --base-domain apps.example.com
-
-# Require and update the apex Sandbox Web Dashboard route explicitly (or revert apex to 404):
-modal-sandbox infra caddy --dashboard
-modal-sandbox infra caddy --no-dashboard
+# Or configure/upgrade wildcard ingress from APPS_BASE_DOMAIN + CLOUDFLARE_DNS_API_TOKEN in .env:
+modal-sandbox infra caddy --wildcard
 
 # Verify running container, network attachment, and Caddyfile validity:
 modal-sandbox infra caddy --check-only
 ```
 
 - `/opt/caddy` lives as a sibling stack to `/opt/resource-plane` (strictly canonical with no `.env` path overrides).
-- Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated.
-- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips, and routes the `<APPS_BASE_DOMAIN>` apex either to the Modal Control Plane origin (`--dashboard-upstream` / `SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery, syncing empty `MODAL_SANDBOX_ENDPOINT_URL` in `.env`) or, after `modal-sandbox infra dashboard --cutover`, to `sandbox-dashboard-web:3000` while keeping `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` routed to Modal.
+- Resource Plane routes are isolated in `/opt/caddy/conf/sites/resource-plane.caddy` via `import /etc/caddy/sites/*.caddy`, keeping co-located VPS apps isolated. `--domain` and `--s3-domain` are normalized (stripping accidental schemes/paths) and never fall back implicitly to `RESOURCE_PLANE_DOMAIN` in `.env`.
+- Wildcard Hosted App ingress uses `resource-plane/caddy/Dockerfile` (`caddy-dns/cloudflare`), writes `CLOUDFLARE_DNS_API_TOKEN` to `/opt/caddy/.env` (`0600`), configures `/opt/caddy/conf/sites/apps-wildcard.caddy` for `<APPS_BASE_DOMAIN>, *.<APPS_BASE_DOMAIN>`, and imports per-app snippets from `/opt/caddy/conf/apps/*.caddy` so new apps add zero Let's Encrypt round-trips. `modal-sandbox infra caddy --wildcard` configures Modal CLI apex routes (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) with HTTP `404` on browser paths until `modal-sandbox infra dashboard` deploys the apex Next.js Sandbox Web Dashboard (`sandbox-dashboard-web:3000`).
 
 #### Persisting and Restoring `/opt/caddy` via Central Config Store (`config/caddy/`)
 
@@ -148,18 +139,15 @@ modal-sandbox infra caddy backup
 # Optional profile override (e.g., staging vs default production VPS):
 modal-sandbox infra caddy backup --profile staging
 
-# Update Resource Plane route and immediately sync /opt/caddy to config/caddy/<profile>/:
-modal-sandbox infra caddy --domain db-host.example.com --sync
-
 # Provision /opt/caddy on a brand-new VPS and restore all stored routes + Caddyfile + active networks:
-modal-sandbox infra caddy --bootstrap --from-store
+modal-sandbox infra caddy restore --bootstrap
 
 # Idempotently converge an existing running VPS from config/caddy/<profile>/ (--prune removes extra local *.caddy files):
 modal-sandbox infra caddy restore
 modal-sandbox infra caddy restore --prune
 ```
 
-- **Fresh-VPS Network Filtering**: If `docker-compose.override.yml` declares `external: true` networks for co-located apps not yet deployed on a new VPS, `restore` / `--bootstrap --from-store` filters them to networks already present on the host (reporting any skipped networks). Re-run `modal-sandbox infra caddy restore` after deploying those co-located stacks to attach their networks.
+- **Fresh-VPS Network Filtering**: If `docker-compose.override.yml` declares `external: true` networks for co-located apps not yet deployed on a new VPS, `restore` filters them to networks already present on the host (reporting any skipped networks). Re-run `modal-sandbox infra caddy restore` after deploying those co-located stacks to attach their networks.
 - **Validation and recovery**: Managed changes validate and activate Caddy under a lock. Failed activation attempts rollback; interrupted changes leave `/opt/caddy/.factory-ingress-pending` for recovery by the next mutating ingress operation. Preserve that journal if recovery reports an error.
 - **Backup scope**: Caddy Store captures declarative configuration, not the VPS application data, `/opt/caddy/.env` DNS token, app ownership registry, or `caddy_data` / `caddy_config` ACME volumes. Ownership receipts in app routes can help restore identity, but do not restore application source or data. Restore secrets separately and allow certificates to reissue after DNS switches.
 
@@ -167,7 +155,7 @@ modal-sandbox infra caddy restore --prune
 
 ## 3. Configuring Execution Sandboxes to Use the Deployed Resource Plane
 
-`deploy-infra` fills missing connection variables in your root `.env` and preserves existing nonempty values. After adding HTTPS, set `RESOURCE_PLANE_DOMAIN` to the HTTPS hostname. For direct local HTTP testing use an explicit URL such as `http://127.0.0.1:3000`; a bare hostname is normalized to HTTPS by clients. If you used `--no-sync-env` or manage `.env` manually, ensure the following are set:
+`modal-sandbox infra deploy` fills missing connection variables in your root `.env` and preserves existing nonempty values. After adding HTTPS, set `RESOURCE_PLANE_DOMAIN` to the HTTPS hostname. For direct local HTTP testing use an explicit URL such as `http://127.0.0.1:3000`; a bare hostname is normalized to HTTPS by clients. If you manage `.env` manually, ensure the following are set:
 
 ```env
 # HTTPS URL of the Resource Plane deployment

@@ -20,7 +20,8 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `DEFAULT_TIMEZONE`, `TZ` | Timezone; factory resolution prefers file values, then host values, then `Asia/Kolkata`; repository vault `TZ` can override the sandbox's selected timezone |
 | `MODAL_SANDBOX_ENDPOINT_URL` | Public or Modal control plane base URL for CLI `--remote` and pool-wide Codex status (e.g. `https://apps.example.com`); `--endpoint-url` overrides it |
 | `SANDBOX_DASHBOARD_UPSTREAM` | Optional Modal Control Plane origin URL (`*.modal.run`) used by Caddy apex/CLI route proxying and `modal-sandbox infra dashboard` (auto-discovered via Modal SDK when unset) |
-| `SANDBOX_CONTROL_PLANE_URL` | Modal Control Plane origin URL configured in the Next.js Sandbox Dashboard environment (`dashboard/` BFF proxy and `/opt/sandbox-dashboard/.env`) |
+| `SANDBOX_CONTROL_PLANE_URL` | Modal Control Plane origin URL configured in the Next.js Sandbox Dashboard environment (`dashboard/` BFF proxy, `/opt/sandbox-dashboard/.env`, and `/opt/sandbox-dashboard-staging/.env`) |
+| `NEXT_PUBLIC_DASHBOARD_COMMIT` | Optional short commit badge baked into the Next.js Sandbox Dashboard build and `/api/health` output by `modal-sandbox infra dashboard` |
 | `CODEX_PROFILE_VOLUME_PREFIX` | Opt-in pool of three credential volumes with `-a`, `-b`, and `-c` suffixes; testing uses a separate prefix |
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex profile status; configure the same secret on launch host and hosted control plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the hosted control plane's clean-working-tree check for development |
@@ -38,9 +39,8 @@ Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Chil
 | `RESOURCE_PLANE_SSH_HOST` | Required VPS hostname/IP for deployment |
 | `RESOURCE_PLANE_SSH_USER` | Deployment SSH user, default `root` |
 | `RESOURCE_PLANE_SSH_PORT` | SSH port, default `22` |
-| `RESOURCE_PLANE_SSH_KEY` | Required explicit private key path, normally `.secrets/resource_plane_ssh`; no ambient SSH key fallback |
-| `RESOURCE_PLANE_REMOTE_DIR` | Resource Plane deployment directory, default `/opt/resource-plane` |
-| `CADDY_STORE_PROFILE` | Logical profile folder under `caddy/` in the private `config` repository, default `default`; Caddy and deploy-app `--profile` overrides it |
+| `RESOURCE_PLANE_SSH_KEY` | Required explicit private key path, normally `.secrets/resource_plane_ssh`; no ambient SSH key fallback (`modal deploy` reads its content into `RESOURCE_PLANE_SSH_PRIVATE_KEY` for Control-Plane-backed dashboard self-deploy) |
+| `CADDY_STORE_PROFILE` | Logical profile folder under `caddy/` in the private `config` repository, default `default`; `infra caddy backup`/`restore` and `deploy-app --profile` override it |
 | `APPS_BASE_DOMAIN` | Root DNS domain for the apex Sandbox Web Dashboard and Hosted App subdomains, such as `apps.example.com` |
 | `CLOUDFLARE_DNS_API_TOKEN` | DNS-01 token for Caddy wildcard certificates, falling back to `CLOUDFLARE_API_TOKEN`; remotely stored in `/opt/caddy/.env` |
 

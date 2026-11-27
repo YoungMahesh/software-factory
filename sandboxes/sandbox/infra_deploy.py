@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 from sandbox.config import parse_env_file, resolve_factory_root
 from sandbox.source_transfer import stream_source_archive
@@ -34,6 +36,17 @@ class VpsSshConfig:
     remote_dir: str = DEFAULT_REMOTE_DIR
 
 
+def _materialize_ssh_private_key(private_key: str) -> Path:
+    """Writes inline SSH private key material to a stable 0600 temp file."""
+    normalized = private_key.replace("\r\n", "\n").rstrip() + "\n"
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    key_path = Path(tempfile.gettempdir()) / f"software-factory-vps-{digest}"
+    if not key_path.is_file() or key_path.read_text(encoding="utf-8") != normalized:
+        key_path.write_text(normalized, encoding="utf-8")
+    key_path.chmod(0o600)
+    return key_path
+
+
 def resolve_vps_ssh_config(
     host: str | None = None,
     user: str | None = None,
@@ -41,6 +54,7 @@ def resolve_vps_ssh_config(
     key_path: str | Path | None = None,
     remote_dir: str | None = None,
     *,
+    private_key: str | None = None,
     dotenv: dict[str, str] | None = None,
 ) -> VpsSshConfig:
     """Resolves VPS SSH connection configuration from arguments or environment."""
@@ -53,7 +67,7 @@ def resolve_vps_ssh_config(
     )
     if not resolved_host or not resolved_host.strip():
         raise ValueError(
-            "Missing VPS SSH host. Set RESOURCE_PLANE_SSH_HOST in .env or provide --host."
+            "Missing VPS SSH host. Set RESOURCE_PLANE_SSH_HOST in .env."
         )
 
     resolved_user = (
@@ -69,24 +83,33 @@ def resolve_vps_ssh_config(
         or DEFAULT_SSH_PORT
     )
     resolved_port = int(raw_port)
+    raw_private_key = (
+        private_key
+        or os.environ.get("RESOURCE_PLANE_SSH_PRIVATE_KEY")
+        or file_env.get("RESOURCE_PLANE_SSH_PRIVATE_KEY")
+    )
     raw_key = (
         key_path
         or os.environ.get("RESOURCE_PLANE_SSH_KEY")
         or file_env.get("RESOURCE_PLANE_SSH_KEY")
     )
-    if not raw_key or not str(raw_key).strip():
-        raise ValueError(
-            "Missing required SSH key. Set RESOURCE_PLANE_SSH_KEY in .env or provide --key."
-        )
 
-    key_p = Path(raw_key).expanduser()
-    if not key_p.is_absolute():
-        resolved_key = (resolve_factory_root() / key_p).resolve()
-    else:
-        resolved_key = key_p.resolve()
+    resolved_key: Path | None = None
+    if raw_key and str(raw_key).strip():
+        key_p = Path(raw_key).expanduser()
+        candidate = (resolve_factory_root() / key_p).resolve() if not key_p.is_absolute() else key_p.resolve()
+        if candidate.is_file():
+            resolved_key = candidate
+        elif not raw_private_key or not raw_private_key.strip():
+            raise FileNotFoundError(f"SSH private key file not found: {candidate}")
 
-    if not resolved_key.is_file():
-        raise FileNotFoundError(f"SSH private key file not found: {resolved_key}")
+    if resolved_key is None:
+        if raw_private_key and raw_private_key.strip():
+            resolved_key = _materialize_ssh_private_key(raw_private_key)
+        else:
+            raise ValueError(
+                "Missing required SSH key. Set RESOURCE_PLANE_SSH_KEY in .env."
+            )
 
     try:
         key_bytes = resolved_key.read_bytes()
@@ -101,12 +124,7 @@ def resolve_vps_ssh_config(
     except OSError:
         pass
 
-    resolved_remote_dir = (
-        remote_dir
-        or os.environ.get("RESOURCE_PLANE_REMOTE_DIR")
-        or file_env.get("RESOURCE_PLANE_REMOTE_DIR")
-        or DEFAULT_REMOTE_DIR
-    )
+    resolved_remote_dir = remote_dir or DEFAULT_REMOTE_DIR
 
     return VpsSshConfig(
         host=resolved_host.strip(),
@@ -390,14 +408,8 @@ def create_parser() -> argparse.ArgumentParser:
     """Builds the argument parser for infra deployment."""
     parser = argparse.ArgumentParser(
         prog="modal-sandbox infra deploy",
-        description="Deploy Resource Plane (PostgreSQL & S3 control plane) to a Linux VPS via SSH.",
+        description="Deploy Resource Plane (PostgreSQL & S3 control plane) to /opt/resource-plane via SSH.",
     )
-    parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
-    parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")
-    parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
-    parser.add_argument("--key", help="Path to private SSH key file (required or RESOURCE_PLANE_SSH_KEY env var).")
-    parser.add_argument("--remote-dir", help="Target directory on remote VPS (defaults to /opt/resource-plane).")
-    parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize credentials to local .env.")
     parser.add_argument("--check-only", action="store_true", help="Only verify SSH and Docker connectivity without deploying.")
     return parser
 
@@ -409,11 +421,6 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cfg = resolve_vps_ssh_config(
-            host=args.host,
-            user=args.user,
-            port=args.port,
-            key_path=args.key,
-            remote_dir=args.remote_dir,
             dotenv=parse_env_file(resolve_factory_root() / ".env"),
         )
     except (ValueError, FileNotFoundError) as exc:
@@ -429,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
         print("✓ " if ok else "❌ ", msg)
         return 0 if ok else 1
 
-    return deploy_resource_plane(cfg, stream=True, sync_env=not args.no_sync_env)
+    return deploy_resource_plane(cfg, stream=True, sync_env=True)
 
 
 if __name__ == "__main__":

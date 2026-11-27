@@ -1,6 +1,6 @@
 """Central Config Store (caddy/) deep module interface."""
 
-from ._cli import maybe_sync_after_deploy, run_bootstrap_from_store, run_caddy_store_subcommand
+from ._cli import maybe_sync_after_deploy, run_caddy_store_subcommand
 from ._compose_filter import DEFAULT_CADDY_NETWORK, filter_compose_override_networks
 from ._github import (
     CADDY_STORE_PREFIX,
@@ -52,7 +52,6 @@ __all__ = [
     "read_local_caddy_dir",
     "resolve_caddy_store_profile",
     "restore_caddy_from_store",
-    "run_bootstrap_from_store",
     "run_caddy_store_subcommand",
     "write_local_caddy_dir",
 ]

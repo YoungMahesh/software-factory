@@ -96,20 +96,22 @@ Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in `.env` (or the process environmen
 modal deploy sandboxes/sandbox/function.py
 ```
 
-For local edits without committing first, run `ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py`.
+For local edits without committing first, run `ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py`. When `RESOURCE_PLANE_SSH_KEY` is configured in `.env`, `modal deploy` reads its key material into `RESOURCE_PLANE_SSH_PRIVATE_KEY` for Control-Plane-backed dashboard self-deploys.
 
-You can run the Next.js Sandbox Web Dashboard (`dashboard/`) locally (set `SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, and `WEB_UI_PASSWORD` in `dashboard/apps/web/.env`) or deploy it to `/opt/sandbox-dashboard` on a VPS once `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_KEY`, `APPS_BASE_DOMAIN`, and a Cloudflare DNS-01 token (`CLOUDFLARE_DNS_API_TOKEN` or `CLOUDFLARE_API_TOKEN`) are configured:
+You can run the Next.js Sandbox Web Dashboard (`dashboard/`) locally (set `SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, and `WEB_UI_PASSWORD` in `dashboard/apps/web/.env`) or deploy isolated production (`/opt/sandbox-dashboard`) and staging (`/opt/sandbox-dashboard-staging`) stacks to a VPS once `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_KEY`, `APPS_BASE_DOMAIN`, and a Cloudflare DNS-01 token (`CLOUDFLARE_DNS_API_TOKEN` or `CLOUDFLARE_API_TOKEN`) are configured:
 
 ```bash
 # Local dashboard development server
 pnpm --dir dashboard dev
 
-# Or deploy to VPS (stage on dashboard.<APPS_BASE_DOMAIN>, then cut over apex)
-modal-sandbox infra dashboard --subdomain dashboard
-modal-sandbox infra dashboard --cutover --sync
+# Stage isolated build on https://dashboard.<APPS_BASE_DOMAIN>
+modal-sandbox infra dashboard --subdomain
+
+# Build and deploy production dashboard to https://<APPS_BASE_DOMAIN>
+modal-sandbox infra dashboard
 ```
 
-The Next.js dashboard provides the Factory App builder (including Prime Sandbox reuse, GitHub repository picker, and model selection), live sandbox inspection with accrued Modal costs and lifespan timers, snapshot management, and Scratchpad (`Ideas` and `Raw` notes). The CLI can also use the backend through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md) and [dashboard README](dashboard/README.md).
+The Next.js dashboard provides the Factory App builder (including Prime Sandbox reuse, GitHub repository picker, and model selection), live sandbox inspection with accrued Modal costs and lifespan timers, snapshot management, Scratchpad (`Ideas` and `Raw` notes), and opposite-target header deploy controls (`Deploy dashboard.<APPS_BASE_DOMAIN>` from apex, and vice versa). The CLI can also use the backend through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md) and [dashboard README](dashboard/README.md).
 
 ## Persistence and applications
 
@@ -135,7 +137,7 @@ create-app my-app --cloud
 
 Use [Resource Plane deployment](docs/guides/resource-plane-deployment.md) for SSH, local development, Caddy, and backups. Use [application creation and deployment](docs/guides/applications.md) for template options, cloud prerequisites, wildcard HTTPS, redeployment, and teardown.
 
-Other installed commands include `deploy-infra`, `setup-caddy`, `push-repo-env`, `pull-repo-env`, and `deploy-app`. The [CLI reference](docs/guides/cli.md) describes their options.
+Other installed commands include `push-repo-env`, `pull-repo-env`, and `deploy-app` alongside `modal-sandbox infra <deploy|dashboard|caddy>`. The [CLI reference](docs/guides/cli.md) describes their options.
 
 ## Verification and documentation
 

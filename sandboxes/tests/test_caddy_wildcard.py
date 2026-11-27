@@ -209,17 +209,17 @@ class TestCaddyWildcard(unittest.TestCase):
             {"APPS_BASE_DOMAIN": "apps.example.com", "CLOUDFLARE_DNS_API_TOKEN": "cf-tok"},
             clear=True,
         ):
-            code = caddy_main(["--wildcard", "--dashboard", "--dashboard-upstream", "https://cp.modal.run", "--no-sync-env", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
+            code = caddy_main(["--wildcard"])
         self.assertEqual(code, 0)
         self.assertTrue(mock_setup.call_args.kwargs["wildcard"])
-        self.assertTrue(mock_setup.call_args.kwargs["dashboard"])
-        self.assertEqual(mock_setup.call_args.kwargs["dashboard_upstream"], "https://cp.modal.run")
-        self.assertIsNone(mock_setup.call_args.kwargs["env_file_path"])
+        self.assertTrue(mock_setup.call_args.kwargs["apex_cli_only"])
+        self.assertNotIn("dashboard_upstream", mock_setup.call_args.kwargs)
         self.assertEqual(mock_setup.call_args.kwargs["base_domain"], "apps.example.com")
         self.assertEqual(mock_setup.call_args.kwargs["cf_dns_token"], "cf-tok")
 
-        code_bad = caddy_main(["--dashboard", "--no-dashboard", "--host", "1.2.3.4", "--key", str(self.dummy_key)])
-        self.assertEqual(code_bad, 1)
+        with self.assertRaises(SystemExit) as ctx:
+            caddy_main(["--dashboard"])
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_render_wildcard_site_split_apex_routing_and_preservation(self):
         modal_upstream = "https://ws--sandbox-control-plane-fastapi-app.modal.run"
@@ -236,6 +236,14 @@ class TestCaddyWildcard(unittest.TestCase):
         self.assertIn(f"reverse_proxy {web_upstream} {{", rendered)
         self.assertEqual(extract_dashboard_upstream(rendered), modal_upstream)
         self.assertEqual(extract_dashboard_web_upstream(rendered), web_upstream)
+
+        apex_cli = render_wildcard_site(
+            "apps.example.com",
+            dashboard_upstream=modal_upstream,
+            apex_cli_only=True,
+        )
+        self.assertIn('respond "Not Found" 404', apex_cli)
+        self.assertIsNone(extract_dashboard_web_upstream(apex_cli))
 
         legacy = render_wildcard_site("apps.example.com", dashboard_upstream=modal_upstream)
         self.assertIsNone(extract_dashboard_web_upstream(legacy))

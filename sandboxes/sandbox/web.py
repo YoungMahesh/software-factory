@@ -26,6 +26,7 @@ from shared.image import DEFAULT_T3_USAGE_VOLUME
 from sandbox.apps import apps_router
 from sandbox.apps._store import get_default_store
 from sandbox.costs import costs_router
+from sandbox.dashboard_self_deploy import dashboard_deploy_router
 from sandbox.config import (
     DEFAULT_SNAPSHOT_TIMEOUT,
 )
@@ -450,6 +451,7 @@ router.include_router(apps_router)
 router.include_router(costs_router)
 router.include_router(scratchpad_router)
 router.include_router(t3_pairing_router)
+router.include_router(dashboard_deploy_router)
 
 
 def create_app() -> FastAPI:

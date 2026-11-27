@@ -255,16 +255,33 @@ class TestCaddyStoreSync(unittest.TestCase):
 
 
     @patch("sandbox.caddy_store._cli.resolve_factory_root")
+    @patch("sandbox.caddy_store._cli.resolve_vps_ssh_config")
+    @patch("sandbox.caddy_store._cli.restore_caddy_from_store")
     @patch("sandbox.caddy_store._cli.backup_caddy_to_store")
-    def test_cli_backup_from_dir_does_not_require_ssh(self, mock_backup, mock_root):
+    def test_cli_backup_and_restore_simplified_flags(
+        self, mock_backup, mock_restore, mock_ssh, mock_root
+    ):
         mock_root.return_value = self.tmp_path
-        local_src = self.tmp_path / "local"
-        local_src.mkdir()
+        mock_ssh.return_value = self.vps_config
         mock_backup.return_value = MagicMock(success=True, message="ok")
-        with patch.dict(os.environ, {}, clear=True):
-            code = run_caddy_store_subcommand("backup", ["--from-dir", str(local_src), "--profile", "staging"])
-        self.assertEqual(code, 0)
-        self.assertIsNone(mock_backup.call_args.args[0])
+        mock_restore.return_value = MagicMock(success=True, message="ok")
+
+        code_b = run_caddy_store_subcommand("backup", ["--profile", "staging"])
+        self.assertEqual(code_b, 0)
+        mock_backup.assert_called_once()
+        self.assertEqual(mock_backup.call_args.kwargs["profile"], "staging")
+
+        code_r = run_caddy_store_subcommand(
+            "restore", ["--profile", "staging", "--prune", "--bootstrap"]
+        )
+        self.assertEqual(code_r, 0)
+        mock_restore.assert_called_once()
+        self.assertTrue(mock_restore.call_args.kwargs["prune"])
+        self.assertTrue(mock_restore.call_args.kwargs["bootstrap"])
+
+        for bad in (["--from-dir", "/tmp"], ["--host", "1.2.3.4"]):
+            with self.assertRaises(SystemExit):
+                run_caddy_store_subcommand("backup", bad)
 
 
 if __name__ == "__main__":

@@ -42,8 +42,6 @@ docs = [
 
 [project.scripts]
 modal-sandbox = "sandbox.main:main"
-deploy-infra = "sandbox.infra_deploy:main"
-setup-caddy = "sandbox.caddy_deploy:main"
 push-repo-env = "scripts.push_repo_env:main"
 pull-repo-env = "scripts.pull_repo_env:main"
 create-db = "scripts.create_db:main"

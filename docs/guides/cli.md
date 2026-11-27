@@ -166,65 +166,46 @@ ghclone my-service
 
 ## Resource Plane & VPS Infrastructure Deployment
 
-### `modal-sandbox infra deploy` / `deploy-infra`
-Automates turnkey deployment of the persistent **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js control console) to a remote Linux VPS over SSH.
+Running bare `modal-sandbox infra` prints help for its explicit subcommands (`deploy`, `dashboard`, and `caddy`). All `infra` subcommands read `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_USER`, `RESOURCE_PLANE_SSH_PORT`, and `RESOURCE_PLANE_SSH_KEY` from the root `.env` or environment and target canonical `/opt/*` VPS directories.
 
-The deployment command runs completely over native SSH and streaming `tar` via `subprocess`, verifying SSH reachability and remote Docker daemon requirements, synchronizing the `resource-plane/` directory, and launching containers via `./deploy.sh`.
+### `modal-sandbox infra deploy`
+Automates turnkey deployment of the persistent **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js control console) to `/opt/resource-plane` on a remote Linux VPS over SSH.
+
+The deployment command runs over native SSH and streaming `tar` via `subprocess`, verifying SSH reachability and remote Docker daemon requirements, synchronizing the `resource-plane/` directory, executing `./deploy.sh`, and syncing `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into `.env`.
 
 ```bash
 # Verify SSH and remote Docker connectivity without deploying:
 modal-sandbox infra deploy --check-only
 
-# Deploy automatically using .env configuration:
+# Deploy to /opt/resource-plane using .env configuration:
 modal-sandbox infra deploy
-
-# Or use the standalone script entrypoint:
-deploy-infra
-
-# Deploy targeting an explicit host and custom key:
-modal-sandbox infra deploy --host 203.0.113.10 --user root --key .secrets/resource_plane_ssh --remote-dir /opt/resource-plane
 ```
 
 #### `infra deploy` Options
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--host` | string | `RESOURCE_PLANE_SSH_HOST` | Target Linux VPS hostname or IP address. |
-| `--user` | string | `RESOURCE_PLANE_SSH_USER` / `root` | Remote SSH user with Docker permissions. |
-| `--port` | integer | `RESOURCE_PLANE_SSH_PORT` / `22` | Remote SSH port. |
-| `--key` | path | `RESOURCE_PLANE_SSH_KEY` | Path to private SSH key file (required; canonically `.secrets/resource_plane_ssh`). |
-| `--remote-dir` | path | `RESOURCE_PLANE_REMOTE_DIR` / `/opt/resource-plane` | Destination path on remote VPS for resource-plane files. |
-| `--no-sync-env` | flag | `False` | Do not automatically synchronize `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` into the local root `.env`. |
 | `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
 
 ### `modal-sandbox infra dashboard`
-Deploys the Next.js **Sandbox Dashboard** (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS and optionally stages it on a subdomain or cuts over the apex of `APPS_BASE_DOMAIN` while keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal.
+Deploys the Next.js **Sandbox Dashboard** (`dashboard/`) to isolated VPS Compose stacks using `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, `SANDBOX_DASHBOARD_UPSTREAM` (or Modal SDK auto-discovery), and Cloudflare DNS-01 configuration from `.env`. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` into the dashboard build so its commit badge appears alongside the Control Plane badge.
 
 ```bash
-# Verify SSH and remote Docker connectivity
-modal-sandbox infra dashboard --check-only
+# Build and deploy production dashboard to /opt/sandbox-dashboard (https://<APPS_BASE_DOMAIN>)
+modal-sandbox infra dashboard
 
-# Deploy container and stage on https://dashboard.<APPS_BASE_DOMAIN>
-modal-sandbox infra dashboard --subdomain dashboard
-
-# Deploy and cut over apex https://<APPS_BASE_DOMAIN> to Next.js
-modal-sandbox infra dashboard --cutover
+# Build and deploy isolated staging stack to /opt/sandbox-dashboard-staging (https://dashboard.<APPS_BASE_DOMAIN>)
+modal-sandbox infra dashboard --subdomain
 ```
+
+- **Default (apex)**: Updates `/opt/sandbox-dashboard` (`sandbox-dashboard-web:3000`) and configures Caddy split apex routing on `https://<APPS_BASE_DOMAIN>` while routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal, leaving staging untouched.
+- **Staging (`--subdomain`)**: Updates `/opt/sandbox-dashboard-staging` (`sandbox-dashboard-staging-web:3000`) and routes `https://dashboard.<APPS_BASE_DOMAIN>`, leaving the apex container and route untouched (keeping Modal CLI routes active at apex with HTTP `404` on browser paths if apex has not been deployed).
 
 #### `infra dashboard` Options
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--control-plane-url` | URL | `SANDBOX_DASHBOARD_UPSTREAM` / Modal SDK | Direct Modal Control Plane origin (`*.modal.run`) used by the Next.js BFF proxy. |
-| `--subdomain` | string | `None` | Expose staging preview at `<subdomain>.<APPS_BASE_DOMAIN>`. |
-| `--cutover` | flag | `False` | Switch apex `APPS_BASE_DOMAIN` to `sandbox-dashboard-web:3000` while preserving Modal CLI paths. |
-| `--base-domain` | string | `APPS_BASE_DOMAIN` | Override `APPS_BASE_DOMAIN`. |
-| `--cf-dns-token` | string | Factory DNS token variables | Cloudflare DNS-01 token when updating Caddy routes. |
-| `--remote-dir` | path | `/opt/sandbox-dashboard` | Destination path on remote VPS for `dashboard/`. |
-| `--sync` | flag | `False` | Back up `/opt/caddy` to Central Config Store after route changes. |
-| `--profile` | string | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`. |
-| `--host`, `--user`, `--port`, `--key` | string/int/path | `RESOURCE_PLANE_SSH_*` | Remote VPS SSH overrides. |
-| `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying. |
+| `--subdomain` | flag | `False` | Deploy the isolated staging stack to `/opt/sandbox-dashboard-staging` at `dashboard.<APPS_BASE_DOMAIN>` instead of the apex production stack. |
 
 ---
 
@@ -421,51 +402,33 @@ deploy-app down my-app --purge
 
 Run from the deployment host. A sandbox developer can push code and environment files, then use `deploy-app --repo owner/name` on that host. See [application deployment](applications.md) for prerequisites, ownership checks, and failure recovery.
 
-## Host Ingress Management (`modal-sandbox infra caddy` / `setup-caddy`)
+## Host Ingress Management (`modal-sandbox infra caddy`)
+
+Reads `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, and `CLOUDFLARE_DNS_API_TOKEN` from `.env` and manages `/opt/caddy`. Passing `--domain` writes `/opt/caddy/conf/sites/resource-plane.caddy` explicitly (scheme/path stripped; never inferred from `RESOURCE_PLANE_DOMAIN`).
 
 ```bash
 modal-sandbox infra caddy --bootstrap --domain resources.example.com
-modal-sandbox infra caddy --wildcard --base-domain apps.example.com
-modal-sandbox infra caddy --dashboard --dashboard-upstream https://<workspace>--sandbox-control-plane-fastapi-app.modal.run
-modal-sandbox infra caddy --no-dashboard
+modal-sandbox infra caddy --wildcard
 modal-sandbox infra caddy --check-only
 modal-sandbox infra caddy backup --profile staging
-modal-sandbox infra caddy restore --profile staging --prune
-modal-sandbox infra caddy --bootstrap --from-store
+modal-sandbox infra caddy restore --profile staging --prune --bootstrap
 ```
 
 | Option | Default | Description |
 | :--- | :--- | :--- |
-| `--domain` | Unset | Resource Plane console/MCP hostname. |
-| `--s3-domain` | Unset | Optional HTTPS hostname for S3. |
-| `--upstream` | `db-host-web:3000` | Console proxy upstream. |
-| `--s3-upstream` | `neon-seaweedfs:8333` | S3 proxy upstream. |
+| `--domain` | Unset | Resource Plane console/MCP hostname (`db-host-web:3000` upstream). |
+| `--s3-domain` | Unset | Optional HTTPS hostname for S3 (`neon-seaweedfs:8333` upstream). |
 | `--bootstrap` | `False` | Provision the canonical `/opt/caddy` Compose stack. |
 | `--email` | Unset | Optional ACME email for bootstrap. |
-| `--wildcard` | `False` | Configure the Cloudflare DNS-01 wildcard certificate and apex dashboard route when available. |
-| `--base-domain` | `APPS_BASE_DOMAIN` | App Base Domain for the Sandbox Web Dashboard apex and Hosted Apps. |
-| `--dashboard` | `False` | Require routing the `APPS_BASE_DOMAIN` apex to the Modal Sandbox Web Dashboard (implies `--wildcard`). |
-| `--dashboard-upstream` | `SANDBOX_DASHBOARD_UPSTREAM` / Modal SDK | Modal Control Plane origin URL proxied at the apex (implies `--wildcard`). |
-| `--dashboard-web-upstream` | `None` | Optional Next.js dashboard web container target (e.g. `sandbox-dashboard-web:3000`) for split apex routing. |
-| `--no-dashboard` | `False` | Keep or revert the `APPS_BASE_DOMAIN` apex to HTTP `404`. |
-| `--no-sync-env` | `False` | Do not synchronize `MODAL_SANDBOX_ENDPOINT_URL` into local `.env`. |
-| `--cf-dns-token` | Factory DNS token variables | DNS-01 token. |
-| `--from-store` | `False` | Restore `config/caddy/<profile>/` during bootstrap; requires `--bootstrap`. |
-| `--sync` | `False` | Back up configuration after route changes. |
-| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`. |
+| `--wildcard` | `False` | Configure Cloudflare DNS-01 wildcard certificate and apex Modal CLI routes (`404` on browser paths until `infra dashboard` deploys the UI). |
 | `--check-only` | `False` | Inspect Caddy without changing configuration. |
-| `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS SSH connection overrides. |
 
-`backup` and `restore` also accept `--profile` and SSH overrides; `restore --prune` removes extra local site files. See [deployment and restore](resource-plane-deployment.md) for required files, DNS, and network behavior.
+`backup` and `restore` operate directly between the VPS and `config/caddy/<profile>/` over SSH. See [deployment and restore](resource-plane-deployment.md) for required files, DNS, and network behavior.
 
 ### Central Config Store (`caddy/`) backup and restore options
 
 | Option | Purpose |
 | :--- | :--- |
-| `-o, --org` | GitHub organization owning `config`. |
-| `-t, --token` | GitHub access token override. |
-| `--dir` | Write a local inspection copy. |
-| `--from-dir` | Use local configuration instead of reading from VPS (backup) or `config/caddy/` (restore). |
+| `--profile` | Caddy config profile folder under `caddy/` (defaults to `CADDY_STORE_PROFILE` / `default`). |
 | `--bootstrap` | With `restore`, provision `/opt/caddy` before restoring. |
 | `--prune` | With `restore`, remove extra configuration files while retaining the main Caddyfile. |
-| `--profile`, `--host`, `--user`, `--port`, `--key` | Caddy config profile and deployment SSH overrides. |

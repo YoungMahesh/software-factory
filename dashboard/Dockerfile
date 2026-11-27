@@ -7,6 +7,8 @@ FROM base AS builder
 WORKDIR /app
 COPY . .
 
+ARG NEXT_PUBLIC_DASHBOARD_COMMIT=""
+ENV NEXT_PUBLIC_DASHBOARD_COMMIT=${NEXT_PUBLIC_DASHBOARD_COMMIT}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install; fi
 ENV NODE_ENV=production
@@ -17,6 +19,8 @@ FROM node:20-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl curl
 WORKDIR /app
 
+ARG NEXT_PUBLIC_DASHBOARD_COMMIT=""
+ENV NEXT_PUBLIC_DASHBOARD_COMMIT=${NEXT_PUBLIC_DASHBOARD_COMMIT}
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000

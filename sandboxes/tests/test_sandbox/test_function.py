@@ -14,6 +14,7 @@ import modal
 from sandbox.cli import create_parser, validate_args
 from sandbox.core import LaunchResponse, SnapshotResponse
 from sandbox.function import (
+    CONTROL_PLANE_APT_PACKAGES,
     CONTROL_PLANE_PIP_PACKAGES,
     collect_control_plane_secrets,
     image as control_plane_image,
@@ -423,6 +424,28 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
             self.assertEqual(secrets.get("SOFTWARE_FACTORY_COMMIT"), "deadbeef12345")
             self.assertEqual(secrets.get("SOFTWARE_FACTORY_COMMIT_SHORT"), "deadbee")
             self.assertEqual(secrets.get("SOFTWARE_FACTORY_DIRTY"), "0")
+
+    @patch("sandbox.function.resolve_host_software_factory_provenance")
+    def test_collect_control_plane_secrets_reads_resource_plane_ssh_key(self, mock_prov):
+        mock_prov.return_value = {"SOFTWARE_FACTORY_DIRTY": "0"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            key_file = root / ".secrets" / "resource_plane_ssh"
+            key_file.parent.mkdir(parents=True, exist_ok=True)
+            key_file.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n", encoding="utf-8")
+            (root / ".env").write_text(
+                "RESOURCE_PLANE_SSH_HOST=vps.example.com\n"
+                "RESOURCE_PLANE_SSH_KEY=.secrets/resource_plane_ssh\n",
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {}, clear=True):
+                secrets = collect_control_plane_secrets(root)
+            self.assertEqual(secrets.get("RESOURCE_PLANE_SSH_HOST"), "vps.example.com")
+            self.assertIn("BEGIN OPENSSH PRIVATE KEY", secrets.get("RESOURCE_PLANE_SSH_PRIVATE_KEY", ""))
+
+    def test_control_plane_image_includes_git_and_ssh_client(self):
+        self.assertIn("openssh-client", CONTROL_PLANE_APT_PACKAGES)
+        self.assertIn("git", CONTROL_PLANE_APT_PACKAGES)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from sandbox.caddy_wildcard import (
     ensure_wildcard_caddy,
     format_caddy_route,
     is_subdomain_of,
+    normalize_base_domain,
     parse_caddyfile_domains,
     render_base_caddyfile,
     render_resource_plane_site,
@@ -224,7 +225,8 @@ def setup_reverse_proxy(
     bootstrap: bool = False, email: str | None = None, caddy_config: CaddyConfig | None = None,
     *, base_domain: str | None = None, cf_dns_token: str | None = None, wildcard: bool = False,
     dashboard: bool = False, dashboard_upstream: str | None = None, dashboard_web_upstream: str | None = None,
-    no_dashboard: bool = False, dotenv: dict[str, str] | None = None, env_file_path: Path | None = None,
+    no_dashboard: bool = False, apex_cli_only: bool = False,
+    dotenv: dict[str, str] | None = None, env_file_path: Path | None = None,
 ) -> tuple[bool, str]:
     """High-level orchestration: optionally bootstraps /opt/caddy, sets up wildcard TLS, writes site config, and reloads."""
     cfg = caddy_config or CaddyConfig()
@@ -251,6 +253,7 @@ def setup_reverse_proxy(
             vps_config, active_base, resolved_cf, bootstrap=bootstrap, email=email,
             dashboard_upstream=effective_dash, dashboard_web_upstream=dashboard_web_upstream,
             preserve_dashboard=not no_dashboard,
+            apex_cli_only=apex_cli_only,
             caddy_dir=cfg.caddy_dir, container_name=cfg.container_name, network=cfg.network,
         )
         if not wc_ok:
@@ -305,33 +308,22 @@ def setup_reverse_proxy(
     return True, f"{wc_msg} {done_msg}".strip() if wc_msg else done_msg
 
 
+def _normalize_site_domain(raw_domain: str) -> str:
+    """Normalizes a Caddy site domain, stripping any scheme, port, or path."""
+    return normalize_base_domain(raw_domain)
+
+
 def build_caddy_parser() -> argparse.ArgumentParser:
     """Builds the argument parser for Host Ingress Proxy setup CLI."""
     parser = argparse.ArgumentParser(
         prog="modal-sandbox infra caddy",
-        description="Configure Host Ingress Proxy (/opt/caddy) for Resource Plane on a remote VPS.",
+        description="Configure Host Ingress Proxy (/opt/caddy) for Resource Plane and wildcard ingress.",
     )
-    parser.add_argument("--domain", help="Primary public domain for Resource Plane web console & MCP endpoint.")
+    parser.add_argument("--domain", help="Public domain for Resource Plane web console & MCP endpoint.")
     parser.add_argument("--s3-domain", default=None, help="Optional public domain for SeaweedFS S3 API endpoint.")
-    parser.add_argument("--upstream", default=DEFAULT_WEB_UPSTREAM, help=f"Upstream web target (default: {DEFAULT_WEB_UPSTREAM}).")
-    parser.add_argument("--s3-upstream", default=DEFAULT_S3_UPSTREAM, help=f"Upstream S3 target (default: {DEFAULT_S3_UPSTREAM}).")
     parser.add_argument("--bootstrap", action="store_true", help=f"Provision {DEFAULT_CADDY_DIR} via Docker Compose on a fresh VPS.")
-    parser.add_argument("--wildcard", action="store_true", help="Provision or upgrade /opt/caddy with Cloudflare DNS-01 wildcard cert for APPS_BASE_DOMAIN.")
-    parser.add_argument("--base-domain", default=None, help="App Base Domain for wildcard cert (defaults to APPS_BASE_DOMAIN).")
-    parser.add_argument("--dashboard", action="store_true", help="Route APPS_BASE_DOMAIN apex to the Modal Sandbox Web Dashboard (implies --wildcard).")
-    parser.add_argument("--dashboard-upstream", default=None, help="Modal Control Plane origin URL for apex reverse proxy (defaults to SANDBOX_DASHBOARD_UPSTREAM or Modal SDK lookup).")
-    parser.add_argument("--dashboard-web-upstream", default=None, help="Optional Next.js dashboard web container target (e.g. sandbox-dashboard-web:3000) for split apex routing.")
-    parser.add_argument("--no-dashboard", action="store_true", help="Keep or revert APPS_BASE_DOMAIN apex to 404 instead of routing the Sandbox Web Dashboard.")
-    parser.add_argument("--no-sync-env", action="store_true", help="Do not automatically synchronize MODAL_SANDBOX_ENDPOINT_URL to local .env.")
-    parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 API token (defaults to CLOUDFLARE_DNS_API_TOKEN or CLOUDFLARE_API_TOKEN).")
     parser.add_argument("--email", default=None, help="Optional ACME email written during --bootstrap.")
-    parser.add_argument("--from-store", action="store_true", help="With --bootstrap, restore /opt/caddy from Central Config Store (config/caddy/<profile>/) instead of an empty Caddyfile.")
-    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to Central Config Store (config/caddy/<profile>/) after configuring routes.")
-    parser.add_argument("--profile", default=None, help="Logical VPS profile folder under caddy/ in config repo (defaults to CADDY_STORE_PROFILE or 'default').")
-    parser.add_argument("--host", help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST env var).")
-    parser.add_argument("--user", help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER env var or 'root').")
-    parser.add_argument("--port", type=int, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT env var or 22).")
-    parser.add_argument("--key", help="Path to private SSH key file (required or RESOURCE_PLANE_SSH_KEY env var).")
+    parser.add_argument("--wildcard", action="store_true", help="Provision or upgrade /opt/caddy with Cloudflare DNS-01 wildcard cert for APPS_BASE_DOMAIN.")
     parser.add_argument("--check-only", action="store_true", help="Only verify Caddy status and connectivity without altering configuration.")
     return parser
 
@@ -347,14 +339,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.email and not args.bootstrap:
         print("❌ --email can only be used together with --bootstrap.", file=sys.stderr)
         return 1
-    if args.from_store and not args.bootstrap:
-        print("❌ --from-store requires --bootstrap (or use 'modal-sandbox infra caddy restore').", file=sys.stderr)
-        return 1
 
     root = resolve_factory_root()
     file_env = parse_env_file(root / ".env") if (root / ".env").exists() else {}
     try:
-        vps_config = resolve_vps_ssh_config(host=args.host, user=args.user, port=args.port, key_path=args.key, dotenv=file_env)
+        vps_config = resolve_vps_ssh_config(dotenv=file_env)
+        domain = _normalize_site_domain(args.domain) if args.domain and args.domain.strip() else None
+        s3_domain = _normalize_site_domain(args.s3_domain) if args.s3_domain and args.s3_domain.strip() else None
     except (ValueError, FileNotFoundError) as exc:
         print(f"❌ Configuration error: {exc}", file=sys.stderr)
         return 1
@@ -373,66 +364,46 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"✓ {val_msg}" if val_ok else f"❌ {val_msg}")
         return 0 if (net_ok and val_ok) else 1
 
-    if args.bootstrap and args.from_store:
-        from sandbox.caddy_store import run_bootstrap_from_store
-        return run_bootstrap_from_store(
-            vps_config, profile=args.profile, domain=args.domain, upstream=args.upstream,
-            s3_domain=args.s3_domain, s3_upstream=args.s3_upstream, sync=args.sync, caddy_cfg=caddy_cfg,
-        )
-
-    if args.no_dashboard and (
-        args.dashboard
-        or (args.dashboard_upstream and args.dashboard_upstream.strip())
-        or (args.dashboard_web_upstream and args.dashboard_web_upstream.strip())
-    ):
-        print("❌ Cannot combine --no-dashboard with --dashboard, --dashboard-upstream, or --dashboard-web-upstream.", file=sys.stderr)
-        return 1
-
-    wants_wildcard = bool(
-        args.wildcard or args.base_domain or args.dashboard or args.dashboard_upstream
-        or args.dashboard_web_upstream or args.no_dashboard
+    env_base = os.environ.get("APPS_BASE_DOMAIN") or file_env.get("APPS_BASE_DOMAIN")
+    env_cf = (
+        os.environ.get("CLOUDFLARE_DNS_API_TOKEN") or file_env.get("CLOUDFLARE_DNS_API_TOKEN")
+        or os.environ.get("CLOUDFLARE_API_TOKEN") or file_env.get("CLOUDFLARE_API_TOKEN")
     )
-    env_base = args.base_domain or os.environ.get("APPS_BASE_DOMAIN") or file_env.get("APPS_BASE_DOMAIN")
-    env_cf = (args.cf_dns_token or os.environ.get("CLOUDFLARE_DNS_API_TOKEN") or file_env.get("CLOUDFLARE_DNS_API_TOKEN")
-              or os.environ.get("CLOUDFLARE_API_TOKEN") or file_env.get("CLOUDFLARE_API_TOKEN"))
     auto_wildcard = bool(args.bootstrap and env_base and env_base.strip() and env_cf and env_cf.strip())
-    domain = args.domain or os.environ.get("RESOURCE_PLANE_DOMAIN") or file_env.get("RESOURCE_PLANE_DOMAIN")
-    if (not domain or not domain.strip()) and not args.bootstrap and not wants_wildcard:
-        print("❌ Missing domain. Provide --domain, set RESOURCE_PLANE_DOMAIN in .env, or pass --bootstrap / --wildcard.", file=sys.stderr)
+    if not domain and not args.bootstrap and not args.wildcard:
+        print("❌ Missing target. Provide --domain, --bootstrap, or --wildcard.", file=sys.stderr)
         return 1
 
     setup_kwargs: dict[str, object] = {}
-    if wants_wildcard or auto_wildcard:
+    if args.wildcard or auto_wildcard:
         try:
             setup_kwargs = {
                 "wildcard": True,
-                "base_domain": resolve_apps_base_domain(args.base_domain, dotenv=file_env),
-                "cf_dns_token": resolve_cloudflare_dns_token(args.cf_dns_token, dotenv=file_env),
-                "dashboard": args.dashboard,
-                "dashboard_upstream": args.dashboard_upstream,
-                "dashboard_web_upstream": args.dashboard_web_upstream,
-                "no_dashboard": args.no_dashboard,
+                "base_domain": resolve_apps_base_domain(dotenv=file_env),
+                "cf_dns_token": resolve_cloudflare_dns_token(dotenv=file_env),
+                "apex_cli_only": True,
                 "dotenv": file_env,
-                "env_file_path": None if args.no_sync_env else (root / ".env"),
+                "env_file_path": root / ".env",
             }
         except ValueError as exc:
             print(f"❌ {exc}", file=sys.stderr)
             return 1
 
-    target_desc = f"domain '{domain.strip()}'" if domain and domain.strip() else ("wildcard" if setup_kwargs else "bootstrap only")
+    target_desc = f"domain '{domain}'" if domain else ("wildcard" if setup_kwargs else "bootstrap only")
     print(f"🔒 Configuring Host Ingress Proxy (/opt/caddy) on {vps_config.user}@{vps_config.host} ({target_desc})...")
     success, message = setup_reverse_proxy(
-        vps_config=vps_config, domain=domain.strip() if domain else None, upstream=args.upstream,
-        s3_domain=args.s3_domain.strip() if args.s3_domain else None, s3_upstream=args.s3_upstream,
-        bootstrap=args.bootstrap, email=args.email, caddy_config=caddy_cfg, **setup_kwargs,
+        vps_config=vps_config,
+        domain=domain,
+        s3_domain=s3_domain,
+        bootstrap=args.bootstrap,
+        email=args.email,
+        caddy_config=caddy_cfg,
+        **setup_kwargs,
     )
     if not success:
         print(f"❌ {message}", file=sys.stderr)
         return 1
     print(f"✓ {message}")
-    if args.sync:
-        from sandbox.caddy_store import maybe_sync_after_deploy
-        return maybe_sync_after_deploy(vps_config, args.profile)
     return 0
 
 

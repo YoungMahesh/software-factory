@@ -38,6 +38,10 @@ from sandbox.core import (
     SnapshotResponse,
     capture_snapshot_core,
 )
+from sandbox.dashboard_self_deploy import (
+    execute_dashboard_self_deploy,
+    set_dashboard_deploy_dispatcher,
+)
 from sandbox.launcher import (
     RunningSandbox,
     SandboxLauncher,
@@ -138,6 +142,13 @@ def validate_clean_working_tree(root: Path, enforce: bool | None = None) -> bool
     return True
 
 
+CONTROL_PLANE_APT_PACKAGES: tuple[str, ...] = (
+    "curl",
+    "ca-certificates",
+    "openssh-client",
+    "git",
+)
+
 CONTROL_PLANE_PIP_PACKAGES: tuple[str, ...] = (
     "modal>=1.6.4",
     "fastapi>=0.100.0",
@@ -154,7 +165,7 @@ OPENCODE_INSTALL_COMMANDS: tuple[str, ...] = (
 
 image = (
     modal.Image.debian_slim()
-    .apt_install("curl", "ca-certificates")
+    .apt_install(*CONTROL_PLANE_APT_PACKAGES)
     .run_commands(*SOPS_INSTALL_COMMANDS, *OPENCODE_INSTALL_COMMANDS)
     .pip_install(*CONTROL_PLANE_PIP_PACKAGES)
     .add_local_python_source("sandbox")
@@ -290,6 +301,19 @@ def run_launch_request(request_id: str) -> dict[str, Any]:
 @app.function(
     image=image,
     secrets=function_secrets,
+    timeout=600,
+)
+def run_dashboard_deploy(deploy_id: str) -> dict[str, Any]:
+    """Modal background worker cloning main and deploying dashboard/ to the VPS."""
+    store = FactoryStateClient(factory_state_operation.remote)
+    set_default_store(store)
+    result = execute_dashboard_self_deploy(deploy_id, store=store)
+    return result.model_dump()
+
+
+@app.function(
+    image=image,
+    secrets=function_secrets,
     timeout=180,
 )
 @modal.asgi_app()
@@ -297,4 +321,5 @@ def fastapi_app():
     """Serves the control plane ASGI application."""
     set_default_store(FactoryStateClient(factory_state_operation.remote))
     set_launch_dispatcher(lambda request_id: run_launch_request.spawn(request_id))
+    set_dashboard_deploy_dispatcher(lambda deploy_id: run_dashboard_deploy.spawn(deploy_id))
     return web_app

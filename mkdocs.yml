@@ -181,6 +181,7 @@ nav:
     - '0095: Scratchpad Ideas/Raw Split and Persisted Catalog Cache': adr/0095-scratchpad-ideas-raw-split-and-catalog-cache.md
     - '0096: Next.js Sandbox Dashboard and Same-Origin Control Plane BFF': adr/0096-nextjs-sandbox-dashboard-and-bff.md
     - '0097: Shared Repo Worktrees, Builder Defaults, Rootfs Snapshot Size, and Scratchpad Delete': adr/0097-shared-repo-worktrees-and-dashboard-defaults.md
+    - '0098: Simplified modal-sandbox infra CLI and Isolated Dashboard Self-Deploy': adr/0098-simplified-infra-cli-and-isolated-dashboard-deploys.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

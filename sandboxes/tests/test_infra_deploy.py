@@ -136,7 +136,6 @@ class TestInfraDeploy(unittest.TestCase):
             "RESOURCE_PLANE_SSH_USER": "deploy",
             "RESOURCE_PLANE_SSH_PORT": "22022",
             "RESOURCE_PLANE_SSH_KEY": str(self.dummy_key),
-            "RESOURCE_PLANE_REMOTE_DIR": "/custom/path",
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = resolve_vps_ssh_config()
@@ -144,7 +143,19 @@ class TestInfraDeploy(unittest.TestCase):
             self.assertEqual(cfg.user, "deploy")
             self.assertEqual(cfg.port, 22022)
             self.assertEqual(cfg.key_path, self.dummy_key.resolve())
-            self.assertEqual(cfg.remote_dir, "/custom/path")
+            self.assertEqual(cfg.remote_dir, "/opt/resource-plane")
+
+    def test_resolve_vps_ssh_config_private_key_materialization(self):
+        """Materializes an inline SSH private key when passed to resolve_vps_ssh_config."""
+        env = {"RESOURCE_PLANE_SSH_HOST": "envhost.test"}
+        with patch.dict(os.environ, env, clear=True):
+            cfg = resolve_vps_ssh_config(private_key="-----BEGIN TEST KEY-----\n")
+            try:
+                self.assertEqual(cfg.host, "envhost.test")
+                self.assertTrue(cfg.key_path.is_file())
+                self.assertEqual(cfg.key_path.stat().st_mode & 0o777, 0o600)
+            finally:
+                cfg.key_path.unlink(missing_ok=True)
 
     def test_resolve_vps_ssh_config_legacy_db_host_ignored(self):
         """Ignores legacy DB_HOST_SSH_* variables and raises ValueError for missing host."""
@@ -276,10 +287,22 @@ class TestInfraDeploy(unittest.TestCase):
         mock_ssh.return_value = True
         mock_docker.return_value = (True, "Docker OK")
 
-        code = main(["--host", "test.vps", "--key", str(self.dummy_key), "--check-only"])
+        env = {
+            "RESOURCE_PLANE_SSH_HOST": "test.vps",
+            "RESOURCE_PLANE_SSH_KEY": str(self.dummy_key),
+        }
+        with patch.dict(os.environ, env, clear=True):
+            code = main(["--check-only"])
         self.assertEqual(code, 0)
         mock_ssh.assert_called_once()
         mock_docker.assert_called_once()
+
+    def test_parser_rejects_removed_flags(self):
+        """Simplified infra deploy parser rejects removed SSH and sync override flags."""
+        for bad in (["--host", "1.2.3.4"], ["--key", "/tmp/k"], ["--remote-dir", "/tmp"], ["--no-sync-env"]):
+            with self.assertRaises(SystemExit) as ctx:
+                main(bad)
+            self.assertEqual(ctx.exception.code, 2)
 
     @patch("subprocess.run")
     def test_fetch_remote_admin_token_success(self, mock_run):
@@ -390,7 +413,7 @@ class TestInfraDeploy(unittest.TestCase):
     @patch("sandbox.infra_deploy.sync_resource_plane_to_vps")
     @patch("sandbox.infra_deploy.execute_remote_deploy")
     @patch("sandbox.infra_deploy.fetch_remote_admin_token")
-    def test_main_no_sync_env_flag(
+    def test_main_syncs_env_by_default(
         self,
         mock_token,
         mock_exec,
@@ -398,12 +421,18 @@ class TestInfraDeploy(unittest.TestCase):
         mock_docker,
         mock_ssh,
     ):
-        """Ensures --no-sync-env bypasses local credential synchronization."""
+        """Ensures modal-sandbox infra deploy always syncs credentials by default."""
         mock_ssh.return_value = True
         mock_docker.return_value = (True, "Docker OK")
         mock_sync.return_value = True
         mock_exec.return_value = (0, "Success output")
+        mock_token.return_value = "synced_tok"
 
-        code = main(["--host", "vps.example.com", "--key", str(self.dummy_key), "--no-sync-env"])
+        env = {
+            "RESOURCE_PLANE_SSH_HOST": "vps.example.com",
+            "RESOURCE_PLANE_SSH_KEY": str(self.dummy_key),
+        }
+        with patch.dict(os.environ, env, clear=True):
+            code = main([])
         self.assertEqual(code, 0)
-        mock_token.assert_not_called()
+        mock_token.assert_called_once()

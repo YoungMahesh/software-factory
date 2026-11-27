@@ -216,6 +216,41 @@ def run_sandbox_launch(
     )
 
 
+def _build_infra_help_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="modal-sandbox infra",
+        description="Manage Resource Plane, Sandbox Web Dashboard, and Host Ingress Proxy on the VPS.",
+    )
+    subparsers = parser.add_subparsers(dest="subcommand", metavar="<subcommand>")
+    subparsers.add_parser("deploy", help="Deploy Resource Plane (PostgreSQL & S3) to the VPS via SSH.")
+    subparsers.add_parser("dashboard", help="Deploy the Next.js Sandbox Web Dashboard and configure Caddy routing.")
+    subparsers.add_parser("caddy", help="Configure Host Ingress Proxy (/opt/caddy) and backup/restore config.")
+    return parser
+
+
+def run_infra_cli(argv: list[str]) -> int:
+    """Dispatches `modal-sandbox infra <deploy|dashboard|caddy>` without implicit deploy."""
+    if argv and argv[0] == "deploy":
+        from sandbox.infra_deploy import main as infra_main
+        return infra_main(argv[1:])
+    if argv and argv[0] == "dashboard":
+        from sandbox.dashboard_deploy import main as dashboard_main
+        return dashboard_main(argv[1:])
+    if argv and argv[0] == "caddy":
+        from sandbox.caddy_deploy import main as caddy_main
+        return caddy_main(argv[1:])
+
+    parser = _build_infra_help_parser()
+    if not argv:
+        parser.print_help(sys.stderr)
+        return 2
+    if argv[0] in ("-h", "--help"):
+        parser.print_help()
+        return 0
+    parser.error(f"Unknown infra subcommand '{argv[0]}'. Choose from: deploy, dashboard, caddy.")
+    return 2
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "create-app":
         from scripts.create_app import main as create_app_main
@@ -226,15 +261,7 @@ def main():
         sys.exit(deploy_app_main(sys.argv[2:]))
 
     if len(sys.argv) > 1 and sys.argv[1] == "infra":
-        args = sys.argv[2:]
-        if args and args[0] == "caddy":
-            from sandbox.caddy_deploy import main as caddy_main
-            sys.exit(caddy_main(args[1:]))
-        if args and args[0] == "dashboard":
-            from sandbox.dashboard_deploy import main as dashboard_main
-            sys.exit(dashboard_main(args[1:]))
-        from sandbox.infra_deploy import main as infra_main
-        sys.exit(infra_main(args[1:] if args[:1] == ["deploy"] else args))
+        sys.exit(run_infra_cli(sys.argv[2:]))
 
     parser = create_parser()
     args = parser.parse_args()

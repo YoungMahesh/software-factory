@@ -33,23 +33,25 @@ For development with local edits:
 ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py
 ```
 
-The deployed control plane receives captured factory configuration and Git provenance. Edit `.env` and redeploy to update production secrets or staged files; modifying a local checkout does not update an already deployed app. `GET /` directly on the Modal origin returns an authenticated API status page, `GET /api/version` returns provenance, and the Next.js dashboard displays the deployed commit in its footer/shell.
+The deployed control plane receives captured factory configuration (including `RESOURCE_PLANE_SSH_*`, reading `RESOURCE_PLANE_SSH_KEY` into `RESOURCE_PLANE_SSH_PRIVATE_KEY`, `APPS_BASE_DOMAIN`, and `CLOUDFLARE_DNS_API_TOKEN`) plus Git provenance. Edit `.env` and redeploy to update production secrets or staged files; modifying a local checkout does not update an already deployed app. `GET /` directly on the Modal origin returns an authenticated API status page, `GET /api/version` returns provenance, and the Next.js dashboard displays both the Control Plane commit (`CP`) and its own deployed build commit (`UI`) in its header.
 
 ## Next.js Dashboard & Custom Base Domain via Caddy
 
-After deploying `sandboxes/sandbox/function.py` to Modal and configuring `APPS_BASE_DOMAIN` (plus `CLOUDFLARE_DNS_API_TOKEN` or `CLOUDFLARE_API_TOKEN`) in root `.env`, deploy the Next.js Sandbox Web Dashboard (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS and expose it on `APPS_BASE_DOMAIN`:
+After deploying `sandboxes/sandbox/function.py` to Modal and configuring `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, and `CLOUDFLARE_DNS_API_TOKEN` (or `CLOUDFLARE_API_TOKEN`) in root `.env`, deploy the Next.js Sandbox Web Dashboard (`dashboard/`) to isolated production (`/opt/sandbox-dashboard`) and staging (`/opt/sandbox-dashboard-staging`) stacks on the VPS:
 
 ```bash
-# Stage on a preview subdomain first (e.g. https://dashboard.<APPS_BASE_DOMAIN>)
-modal-sandbox infra dashboard --subdomain dashboard
+# Stage an isolated build on https://dashboard.<APPS_BASE_DOMAIN> without affecting apex
+modal-sandbox infra dashboard --subdomain
 
-# Cut over the apex (https://<APPS_BASE_DOMAIN>) to Next.js and sync /opt/caddy to Central Config Store
-modal-sandbox infra dashboard --cutover --sync
+# Build and deploy the production dashboard to https://<APPS_BASE_DOMAIN>
+modal-sandbox infra dashboard
 ```
 
-`modal-sandbox infra dashboard` transfers `dashboard/` over SSH, writes `/opt/sandbox-dashboard/.env` (`SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `APPS_BASE_DOMAIN`), builds and runs the Docker Compose stack attached to `dbhost-network`, and configures `/opt/caddy/conf/sites/apps-wildcard.caddy` on `--cutover`. In cutover mode, Caddy routes apex browser UI and `/api/*` requests to `sandbox-dashboard-web:3000` (which enforces HTTP Basic Auth in Next.js middleware and forwards `/api/[...path]` to `SANDBOX_CONTROL_PLANE_URL`) while forwarding Modal CLI/status paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) directly to Modal (`SANDBOX_DASHBOARD_UPSTREAM` or Modal SDK auto-discovery).
+- **Production (`modal-sandbox infra dashboard`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard`, writes `.env` (`SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `APPS_BASE_DOMAIN`, `DASHBOARD_CONTAINER_NAME=sandbox-dashboard-web`, `DASHBOARD_COMPOSE_PROJECT=sandbox-dashboard`, `NEXT_PUBLIC_DASHBOARD_COMMIT`), builds/starts `sandbox-dashboard-web:3000` on `dbhost-network`, and configures `/opt/caddy/conf/sites/apps-wildcard.caddy` so apex browser UI and `/api/*` go to `sandbox-dashboard-web:3000` while `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` route directly to Modal.
+- **Staging (`modal-sandbox infra dashboard --subdomain`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard-staging`, runs an independent container (`sandbox-dashboard-staging-web:3000`, Compose project `sandbox-dashboard-staging`), and wires `https://dashboard.<APPS_BASE_DOMAIN>` without modifying `/opt/sandbox-dashboard`. Broken changes on staging do not take down the apex dashboard. When staging is deployed before apex, Caddy keeps Modal CLI routes active at apex with HTTP `404` on browser paths until apex is deployed.
+- **UI Self-Deploy Header Buttons**: On `https://<APPS_BASE_DOMAIN>`, the header renders only **Deploy `dashboard.<APPS_BASE_DOMAIN>`**; on `https://dashboard.<APPS_BASE_DOMAIN>`, it renders only **Deploy `<APPS_BASE_DOMAIN>`** (local `localhost` development shows both). Confirming prompts `POST /api/dashboard/deploy` on the Modal Control Plane to clone `main` from `${GH_ORG_NAME}/software-factory` asynchronously, build/deploy only the target `dashboard/` stack and its Caddy route (without redeploying Modal backend functions), and report live completion status.
 
-Before Next.js cutover, `modal-sandbox infra caddy --wildcard` proxies the apex of `APPS_BASE_DOMAIN` directly to Modal (pass `--no-sync-env` to skip setting empty `MODAL_SANDBOX_ENDPOINT_URL`, or `--no-dashboard` to revert the apex to `404`).
+Running `modal-sandbox infra caddy --wildcard` directly configures wildcard DNS-01 TLS and Modal CLI apex routes (`404` for browser paths) until `modal-sandbox infra dashboard` deploys the apex Next.js UI.
 
 ## Launch through the dashboard or CLI
 
@@ -109,6 +111,9 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 | `GET` | `/api/snapshots` | Basic | List snapshot registry records |
 | `DELETE` | `/api/snapshots/{image_id}` | Basic | Delete registry record; leaves the underlying image intact |
 | `POST` | `/api/snapshots/{image_id}/launch` | Basic | Restore an image with launch options |
+| `POST` | `/api/dashboard/deploy` | Basic | Queue async build and deploy of `dashboard/` (`main`) to `apex` or `subdomain` |
+| `GET` | `/api/dashboard/deploy` | Basic | Return latest dashboard self-deployment record and status |
+| `GET` | `/api/dashboard/deploy/{deploy_id}` | Basic | Poll status and logs for one dashboard self-deployment job |
 | `POST` | `/launch` | Basic | Headless `LaunchRequest` provisioning |
 | `POST` | `/snapshot` | Basic | Headless snapshot capture |
 | `GET` | `/api/codex/profiles` | Scoped bearer credential | Codex login pool status |

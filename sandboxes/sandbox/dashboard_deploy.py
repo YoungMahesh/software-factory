@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 import sys
 
-from sandbox.app_deploy._caddy import ensure_app_caddy_route, remove_app_caddy_route
+from sandbox.app_deploy._caddy import ensure_app_caddy_route
 from sandbox.app_deploy._config import serialize_dotenv
 from sandbox.caddy_deploy import setup_reverse_proxy
 from sandbox.caddy_wildcard import (
@@ -16,7 +17,6 @@ from sandbox.caddy_wildcard import (
     resolve_apps_base_domain,
     resolve_cloudflare_dns_token,
     resolve_dashboard_upstream,
-    validate_subdomain_label,
 )
 from sandbox.config import parse_env_file, resolve_factory_root, resolve_web_ui_credentials
 from sandbox.infra_deploy import (
@@ -26,10 +26,48 @@ from sandbox.infra_deploy import (
     check_ssh_connection,
     resolve_vps_ssh_config,
 )
+from sandbox.provenance import resolve_host_software_factory_provenance
 from sandbox.source_transfer import stream_source_archive
 
 DEFAULT_DASHBOARD_REMOTE_DIR = "/opt/sandbox-dashboard"
+DEFAULT_STAGING_REMOTE_DIR = "/opt/sandbox-dashboard-staging"
 DEFAULT_DASHBOARD_APP_SLUG = "sandbox-dashboard"
+DEFAULT_STAGING_SUBDOMAIN = "dashboard"
+DEFAULT_STAGING_WEB_UPSTREAM = "sandbox-dashboard-staging-web:3000"
+
+
+@dataclass(frozen=True)
+class DashboardDeployTarget:
+    """Isolated VPS deployment target metadata for apex vs staging dashboard."""
+
+    kind: str
+    remote_dir: str
+    container_name: str
+    compose_project: str
+    upstream: str
+
+
+DASHBOARD_TARGETS: dict[str, DashboardDeployTarget] = {
+    "apex": DashboardDeployTarget(
+        kind="apex",
+        remote_dir=DEFAULT_DASHBOARD_REMOTE_DIR,
+        container_name="sandbox-dashboard-web",
+        compose_project="sandbox-dashboard",
+        upstream=DEFAULT_DASHBOARD_WEB_UPSTREAM,
+    ),
+    "subdomain": DashboardDeployTarget(
+        kind="subdomain",
+        remote_dir=DEFAULT_STAGING_REMOTE_DIR,
+        container_name="sandbox-dashboard-staging-web",
+        compose_project="sandbox-dashboard-staging",
+        upstream=DEFAULT_STAGING_WEB_UPSTREAM,
+    ),
+}
+
+
+def resolve_dashboard_target(*, subdomain: bool = False) -> DashboardDeployTarget:
+    """Returns the isolated VPS target metadata for apex or staging subdomain deployment."""
+    return DASHBOARD_TARGETS["subdomain" if subdomain else "apex"]
 
 
 def find_dashboard_source_dir(start_path: Path | None = None) -> Path:
@@ -103,18 +141,35 @@ def build_dashboard_remote_env(
     username: str,
     password: str,
     base_domain: str | None = None,
+    container_name: str = "sandbox-dashboard-web",
+    compose_project: str = "sandbox-dashboard",
+    dashboard_commit: str | None = None,
 ) -> dict[str, str]:
-    """Builds production environment variables written to /opt/sandbox-dashboard/.env."""
+    """Builds production environment variables written to the VPS dashboard .env."""
     env_vars = {
         "NODE_ENV": "production",
         "PORT": "3000",
         "SANDBOX_CONTROL_PLANE_URL": control_plane_url,
         "WEB_UI_USERNAME": username,
         "WEB_UI_PASSWORD": password,
+        "DASHBOARD_CONTAINER_NAME": container_name,
+        "DASHBOARD_COMPOSE_PROJECT": compose_project,
     }
     if base_domain:
         env_vars["APPS_BASE_DOMAIN"] = base_domain
+    if dashboard_commit and dashboard_commit != "unknown":
+        env_vars["NEXT_PUBLIC_DASHBOARD_COMMIT"] = dashboard_commit
     return env_vars
+
+
+def _resolve_dashboard_commit(root: Path, explicit_commit: str | None) -> str | None:
+    if explicit_commit and explicit_commit.strip():
+        return explicit_commit.strip()
+    prov = resolve_host_software_factory_provenance(root)
+    short = prov.get("SOFTWARE_FACTORY_COMMIT_SHORT", "").strip()
+    if not short or short == "unknown":
+        return None
+    return f"{short}*" if prov.get("SOFTWARE_FACTORY_DIRTY") == "1" else short
 
 
 def deploy_dashboard(
@@ -123,110 +178,112 @@ def deploy_dashboard(
     factory_root: Path | None = None,
     dotenv: dict[str, str] | None = None,
     control_plane_url: str | None = None,
-    base_domain: str | None = None,
-    cf_dns_token: str | None = None,
-    subdomain: str | None = None,
-    cutover: bool = False,
-    sync_caddy_store: bool = False,
-    profile: str | None = None,
+    subdomain: bool = False,
+    dashboard_commit: str | None = None,
     stream: bool = True,
+    log_cb=None,
 ) -> int:
-    """Deploys dashboard/ to VPS, builds container, and optionally wires staging or apex Caddy routes."""
-    if subdomain and cutover:
-        print("❌ Cannot combine --subdomain and --cutover in one step; stage first, then cut over.", file=sys.stderr)
-        return 1
+    """Deploys dashboard/ to its isolated VPS stack and wires apex or dashboard.<base> Caddy route."""
+    def _emit(msg: str, *, err: bool = False) -> None:
+        if log_cb:
+            log_cb(msg)
+        print(msg, file=sys.stderr if err else sys.stdout)
 
+    target = resolve_dashboard_target(subdomain=subdomain)
+    target_cfg = VpsSshConfig(
+        host=vps_config.host,
+        user=vps_config.user,
+        port=vps_config.port,
+        key_path=vps_config.key_path,
+        remote_dir=target.remote_dir,
+    )
     root = factory_root or resolve_factory_root()
     env_map = dotenv if dotenv is not None else (parse_env_file(root / ".env") if (root / ".env").is_file() else {})
 
     try:
-        resolved_base = resolve_apps_base_domain(base_domain, dotenv=env_map)
+        resolved_base = resolve_apps_base_domain(None, dotenv=env_map)
         upstream, lookup_err = resolve_dashboard_upstream(
             control_plane_url, base_domain=resolved_base, dotenv=env_map, repo_root=root,
         )
         if not upstream:
             raise ValueError(lookup_err or "Could not resolve Modal Control Plane URL.")
-        creds = resolve_web_ui_credentials(repo_root=root, enforce=True)
-        clean_sub = validate_subdomain_label(subdomain) if subdomain else None
-        resolved_cf = (
-            resolve_cloudflare_dns_token(cf_dns_token, dotenv=env_map)
-            if (clean_sub or cutover)
-            else None
-        )
-    except ValueError as exc:
-        print(f"❌ {exc}", file=sys.stderr)
+        creds = resolve_web_ui_credentials(repo_root=root, env=env_map or None, enforce=True)
+        resolved_cf = resolve_cloudflare_dns_token(None, dotenv=env_map)
+    except (ValueError, RuntimeError) as exc:
+        _emit(f"❌ {exc}", err=True)
         return 1
 
-    print(f"\n🚀 Deploying Sandbox Dashboard to {vps_config.user}@{vps_config.host}:{vps_config.remote_dir}")
-    if not check_ssh_connection(vps_config):
-        print(f"❌ Cannot connect via SSH to {vps_config.user}@{vps_config.host}:{vps_config.port}.", file=sys.stderr)
+    _emit(f"🚀 Deploying Sandbox Web Dashboard ({target.kind}) to {target_cfg.user}@{target_cfg.host}:{target_cfg.remote_dir}")
+    if not check_ssh_connection(target_cfg):
+        _emit(f"❌ Cannot connect via SSH to {target_cfg.user}@{target_cfg.host}:{target_cfg.port}.", err=True)
         return 1
-    docker_ok, docker_msg = check_remote_docker(vps_config)
+    docker_ok, docker_msg = check_remote_docker(target_cfg)
     if not docker_ok:
-        print(f"❌ {docker_msg}", file=sys.stderr)
+        _emit(f"❌ {docker_msg}", err=True)
         return 1
 
-    if not sync_dashboard_to_vps(vps_config):
+    source_dir = find_dashboard_source_dir(root)
+    if not sync_dashboard_to_vps(target_cfg, source_dir=source_dir):
         return 1
 
+    commit_label = _resolve_dashboard_commit(root, dashboard_commit)
     remote_env = build_dashboard_remote_env(
         control_plane_url=upstream,
         username=creds["WEB_UI_USERNAME"],
         password=creds["WEB_UI_PASSWORD"],
         base_domain=resolved_base,
+        container_name=target.container_name,
+        compose_project=target.compose_project,
+        dashboard_commit=commit_label,
     )
     ok_env, msg_env = _write_remote_b64(
-        vps_config, f"{vps_config.remote_dir}/.env", serialize_dotenv(remote_env), mode="0600",
+        target_cfg, f"{target_cfg.remote_dir}/.env", serialize_dotenv(remote_env), mode="0600",
     )
     if not ok_env:
-        print(f"❌ {msg_env}", file=sys.stderr)
+        _emit(f"❌ {msg_env}", err=True)
         return 1
 
-    code, out = execute_remote_dashboard_deploy(vps_config, stream=stream)
+    code, out = execute_remote_dashboard_deploy(target_cfg, stream=stream)
     if code != 0:
-        print(f"❌ Remote dashboard build/start failed (exit {code}).", file=sys.stderr)
+        _emit(f"❌ Remote dashboard build/start failed (exit {code}).", err=True)
         if out:
-            print(out, file=sys.stderr)
+            _emit(out, err=True)
         return code
 
-    if clean_sub:
-        fqdn = f"{clean_sub}.{resolved_base}"
+    if subdomain:
+        fqdn = f"{DEFAULT_STAGING_SUBDOMAIN}.{resolved_base}"
         ok_route, route_msg = ensure_app_caddy_route(
-            vps_config,
+            target_cfg,
             DEFAULT_DASHBOARD_APP_SLUG,
             fqdn,
-            DEFAULT_DASHBOARD_WEB_UPSTREAM,
+            target.upstream,
             base_domain=resolved_base,
             cf_dns_token=resolved_cf,
+            dashboard_upstream=upstream,
+            apex_cli_only=True,
         )
         if not ok_route:
-            print(f"❌ {route_msg}", file=sys.stderr)
+            _emit(f"❌ {route_msg}", err=True)
             return 1
-        print(f"   ✓ Staged at https://{fqdn} ({route_msg})")
-
-    if cutover:
+        _emit(f"   ✓ Staged at https://{fqdn} ({route_msg})")
+    else:
         ok_apex, apex_msg = setup_reverse_proxy(
-            vps_config=vps_config,
+            vps_config=target_cfg,
             wildcard=True,
             base_domain=resolved_base,
             cf_dns_token=resolved_cf,
             dashboard=True,
             dashboard_upstream=upstream,
-            dashboard_web_upstream=DEFAULT_DASHBOARD_WEB_UPSTREAM,
+            dashboard_web_upstream=target.upstream,
             dotenv=env_map,
             env_file_path=root / ".env",
         )
         if not ok_apex:
-            print(f"❌ Apex cutover failed: {apex_msg}", file=sys.stderr)
+            _emit(f"❌ Apex routing failed: {apex_msg}", err=True)
             return 1
-        print(f"   ✓ {apex_msg}")
-        remove_app_caddy_route(vps_config, DEFAULT_DASHBOARD_APP_SLUG)
+        _emit(f"   ✓ {apex_msg}")
 
-    if sync_caddy_store and (clean_sub or cutover):
-        from sandbox.caddy_store import maybe_sync_after_deploy
-        return maybe_sync_after_deploy(vps_config, profile)
-
-    print("\n✅ Sandbox Dashboard deployment complete!")
+    _emit("✅ Sandbox Web Dashboard deployment complete!")
     return 0
 
 
@@ -234,62 +291,34 @@ def build_dashboard_deploy_parser() -> argparse.ArgumentParser:
     """Builds the CLI argument parser for modal-sandbox infra dashboard."""
     parser = argparse.ArgumentParser(
         prog="modal-sandbox infra dashboard",
-        description="Deploy the Next.js Sandbox Dashboard container to /opt/sandbox-dashboard on the VPS.",
+        description="Build and deploy the Sandbox Web Dashboard to the App Base Domain or staging subdomain.",
     )
-    parser.add_argument("--control-plane-url", default=None, help="Direct Modal Control Plane origin (*.modal.run).")
-    parser.add_argument("--subdomain", default=None, help="Expose staging preview at <subdomain>.<APPS_BASE_DOMAIN>.")
-    parser.add_argument("--cutover", action="store_true", help="Switch apex APPS_BASE_DOMAIN to Next.js while preserving Modal CLI paths.")
-    parser.add_argument("--base-domain", default=None, help="Override APPS_BASE_DOMAIN.")
-    parser.add_argument("--cf-dns-token", default=None, help="Cloudflare DNS-01 token when updating Caddy wildcard ingress.")
-    parser.add_argument("--remote-dir", default=DEFAULT_DASHBOARD_REMOTE_DIR, help=f"Remote VPS directory (default: {DEFAULT_DASHBOARD_REMOTE_DIR}).")
-    parser.add_argument("--sync", action="store_true", help="Back up /opt/caddy to Central Config Store after route changes.")
-    parser.add_argument("--profile", default=None, help="Caddy config profile folder under caddy/ in config repo.")
-    parser.add_argument("--host", default=None, help="VPS SSH host (defaults to RESOURCE_PLANE_SSH_HOST).")
-    parser.add_argument("--user", default=None, help="VPS SSH user (defaults to RESOURCE_PLANE_SSH_USER or 'root').")
-    parser.add_argument("--port", type=int, default=None, help="VPS SSH port (defaults to RESOURCE_PLANE_SSH_PORT or 22).")
-    parser.add_argument("--key", default=None, help="Path to private SSH key (defaults to RESOURCE_PLANE_SSH_KEY).")
-    parser.add_argument("--check-only", action="store_true", help="Only verify SSH and remote Docker connectivity.")
+    parser.add_argument(
+        "--subdomain",
+        action="store_true",
+        help="Deploy isolated staging stack to dashboard.<APPS_BASE_DOMAIN> without affecting the apex.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entrypoint for deploying the Sandbox Dashboard to the VPS."""
+    """CLI entrypoint for deploying the Sandbox Web Dashboard to the VPS."""
     args = build_dashboard_deploy_parser().parse_args(argv)
     root = resolve_factory_root()
     dotenv = parse_env_file(root / ".env") if (root / ".env").is_file() else {}
+    target = resolve_dashboard_target(subdomain=args.subdomain)
 
     try:
-        vps_cfg = resolve_vps_ssh_config(
-            host=args.host,
-            user=args.user,
-            port=args.port,
-            key_path=args.key,
-            remote_dir=args.remote_dir,
-            dotenv=dotenv,
-        )
+        vps_cfg = resolve_vps_ssh_config(remote_dir=target.remote_dir, dotenv=dotenv)
     except (ValueError, FileNotFoundError) as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 1
-
-    if args.check_only:
-        if not check_ssh_connection(vps_cfg):
-            print("❌ SSH connection failed.", file=sys.stderr)
-            return 1
-        ok, msg = check_remote_docker(vps_cfg)
-        print("✓ " if ok else "❌ ", msg)
-        return 0 if ok else 1
 
     return deploy_dashboard(
         vps_cfg,
         factory_root=root,
         dotenv=dotenv,
-        control_plane_url=args.control_plane_url,
-        base_domain=args.base_domain,
-        cf_dns_token=args.cf_dns_token,
         subdomain=args.subdomain,
-        cutover=args.cutover,
-        sync_caddy_store=args.sync,
-        profile=args.profile,
     )
 
 

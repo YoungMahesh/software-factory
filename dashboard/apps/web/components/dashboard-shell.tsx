@@ -11,12 +11,14 @@ import {
   PenLine,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
   Server,
   X,
   Zap,
 } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
+import { isActiveDashboardDeploy, resolveDashboardDeployActions } from "@/lib/dashboard-deploy";
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -30,13 +32,31 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     selectProfile,
     profiles,
     version,
+    appsBaseDomain,
+    dashboardCommit,
+    dashboardDeploy,
+    deploySubmitting,
     apps,
     sandboxes,
     snapshots,
     scratchpadCatalog,
     refreshAll,
     openFreshLaunchModal,
+    triggerDashboardDeploy,
   } = useDashboard();
+  const [hostname, setHostname] = useState<string | null>(null);
+  const [hostResolved, setHostResolved] = useState(false);
+
+  useEffect(() => {
+    setHostname(window.location.hostname);
+    setHostResolved(true);
+  }, []);
+
+  const deployActions = hostResolved
+    ? resolveDashboardDeployActions(hostname, appsBaseDomain)
+    : [];
+  const activeDeploy = isActiveDashboardDeploy(dashboardDeploy);
+  const deployBusy = deploySubmitting || activeDeploy;
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -104,13 +124,21 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   version.commit_short &&
                   version.commit_short !== "unknown" && (
                     <span
-                      title={`Ref: ${version.ref} | Commit: ${version.commit}`}
+                      title={`Control Plane Ref: ${version.ref} | Commit: ${version.commit}`}
                       className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-surface-card text-muted font-mono border border-hairline"
                     >
-                      {version.commit_short}
+                      CP {version.commit_short}
                       {version.dirty ? "*" : ""}
                     </span>
                   )}
+                {dashboardCommit && dashboardCommit !== "unknown" && (
+                  <span
+                    title={`Dashboard Commit: ${dashboardCommit}`}
+                    className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-surface-card text-muted font-mono border border-hairline"
+                  >
+                    UI {dashboardCommit.slice(0, 7)}
+                  </span>
+                )}
               </h1>
             </div>
           </div>
@@ -214,6 +242,29 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 />
                 <span>Auto-refresh (5s)</span>
               </label>
+
+              {deployActions.map((action) => {
+                const isTargetRunning = activeDeploy && dashboardDeploy?.target === action.target;
+                const buttonLabel = isTargetRunning
+                  ? dashboardDeploy.current_label || `Deploying ${action.targetDomain}...`
+                  : action.label;
+                return (
+                  <button
+                    key={action.target}
+                    type="button"
+                    disabled={deployBusy}
+                    onClick={() => void triggerDashboardDeploy(action.target)}
+                    title={`Deploy latest main dashboard/ and Caddy routing to ${action.targetDomain}`}
+                    aria-label={action.label}
+                    className="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-lg bg-canvas hover:bg-surface-card border border-hairline text-xs sm:text-sm font-medium text-ink transition-colors disabled:opacity-50"
+                  >
+                    <Rocket
+                      className={`w-4 h-4 sm:mr-1.5 ${isTargetRunning ? "animate-pulse text-primary" : ""}`}
+                    />
+                    <span className="hidden md:inline truncate max-w-[220px]">{buttonLabel}</span>
+                  </button>
+                );
+              })}
 
               <button
                 type="button"

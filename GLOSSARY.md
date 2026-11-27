@@ -215,7 +215,7 @@ The Modal-hosted FastAPI backend (`sandboxes/sandbox/function.py`), Durable Laun
 _Avoid_: Sandbox server, runner API, modal webhook daemon
 
 **Sandbox Web Dashboard**:
-The Next.js 16 + React 19 browser UI and same-origin BFF proxy (`dashboard/apps/web`) hosted on the VPS (`/opt/sandbox-dashboard`) for building Factory Apps, inspecting active sandboxes (with live lifespan timers and accrued Modal costs), managing snapshot registry records, and authoring Scratchpad Ideas/Raw notes. Exposed via Caddy at the apex of the App Base Domain (`--cutover`, split-routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal) or on a staging subdomain preview.
+The Next.js 16 + React 19 browser UI and same-origin BFF proxy (`dashboard/apps/web`) hosted on the VPS for building Factory Apps, inspecting active sandboxes (with live lifespan timers and accrued Modal costs), managing snapshot registry records, and authoring Scratchpad Ideas/Raw notes. Runs as an isolated production apex instance (`/opt/sandbox-dashboard`) on the App Base Domain and an isolated staging instance (`/opt/sandbox-dashboard-staging`) on `dashboard.<APPS_BASE_DOMAIN>`.
 _Avoid_: Sandbox web UI, runner dashboard, sandbox console, modal GUI
 
 **Snapshot Registry**:
@@ -308,7 +308,7 @@ _Avoid_: Project generator, bootstrap script, create-base-app
 
 
 **App Base Domain**:
-The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers the apex Sandbox Web Dashboard and subdomains assigned to Hosted Apps on the VPS.
+The configured root DNS domain (`APPS_BASE_DOMAIN`) whose wildcard TLS certificate covers the apex Sandbox Web Dashboard, its staging subdomain (`dashboard.<APPS_BASE_DOMAIN>`), and subdomains assigned to Hosted Apps on the VPS.
 _Avoid_: Root domain, tunnel domain, resource plane domain
 
 **Hosted App**:
