@@ -9,6 +9,16 @@ export const DashboardDeployStatusSchema = z.enum([
 ]);
 export type DashboardDeployStatus = z.infer<typeof DashboardDeployStatusSchema>;
 
+export const DocsDeployStatusSchema = z.enum([
+  "queued",
+  "cloning",
+  "building",
+  "deploying",
+  "ready",
+  "failed",
+]);
+export type DocsDeployStatus = z.infer<typeof DocsDeployStatusSchema>;
+
 export const DashboardDeployRecordSchema = z.object({
   deploy_id: z.string(),
   target: z.literal("apex").default("apex"),
@@ -24,11 +34,34 @@ export const DashboardDeployRecordSchema = z.object({
 });
 export type DashboardDeployRecord = z.infer<typeof DashboardDeployRecordSchema>;
 
+export const DocsDeployRecordSchema = z.object({
+  deploy_id: z.string(),
+  status: DocsDeployStatusSchema,
+  current_label: z.string(),
+  target_url: z.string().nullable().optional().default(null),
+  project_name: z.string().nullable().optional().default(null),
+  branch: z.string().nullable().optional().default(null),
+  commit: z.string().nullable().optional().default(null),
+  commit_short: z.string().nullable().optional().default(null),
+  logs: z.array(z.string()).optional().default([]),
+  error: z.string().nullable().optional().default(null),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type DocsDeployRecord = z.infer<typeof DocsDeployRecordSchema>;
+
 export const DashboardDeployStatusResponseSchema = z.object({
   deploy: DashboardDeployRecordSchema.nullable().optional().default(null),
 });
 export type DashboardDeployStatusResponse = z.infer<
   typeof DashboardDeployStatusResponseSchema
+>;
+
+export const DocsDeployStatusResponseSchema = z.object({
+  deploy: DocsDeployRecordSchema.nullable().optional().default(null),
+});
+export type DocsDeployStatusResponse = z.infer<
+  typeof DocsDeployStatusResponseSchema
 >;
 
 export const VersionInfoSchema = z.object({
@@ -42,20 +75,36 @@ export type VersionInfo = z.infer<typeof VersionInfoSchema>;
 export interface DeployerStatusPayload {
   apps_base_domain: string | null;
   target_url: string | null;
+  docs_target_url: string | null;
   deployer_commit: string | null;
   control_plane_configured: boolean;
   control_plane_error: string | null;
   control_plane_version: VersionInfo | null;
   live_dashboard_commit: string | null;
   live_dashboard_reachable: boolean;
+  live_docs_commit: string | null;
+  live_docs_reachable: boolean;
   latest_deploy: DashboardDeployRecord | null;
+  latest_docs_deploy: DocsDeployRecord | null;
+}
+
+export type AnyDeployStatus = DashboardDeployStatus | DocsDeployStatus;
+export type AnyDeployRecord = DashboardDeployRecord | DocsDeployRecord;
+
+export function isActiveDeployStatus(status: AnyDeployStatus | null | undefined): boolean {
+  return status === "queued" || status === "cloning" || status === "building" || status === "deploying";
 }
 
 export function isActiveDashboardDeploy(
   deploy: DashboardDeployRecord | null | undefined,
 ): boolean {
-  if (!deploy) return false;
-  return deploy.status === "queued" || deploy.status === "cloning" || deploy.status === "deploying";
+  return Boolean(deploy && isActiveDeployStatus(deploy.status));
+}
+
+export function isActiveDocsDeploy(
+  deploy: DocsDeployRecord | null | undefined,
+): boolean {
+  return Boolean(deploy && isActiveDeployStatus(deploy.status));
 }
 
 export async function extractApiError(res: Response): Promise<string> {

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
@@ -16,7 +14,17 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from sandbox.apps._models import MAX_LAUNCH_LOG_LINES, utc_now_iso
+from sandbox._deploy_state import (
+    ACTIVE_DEPLOY_STATUSES,
+    STALE_DEPLOY_MINUTES,
+    clone_latest_main,
+    create_deploy_job,
+    get_deploy_job,
+    get_latest_deploy_job,
+    is_stale_active_deploy,
+    update_deploy_job,
+)
+from sandbox.apps._models import utc_now_iso
 from sandbox.caddy_wildcard import is_subdomain_of, normalize_base_domain, resolve_apps_base_domain
 from sandbox.dashboard_deploy import deploy_dashboard
 from sandbox.env_store import fetch_vault_env_raw, resolve_gh_token
@@ -25,11 +33,11 @@ from sandbox.infra_deploy import resolve_vps_ssh_config
 DashboardDeployTargetKind = Literal["apex"]
 DashboardDeployStatus = Literal["queued", "cloning", "deploying", "ready", "failed"]
 
-ACTIVE_DEPLOY_STATUSES: frozenset[str] = frozenset({"queued", "cloning", "deploying"})
-STALE_DEPLOY_MINUTES = 20
+_DASHBOARD_DEPLOYS_SUBDIR = "dashboard-deploys"
 
 dashboard_deploy_router = APIRouter(tags=["dashboard-deploy"])
 _DASHBOARD_DEPLOY_DISPATCHER: Callable[[str], None] | None = None
+_is_stale_active_deploy = is_stale_active_deploy
 
 
 def set_dashboard_deploy_dispatcher(dispatcher: Callable[[str], None] | None) -> None:
@@ -70,39 +78,8 @@ class DashboardDeployStatusResponse(BaseModel):
     deploy: DashboardDeployRecord | None = None
 
 
-def _is_stale_active_deploy(record: DashboardDeployRecord) -> bool:
-    if record.status not in ACTIVE_DEPLOY_STATUSES:
-        return False
-    try:
-        updated = datetime.fromisoformat(record.updated_at)
-    except ValueError:
-        return False
-    if updated.tzinfo is None:
-        updated = updated.replace(tzinfo=timezone.utc)
-    age_secs = (datetime.now(timezone.utc) - updated).total_seconds()
-    return age_secs > STALE_DEPLOY_MINUTES * 60
-
-
 class DashboardDeployStateMixin:
     """FactoryStateStore mixin persisting DashboardDeployRecord JSON files."""
-
-    def _dashboard_deploys_dir(self) -> Path:
-        return self.root_dir / "dashboard-deploys"
-
-    def _dashboard_deploy_path(self, deploy_id: str) -> Path:
-        return self._dashboard_deploys_dir() / f"{self._validate_id(deploy_id)}.json"
-
-    def _list_dashboard_deploys_unlocked(self) -> list[DashboardDeployRecord]:
-        deploys_dir = self._dashboard_deploys_dir()
-        if not deploys_dir.is_dir():
-            return []
-        items: list[DashboardDeployRecord] = []
-        for entry in deploys_dir.glob("*.json"):
-            rec = self._read_model_file(entry, DashboardDeployRecord)
-            if rec is not None:
-                items.append(rec)
-        items.sort(key=lambda item: item.created_at, reverse=True)
-        return items
 
     def create_dashboard_deploy(
         self,
@@ -111,40 +88,38 @@ class DashboardDeployStateMixin:
         control_plane_url: str | None = None,
     ) -> DashboardDeployRecord:
         """Persists a new queued DashboardDeployRecord if no active deployment is running."""
-        with self._lock:
-            self._reload_volume()
-            self._dashboard_deploys_dir().mkdir(parents=True, exist_ok=True)
-            for existing in self._list_dashboard_deploys_unlocked():
-                if existing.status in ACTIVE_DEPLOY_STATUSES and not _is_stale_active_deploy(existing):
-                    raise DashboardDeployConflictError(
-                        f"Dashboard deployment '{existing.deploy_id}' ({existing.target}) is already {existing.status}."
-                    )
-            deploy_id = f"dash-{uuid.uuid4().hex[:12]}"
-            record = DashboardDeployRecord(
-                deploy_id=deploy_id,
+        return create_deploy_job(
+            self,
+            subdir=_DASHBOARD_DEPLOYS_SUBDIR,
+            model_cls=DashboardDeployRecord,
+            conflict_exc_cls=DashboardDeployConflictError,
+            conflict_noun="Dashboard deployment",
+            build_record=lambda: DashboardDeployRecord(
+                deploy_id=f"dash-{uuid.uuid4().hex[:12]}",
                 target=target,
                 current_label="Queued production deploy (App Base Domain)",
                 control_plane_url=control_plane_url,
-            )
-            self._write_model_file(self._dashboard_deploy_path(deploy_id), record)
-            self._commit_volume()
-            return record
+            ),
+        )
 
     def get_dashboard_deploy(self, deploy_id: str, *, reload: bool = True) -> DashboardDeployRecord | None:
         """Loads one DashboardDeployRecord by ID."""
-        try:
-            path = self._dashboard_deploy_path(deploy_id)
-        except ValueError:
-            return None
-        return self._get_record(path, DashboardDeployRecord, reload=reload)
+        return get_deploy_job(
+            self,
+            subdir=_DASHBOARD_DEPLOYS_SUBDIR,
+            model_cls=DashboardDeployRecord,
+            deploy_id=deploy_id,
+            reload=reload,
+        )
 
     def get_latest_dashboard_deploy(self, *, reload: bool = True) -> DashboardDeployRecord | None:
         """Returns the most recent DashboardDeployRecord, if any."""
-        with self._lock:
-            if reload:
-                self._reload_volume()
-            items = self._list_dashboard_deploys_unlocked()
-            return items[0] if items else None
+        return get_latest_deploy_job(
+            self,
+            subdir=_DASHBOARD_DEPLOYS_SUBDIR,
+            model_cls=DashboardDeployRecord,
+            reload=reload,
+        )
 
     def update_dashboard_deploy(
         self,
@@ -154,21 +129,15 @@ class DashboardDeployStateMixin:
         **updates: Any,
     ) -> DashboardDeployRecord:
         """Reloads, updates fields/logs on a DashboardDeployRecord, and commits."""
-        def _mutate(cur: DashboardDeployRecord) -> DashboardDeployRecord:
-            merged = dict(updates)
-            if append_logs:
-                merged["logs"] = [*cur.logs, *append_logs][-MAX_LAUNCH_LOG_LINES:]
-            merged.setdefault("updated_at", utc_now_iso())
-            return cur.model_copy(update=merged)
-
-        result = self._modify_record(
-            self._dashboard_deploy_path(deploy_id),
-            DashboardDeployRecord,
-            _mutate,
-            f"Dashboard deploy '{deploy_id}' not found.",
+        return update_deploy_job(
+            self,
+            subdir=_DASHBOARD_DEPLOYS_SUBDIR,
+            model_cls=DashboardDeployRecord,
+            deploy_id=deploy_id,
+            missing_label="Dashboard deploy",
+            append_logs=append_logs,
+            **updates,
         )
-        assert result is not None
-        return result
 
 
 def resolve_control_plane_ssh_private_key() -> str:
@@ -209,41 +178,6 @@ def ensure_headless_ssh_config(ssh_dir: Path | None = None) -> None:
         content = (existing.rstrip() + "\n\n" + block) if existing.strip() else block
         cfg_path.write_text(content, encoding="utf-8")
     cfg_path.chmod(0o600)
-
-
-def clone_latest_main(dest_dir: Path, *, org_name: str, gh_token: str) -> str:
-    """Shallow-clones github.com/<org_name>/software-factory (main) and returns short commit SHA."""
-    basic_b64 = base64.b64encode(f"x-access-token:{gh_token}".encode("utf-8")).decode("ascii")
-    repo_url = f"https://github.com/{org_name}/software-factory.git"
-    auth_cfg = f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic_b64}"
-    clone_cmd = [
-        "git",
-        "-c",
-        "credential.helper=",
-        "-c",
-        auth_cfg,
-        "clone",
-        "--depth",
-        "1",
-        "--branch",
-        "main",
-        "--single-branch",
-        repo_url,
-        str(dest_dir),
-    ]
-    res = subprocess.run(clone_cmd, capture_output=True, text=True, check=False)
-    if res.returncode != 0:
-        raise RuntimeError(f"Failed cloning {org_name}/software-factory (main): {res.stderr.strip() or res.stdout.strip()}")
-
-    rev = subprocess.run(
-        ["git", "-C", str(dest_dir), "rev-parse", "--short", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if rev.returncode != 0 or not rev.stdout.strip():
-        raise RuntimeError("Cloned repository did not yield a valid HEAD commit.")
-    return rev.stdout.strip()
 
 
 def execute_dashboard_self_deploy(

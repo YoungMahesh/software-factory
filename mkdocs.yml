@@ -183,6 +183,7 @@ nav:
     - '0097: Shared Repo Worktrees, Builder Defaults, Rootfs Snapshot Size, and Scratchpad Delete': adr/0097-shared-repo-worktrees-and-dashboard-defaults.md
     - '0098: Simplified modal-sandbox infra CLI and Isolated Dashboard Self-Deploy': adr/0098-simplified-infra-cli-and-isolated-dashboard-deploys.md
     - '0099: Standalone Dashboard Deployer and Staging Dashboard Removal': adr/0099-standalone-dashboard-deployer-and-staging-removal.md
+    - '0100: Cloudflare Documentation Web App in Dashboard Deployer and Modal Docs Retirement': adr/0100-cloudflare-documentation-deployer-and-modal-docs-retirement.md
 - Agent Guidelines:
   - Domain Documentation: agents/domain.md
   - Issue Tracker: agents/issue-tracker.md

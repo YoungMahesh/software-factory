@@ -26,7 +26,6 @@ Factory configuration starts with the repository root `.env`; copy the tracked [
 | `CODEX_STATUS_SECRET` | Signing secret for pool-wide Codex Credential Profile status; configure the same secret on launch host and Hosted Sandbox Control Plane |
 | `ALLOW_DIRTY_DEPLOY` | Set to `1` to bypass the Hosted Sandbox Control Plane's clean-working-tree check for development |
 | `FACTORY_STATE_DIR` | Override directory for `FactoryStateStore` metadata outside `/root/.factory-state` (`factory-state-v1` volume) |
-| `DOCS_CUSTOM_DOMAIN` | Optional custom domain for the Modal documentation app |
 
 Pool-wide Codex status also requires an HTTPS `MODAL_SANDBOX_ENDPOINT_URL`. Child sandboxes receive scoped status access rather than the signing secret. See [AI tooling](../guides/ai-tooling.md#codex-credential-profiles).
 
@@ -64,7 +63,7 @@ Production `resource-plane/deploy.sh` generates `.env` on first use and preserve
 
 ## Documentation publishing variables
 
-The Cloudflare Pages script uses `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, plus optional `CLOUDFLARE_PAGES_PROJECT` (default `modal-sandboxes-docs`) and `CLOUDFLARE_PAGES_BRANCH` (default `main`). See [documentation deployment](../guides/deploying-documentation.md).
+Both **Dashboard Deployer** (`POST /api/docs/deploy`) and `sandboxes/scripts/deploy-docs.sh` use `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, plus `APPS_BASE_DOMAIN` (`https://docs.<APPS_BASE_DOMAIN>`) and optional `CLOUDFLARE_PAGES_PROJECT` (default `modal-sandboxes-docs`) and `CLOUDFLARE_PAGES_BRANCH` (default `main`). See [documentation deployment](../guides/deploying-documentation.md).
 
 ## Provenance
 

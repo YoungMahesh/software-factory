@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Build & Deploy Docs to Cloudflare Pages
+# Build & Deploy Documentation Web App to Cloudflare Pages
 # ==============================================================================
 set -euo pipefail
 
@@ -59,6 +59,18 @@ if [[ ! -d "${ROOT_DIR}/site" ]]; then
     exit 1
 fi
 
+COMMIT_FULL="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || echo "unknown")"
+COMMIT_SHORT="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+cat > "${ROOT_DIR}/site/deploy-info.json" <<EOF
+{
+  "commit": "${COMMIT_FULL}",
+  "commit_short": "${COMMIT_SHORT}",
+  "deployed_at": "${DEPLOYED_AT}"
+}
+EOF
+
 echo "==> Deploying to Cloudflare Pages project: ${PROJECT_NAME}..."
 
 # Locate wrangler CLI
@@ -74,5 +86,14 @@ CI=1 ${WRANGLER} pages deploy "${ROOT_DIR}/site" \
     --commit-dirty=true
 
 echo ""
-echo "✅ Documentation successfully built and deployed to Cloudflare Pages!"
-echo "   Live URL: https://${PROJECT_NAME}.pages.dev"
+echo "✅ Documentation Web App successfully built and deployed to Cloudflare Pages!"
+if [[ -n "${APPS_BASE_DOMAIN:-}" ]]; then
+    DOCS_DOMAIN="${APPS_BASE_DOMAIN#*://}"
+    DOCS_DOMAIN="${DOCS_DOMAIN%%/*}"
+    DOCS_DOMAIN="${DOCS_DOMAIN%%:*}"
+    DOCS_DOMAIN="${DOCS_DOMAIN#\*.}"
+    DOCS_DOMAIN="${DOCS_DOMAIN%.}"
+    echo "   Live URL: https://docs.${DOCS_DOMAIN}"
+else
+    echo "   Configure APPS_BASE_DOMAIN and Cloudflare Pages custom domain for https://docs.<APPS_BASE_DOMAIN>."
+fi

@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dashboard Deployer",
-  description: "Standalone deployment console for Sandbox Web Dashboard (GitHub main to App Base Domain)",
+  description:
+    "Standalone deployment console for Sandbox Web Dashboard and Documentation Web App (GitHub main)",
 };
 
 export const viewport: Viewport = {

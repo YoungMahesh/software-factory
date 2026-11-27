@@ -1,85 +1,22 @@
-"""Unit tests for the Modal Documentation Web App."""
+"""Unit tests for Zensical documentation configuration and strict build."""
 
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
-
-from fastapi.testclient import TestClient
-
-from sandbox.docs import (
-    APP_NAME,
-    app,
-    create_docs_app,
-    docs_image,
-    docs_web_app,
-)
 
 
-class TestDocsApp(unittest.TestCase):
-    """Test suite for the static documentation FastAPI application."""
-
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.site_path = Path(self.temp_dir.name)
-
-        # Create mock compiled site structure
-        (self.site_path / "index.html").write_text("<h1>Modal Sandboxes Docs</h1>", encoding="utf-8")
-        nested_dir = self.site_path / "getting-started"
-        nested_dir.mkdir(parents=True, exist_ok=True)
-        (nested_dir / "index.html").write_text("<h1>Getting Started</h1>", encoding="utf-8")
-        (self.site_path / "404.html").write_text("<h1>Page Not Found</h1>", encoding="utf-8")
-
-        self.app = create_docs_app(self.site_path)
-        self.client = TestClient(self.app)
-
-    def tearDown(self):
-        self.temp_dir.cleanup()
-
-    def test_root_index_html(self):
-        """Root GET request should serve the index.html page."""
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Modal Sandboxes Docs", response.text)
-        self.assertIn("text/html", response.headers.get("content-type", ""))
-
-    def test_nested_directory_route(self):
-        """Directory route should resolve to the index.html within that folder."""
-        response = self.client.get("/getting-started/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Getting Started", response.text)
-
-    def test_not_found_status(self):
-        """Request for non-existent path should return 404 status."""
-        response = self.client.get("/non-existent-page")
-        self.assertEqual(response.status_code, 404)
-
-    def test_nonexistent_site_directory_graceful_handling(self):
-        """App creation should handle missing directory gracefully without failing."""
-        missing_path = Path("/nonexistent/directory/for/testing")
-        empty_app = create_docs_app(missing_path)
-        client = TestClient(empty_app)
-        response = client.get("/")
-        self.assertEqual(response.status_code, 404)
-
-    def test_modal_app_invariants(self):
-        """Modal application definition should have expected name and properties."""
-        self.assertEqual(APP_NAME, "modal-sandboxes-docs")
-        self.assertEqual(app.name, "modal-sandboxes-docs")
-        self.assertIsNotNone(docs_image)
-
-    def test_docs_web_app_factory(self):
-        """Invoking docs_web_app via .local() should return a FastAPI instance."""
-        with patch("sandbox.docs.create_docs_app", return_value=self.app) as mock_create:
-            fastapi_instance = docs_web_app.local()
-            self.assertIs(fastapi_instance, self.app)
-            mock_create.assert_called_once_with("/root/site")
+class TestDocsBuild(unittest.TestCase):
+    """Test suite for documentation configuration and Zensical compilation."""
 
     def test_mkdocs_emoji_extension_configured(self):
         """Verify mkdocs.yml configures pymdownx.emoji for Material and Octicons rendering."""
-        repo_root = Path(__file__).resolve().parents[2] if (Path(__file__).resolve().parents[2] / "mkdocs.yml").is_file() else Path(__file__).resolve().parent.parent
+        repo_root = (
+            Path(__file__).resolve().parents[2]
+            if (Path(__file__).resolve().parents[2] / "mkdocs.yml").is_file()
+            else Path(__file__).resolve().parent.parent
+        )
         mkdocs_path = repo_root / "mkdocs.yml"
         self.assertTrue(mkdocs_path.is_file(), "mkdocs.yml must exist at repo root")
         content = mkdocs_path.read_text(encoding="utf-8")
@@ -93,9 +30,12 @@ class TestDocsApp(unittest.TestCase):
         if not zensical_bin:
             self.skipTest("zensical binary not installed in test environment")
 
-        repo_root = Path(__file__).resolve().parents[2] if (Path(__file__).resolve().parents[2] / "mkdocs.yml").is_file() else Path(__file__).resolve().parent.parent
-        # Build to a temporary directory to verify strict clean build
-        with tempfile.TemporaryDirectory() as tmp_site:
+        repo_root = (
+            Path(__file__).resolve().parents[2]
+            if (Path(__file__).resolve().parents[2] / "mkdocs.yml").is_file()
+            else Path(__file__).resolve().parent.parent
+        )
+        with tempfile.TemporaryDirectory():
             res = subprocess.run(
                 [zensical_bin, "build", "--strict", "-f", str(repo_root / "mkdocs.yml")],
                 cwd=str(repo_root),
@@ -103,9 +43,16 @@ class TestDocsApp(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            # Remove site directory generated during test
             site_dir = repo_root / "site"
             if site_dir.exists():
                 shutil.rmtree(site_dir)
 
-            self.assertEqual(res.returncode, 0, f"zensical build --strict failed:\n{res.stderr}\n{res.stdout}")
+            self.assertEqual(
+                res.returncode,
+                0,
+                f"zensical build --strict failed:\n{res.stderr}\n{res.stdout}",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,9 +1,11 @@
 import { loadWorkspaceEnv } from "./env";
 import {
   DashboardDeployStatusResponseSchema,
+  DocsDeployStatusResponseSchema,
   VersionInfoSchema,
   type DashboardDeployRecord,
   type DeployerStatusPayload,
+  type DocsDeployRecord,
   type VersionInfo,
 } from "./deploy-types";
 
@@ -152,26 +154,70 @@ export async function proxyControlPlaneRequest(
   });
 }
 
-export async function fetchLiveDashboardHealth(
-  targetUrl: string | null,
+export async function proxyDeployStatusById(
+  upstreamPrefix: string,
+  deployId: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  if (!deployId || !/^[A-Za-z0-9_-]+$/.test(deployId)) {
+    return Response.json({ detail: "Invalid deploy ID." }, { status: 400 });
+  }
+  return proxyControlPlaneRequest(`${upstreamPrefix}/${encodeURIComponent(deployId)}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+async function fetchLiveCommitProbe(
+  probeUrl: string | null,
+  extractCommit: (payload: Record<string, unknown>) => string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ commit: string | null; reachable: boolean }> {
-  if (!targetUrl) return { commit: null, reachable: false };
+  if (!probeUrl) return { commit: null, reachable: false };
   try {
-    const res = await fetchImpl(`${targetUrl}/api/health`, {
+    const res = await fetchImpl(probeUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return { commit: null, reachable: false };
-    const data = (await res.json()) as { dashboard_commit?: unknown };
-    const commit =
-      typeof data.dashboard_commit === "string" && data.dashboard_commit.trim()
-        ? data.dashboard_commit.trim()
-        : null;
-    return { commit, reachable: true };
+    const data = (await res.json()) as Record<string, unknown>;
+    return { commit: extractCommit(data), reachable: true };
   } catch {
     return { commit: null, reachable: false };
   }
+}
+
+export async function fetchLiveDashboardHealth(
+  targetUrl: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ commit: string | null; reachable: boolean }> {
+  return fetchLiveCommitProbe(
+    targetUrl ? `${targetUrl}/api/health` : null,
+    (data) =>
+      typeof data.dashboard_commit === "string" && data.dashboard_commit.trim()
+        ? data.dashboard_commit.trim()
+        : null,
+    fetchImpl,
+  );
+}
+
+export async function fetchLiveDocsInfo(
+  docsTargetUrl: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ commit: string | null; reachable: boolean }> {
+  return fetchLiveCommitProbe(
+    docsTargetUrl ? `${docsTargetUrl}/deploy-info.json` : null,
+    (data) => {
+      if (typeof data.commit_short === "string" && data.commit_short.trim()) {
+        return data.commit_short.trim();
+      }
+      if (typeof data.commit === "string" && data.commit.trim()) {
+        return data.commit.trim().slice(0, 7);
+      }
+      return null;
+    },
+    fetchImpl,
+  );
 }
 
 export async function gatherDeployerStatus(
@@ -183,6 +229,7 @@ export async function gatherDeployerStatus(
 
   const baseDomain = normalizeBaseDomain(env.APPS_BASE_DOMAIN);
   const targetUrl = baseDomain ? `https://${baseDomain}` : null;
+  const docsTargetUrl = baseDomain ? `https://docs.${baseDomain}` : null;
   const deployerCommit = env.NEXT_PUBLIC_DASHBOARD_COMMIT?.trim() || null;
 
   let origin: string | null = null;
@@ -197,15 +244,18 @@ export async function gatherDeployerStatus(
 
   let controlPlaneVersion: VersionInfo | null = null;
   let latestDeploy: DashboardDeployRecord | null = null;
+  let latestDocsDeploy: DocsDeployRecord | null = null;
   let cpError = configError;
 
-  const liveProbePromise = fetchLiveDashboardHealth(targetUrl, fetchImpl);
+  const liveDashboardPromise = fetchLiveDashboardHealth(targetUrl, fetchImpl);
+  const liveDocsPromise = fetchLiveDocsInfo(docsTargetUrl, fetchImpl);
 
   if (origin && authHeader) {
     const headers = { Authorization: authHeader, Accept: "application/json" };
-    const [versionRes, deployRes] = await Promise.allSettled([
+    const [versionRes, deployRes, docsDeployRes] = await Promise.allSettled([
       fetchImpl(`${origin}/api/version`, { headers, cache: "no-store" }),
       fetchImpl(`${origin}/api/dashboard/deploy`, { headers, cache: "no-store" }),
+      fetchImpl(`${origin}/api/docs/deploy`, { headers, cache: "no-store" }),
     ]);
 
     if (versionRes.status === "fulfilled" && versionRes.value.ok) {
@@ -227,19 +277,31 @@ export async function gatherDeployerStatus(
         // Ignore malformed deploy payload.
       }
     }
+
+    if (docsDeployRes.status === "fulfilled" && docsDeployRes.value.ok) {
+      try {
+        latestDocsDeploy = DocsDeployStatusResponseSchema.parse(await docsDeployRes.value.json()).deploy;
+      } catch {
+        // Ignore malformed docs deploy payload.
+      }
+    }
   }
 
-  const liveHealth = await liveProbePromise;
+  const [liveHealth, liveDocs] = await Promise.all([liveDashboardPromise, liveDocsPromise]);
 
   return {
     apps_base_domain: baseDomain,
     target_url: targetUrl,
+    docs_target_url: docsTargetUrl,
     deployer_commit: deployerCommit,
     control_plane_configured: Boolean(origin && authHeader),
     control_plane_error: cpError,
     control_plane_version: controlPlaneVersion,
     live_dashboard_commit: liveHealth.commit,
     live_dashboard_reachable: liveHealth.reachable,
+    live_docs_commit: liveDocs.commit,
+    live_docs_reachable: liveDocs.reachable,
     latest_deploy: latestDeploy,
+    latest_docs_deploy: latestDocsDeploy,
   };
 }

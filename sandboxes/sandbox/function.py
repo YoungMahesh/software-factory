@@ -42,6 +42,10 @@ from sandbox.dashboard_self_deploy import (
     execute_dashboard_self_deploy,
     set_dashboard_deploy_dispatcher,
 )
+from sandbox.docs_deploy import (
+    execute_docs_deploy,
+    set_docs_deploy_dispatcher,
+)
 from sandbox.launcher import (
     RunningSandbox,
     SandboxLauncher,
@@ -179,6 +183,32 @@ image = stage_app_template_into_image(
     copy=False,
 )
 
+DOCS_DEPLOY_APT_PACKAGES: tuple[str, ...] = (
+    "curl",
+    "ca-certificates",
+    "git",
+    "gnupg",
+)
+
+DOCS_DEPLOY_PIP_PACKAGES: tuple[str, ...] = (
+    *CONTROL_PLANE_PIP_PACKAGES,
+    "zensical>=0.1.1",
+)
+
+DOCS_DEPLOY_RUN_COMMANDS: tuple[str, ...] = (
+    "curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
+    "apt-get install -y nodejs",
+    "npm install -g wrangler",
+)
+
+docs_deploy_image = (
+    modal.Image.debian_slim()
+    .apt_install(*DOCS_DEPLOY_APT_PACKAGES)
+    .run_commands(*DOCS_DEPLOY_RUN_COMMANDS)
+    .pip_install(*DOCS_DEPLOY_PIP_PACKAGES)
+    .add_local_python_source("sandbox", "shared")
+)
+
 # Secrets are injected via modal.Secret, not staged to filesystem
 auth_env = resolve_and_validate_web_credentials(repo_root)
 for k, v in auth_env.items():
@@ -312,6 +342,19 @@ def run_dashboard_deploy(deploy_id: str) -> dict[str, Any]:
 
 
 @app.function(
+    image=docs_deploy_image,
+    secrets=function_secrets,
+    timeout=600,
+)
+def run_docs_deploy(deploy_id: str) -> dict[str, Any]:
+    """Modal background worker cloning main, building docs, and publishing to Cloudflare Pages."""
+    store = FactoryStateClient(factory_state_operation.remote)
+    set_default_store(store)
+    result = execute_docs_deploy(deploy_id, store=store)
+    return result.model_dump()
+
+
+@app.function(
     image=image,
     secrets=function_secrets,
     timeout=180,
@@ -322,4 +365,5 @@ def fastapi_app():
     set_default_store(FactoryStateClient(factory_state_operation.remote))
     set_launch_dispatcher(lambda request_id: run_launch_request.spawn(request_id))
     set_dashboard_deploy_dispatcher(lambda deploy_id: run_dashboard_deploy.spawn(deploy_id))
+    set_docs_deploy_dispatcher(lambda deploy_id: run_docs_deploy.spawn(deploy_id))
     return web_app

@@ -1,6 +1,6 @@
 # Building and Deploying Documentation
 
-The Markdown site lives in `docs/`, with navigation and extensions configured by `mkdocs.yml`. Local verification uses Zensical. The Cloudflare publishing script can fall back to MkDocs if Zensical is absent.
+The Markdown site lives in `docs/`, with navigation and extensions configured by `mkdocs.yml`. Local verification uses Zensical. The **Documentation Web App** is hosted exclusively on Cloudflare Pages at `https://docs.<APPS_BASE_DOMAIN>`.
 
 ## Install and verify locally
 
@@ -20,44 +20,37 @@ zensical serve
 
 This serves a local development preview. The static build output goes to `site/`. The documentation test builds in strict mode when Zensical is on `PATH`; the manually dispatched CI workflow installs the docs extras so this check is exercised. Contract checks cover local links, CLI option references, registered MCP tool names, ADR indexing, and Hosted Sandbox Control Plane API routes.
 
-## Publish on Modal
+## One-time Cloudflare Pages & DNS Setup
 
-```bash
-modal deploy sandboxes/sandbox/docs.py
-```
-
-This deploys the separate `modal-sandboxes-docs` app. Its image installs Zensical, builds the staged documentation, and serves static files through FastAPI/Starlette. It does not install docs tooling into development sandboxes. Use the URL reported by Modal after deployment.
-
-For a custom domain, set `DOCS_CUSTOM_DOMAIN` in the **deploying process environment**:
-
-```bash
-DOCS_CUSTOM_DOMAIN=docs.example.com modal deploy sandboxes/sandbox/docs.py
-```
-
-The docs app reads this value through `os.environ`; it does not load the factory `.env` by itself. Configure the domain using the DNS instructions supplied by Modal. The resulting documentation site is public and has no dashboard Basic authentication.
-
-For a temporary hosted development session:
-
-```bash
-modal serve sandboxes/sandbox/docs.py
-```
-
-## Publish on Cloudflare Pages
-
-Set the following credentials in the root `.env` or process environment:
+Set the following values in the root `.env` (or environment) and redeploy the **Hosted Sandbox Control Plane** (`modal deploy sandboxes/sandbox/function.py`):
 
 ```env
 CLOUDFLARE_ACCOUNT_ID=your-account-id
 CLOUDFLARE_API_TOKEN=your-pages-edit-token
+APPS_BASE_DOMAIN=apps.example.com
 ```
 
-Run from the factory checkout:
+Because `*.<APPS_BASE_DOMAIN>` routes to the VPS Host Ingress Proxy, wire `https://docs.<APPS_BASE_DOMAIN>` once in Cloudflare:
+
+1. Create or open the Cloudflare Pages project (`CLOUDFLARE_PAGES_PROJECT`, defaulting to `modal-sandboxes-docs`, production branch `main`).
+2. Attach `docs.<APPS_BASE_DOMAIN>` as a Custom Domain on that Cloudflare Pages project.
+3. Ensure an explicit `CNAME` record for `docs.<APPS_BASE_DOMAIN>` points to the Cloudflare Pages target (`<project>.pages.dev`) so Cloudflare handles `docs.<APPS_BASE_DOMAIN>` directly rather than falling through to the VPS wildcard record.
+
+## Deploy via Dashboard Deployer
+
+Open **Dashboard Deployer** (`https://deploy.<APPS_BASE_DOMAIN>`) and click **Deploy Documentation Web App**.
+
+The **Hosted Sandbox Control Plane** (`POST /api/docs/deploy`) spawns `run_docs_deploy` in a dedicated `docs_deploy_image` container, clones `main` from GitHub, runs `zensical build --strict`, writes `/deploy-info.json` (`commit`, `commit_short`, `deployed_at`) into `site/`, and uploads `site/` to Cloudflare Pages via Wrangler. **Dashboard Deployer** polls deployment logs independently of **Sandbox Web Dashboard** deploys and displays the live deployed commit from `https://docs.<APPS_BASE_DOMAIN>/deploy-info.json`.
+
+## Manual CLI Deployment on Cloudflare Pages
+
+You can also build and upload `site/` directly from a local factory checkout:
 
 ```bash
 ./sandboxes/scripts/deploy-docs.sh
 ```
 
-The script loads the root `.env`, selects a local Zensical or MkDocs executable, builds with `--strict`, and runs Wrangler to upload `site/`. Node.js is needed for the `npx wrangler` fallback when Wrangler is not already installed.
+The script loads the root `.env`, selects a local Zensical or MkDocs executable, builds with `--strict`, writes `site/deploy-info.json`, and runs Wrangler to upload `site/`. Node.js is needed for the `npx wrangler` fallback when Wrangler is not already installed.
 
 Its default Pages project is `modal-sandboxes-docs`, on branch `main`. Optional project/branch values are read before the script sources `.env`, so export them or supply them to the command:
 
@@ -66,8 +59,6 @@ CLOUDFLARE_PAGES_PROJECT=my-docs CLOUDFLARE_PAGES_BRANCH=staging \
   ./sandboxes/scripts/deploy-docs.sh
 ```
 
-Use the deployment URL printed by Wrangler. To add a custom domain, open the Pages project in Cloudflare and configure its custom domain and DNS records.
-
 Publishing is separate from local verification. The manually dispatched (`workflow_dispatch`) [CI workflow](https://github.com/YoungMahesh/software-factory/blob/main/.github/workflows/docs.yml) builds and checks documentation without publishing it.
 
-Related decisions: [ADR 0062](../adr/0062-publish-documentation-as-modal-web-function.md) and [ADR 0068](../adr/0068-migrate-documentation-generator-to-zensical.md).
+Related decisions: [ADR 0068](../adr/0068-migrate-documentation-generator-to-zensical.md) and [ADR 0100](../adr/0100-cloudflare-documentation-deployer-and-modal-docs-retirement.md).

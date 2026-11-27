@@ -48,7 +48,7 @@ modal-sandbox infra deployer
 ```
 
 - **Production Dashboard (`modal-sandbox infra dashboard`)**: Syncs `dashboard/` to `/opt/sandbox-dashboard`, writes `.env` (`SANDBOX_CONTROL_PLANE_URL`, `WEB_UI_USERNAME`, `WEB_UI_PASSWORD`, `APPS_BASE_DOMAIN`, `DASHBOARD_CONTAINER_NAME=sandbox-dashboard-web`, `DASHBOARD_COMPOSE_PROJECT=sandbox-dashboard`, `NEXT_PUBLIC_DASHBOARD_COMMIT`), builds/starts `sandbox-dashboard-web:3000` on `dbhost-network`, configures `/opt/caddy/conf/sites/apps-wildcard.caddy` so apex browser UI and `/api/*` go to `sandbox-dashboard-web:3000` while `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` route directly to Modal, and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or route.
-- **Dashboard Deployer (`modal-sandbox infra deployer`)**: Syncs `dashboard-deployer/` to `/opt/dashboard-deployer`, builds/starts an independent container (`dashboard-deployer-web:3000`, Compose project `dashboard-deployer`) behind the same `WEB_UI_USERNAME` / `WEB_UI_PASSWORD` Basic Auth middleware, and wires `https://deploy.<APPS_BASE_DOMAIN>` via `/opt/caddy/conf/apps/dashboard-deployer.caddy`. Its **Deploy Sandbox Web Dashboard** button triggers `POST /api/dashboard/deploy` on the Hosted Sandbox Control Plane to clone `main` from `${GH_ORG_NAME}/software-factory` asynchronously, rebuild/deploy `dashboard/` to `https://<APPS_BASE_DOMAIN>` (without redeploying Modal backend functions), and stream live status/logs.
+- **Dashboard Deployer (`modal-sandbox infra deployer`)**: Syncs `dashboard-deployer/` to `/opt/dashboard-deployer`, builds/starts an independent container (`dashboard-deployer-web:3000`, Compose project `dashboard-deployer`) behind the same `WEB_UI_USERNAME` / `WEB_UI_PASSWORD` Basic Auth middleware, and wires `https://deploy.<APPS_BASE_DOMAIN>` via `/opt/caddy/conf/apps/dashboard-deployer.caddy`. Its **Deploy Sandbox Web Dashboard** button triggers `POST /api/dashboard/deploy` to clone `main` from `${GH_ORG_NAME}/software-factory` asynchronously, rebuild/deploy `dashboard/` to `https://<APPS_BASE_DOMAIN>` (without redeploying Modal backend functions), and stream live status/logs. Its **Deploy Documentation Web App** button triggers `POST /api/docs/deploy` independently in a dedicated `docs_deploy_image` worker (`run_docs_deploy`) to clone `main`, run `zensical build --strict`, write `/deploy-info.json`, and publish to Cloudflare Pages at `https://docs.<APPS_BASE_DOMAIN>`.
 
 Running `modal-sandbox infra caddy --wildcard` directly configures wildcard DNS-01 TLS and Modal CLI apex routes (`404` for browser paths) until `modal-sandbox infra dashboard` deploys the apex Next.js UI.
 
@@ -125,6 +125,9 @@ The API retains its existing `/api/apps` routes and `app_id` fields for Builder 
 | `POST` | `/api/dashboard/deploy` | Basic | Queue async build and deploy of `dashboard/` (`main`) to the App Base Domain |
 | `GET` | `/api/dashboard/deploy` | Basic | Return latest dashboard self-deployment record and status |
 | `GET` | `/api/dashboard/deploy/{deploy_id}` | Basic | Poll status and logs for one dashboard self-deployment job |
+| `POST` | `/api/docs/deploy` | Basic | Queue async Zensical build and Cloudflare Pages deploy (`main`) to `docs.<APPS_BASE_DOMAIN>` |
+| `GET` | `/api/docs/deploy` | Basic | Return latest documentation deployment record and status |
+| `GET` | `/api/docs/deploy/{deploy_id}` | Basic | Poll status and logs for one documentation deployment job |
 | `POST` | `/launch` | Basic | Launch a sandbox from `core.LaunchRequest` configuration |
 | `POST` | `/snapshot` | Basic | Headless snapshot capture |
 | `GET` | `/api/codex/profiles` | Scoped bearer credential | Codex Credential Profile pool status |

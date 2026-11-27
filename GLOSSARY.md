@@ -36,11 +36,12 @@ The area of the Sandbox Web Dashboard for creating and opening Builder Workspace
 The factory's command-line interface for provisioning and managing Development Sandboxes.
 
 **Dashboard Deployer**:
-The separate deployment interface for updating the Sandbox Web Dashboard.
+The separate deployment interface for updating the Sandbox Web Dashboard and the Documentation Web App.
 _Avoid_: Staging dashboard, self-deploy UI
 
 **Documentation Web App**:
-The factory's public documentation site, hosted independently of the Hosted Sandbox Control Plane.
+The factory's public documentation site, hosted on Cloudflare Pages under the App Base Domain independently of the Hosted Sandbox Control Plane.
+_Avoid_: Modal docs app
 
 **Control Plane Provenance**:
 The identity of the factory source revision used to deploy the Hosted Sandbox Control Plane, including whether that source contained local modifications.
@@ -171,7 +172,7 @@ The dedicated client key pair for authenticating SSH access to Development Sandb
 ### Application ingress
 
 **App Base Domain**:
-The shared DNS base for the Sandbox Web Dashboard, Dashboard Deployer, and Hosted App hostnames.
+The shared DNS base for the Sandbox Web Dashboard, Dashboard Deployer, Documentation Web App, and Hosted App hostnames.
 
 **Host Ingress Proxy**:
 The shared public web entry point for Hosted Apps and other services on the factory's persistent host.

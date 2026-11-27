@@ -79,7 +79,7 @@ flowchart TD
 ### 2. Sandbox Web Dashboard (`dashboard/`) & Dashboard Deployer (`dashboard-deployer/`)
 
 - **`dashboard/apps/web`**: Next.js 16 + React 19 UI providing the Builder (`/`), Sandboxes (`/sandboxes`), Snapshots (`/snapshots`), and Scratchpad (`/scratchpad` Ideas & Raw) views.
-- **`dashboard-deployer/`**: Standalone Next.js 16 + React 19 deployment console (`/opt/dashboard-deployer`, `https://deploy.<APPS_BASE_DOMAIN>`, deployed via `modal-sandbox infra deployer`) that triggers async GitHub `main` builds and deploys of `dashboard/` to `https://<APPS_BASE_DOMAIN>` via `POST /api/dashboard/deploy` on the Hosted Sandbox Control Plane.
+- **`dashboard-deployer/`**: Standalone Next.js 16 + React 19 deployment console (`/opt/dashboard-deployer`, `https://deploy.<APPS_BASE_DOMAIN>`, deployed via `modal-sandbox infra deployer`) that independently triggers async GitHub `main` builds and deploys of `dashboard/` to `https://<APPS_BASE_DOMAIN>` (`POST /api/dashboard/deploy`) and the **Documentation Web App** to Cloudflare Pages at `https://docs.<APPS_BASE_DOMAIN>` (`POST /api/docs/deploy`).
 - **Same-Origin BFF Proxy**: Next.js middleware enforces HTTP Basic Authentication (`WEB_UI_USERNAME` / `WEB_UI_PASSWORD`) and forwards `/api/[...path]` (with SSE streaming support in `dashboard/`) to `SANDBOX_CONTROL_PLANE_URL`.
 - **VPS Stack**: **Sandbox Web Dashboard** is deployed to `/opt/sandbox-dashboard` (`https://<APPS_BASE_DOMAIN>`) via `modal-sandbox infra dashboard`, keeping Modal CLI paths (`/launch`, `/snapshot`, `/health`, `/api/codex/profiles`) routed directly to Modal.
 

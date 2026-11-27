@@ -16,6 +16,7 @@ from ._coordination import StateTransitions
 from ._github_repos import RepositoryCatalogCache
 from ._models import FactoryAppRecord, LaunchRequestRecord, PrimeSandboxRecord, derive_app_slug, utc_now_iso
 from sandbox.dashboard_self_deploy import DashboardDeployStateMixin
+from sandbox.docs_deploy import DocsDeployStateMixin
 from ._scratchpad_cache import (
     CachedScratchpadNote,
     ScratchpadCatalogCache,
@@ -55,7 +56,7 @@ def get_factory_state_volume(name: str = FACTORY_STATE_VOLUME_NAME) -> modal.Vol
     return modal.Volume.from_name(name, create_if_missing=True)
 
 
-class FactoryStateStore(StateTransitions, DashboardDeployStateMixin):
+class FactoryStateStore(StateTransitions, DashboardDeployStateMixin, DocsDeployStateMixin):
     """Thread-safe per-record JSON persistence for Factory Apps and Launch Requests."""
 
     def __init__(

@@ -15,6 +15,7 @@ from sandbox.caddy_wildcard import (
 )
 
 GITHUB_REMOTE_RE = re.compile(r"github\.com[:/]([^/]+)/([^/\s]+?)(?:\.git)?$")
+RESERVED_APP_SUBDOMAINS: frozenset[str] = frozenset({"deploy", "docs"})
 
 
 @dataclass
@@ -204,6 +205,11 @@ def resolve_app_domain(
         label = validate_subdomain_label(raw_sub)
     else:
         label = validate_subdomain_label(sanitize_app_slug(app_slug))
+    if label in RESERVED_APP_SUBDOMAINS:
+        raise ValueError(
+            f"Subdomain '{label}' is reserved under App Base Domain ({clean_base}). "
+            "Pass --subdomain to choose another subdomain."
+        )
     return label, f"{label}.{clean_base}"
 
 

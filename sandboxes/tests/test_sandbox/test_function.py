@@ -16,9 +16,14 @@ from sandbox.core import LaunchResponse, SnapshotResponse
 from sandbox.function import (
     CONTROL_PLANE_APT_PACKAGES,
     CONTROL_PLANE_PIP_PACKAGES,
+    DOCS_DEPLOY_APT_PACKAGES,
+    DOCS_DEPLOY_PIP_PACKAGES,
+    DOCS_DEPLOY_RUN_COMMANDS,
     collect_control_plane_secrets,
+    docs_deploy_image,
     image as control_plane_image,
     resolve_and_validate_web_credentials,
+    run_docs_deploy,
     validate_clean_working_tree,
     validate_deployment_credentials,
     web_app,
@@ -446,6 +451,22 @@ class TestSandboxCliRemoteIntegration(unittest.TestCase):
     def test_control_plane_image_includes_git_and_ssh_client(self):
         self.assertIn("openssh-client", CONTROL_PLANE_APT_PACKAGES)
         self.assertIn("git", CONTROL_PLANE_APT_PACKAGES)
+
+    def test_docs_deploy_image_includes_zensical_and_wrangler(self):
+        self.assertIn("git", DOCS_DEPLOY_APT_PACKAGES)
+        self.assertTrue(any("zensical" in pkg for pkg in DOCS_DEPLOY_PIP_PACKAGES))
+        self.assertTrue(any("wrangler" in cmd for cmd in DOCS_DEPLOY_RUN_COMMANDS))
+        dep_reprs = [repr(dep) for dep in image_dependencies(docs_deploy_image)]
+        self.assertTrue(any("run_commands" in r for r in dep_reprs))
+        mounted_files = {
+            str(remote_path)
+            for dependency in image_dependencies(docs_deploy_image)
+            for entry in getattr(dependency, "entries", ())
+            for _, remote_path in entry.get_files_to_upload()
+        }
+        self.assertIn("/root/sandbox/docs_deploy.py", mounted_files)
+        self.assertIn("/root/shared/image.py", mounted_files)
+        self.assertIsNotNone(run_docs_deploy)
 
 
 if __name__ == "__main__":

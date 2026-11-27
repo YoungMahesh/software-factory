@@ -68,6 +68,12 @@ class TestAppDeployConfigAndCaddy(unittest.TestCase):
         sub2, fqdn2 = resolve_app_domain("my-app", "apps.example.com", subdomain="demo.apps.example.com")
         self.assertEqual((sub2, fqdn2), ("demo", "demo.apps.example.com"))
 
+        for reserved in ("docs", "deploy"):
+            with self.assertRaises(ValueError):
+                resolve_app_domain(reserved, "apps.example.com")
+            with self.assertRaises(ValueError):
+                resolve_app_domain("my-app", "apps.example.com", subdomain=reserved)
+
         env_dict = build_remote_app_env(
             {
                 "NODE_ENV": "development",

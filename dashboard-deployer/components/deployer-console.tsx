@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   ExternalLink,
   GitBranch,
@@ -17,9 +18,15 @@ import {
 import {
   extractApiError,
   isActiveDashboardDeploy,
+  isActiveDocsDeploy,
+  type AnyDeployRecord,
+  type AnyDeployStatus,
   type DashboardDeployRecord,
   type DeployerStatusPayload,
+  type DocsDeployRecord,
 } from "@/lib/deploy-types";
+
+type ConfirmTarget = "dashboard" | "docs" | null;
 
 function formatTimestamp(raw: string | null | undefined): string {
   if (!raw) return "—";
@@ -28,7 +35,7 @@ function formatTimestamp(raw: string | null | undefined): string {
   return parsed.toLocaleString();
 }
 
-function StatusBadge({ status }: { status: DashboardDeployRecord["status"] }) {
+function StatusBadge({ status }: { status: AnyDeployStatus }) {
   switch (status) {
     case "ready":
       return (
@@ -54,14 +61,216 @@ function StatusBadge({ status }: { status: DashboardDeployRecord["status"] }) {
   }
 }
 
+interface DeployStackSectionProps {
+  eyebrowIcon: ReactNode;
+  eyebrow: string;
+  title: string;
+  description: ReactNode;
+  buttonLabel: string;
+  buttonDisabled: boolean;
+  deployRunning: boolean;
+  activeDeploy: AnyDeployRecord | null;
+  onDeployClick: () => void;
+  domainTileLabel: string;
+  domainText: string | null;
+  targetUrl: string | null;
+  liveCommitLabel: string;
+  liveCommit: string | null;
+  liveReachable: boolean;
+  loading: boolean;
+  latestTitle: string;
+  emptyText: string;
+  openLabel: string;
+}
+
+function DeployStackSection({
+  eyebrowIcon,
+  eyebrow,
+  title,
+  description,
+  buttonLabel,
+  buttonDisabled,
+  deployRunning,
+  activeDeploy,
+  onDeployClick,
+  domainTileLabel,
+  domainText,
+  targetUrl,
+  liveCommitLabel,
+  liveCommit,
+  liveReachable,
+  loading,
+  latestTitle,
+  emptyText,
+  openLabel,
+}: DeployStackSectionProps) {
+  const logBoxRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (logBoxRef.current) {
+      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
+    }
+  }, [activeDeploy?.logs.length]);
+
+  const resolvedOpenUrl = activeDeploy?.target_url || targetUrl;
+
+  return (
+    <section className="rounded-2xl border border-hairline bg-surface-soft p-5 sm:p-6 shadow-2xs space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted">
+            {eyebrowIcon}
+            <span>{eyebrow}</span>
+          </div>
+          <h2 className="text-xl font-semibold text-ink">{title}</h2>
+          <p className="text-sm text-body">{description}</p>
+        </div>
+
+        <button
+          type="button"
+          disabled={buttonDisabled}
+          onClick={onDeployClick}
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary hover:bg-primary-active text-on-primary text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          {deployRunning ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>{activeDeploy?.current_label || "Deploying..."}</span>
+            </>
+          ) : (
+            <>
+              <Rocket className="w-4 h-4" />
+              <span>{buttonLabel}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-hairline">
+        <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
+          <div className="text-xs text-muted">{domainTileLabel}</div>
+          {targetUrl && domainText ? (
+            <a
+              href={targetUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-mono font-medium text-primary-active hover:underline break-all"
+            >
+              <span>{domainText}</span>
+              <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+            </a>
+          ) : (
+            <div className="text-sm font-mono text-muted">Not configured</div>
+          )}
+        </div>
+
+        <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
+          <div className="text-xs text-muted">Source Branch</div>
+          <div className="inline-flex items-center gap-1.5 text-sm font-mono font-medium text-ink">
+            <GitBranch className="w-3.5 h-3.5 text-muted" />
+            <span>main</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
+          <div className="text-xs text-muted">{liveCommitLabel}</div>
+          <div className="text-sm font-mono font-medium text-ink">
+            {loading
+              ? "Checking..."
+              : liveCommit
+                ? liveCommit
+                : liveReachable
+                  ? "Live (commit unknown)"
+                  : "Unreachable"}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-hairline bg-canvas p-4 sm:p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <h3 className="text-base font-semibold text-ink">{latestTitle}</h3>
+            <p className="text-xs text-muted">
+              {activeDeploy
+                ? `Job ${activeDeploy.deploy_id} · Updated ${formatTimestamp(activeDeploy.updated_at)}`
+                : emptyText}
+            </p>
+          </div>
+          {activeDeploy && <StatusBadge status={activeDeploy.status} />}
+        </div>
+
+        {activeDeploy && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-lg bg-surface-soft border border-hairline p-3">
+                <div className="text-xs text-muted mb-0.5">Current Step</div>
+                <div className="font-medium text-ink break-words">{activeDeploy.current_label}</div>
+              </div>
+              <div className="rounded-lg bg-surface-soft border border-hairline p-3">
+                <div className="text-xs text-muted mb-0.5">Deployed Commit</div>
+                <div className="font-mono text-ink">{activeDeploy.commit_short ?? "—"}</div>
+              </div>
+              <div className="rounded-lg bg-surface-soft border border-hairline p-3">
+                <div className="text-xs text-muted mb-0.5">Started</div>
+                <div className="text-ink">{formatTimestamp(activeDeploy.created_at)}</div>
+              </div>
+            </div>
+
+            {activeDeploy.error && (
+              <div className="rounded-xl border border-error/40 bg-error/10 p-3.5 text-sm text-error break-words">
+                {activeDeploy.error}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span className="inline-flex items-center gap-1.5 font-medium">
+                  <Terminal className="w-3.5 h-3.5" />
+                  Deployment Logs
+                </span>
+                {activeDeploy.status === "ready" && resolvedOpenUrl && (
+                  <a
+                    href={resolvedOpenUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary-active font-medium hover:underline"
+                  >
+                    <span>{openLabel}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              <div
+                ref={logBoxRef}
+                className="rounded-xl bg-surface-dark text-on-dark font-mono text-xs p-4 h-56 overflow-y-auto space-y-1 border border-surface-dark-elevated"
+              >
+                {activeDeploy.logs.length > 0 ? (
+                  activeDeploy.logs.map((line, idx) => (
+                    <div key={idx} className="whitespace-pre-wrap break-words leading-relaxed">
+                      {line}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-on-dark-soft italic">Waiting for deployment output...</div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function DeployerConsole() {
   const [status, setStatus] = useState<DeployerStatusPayload | null>(null);
   const [activeDeploy, setActiveDeploy] = useState<DashboardDeployRecord | null>(null);
+  const [activeDocsDeploy, setActiveDocsDeploy] = useState<DocsDeployRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submittingDashboard, setSubmittingDashboard] = useState(false);
+  const [submittingDocs, setSubmittingDocs] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
-  const logBoxRef = useRef<HTMLDivElement | null>(null);
 
   const loadStatus = useCallback(async (withSpinner = false) => {
     if (withSpinner) setLoading(true);
@@ -73,6 +282,7 @@ export function DeployerConsole() {
       const data = (await res.json()) as DeployerStatusPayload;
       setStatus(data);
       setActiveDeploy(data.latest_deploy);
+      setActiveDocsDeploy(data.latest_docs_deploy);
       setBannerError(data.control_plane_error);
     } catch (err) {
       setBannerError(err instanceof Error ? err.message : String(err));
@@ -92,6 +302,7 @@ export function DeployerConsole() {
         if (cancelled) return;
         setStatus(data);
         setActiveDeploy(data.latest_deploy);
+        setActiveDocsDeploy(data.latest_docs_deploy);
         setBannerError(data.control_plane_error);
       })
       .catch((err) => {
@@ -109,6 +320,10 @@ export function DeployerConsole() {
 
   const runningDeployId = isActiveDashboardDeploy(activeDeploy)
     ? (activeDeploy?.deploy_id ?? null)
+    : null;
+
+  const runningDocsDeployId = isActiveDocsDeploy(activeDocsDeploy)
+    ? (activeDocsDeploy?.deploy_id ?? null)
     : null;
 
   useEffect(() => {
@@ -137,14 +352,33 @@ export function DeployerConsole() {
   }, [runningDeployId, loadStatus]);
 
   useEffect(() => {
-    if (logBoxRef.current) {
-      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
-    }
-  }, [activeDeploy?.logs.length]);
+    if (!runningDocsDeployId) return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/docs/deploy/${encodeURIComponent(runningDocsDeployId)}`, {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const next = (await res.json()) as DocsDeployRecord;
+        if (cancelled) return;
+        setActiveDocsDeploy(next);
+        if (!isActiveDocsDeploy(next)) {
+          void loadStatus(false);
+        }
+      } catch {
+        // Polling is best-effort; retry on next tick.
+      }
+    }, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [runningDocsDeployId, loadStatus]);
 
-  const triggerDeploy = useCallback(async () => {
-    setConfirmOpen(false);
-    setSubmitting(true);
+  const triggerDashboardDeploy = useCallback(async () => {
+    setConfirmTarget(null);
+    setSubmittingDashboard(true);
     setBannerError(null);
     try {
       const res = await fetch("/api/deploy", { method: "POST" });
@@ -156,14 +390,38 @@ export function DeployerConsole() {
     } catch (err) {
       setBannerError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSubmitting(false);
+      setSubmittingDashboard(false);
     }
   }, []);
 
-  const deployRunning = submitting || isActiveDashboardDeploy(activeDeploy);
+  const triggerDocsDeploy = useCallback(async () => {
+    setConfirmTarget(null);
+    setSubmittingDocs(true);
+    setBannerError(null);
+    try {
+      const res = await fetch("/api/docs/deploy", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await extractApiError(res));
+      }
+      const record = (await res.json()) as DocsDeployRecord;
+      setActiveDocsDeploy(record);
+    } catch (err) {
+      setBannerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmittingDocs(false);
+    }
+  }, []);
+
+  const dashboardDeployRunning = submittingDashboard || isActiveDashboardDeploy(activeDeploy);
+  const docsDeployRunning = submittingDocs || isActiveDocsDeploy(activeDocsDeploy);
   const targetDomain = status?.apps_base_domain ?? "App Base Domain";
+  const docsDomain = status?.apps_base_domain
+    ? `docs.${status.apps_base_domain}`
+    : "docs.<APPS_BASE_DOMAIN>";
   const targetUrl = status?.target_url ?? activeDeploy?.target_url ?? null;
+  const docsTargetUrl = status?.docs_target_url ?? activeDocsDeploy?.target_url ?? null;
   const cpVersion = status?.control_plane_version;
+  const cpDisabled = loading || status?.control_plane_configured === false;
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas text-ink">
@@ -217,164 +475,72 @@ export function DeployerConsole() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-hairline bg-surface-soft p-5 sm:p-6 shadow-2xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted">
-                <Globe className="w-3.5 h-3.5" />
-                <span>Target Production Stack</span>
-              </div>
-              <h2 className="text-xl font-semibold text-ink">Sandbox Web Dashboard</h2>
-              <p className="text-sm text-body">
-                Clones the latest <span className="font-mono text-ink">main</span> branch from
-                GitHub inside the Hosted Sandbox Control Plane and rebuilds{" "}
-                <span className="font-mono text-ink">dashboard/</span> on{" "}
-                <span className="font-mono text-ink">{targetDomain}</span>.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              disabled={deployRunning || loading || status?.control_plane_configured === false}
-              onClick={() => setConfirmOpen(true)}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary hover:bg-primary-active text-on-primary text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-            >
-              {deployRunning ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{activeDeploy?.current_label || "Deploying..."}</span>
-                </>
-              ) : (
-                <>
-                  <Rocket className="w-4 h-4" />
-                  <span>Deploy Sandbox Web Dashboard</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-hairline">
-            <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
-              <div className="text-xs text-muted">App Base Domain</div>
-              {targetUrl ? (
-                <a
-                  href={targetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm font-mono font-medium text-primary-active hover:underline break-all"
-                >
-                  <span>{targetDomain}</span>
-                  <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-                </a>
-              ) : (
-                <div className="text-sm font-mono text-muted">Not configured</div>
-              )}
-            </div>
-
-            <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
-              <div className="text-xs text-muted">Source Branch</div>
-              <div className="inline-flex items-center gap-1.5 text-sm font-mono font-medium text-ink">
-                <GitBranch className="w-3.5 h-3.5 text-muted" />
-                <span>main</span>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-canvas border border-hairline p-3.5 space-y-1">
-              <div className="text-xs text-muted">Live Dashboard Commit</div>
-              <div className="text-sm font-mono font-medium text-ink">
-                {loading
-                  ? "Checking..."
-                  : status?.live_dashboard_commit
-                    ? status.live_dashboard_commit
-                    : status?.live_dashboard_reachable
-                      ? "Live (commit unknown)"
-                      : "Unreachable"}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-hairline bg-canvas p-5 sm:p-6 shadow-2xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <h3 className="text-base font-semibold text-ink">Latest Deployment</h3>
-              <p className="text-xs text-muted">
-                {activeDeploy
-                  ? `Job ${activeDeploy.deploy_id} · Updated ${formatTimestamp(activeDeploy.updated_at)}`
-                  : "No deployments recorded yet."}
-              </p>
-            </div>
-            {activeDeploy && <StatusBadge status={activeDeploy.status} />}
-          </div>
-
-          {activeDeploy && (
+        <DeployStackSection
+          eyebrowIcon={<Globe className="w-3.5 h-3.5" />}
+          eyebrow="Target Production Stack"
+          title="Sandbox Web Dashboard"
+          description={
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                <div className="rounded-lg bg-surface-soft border border-hairline p-3">
-                  <div className="text-xs text-muted mb-0.5">Current Step</div>
-                  <div className="font-medium text-ink break-words">{activeDeploy.current_label}</div>
-                </div>
-                <div className="rounded-lg bg-surface-soft border border-hairline p-3">
-                  <div className="text-xs text-muted mb-0.5">Deployed Commit</div>
-                  <div className="font-mono text-ink">{activeDeploy.commit_short ?? "—"}</div>
-                </div>
-                <div className="rounded-lg bg-surface-soft border border-hairline p-3">
-                  <div className="text-xs text-muted mb-0.5">Started</div>
-                  <div className="text-ink">{formatTimestamp(activeDeploy.created_at)}</div>
-                </div>
-              </div>
-
-              {activeDeploy.error && (
-                <div className="rounded-xl border border-error/40 bg-error/10 p-3.5 text-sm text-error break-words">
-                  {activeDeploy.error}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5 font-medium">
-                    <Terminal className="w-3.5 h-3.5" />
-                    Deployment Logs
-                  </span>
-                  {activeDeploy.status === "ready" && (activeDeploy.target_url || targetUrl) && (
-                    <a
-                      href={activeDeploy.target_url || targetUrl || "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-primary-active font-medium hover:underline"
-                    >
-                      <span>Open Sandbox Web Dashboard</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-                <div
-                  ref={logBoxRef}
-                  className="rounded-xl bg-surface-dark text-on-dark font-mono text-xs p-4 h-64 overflow-y-auto space-y-1 border border-surface-dark-elevated"
-                >
-                  {activeDeploy.logs.length > 0 ? (
-                    activeDeploy.logs.map((line, idx) => (
-                      <div key={idx} className="whitespace-pre-wrap break-words leading-relaxed">
-                        {line}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-on-dark-soft italic">Waiting for deployment output...</div>
-                  )}
-                </div>
-              </div>
+              Clones the latest <span className="font-mono text-ink">main</span> branch from GitHub
+              inside the Hosted Sandbox Control Plane and rebuilds{" "}
+              <span className="font-mono text-ink">dashboard/</span> on{" "}
+              <span className="font-mono text-ink">{targetDomain}</span>.
             </>
-          )}
-        </section>
+          }
+          buttonLabel="Deploy Sandbox Web Dashboard"
+          buttonDisabled={dashboardDeployRunning || cpDisabled}
+          deployRunning={dashboardDeployRunning}
+          activeDeploy={activeDeploy}
+          onDeployClick={() => setConfirmTarget("dashboard")}
+          domainTileLabel="App Base Domain"
+          domainText={status?.apps_base_domain ? targetDomain : null}
+          targetUrl={targetUrl}
+          liveCommitLabel="Live Dashboard Commit"
+          liveCommit={status?.live_dashboard_commit ?? null}
+          liveReachable={status?.live_dashboard_reachable ?? false}
+          loading={loading}
+          latestTitle="Latest Dashboard Deployment"
+          emptyText="No dashboard deployments recorded yet."
+          openLabel="Open Sandbox Web Dashboard"
+        />
+
+        <DeployStackSection
+          eyebrowIcon={<BookOpen className="w-3.5 h-3.5" />}
+          eyebrow="Target Cloudflare Pages Stack"
+          title="Documentation Web App"
+          description={
+            <>
+              Clones the latest <span className="font-mono text-ink">main</span> branch from GitHub
+              inside the Hosted Sandbox Control Plane, builds{" "}
+              <span className="font-mono text-ink">docs/</span> with Zensical, and publishes to
+              Cloudflare Pages at <span className="font-mono text-ink">{docsDomain}</span>.
+            </>
+          }
+          buttonLabel="Deploy Documentation Web App"
+          buttonDisabled={docsDeployRunning || cpDisabled}
+          deployRunning={docsDeployRunning}
+          activeDeploy={activeDocsDeploy}
+          onDeployClick={() => setConfirmTarget("docs")}
+          domainTileLabel="Documentation Domain"
+          domainText={status?.apps_base_domain ? docsDomain : null}
+          targetUrl={docsTargetUrl}
+          liveCommitLabel="Live Docs Commit"
+          liveCommit={status?.live_docs_commit ?? null}
+          liveReachable={status?.live_docs_reachable ?? false}
+          loading={loading}
+          latestTitle="Latest Documentation Deployment"
+          emptyText="No documentation deployments recorded yet."
+          openLabel="Open Documentation Web App"
+        />
       </main>
 
-      {confirmOpen && (
+      {confirmTarget && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="deploy-confirm-title"
           className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4"
-          onClick={() => setConfirmOpen(false)}
+          onClick={() => setConfirmTarget(null)}
         >
           <div
             className="bg-canvas border border-hairline rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4"
@@ -382,11 +548,13 @@ export function DeployerConsole() {
           >
             <div className="flex items-start justify-between gap-3">
               <h3 id="deploy-confirm-title" className="text-base font-semibold text-ink">
-                Deploy Sandbox Web Dashboard
+                {confirmTarget === "dashboard"
+                  ? "Deploy Sandbox Web Dashboard"
+                  : "Deploy Documentation Web App"}
               </h3>
               <button
                 type="button"
-                onClick={() => setConfirmOpen(false)}
+                onClick={() => setConfirmTarget(null)}
                 aria-label="Close confirmation"
                 className="p-1 text-muted hover:text-ink rounded"
               >
@@ -394,25 +562,38 @@ export function DeployerConsole() {
               </button>
             </div>
 
-            <p className="text-sm text-body">
-              Pull the latest <span className="font-mono text-ink">main</span> branch from GitHub
-              and rebuild and deploy <span className="font-mono text-ink">dashboard/</span> (and
-              Caddy apex routing) to{" "}
-              <span className="font-mono text-ink">{targetDomain}</span>? Modal Control Plane
-              functions will not be redeployed.
-            </p>
+            {confirmTarget === "dashboard" ? (
+              <p className="text-sm text-body">
+                Pull the latest <span className="font-mono text-ink">main</span> branch from GitHub
+                and rebuild and deploy <span className="font-mono text-ink">dashboard/</span> (and
+                Caddy apex routing) to{" "}
+                <span className="font-mono text-ink">{targetDomain}</span>? Hosted Sandbox Control
+                Plane functions will not be redeployed.
+              </p>
+            ) : (
+              <p className="text-sm text-body">
+                Pull the latest <span className="font-mono text-ink">main</span> branch from GitHub,
+                build <span className="font-mono text-ink">docs/</span> with Zensical, and publish to
+                Cloudflare Pages at <span className="font-mono text-ink">{docsDomain}</span>? VPS
+                containers and Hosted Sandbox Control Plane functions will not be modified.
+              </p>
+            )}
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-hairline">
               <button
                 type="button"
-                onClick={() => setConfirmOpen(false)}
+                onClick={() => setConfirmTarget(null)}
                 className="px-4 py-2 rounded-lg bg-surface-soft hover:bg-surface-card border border-hairline text-sm font-medium text-ink"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => void triggerDeploy()}
+                onClick={() =>
+                  void (confirmTarget === "dashboard"
+                    ? triggerDashboardDeploy()
+                    : triggerDocsDeploy())
+                }
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-active text-sm font-semibold text-on-primary"
               >
                 Deploy Now
