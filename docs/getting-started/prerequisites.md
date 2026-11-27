@@ -31,7 +31,7 @@ cp ~/.ssh/modal-sandbox.pub sandboxes/shared/ssh-key.pub
 chmod 600 ~/.ssh/modal-sandbox
 ```
 
-For hosted launches, the operator must redeploy the control plane with the selected public-key file. Startup generates SSH **server host keys**, not the client key pair. An authenticated Modal client can also connect with `modal shell <sandbox-id>`.
+For hosted launches, the operator must redeploy the Hosted Sandbox Control Plane with the selected public-key file. Startup generates SSH **server host keys**, not the client key pair. An authenticated Modal client can also connect with `modal shell <sandbox-id>`.
 
 ## Configure optional integrations
 
@@ -43,7 +43,7 @@ cp .env.example .env
 | :--- | :--- |
 | Clone a repository | `GH_TOKEN`; `GH_ORG_NAME` for shorthand names |
 | Cloudflare application ingress | `CLOUDFLARE_TUNNEL_TOKEN` and an existing tunnel route to port 3000; optional display hostname `MODAL_SANDBOX_TUNNEL_DOMAIN` |
-| Hosted sandbox control plane | `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`, both required |
+| Hosted Sandbox Control Plane | `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`, both required |
 | Modal tooling inside a sandbox | `MODAL_TOKENS` and the `--modal` option |
 | Application secrets from Central Config Store (`config/env/`) | GitHub vault access and an Age decryption key on the launch host |
 | Database and S3 provisioning | `RESOURCE_PLANE_DOMAIN` and `RESOURCE_PLANE_ADMIN_TOKEN` |
@@ -51,4 +51,4 @@ cp .env.example .env
 
 Without a Cloudflare token, sandbox startup skips that tunnel. Use `--no-cloudflare` when you only need SSH or the separate T3 Code HTTPS endpoint.
 
-See [environment variables](../reference/environment.md) and [secrets](../architecture/secrets.md) for scope and precedence. Node.js and pnpm are needed for the [Sandbox Dashboard](../guides/control-plane.md), [application scaffolding](../guides/applications.md), and [Resource Plane local development](../guides/resource-plane-deployment.md#local-development).
+See [environment variables](../reference/environment.md) and [secrets](../architecture/secrets.md) for scope and precedence. Node.js and pnpm are needed for the [Sandbox Web Dashboard](../guides/control-plane.md), [application scaffolding](../guides/applications.md), and [Resource Plane local development](../guides/resource-plane-deployment.md#local-development).

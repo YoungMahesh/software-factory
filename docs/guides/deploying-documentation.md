@@ -18,7 +18,7 @@ The requirements select `.[dev,docs]`, including pytest, Zensical, MkDocs Materi
 zensical serve
 ```
 
-This serves a local development preview. The static build output goes to `site/`. The documentation test builds in strict mode when Zensical is on `PATH`; the manually dispatched CI workflow installs the docs extras so this check is exercised. Contract checks cover local links, CLI option references, registered MCP tool names, ADR indexing, and control plane API routes.
+This serves a local development preview. The static build output goes to `site/`. The documentation test builds in strict mode when Zensical is on `PATH`; the manually dispatched CI workflow installs the docs extras so this check is exercised. Contract checks cover local links, CLI option references, registered MCP tool names, ADR indexing, and Hosted Sandbox Control Plane API routes.
 
 ## Publish on Modal
 

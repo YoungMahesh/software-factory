@@ -6,7 +6,7 @@ Sandbox development ingress and VPS production ingress use different transports.
 
 Startup runs OpenSSH on internal port 2222. Modal exposes an external host and port, which the launcher prints in its connection summary.
 
-The launcher reads `sandboxes/shared/ssh-key.pub` and passes it as `SSH_AUTHORIZED_KEY` to startup. The client needs the matching private key, normally `~/.ssh/modal-sandbox`. To change the authorized key, update that public-key file on the launch host and redeploy a hosted control plane that uses it. See [SSH prerequisites](../getting-started/prerequisites.md#prepare-ssh-access).
+The launcher reads `sandboxes/shared/ssh-key.pub` and passes it as `SSH_AUTHORIZED_KEY` to startup. The client needs the matching private key, normally `~/.ssh/modal-sandbox`. To change the authorized key, update that public-key file on the launch host and redeploy a Hosted Sandbox Control Plane that uses it. See [SSH prerequisites](../getting-started/prerequisites.md#prepare-ssh-access).
 
 A launch named `dev-box` creates an instance such as `dev-box-a1b2c3d4`. The CLI writes the generated instance alias to the launch machine's `~/.ssh/config`, unless `--no-ssh-config` is set. Hosted dashboard launches do not modify the browser user's local SSH configuration.
 

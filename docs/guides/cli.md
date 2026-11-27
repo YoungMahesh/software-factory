@@ -26,18 +26,18 @@ modal-sandbox [OPTIONS]
 | `--t3` | flag | `False` | Launch T3 Code server with encrypted pairing URL and ASCII QR code. |
 | `--browser` | flag | `False` | Pre-bake headless Playwright Chromium for browser automation (implied by `--t3`). |
 | `--react-native` | flag | `False` | Install Android SDK/NDK, OpenJDK 17, Watchman, and Metro bundler tunnel. |
-| `--modal` | flag | `False` | Create the sandbox virtualenv, install Modal and requirements.txt, and configure profiles from required `MODAL_TOKENS`. |
+| `--modal` | flag | `False` | Create the sandbox virtualenv, install Modal and requirements.txt, and configure Modal Profiles from required `MODAL_TOKENS`. |
 | `--no-cloudflare` | flag | `False` | Disable Cloudflare application ingress; without a tunnel token startup also skips initialization. |
 | `--no-ssh-config` | flag | `False` | Do not automatically append SSH connection details to `~/.ssh/config`. |
 | `--sops` | flag | `False` | Retain Age private key in `~/.config/sops` for interactive debugging. |
-| `--remote` | flag | `False` | Delegate sandbox execution to the hosted Modal control plane function. |
+| `--remote` | flag | `False` | Delegate sandbox execution to the Hosted Sandbox Control Plane function. |
 | `--snapshot <id>` | string | `None` | Capture a filesystem snapshot of a running sandbox ID. |
 | `--from-snapshot <img-id>` | string | `None` | Launch a fresh sandbox from an existing filesystem snapshot image ID. |
 | `--snapshot-ttl <days>` | integer | `30` | Snapshot retention period in days (used with `--snapshot`). |
 | `--terminate` | flag | `False` | Terminate the sandbox immediately after taking a snapshot. |
-| `--endpoint-url` | URL | `MODAL_SANDBOX_ENDPOINT_URL` | Hosted control plane URL; only valid with `--remote`. |
+| `--endpoint-url` | URL | `MODAL_SANDBOX_ENDPOINT_URL` | Hosted Sandbox Control Plane URL; only valid with `--remote`. |
 | `--snapshot-timeout` | integer | `180` | Capture timeout in seconds; only valid with `--snapshot`, must be positive. |
-| `--profile` | string | `None` | Modal workspace profile for launch and in-sandbox tooling. |
+| `--profile` | string | `None` | Modal Profile for launch and in-sandbox tooling. |
 | `--t3-port` | integer | `3775` | T3 server port, used with `--t3`. |
 | `--t3-ssh-host` | string | Instance name | Override SSH alias used by T3 and CLI connection registration; requires `--t3`. |
 | `--t3-usage-volume` | string | `t3code-usage-v1` | History/transcript volume; requires `--t3`, incompatible with `--no-t3-persist`. |
@@ -188,7 +188,7 @@ modal-sandbox infra deploy
 | `--check-only` | flag | `False` | Probe SSH connection and remote Docker status without deploying files or starting containers. |
 
 ### `modal-sandbox infra dashboard`
-Deploys the Next.js **Sandbox Web Dashboard** (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS using `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, `SANDBOX_DASHBOARD_UPSTREAM` (or Modal SDK auto-discovery), and Cloudflare DNS-01 configuration from `.env`. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` into the dashboard build so its commit badge appears alongside the Control Plane badge, configures Caddy split apex routing on `https://<APPS_BASE_DOMAIN>` (routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal), and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or Caddy route.
+Deploys the Next.js **Sandbox Web Dashboard** (`dashboard/`) to `/opt/sandbox-dashboard` on the VPS using `RESOURCE_PLANE_SSH_*`, `APPS_BASE_DOMAIN`, `SANDBOX_DASHBOARD_UPSTREAM` (or Modal SDK auto-discovery), and Cloudflare DNS-01 configuration from `.env`. Each deploy bakes `NEXT_PUBLIC_DASHBOARD_COMMIT` into the dashboard build so its commit badge appears alongside the Hosted Sandbox Control Plane badge, configures Caddy split apex routing on `https://<APPS_BASE_DOMAIN>` (routing `/launch`, `/snapshot`, `/health`, and `/api/codex/profiles` to Modal), and cleans up any legacy `/opt/sandbox-dashboard-staging` stack or Caddy route.
 
 ```bash
 # Build and deploy production dashboard to /opt/sandbox-dashboard (https://<APPS_BASE_DOMAIN>)
@@ -212,13 +212,13 @@ Takes no additional flags; configuration is read from `.env`.
 ## Database & Storage Provisioning CLI Utilities
 
 ### `create-db`
-Provisions an isolated PostgreSQL database connection on the hosted **Resource Plane** deployment, automatically resolves or creates the associated project scope, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local project `.env`.
+Provisions an isolated PostgreSQL database connection on the hosted **Resource Plane** deployment, automatically resolves or creates the associated Resource Plane Project, downloads and caches the TLS root CA certificate, and outputs or injects the connection URI into the local application workspace's `.env`.
 
 ```bash
-# Provision or resolve database under current project (derived from Git repo name)
+# Provision or resolve a database in the Resource Plane Project derived from the Git repo name
 create-db <database_name>
 
-# Explicitly target a project
+# Explicitly target a Resource Plane Project
 create-db my-service-db -p custom-project
 
 # Inject connection URI into local .env as DATABASE_URL
@@ -242,7 +242,7 @@ create-db my-service-db --fail-if-exists
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | (required) | Target PostgreSQL database name to provision or resolve. |
-| `-p, --project` | string | Git repo name / `default` | Project scope on the Resource Plane. |
+| `-p, --project` | string | Git repo name / `default` | Resource Plane Project scope. |
 | `--domain` | string | `RESOURCE_PLANE_DOMAIN` | Domain or URL of the Resource Plane (falls back to `DB_HOST_DOMAIN`). |
 | `--token` | string | `RESOURCE_PLANE_ADMIN_TOKEN` | Admin bearer token for MCP server authentication (falls back to `DB_HOST_ADMIN_TOKEN`). |
 | `--write-env` | flag | `False` | Inject or update connection URI in local `.env` file. |
@@ -257,13 +257,13 @@ create-db my-service-db --fail-if-exists
 ---
 
 ### `create-s3`
-Provisions an isolated SeaweedFS S3 object storage bucket on the hosted **Resource Plane** deployment, validates bucket naming rules, retrieves dedicated IAM credentials, and optionally injects standard AWS SDK environment variables into the local project `.env`.
+Provisions an isolated SeaweedFS S3 object storage bucket on the hosted **Resource Plane** deployment, validates bucket naming rules, retrieves dedicated IAM credentials, and optionally injects standard AWS SDK environment variables into the local application workspace's `.env`.
 
 ```bash
-# Provision or resolve S3 bucket under current project (derived from Git repo name)
+# Provision or resolve an S3 bucket in the Resource Plane Project derived from the Git repo name
 create-s3 <bucket_name>
 
-# Explicitly target a project
+# Explicitly target a Resource Plane Project
 create-s3 my-bucket -p custom-project
 
 # Inject standard AWS SDK variables into local .env
@@ -290,7 +290,7 @@ create-s3 my-bucket --fail-if-exists
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | (required) | Target S3 bucket name (3-63 lowercase alphanumeric and hyphens). |
-| `-p, --project` | string | Git repo name / `default` | Project scope on the Resource Plane. |
+| `-p, --project` | string | Git repo name / `default` | Resource Plane Project scope. |
 | `--domain` | string | `RESOURCE_PLANE_DOMAIN` | Domain or URL of the Resource Plane (falls back to `DB_HOST_DOMAIN`). |
 | `--token` | string | `RESOURCE_PLANE_ADMIN_TOKEN` | Admin bearer token for MCP server authentication (falls back to `DB_HOST_ADMIN_TOKEN`). |
 | `--write-env` | flag | `False` | Inject or update standard AWS SDK variables in local `.env` file. |
@@ -332,7 +332,7 @@ modal-sandbox create-app my-app --cloud
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dir` | string | `my-base-app` | Target directory or project name (supports `.` inside empty/standalone sandbox workspaces). |
+| `dir` | string | `my-base-app` | Target directory or application name (supports `.` inside empty/standalone sandbox workspaces). |
 | `--mobile-app / --no-mobile-app` | flag | `False` | Include React Native / Expo mobile client (`apps/mobile`) with parameterized identifiers. |
 | `--db / --no-db` | flag | `True` | Include Drizzle ORM + PostgreSQL setup with portable Resource Plane TLS support. |
 | `--auth / --no-auth` | flag | `True` | Include Better Auth setup with a freshly generated `BETTER_AUTH_SECRET`. |
@@ -344,7 +344,7 @@ modal-sandbox create-app my-app --cloud
 | `--cloud` | flag | `False` | Enable `--github`, `--provision-db` (when `--db` is active), `--push-vault`, and `--launch` (`--provision-s3` stays opt-in). |
 | `--github` | flag | `False` | Create repository in `GH_ORG_NAME` (private by default) and push initial commit. |
 | `--public` | flag | `False` | Create public GitHub repository when `--github` is enabled. |
-| `--repo-name` | string | Project name | Override GitHub/`config/env/` target repository (`<repo>` or `<owner>/<repo>`). |
+| `--repo-name` | string | Application name | Override GitHub/`config/env/` target repository (`<repo>` or `<owner>/<repo>`). |
 | `--provision-db` | flag | `False` | Provision a Resource Plane PostgreSQL database via `create-db` and write `DATABASE_URL` to `.env`. |
 | `--db-name` | string | Derived | Explicit Resource Plane database name. |
 | `--provision-s3` | flag | `False` | Provision a Resource Plane S3 bucket via `create-s3` and write AWS SDK vars to `.env`. |
@@ -353,7 +353,7 @@ modal-sandbox create-app my-app --cloud
 | `--launch` | flag | `False` | Launch a Modal Sandbox with `--t3` (plus `--react-native` if `--mobile-app`) after scaffolding. |
 | `--vm` | flag | `False` | Launch the sandbox as a full Linux VM (used with `--launch`). |
 | `--no-t3` | flag | `False` | Disable T3 Code when launching with `--launch`. |
-| `--profile` | string | `None` | Modal workspace profile for `--launch`. |
+| `--profile` | string | `None` | Modal Profile for `--launch`. |
 | `--deploy` | flag | `False` | Deploy the scaffolded Hosted App to `/root/<repo-name>` on the VPS with wildcard HTTPS. |
 | `--subdomain` | string | Repo slug | Override subdomain label under `APPS_BASE_DOMAIN` when used with `--deploy`. |
 | `--base-domain` | string | `APPS_BASE_DOMAIN` | Override `APPS_BASE_DOMAIN` when used with `--deploy`. |
@@ -397,7 +397,7 @@ deploy-app down my-app --purge
 | `--down` | `False` | Stop the app and remove its Caddy route; alias for `down <target>`. |
 | `--purge` | `False` | With teardown, also remove the remote app directory and ownership record. |
 | `--sync` | `False` | Back up Caddy configuration to Central Config Store (`config/caddy/<profile>/`) after route updates. |
-| `--profile` | `CADDY_STORE_PROFILE` / `default` | Caddy config profile folder under `caddy/`, rather than a Modal workspace profile. |
+| `--profile` | `CADDY_STORE_PROFILE` / `default` | Host Ingress Proxy configuration profile folder under `caddy/`, rather than a Modal Profile. |
 | `--host`, `--user`, `--port`, `--key` | `RESOURCE_PLANE_SSH_*` | VPS connection overrides; explicit private key required. |
 
 Run from the deployment host. A sandbox developer can push code and environment files, then use `deploy-app --repo owner/name` on that host. See [application deployment](applications.md) for prerequisites, ownership checks, and failure recovery.
@@ -429,6 +429,6 @@ modal-sandbox infra caddy restore --profile staging --prune --bootstrap
 
 | Option | Purpose |
 | :--- | :--- |
-| `--profile` | Caddy config profile folder under `caddy/` (defaults to `CADDY_STORE_PROFILE` / `default`). |
+| `--profile` | Host Ingress Proxy configuration profile folder under `caddy/` (defaults to `CADDY_STORE_PROFILE` / `default`). |
 | `--bootstrap` | With `restore`, provision `/opt/caddy` before restoring. |
 | `--prune` | With `restore`, remove extra configuration files while retaining the main Caddyfile. |

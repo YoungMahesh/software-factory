@@ -1,6 +1,6 @@
 # Resource Plane VPS Deployment Guide
 
-This guide walks through deploying the **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, and Next.js management console) to a dedicated Linux VPS or local Docker environment.
+This guide walks through deploying the **Resource Plane** (PostgreSQL 16, SeaweedFS S3 object storage, the Resource Plane Console, and the Resource Plane Management API over MCP) to a dedicated Linux VPS or local Docker environment.
 
 ---
 
@@ -47,7 +47,7 @@ Keep the multi-line SSH private key in a separate file; the factory configuratio
 
 1. **In-Repo Placement**: Save the private key to `.secrets/resource_plane_ssh` (extensionless per Linux conventions). The `.secrets/` directory is excluded in `.gitignore`.
 2. **Automatic Permission Hardening**: `modal-sandbox infra deploy` validates that the key exists and normalizes its permissions to `0600` and adds a missing trailing newline to a recognized private-key file.
-3. **Synchronize to `config/env/`**: Push the key to the central config store with the `--allow-binary` flag:
+3. **Synchronize to `config/env/`**: Push the key to the Central Config Store with the `--allow-binary` flag:
    ```bash
    push-repo-env -e .secrets/resource_plane_ssh -d resource_plane_ssh --allow-binary
    ```
@@ -136,7 +136,7 @@ Declarative `/opt/caddy` files (`conf/Caddyfile`, `conf/sites/*.caddy`, nested `
 # Idempotently capture live /opt/caddy/conf/ and docker-compose.override.yml into config/caddy/<profile>/:
 modal-sandbox infra caddy backup
 
-# Optional profile override (e.g., staging vs default production VPS):
+# Optional Host Ingress Proxy configuration profile override (e.g., staging VPS):
 modal-sandbox infra caddy backup --profile staging
 
 # Provision /opt/caddy on a brand-new VPS and restore all stored routes + Caddyfile + active networks:

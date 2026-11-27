@@ -6,7 +6,7 @@ Standalone Next.js 16 + React 19 deployment console for triggering and monitorin
 
 - **`/`**: Single-page deployment console with live **Sandbox Web Dashboard** commit status, **Hosted Sandbox Control Plane** commit badge, a confirmation-guarded **Deploy Sandbox Web Dashboard** button, `2.5s` status polling, and live deployment log viewer.
 - **`/api/health`**: Unauthenticated container health endpoint (`status`, `apps_base_domain`, `deployer_commit`).
-- **`/api/status`**: Authenticated status endpoint aggregating Control Plane `/api/version`, `/api/dashboard/deploy`, and live `https://<APPS_BASE_DOMAIN>/api/health`.
+- **`/api/status`**: Authenticated status endpoint aggregating Hosted Sandbox Control Plane `/api/version`, `/api/dashboard/deploy`, and live `https://<APPS_BASE_DOMAIN>/api/health`.
 - **`/api/deploy`** (`POST`) and **`/api/deploy/[deployId]`** (`GET`): Authenticated BFF proxies to `POST /api/dashboard/deploy` and `GET /api/dashboard/deploy/{deploy_id}` on `SANDBOX_CONTROL_PLANE_URL`.
 
 ## Local Development

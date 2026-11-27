@@ -76,7 +76,7 @@ nav:
 - User Guides:
   - CLI Reference: guides/cli.md
   - Application Creation & Deployment: guides/applications.md
-  - Hosted Control Plane: guides/control-plane.md
+  - Hosted Sandbox Control Plane: guides/control-plane.md
   - Resource Plane VPS Deployment: guides/resource-plane-deployment.md
   - AI Developer Tooling: guides/ai-tooling.md
   - Deploying Documentation: guides/deploying-documentation.md

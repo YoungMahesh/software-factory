@@ -3,8 +3,8 @@
 Toolkit for provisioning, managing, and snapshotting isolated cloud execution environments on Modal, paired with stateful persistence infrastructure (PostgreSQL 16, SeaweedFS S3, and control console).
 
 Software Factory is partitioned into cohesive subsystems:
-- **`sandboxes/` (Execution Plane)**: Python Modal sandbox engine, CLI (`modal-sandbox`, `create-app`, `create-db`, `create-s3`, `deploy-infra`), hosted FastAPI control plane (`sandboxes/sandbox/function.py`), test suites, and agent harnesses. Consult the `modal` skill (`.agents/skills/modal/SKILL.md`) when writing or modifying Modal SDK code.
-- **`dashboard/` (Sandbox Dashboard)**: Next.js 16 / React 19 web dashboard and same-origin Basic-Auth BFF proxy (`dashboard/apps/web`) deployed to `/opt/sandbox-dashboard` via `modal-sandbox infra dashboard` and backed by the Modal Control Plane API. See [`dashboard/README.md`](dashboard/README.md).
+- **`sandboxes/` (Execution Plane)**: Python Modal sandbox engine, CLI (`modal-sandbox`, `create-app`, `create-db`, `create-s3`, `deploy-infra`), Hosted Sandbox Control Plane built with FastAPI (`sandboxes/sandbox/function.py`), test suites, and agent harnesses. Consult the `modal` skill (`.agents/skills/modal/SKILL.md`) when writing or modifying Modal SDK code.
+- **`dashboard/` (Sandbox Web Dashboard)**: Next.js 16 / React 19 web dashboard and same-origin Basic-Auth BFF proxy (`dashboard/apps/web`) deployed to `/opt/sandbox-dashboard` via `modal-sandbox infra dashboard` and backed by the Hosted Sandbox Control Plane API. See [`dashboard/README.md`](dashboard/README.md).
 - **`resource-plane/` (Resource Plane)**: TypeScript/React 19 Next.js 16 console, PostgreSQL 16, SeaweedFS S3, and Model Context Protocol (MCP) server. See [`resource-plane/AGENTS.md`](resource-plane/AGENTS.md) for Resource Plane conventions.
 - **`app-template/` (App Template)**: Canonical Next.js 16 + optional Expo React Native starter blueprint materialized by `create-app` (excluded from root `pnpm-workspace.yaml`, with allowlisted skills tracked in `app-template/skills.json`).
 

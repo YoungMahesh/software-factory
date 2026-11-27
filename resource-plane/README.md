@@ -1,6 +1,8 @@
 # Resource Plane
 
-The persistence subsystem of Software Factory: a Next.js 16 / React 19 console and MCP server managing PostgreSQL 16 databases and SeaweedFS S3 buckets.
+The persistence subsystem of Software Factory: a Next.js 16 / React 19 application providing the Resource Plane Console and Resource Plane Management API over MCP for PostgreSQL 16 databases and SeaweedFS S3 buckets.
+
+Resource Plane Projects group application databases and object storage. They are separate from T3 Projects and Builder Workspaces. See the [factory glossary](../GLOSSARY.md) for shared terms.
 
 The factory monorepo also contains Modal sandbox tooling in `sandboxes/` and an application blueprint in `app-template/`. See the [root README](../readme.md), [architecture](../docs/architecture/resource-plane.md), and [deployment guide](../docs/guides/resource-plane-deployment.md).
 
@@ -27,11 +29,11 @@ ADMIN_TOKEN=replace-with-a-random-local-mcp-token
 pnpm dev
 ```
 
-Visit `http://localhost:3000`. Resource operations trigger the Auto-Bootstrapper, which creates/starts `neon-postgres` and `neon-seaweedfs`, initializes the `neon_control_plane` metadata database, applies migrations, and generates TLS certificates. Master database and storage credentials are generated into the web process's `.env.local` when absent. Explicit dashboard credentials above ensure the Next.js middleware requires authentication.
+Visit `http://localhost:3000`. Resource operations trigger the Auto-Bootstrapper, which creates/starts `neon-postgres` and `neon-seaweedfs`, initializes the `neon_control_plane` metadata database, applies migrations, and generates TLS certificates. Master database and storage credentials are generated into the web process's `.env.local` when absent. Explicit Resource Plane Console Credentials above ensure the Next.js middleware requires authentication.
 
 Development data defaults to `resource-plane/apps/web/.data/`. PostgreSQL uses port 5432 when available, falls back to 54320, or honors `POSTGRES_PORT`; inspect `/api/health` for the selected port. S3 uses port 8333. Containers bind to loopback by default in development.
 
-The root `resource-plane/.env.example` is inherited application-template configuration, not a complete production credential file. Default `docker-compose.yml` defines only PostgreSQL and SeaweedFS; `docker compose up` alone does not launch this console or perform its full bootstrap.
+The root `resource-plane/.env.example` is inherited application-template configuration, not a complete production credential file. Default `docker-compose.yml` defines only PostgreSQL and SeaweedFS; `docker compose up` alone does not launch the Resource Plane Console or perform its full bootstrap.
 
 Run Resource Plane tests from the monorepo root with `pnpm --dir resource-plane test`.
 
@@ -58,21 +60,21 @@ Public HTTPS uses the sibling Caddy stack at `/opt/caddy`. See [VPS and ingress 
 
 ## Authentication and MCP
 
-- Dashboard: `BASIC_AUTH_USERNAME` / `BASIC_AUTH_PASSWORD`, falling back to `CONTROL_PLANE_USERNAME` / `CONTROL_PLANE_PASSWORD`.
-- HTTP MCP: server `ADMIN_TOKEN` (fallback `NEON_ADMIN_TOKEN`); clients pass it as `Authorization: Bearer <token>` to `POST /api/mcp` or `POST /mcp`.
+- Resource Plane Console Credentials: `BASIC_AUTH_USERNAME` / `BASIC_AUTH_PASSWORD`, falling back to `CONTROL_PLANE_USERNAME` / `CONTROL_PLANE_PASSWORD`.
+- Resource Plane Management API: server `ADMIN_TOKEN` (fallback `NEON_ADMIN_TOKEN`); clients pass it as `Authorization: Bearer <token>` to `POST /api/mcp` or `POST /mcp`.
 - Public metadata: `GET /api/ca.crt` and `GET /api/health` bypass Basic authentication.
 
 The HTTP handler accepts JSON-RPC POST requests; a GET SSE stream is not implemented. For stdio, run `pnpm --filter @repo/web mcp` from `resource-plane/`, with its service environment configured. Set the MCP client's working directory to your actual checkout rather than an old standalone `/opt/db-host` path.
 
 | MCP tool | Purpose |
 | :--- | :--- |
-| `list_projects` | List project scopes |
-| `create_project` | Create a project |
+| `list_projects` | List Resource Plane Projects |
+| `create_project` | Create a Resource Plane Project |
 | `create_database` | Create an isolated database and role |
-| `list_databases` | List project databases |
+| `list_databases` | List Resource Plane Project databases |
 | `get_database_credentials` | Retrieve database credentials |
 | `create_object_storage` | Create a bucket and IAM credentials |
-| `list_object_storages` | List project buckets |
+| `list_object_storages` | List Resource Plane Project buckets |
 | `get_storage_credentials` | Retrieve storage credentials |
 
 ## Client connections

@@ -13,7 +13,7 @@ cd my-demo
 pnpm dev
 ```
 
-For a full-stack project, `create-app my-app` prompts on an interactive terminal when no option flags are supplied. Defaults enable the database, authentication, skills, installation, and Git; mobile is opt-in. `-y` selects defaults without prompts. Git commit creation requires configured authorship.
+For a full-stack application, `create-app my-app` prompts on an interactive terminal when no option flags are supplied. Defaults enable the database, authentication, skills, installation, and Git; mobile is opt-in. `-y` selects defaults without prompts. Git commit creation requires configured authorship.
 
 ```bash
 create-app my-app --mobile-app -y
@@ -32,7 +32,7 @@ The template directory is a blueprint excluded from the factory pnpm workspace. 
 | Create/push GitHub repository | `GH_TOKEN` with repository creation/push access, `GH_ORG_NAME` or explicit owner in `--repo-name`, and Git authorship |
 | Provision PostgreSQL or S3 | Deployed Resource Plane, `RESOURCE_PLANE_DOMAIN`, `RESOURCE_PLANE_ADMIN_TOKEN` |
 | Push secrets to Central Config Store (`config/env/`) | GitHub write access to the private `config` repository and SOPS available; launch host needs an Age key to decrypt the vault later |
-| Launch development sandbox | Authenticated Modal client/profile, launch-host SSH public-key file, and GitHub access to the pushed repository |
+| Launch development sandbox | Authenticated Modal client using the selected Modal Profile, launch-host SSH public-key file, and GitHub access to the pushed repository |
 | Deploy a Hosted App | Deployment host SSH key, VPS Docker, Caddy wildcard ingress, and the configuration described below |
 
 ```bash
@@ -43,6 +43,8 @@ create-app my-mobile-app --cloud --mobile-app --provision-s3 -y
 `--cloud` enables GitHub repository creation, database provisioning when the database overlay is enabled, pushing `.env` to the vault, and launching a T3 sandbox. S3 and production deployment remain opt-in. Each operation can also be selected independently with `--github`, `--provision-db`, `--provision-s3`, `--push-vault`, `--launch`, or `--deploy`.
 
 Cloud operations execute in sequence and are not one transaction. If a later step fails, inspect resources already created before retrying. `--launch` can target an existing repository with `--repo-name owner/name`; push the scaffolded files there before relying on that repository as the launch source.
+
+The launched sandbox and any Hosted App have separate lifetimes. CLI scaffolding and cloud wiring do not create a Builder Workspace record; that identity belongs to the dashboard Builder workflow.
 
 ## Prepare VPS deployment
 
@@ -86,7 +88,7 @@ Use the same command to redeploy. To roll source back, check out the desired sou
 
 ## Ownership and recovery
 
-Deploy and teardown serialize mutations with a VPS deployment lock and ownership records under `/opt/caddy/.factory-apps/`. The command checks repository identity, existing container labels, and route ownership before mutation. It refuses conflicting ownership, unverifiable legacy directories, and hostnames already assigned to another app. `--subdomain` can resolve a hostname conflict, but cannot bypass an app-name ownership conflict; use a distinct repository name when separate apps would produce the same slug.
+Hosted App ownership is tracked independently of Builder Workspace records and sandbox lifetime. Deploy and teardown serialize mutations with a VPS deployment lock and ownership records under `/opt/caddy/.factory-apps/`. The command checks repository identity, existing container labels, and route ownership before mutation. It refuses conflicting ownership, unverifiable legacy directories, and hostnames already assigned to another app. `--subdomain` can resolve a hostname conflict, but cannot bypass an app-name ownership conflict; use a distinct repository name when separate apps would produce the same slug.
 
 Caddy changes use validation, a lock, and a recovery journal at `/opt/caddy/.factory-ingress-pending`. A failed activation attempts to restore the previous configuration. After an interrupted update, the next mutating ingress operation retries recovery before applying changes. Preserve pending files if recovery reports a failure. A successful route rollback does not roll back source transfers, builds, or database migrations from earlier deployment steps.
 

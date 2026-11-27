@@ -4,9 +4,9 @@ Provision Modal development sandboxes, manage persistent PostgreSQL and S3 resou
 
 | Subsystem | Purpose |
 | :--- | :--- |
-| `sandboxes/` | Python CLI, hosted FastAPI sandbox control plane, images, snapshots, and deployment tools |
-| [`dashboard/`](dashboard/README.md) | Next.js 16 / React 19 Sandbox Web Dashboard and same-origin BFF proxy fronting the control plane |
-| [`resource-plane/`](resource-plane/README.md) | Next.js 16 / React 19 console and MCP API, PostgreSQL 16, and SeaweedFS S3 |
+| `sandboxes/` | Python CLI, Hosted Sandbox Control Plane built with FastAPI, images, snapshots, and deployment tools |
+| [`dashboard/`](dashboard/README.md) | Next.js 16 / React 19 Sandbox Web Dashboard and same-origin BFF proxy fronting the Hosted Sandbox Control Plane |
+| [`resource-plane/`](resource-plane/README.md) | Resource Plane Console and Resource Plane Management API, PostgreSQL 16, and SeaweedFS S3 |
 | [`app-template/`](app-template/README.md) | Next.js 16 starter with optional Expo mobile client, database, authentication, and agent skills |
 
 ## Architecture
@@ -14,7 +14,7 @@ Provision Modal development sandboxes, manage persistent PostgreSQL and S3 resou
 ```mermaid
 flowchart LR
     CLI["CLI"] --> Launcher["Sandbox launcher"]
-    Dashboard["Sandbox Web Dashboard<br/>(dashboard/ BFF)"] --> ControlPlane["Modal Control Plane API<br/>(sandboxes/sandbox/function.py)"]
+    Dashboard["Sandbox Web Dashboard<br/>(dashboard/ BFF)"] --> ControlPlane["Hosted Sandbox Control Plane API<br/>(sandboxes/sandbox/function.py)"]
     ControlPlane --> Launcher
     Launcher --> Sandbox["Modal container or VM<br/>SSH, T3 Code, optional Cloudflare ingress"]
     Template["app-template/"] --> Scaffold["create-app"]
@@ -71,7 +71,7 @@ cp ~/.ssh/modal-sandbox.pub sandboxes/shared/ssh-key.pub
 chmod 600 ~/.ssh/modal-sandbox
 ```
 
-Redeploy the hosted control plane after changing files on the launch host.
+Redeploy the Hosted Sandbox Control Plane after changing files on the launch host.
 
 Each launch creates an instance such as `dev-box-a1b2c3d4`. Use the **printed SSH alias**, including the generated suffix, rather than the requested app name. Standalone workspaces live at `/root/<instance-name>`; repository workspaces use `/root/<repo>`.
 
@@ -88,15 +88,15 @@ modal-sandbox --from-snapshot <image-id> --name resumed-box
 
 Snapshots preserve files, including any credentials written to the filesystem. Treat them as sensitive. Resumption skips repository cloning and package installation, so an older snapshot does not automatically acquire new dependencies. See [snapshots](docs/architecture/snapshots.md) and [secrets](docs/architecture/secrets.md).
 
-## Hosted sandbox control plane
+## Hosted Sandbox Control Plane
 
-Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in `.env` (or the process environment) and deploy the Modal Control Plane backend from a clean checkout:
+Set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` in `.env` (or the process environment) and deploy the Hosted Sandbox Control Plane backend from a clean checkout:
 
 ```bash
 modal deploy sandboxes/sandbox/function.py
 ```
 
-For local edits without committing first, run `ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py`. When `RESOURCE_PLANE_SSH_KEY` is configured in `.env`, `modal deploy` reads its key material into `RESOURCE_PLANE_SSH_PRIVATE_KEY` for Control-Plane-backed dashboard self-deploys.
+For local edits without committing first, run `ALLOW_DIRTY_DEPLOY=1 modal serve sandboxes/sandbox/function.py`. When `RESOURCE_PLANE_SSH_KEY` is configured in `.env`, `modal deploy` reads its key material into `RESOURCE_PLANE_SSH_PRIVATE_KEY` for Hosted Sandbox Control Plane-backed dashboard self-deploys.
 
 You can run the Next.js Sandbox Web Dashboard (`dashboard/`) and standalone **Dashboard Deployer** (`dashboard-deployer/`) locally (set `SANDBOX_CONTROL_PLANE_URL`, `APPS_BASE_DOMAIN`, `WEB_UI_USERNAME`, and `WEB_UI_PASSWORD` in `.env` or the app's `.env`) or deploy both to the VPS once `RESOURCE_PLANE_SSH_HOST`, `RESOURCE_PLANE_SSH_KEY`, `APPS_BASE_DOMAIN`, and a Cloudflare DNS-01 token (`CLOUDFLARE_DNS_API_TOKEN` or `CLOUDFLARE_API_TOKEN`) are configured:
 
@@ -114,7 +114,9 @@ modal-sandbox infra dashboard
 modal-sandbox infra deployer
 ```
 
-The Next.js dashboard provides the Factory App builder (including Prime Sandbox reuse, GitHub repository picker, and model selection), live sandbox inspection with accrued Modal costs and lifespan timers, snapshot management, and Scratchpad (`Ideas` and `Raw` notes). The standalone **Dashboard Deployer** (`https://deploy.<APPS_BASE_DOMAIN>`) provides a dedicated **Deploy Sandbox Web Dashboard** button that triggers the Modal Control Plane to clone `main` and deploy `dashboard/` to `https://<APPS_BASE_DOMAIN>`. The CLI can also use the backend through `--remote --endpoint-url <url>`. See the [control plane guide](docs/guides/control-plane.md), [dashboard README](dashboard/README.md), and [Dashboard Deployer README](dashboard-deployer/README.md).
+The Next.js dashboard provides the Builder for launching Builder Workspaces (including Prime Sandbox reuse, Repository Catalog selection, and model selection), live sandbox inspection with accrued Modal costs and lifespan timers, snapshot management, and Scratchpad (`Ideas` and `Raw` notes). The standalone **Dashboard Deployer** (`https://deploy.<APPS_BASE_DOMAIN>`) provides a dedicated **Deploy Sandbox Web Dashboard** button that triggers the Hosted Sandbox Control Plane to clone `main` and deploy `dashboard/` to `https://<APPS_BASE_DOMAIN>`. The CLI can also use the backend through `--remote --endpoint-url <url>`. See the [Hosted Sandbox Control Plane guide](docs/guides/control-plane.md), [dashboard README](dashboard/README.md), and [Dashboard Deployer README](dashboard-deployer/README.md).
+
+A Builder Workspace is a development workspace with its own coding conversation. Multiple Builder Workspaces can use the same Target Repository and share a Prime Sandbox; Hosted Apps have independent deployment lifecycles. The [glossary](GLOSSARY.md) defines these concepts.
 
 ## Persistence and applications
 

@@ -2,7 +2,7 @@
 
 Software Factory supports three main workflows:
 
-- Launch a disposable Modal development sandbox through the CLI or hosted control plane.
+- Launch a disposable Modal development sandbox through the CLI or Hosted Sandbox Control Plane.
 - Run a Resource Plane for persistent PostgreSQL databases and S3 buckets.
 - Scaffold an application from `app-template/` and optionally deploy it to a VPS.
 

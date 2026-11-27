@@ -37,7 +37,7 @@ modal-sandbox --help
 
 ## 2. Configuration (`.env`)
 
-For local runs or deploying the hosted control plane, copy the environment template:
+For local runs or deploying the Hosted Sandbox Control Plane, copy the environment template:
 
 ```bash
 cp .env.example .env

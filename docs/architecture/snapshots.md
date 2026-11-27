@@ -2,6 +2,8 @@
 
 The factory captures sandbox root filesystem state as a Modal Image and can launch another sandbox from that image. This preserves files and installed packages, while startup restarts services; it does not resume running processes. See the [Modal snapshot guide](https://modal.com/docs/guide/sandbox-snapshots) for platform behavior.
 
+A Filesystem Snapshot covers the entire sandbox root filesystem, including all Builder Workspaces hosted there. Builder Workspace tracking records live separately in `factory-state-v1`, and mounted persistent volumes have their own lifecycles. Starting a new sandbox from a snapshot restores the captured files, not the source sandbox's Builder Workspace identities or mounted volume data.
+
 ## Capture
 
 ```bash
@@ -40,10 +42,10 @@ Select service flags needed by the restored workspace and review the resulting c
 | Data | Storage |
 | :--- | :--- |
 | T3 history, provider transcripts, and usage caches | `t3code-usage-v1` mounted at `/root/.t3-storage`; startup hydrates supported local files and runs a synchronization daemon |
-| Codex saved authentication | Assigned profile volume mounted at `/root/.codex-profile`, configured independently from T3 history |
+| Codex saved authentication | Assigned Codex Credential Profile volume mounted at `/root/.codex-profile`, configured independently from T3 history |
 | Gradle cache and wrapper | `gradle-caches` at `/root/.gradle/caches` and `gradle-wrapper` at `/root/.gradle/wrapper` with `--react-native` |
 
-T3 persistence is enabled with `--t3` by default. Set `--t3-usage-volume <name>` to choose the history volume, or `--no-t3-persist` to disable history synchronization. This volume is not a backup of arbitrary repository files or worktrees. Preserve source changes in Git or a filesystem snapshot. Codex profile assignment has its own configuration; see [AI tooling](../guides/ai-tooling.md).
+T3 persistence is enabled with `--t3` by default. Set `--t3-usage-volume <name>` to choose the history volume, or `--no-t3-persist` to disable history synchronization. This volume is not a backup of arbitrary repository files or worktrees. Preserve source changes in Git or a filesystem snapshot. Codex Credential Profile assignment has its own configuration; see [AI tooling](../guides/ai-tooling.md).
 
 ## Credential handling
 

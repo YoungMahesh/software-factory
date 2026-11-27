@@ -1,10 +1,10 @@
-# Execution Runtimes: Container vs. Linux VM
+# Execution Runtimes: Standard Sandboxes and VM Sandboxes
 
-Modal Sandboxes supports two execution environments to balance startup speed with virtualization requirements.
+Development Sandboxes support two runtimes: Standard Sandbox and VM Sandbox. Standalone Sandbox describes the initial repository setup, and Prime Sandbox describes sharing and reuse; both are independent of the runtime choice. A Standalone Sandbox starts without a selected Target Repository and can acquire workspaces later, including when used as a Prime Sandbox.
 
 ## Runtime Comparison
 
-| Dimension | Standard Container | Linux VM Sandbox (`--vm`) | XFCE Desktop VM (`--xfce`) |
+| Dimension | Standard Sandbox | VM Sandbox (`--vm`) | XFCE Desktop Sandbox (`--xfce`) |
 | :--- | :--- | :--- | :--- |
 | **Modal Runtime** | gVisor Container (`runtime="gvisor"`) | Stable VM (`runtime="vm"`) | Stable VM (`runtime="vm"`) |
 | **CLI Flag** | Default | `--vm` | `--xfce` (implies `--vm`) |
@@ -18,9 +18,9 @@ Modal Sandboxes supports two execution environments to balance startup speed wit
 
 ---
 
-## 1. Standard Container Sandbox
+## 1. Standard Sandbox
 
-Standard sandboxes run on Modal's lightweight container runtime. Startup time depends on image caching and repository setup. These sandboxes support:
+Standard Sandboxes run on Modal's lightweight container runtime. Startup time depends on image caching and repository setup. These sandboxes support:
 
 - Running Python, TypeScript, and Go development tools.
 - Hosting web development servers (Next.js, FastAPI, Vite).
@@ -28,13 +28,13 @@ Standard sandboxes run on Modal's lightweight container runtime. Startup time de
 - Inspecting code with remote SSH shells.
 
 ```bash
-# Provision a standard container sandbox
+# Provision a Standard Sandbox
 modal-sandbox --name dev-box
 ```
 
 ---
 
-## 2. Linux VM Sandbox (`--vm`)
+## 2. VM Sandbox (`--vm`)
 
 When `--vm` is specified, the launcher instructs Modal to boot a virtual machine with full kernel isolation (see [ADR 0031](../adr/0031-migrate-vm-runtime-to-modal-stable-runtime.md)).
 
@@ -44,11 +44,11 @@ Key capabilities include:
 - **Swap Allocation**: Swapfile memory allocation is managed automatically to handle intensive build tasks.
 
 ```bash
-# Provision a Linux VM sandbox with Docker support
+# Provision a VM Sandbox with Docker support
 modal-sandbox --name vm-box --vm
 ```
 
-Inside the VM sandbox:
+Inside the VM Sandbox:
 
 ```bash
 ssh <printed-instance-alias> "docker --version && docker run hello-world"
@@ -56,9 +56,9 @@ ssh <printed-instance-alias> "docker --version && docker run hello-world"
 
 ---
 
-## 3. XFCE Desktop Environment & Google Chrome (`--xfce`)
+## 3. XFCE Desktop Sandbox (`--xfce`)
 
-When `--xfce` is specified, the launcher automatically provisions a Linux VM sandbox pre-baked with a full XFCE 4 graphical desktop, TigerVNC X11 server, noVNC web client, and Google Chrome (see [ADR 0070](../adr/0070-xfce-desktop-and-chrome-in-vm-sandboxes.md)).
+When `--xfce` is specified, the launcher automatically provisions an XFCE Desktop Sandbox backed by a VM Sandbox, with a full XFCE 4 graphical desktop, TigerVNC X11 server, noVNC web client, and Google Chrome (see [ADR 0070](../adr/0070-xfce-desktop-and-chrome-in-vm-sandboxes.md)).
 
 Passing `--xfce` automatically enforces VM Sandbox mode (`vm=True`) because graphical desktop environments, IPC message buses (`dbus-x11`), and modern web browsers require full `/dev/shm` shared memory access and burstable RAM up to 16 GiB.
 
@@ -67,7 +67,7 @@ Passing `--xfce` automatically enforces VM Sandbox mode (`vm=True`) because grap
 ```mermaid
 graph TD
     Browser["User Web Browser"] -->|"HTTPS / WSS (configured tunnel domain)"| CFTunnel["Cloudflare Tunnel (cloudflared)"]
-    subgraph Modal VM Sandbox ["Modal VM Sandbox (--vm --xfce)"]
+    subgraph Modal VM Sandbox ["XFCE Desktop Sandbox (--vm --xfce)"]
         CFTunnel -->|"HTTP / WS localhost:3000"| WebSockify["websockify Bridge (port 3000)"]
         WebSockify -->|"TCP localhost:5901"| TigerVNC["TigerVNC Xvnc (Display :1)"]
         TigerVNC -->|"X11 Protocol"| XFCE["XFCE 4 Session (xfwm4, xfce4-panel, dbus-x11)"]
@@ -84,7 +84,7 @@ graph TD
 - **Desktop Service Daemon**: Managed via `/usr/local/bin/desktop-service`, providing clean `start`, `stop`, `restart`, and `status` lifecycle control.
 
 ```bash
-# Provision a cloud desktop sandbox with Google Chrome
+# Provision an XFCE Desktop Sandbox with Google Chrome
 modal-sandbox --name desktop-box --xfce
 ```
 
@@ -92,6 +92,6 @@ For the default desktop port 3000, configure a Cloudflare tunnel token and route
 
 ## Python dependency installation
 
-The base image includes Python 3.12. `--modal` enables workspace virtualenv creation, Modal profile setup, and installation from the target repository's `requirements.txt`; it requires valid `MODAL_TOKENS`. A fresh Software Factory repository launch installs `.[dev,docs]` through that requirements file, including Zensical. Ordinary standalone launches do not automatically create a virtualenv.
+The base image includes Python 3.12. `--modal` enables workspace virtualenv creation, Modal Profile setup, and installation from the target repository's `requirements.txt`; it requires valid `MODAL_TOKENS`. A fresh Software Factory repository launch installs `.[dev,docs]` through that requirements file, including Zensical. Ordinary standalone launches do not automatically create a virtualenv.
 
 Snapshot restores preserve the existing workspace and virtualenv and skip dependency installation. Install updated requirements manually when restoring an older image. See [snapshots](snapshots.md).
