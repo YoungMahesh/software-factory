@@ -40,6 +40,7 @@ import {
   SnapshotLaunchModal,
   type SnapshotLaunchTarget,
 } from "@/components/modals/snapshot-launch-modal";
+import { T3LinksModal } from "@/components/modals/t3-links-modal";
 import { ToastViewport, type ToastKind, type ToastMessage } from "@/components/toast";
 import { useLaunchObserver } from "@/hooks/use-launch-observer";
 import { extractApiError } from "@/lib/format";
@@ -157,6 +158,7 @@ interface DashboardContextValue {
   openFreshLaunchModal: () => void;
   openSnapshotModal: (target: SnapshotTarget) => void;
   openLaunchFromSnapshotModal: (target: SnapshotLaunchTarget) => void;
+  openT3LinksModal: (target: SandboxSummary) => void;
   showToast: (message: string, type?: ToastKind) => void;
 }
 
@@ -251,6 +253,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [launchSnapshotTarget, setLaunchSnapshotTarget] = useState<SnapshotLaunchTarget | null>(
     null,
   );
+  const [t3LinksTarget, setT3LinksTarget] = useState<SandboxSummary | null>(null);
   const [resultModalState, setResultModalState] = useState<{
     result: LaunchResponse | null;
     logs: string[];
@@ -896,6 +899,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       openFreshLaunchModal: () => setFreshModalOpen(true),
       openSnapshotModal: (target) => setSnapshotTarget(target),
       openLaunchFromSnapshotModal: (target) => setLaunchSnapshotTarget(target),
+      openT3LinksModal: (target) => setT3LinksTarget(target),
       showToast,
     }),
     [
@@ -990,6 +994,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           void refreshAll();
         }}
         onToast={showToast}
+      />
+
+      <T3LinksModal
+        target={t3LinksTarget}
+        onClose={() => setT3LinksTarget(null)}
+        onToast={showToast}
+        onLinkGenerated={(sandboxId, url) => {
+          setSandboxes((prev) =>
+            prev.map((item) =>
+              item.id === sandboxId ? { ...item, t3_pair_url: url } : item,
+            ),
+          );
+          setT3LinksTarget((prev) =>
+            prev && prev.id === sandboxId ? { ...prev, t3_pair_url: url } : prev,
+          );
+        }}
       />
 
       <ConfirmDialog

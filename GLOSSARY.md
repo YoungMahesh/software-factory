@@ -61,7 +61,7 @@ _Avoid_: Modal profile, ChatGPT account
 
 **Pairing URL**:
 The public HTTPS URL emitted by T3 Code (`t3 pair` or sandbox launch metadata) containing the Modal application tunnel domain and a cryptographically generated pairing token (`https://<sandbox-tunnel>.modal.host/pair#token=...`), enabling external browser and desktop app pairing with the remote T3 Code Server.
-_Avoid_: Local pairing URL, private IP link, direct socket URL
+_Avoid_: Local pairing URL, private IP link, direct socket URL, t3code link
 
 **Herdr Multiplexer (Retired)**:
 The legacy agent-aware terminal multiplexer previously provisioned via `--herdr`, retired in favor of T3 Code multi-worktree orchestration.

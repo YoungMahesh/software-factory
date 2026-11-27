@@ -10,10 +10,12 @@ import {
   SandboxCostSchema,
   SandboxCostsResponseSchema,
   SandboxSummarySchema,
+  SandboxT3LinksResponseSchema,
   ScratchpadCatalogResponseSchema,
   ScratchpadDeleteResponseSchema,
   ScratchpadNoteDetailViewSchema,
   SnapshotSummarySchema,
+  T3PairingLinkEntrySchema,
 } from "../src/index";
 
 describe("@dashboard/types Zod contracts", () => {
@@ -179,5 +181,30 @@ describe("@dashboard/types Zod contracts", () => {
     });
     expect(costsResponse.costs["sb-2"].cost_usd).toBeNull();
     expect(costsResponse.costs["sb-2"].cost_by_resource_usd).toEqual({});
+
+    const linkEntry = T3PairingLinkEntrySchema.parse({
+      id: "link-1",
+      url: "https://t3.modal.host/pair#token=ABC123",
+      status: "active",
+      label: "Dashboard Pairing",
+      created_at: "2026-11-27T09:00:00Z",
+      expires_at: "2026-11-28T09:00:00Z",
+    });
+    expect(linkEntry.status).toBe("active");
+
+    const linksResponse = SandboxT3LinksResponseSchema.parse({
+      sandbox_id: "sb-1",
+      available: true,
+      t3_url: "https://t3.modal.host",
+      links: [
+        linkEntry,
+        { url: "https://t3.modal.host/pair#token=USED", status: "used" },
+        { url: "https://t3.modal.host/pair#token=EXP", status: "expired" },
+      ],
+    });
+    expect(linksResponse.links).toHaveLength(3);
+    expect(() =>
+      T3PairingLinkEntrySchema.parse({ url: "https://t3.modal.host", status: "revoked" }),
+    ).toThrow();
   });
 });

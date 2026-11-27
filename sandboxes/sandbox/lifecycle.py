@@ -39,6 +39,21 @@ def record_sandbox_connection_info(
     }
 
 
+def update_sandbox_t3_pair_url(sandbox_id: str, t3_pair_url: str | None) -> None:
+    """Updates cached t3_pair_url for a sandbox while preserving existing SSH/lifespan metadata."""
+    if not t3_pair_url:
+        return
+    cached = _SANDBOX_METADATA_CACHE.get(sandbox_id)
+    if cached is not None:
+        cached["t3_pair_url"] = t3_pair_url
+        cached["has_t3"] = True
+        return
+    _SANDBOX_METADATA_CACHE[sandbox_id] = {
+        "t3_pair_url": t3_pair_url,
+        "has_t3": True,
+    }
+
+
 def clear_sandbox_metadata_cache(sandbox_id: str | None = None) -> None:
     """Clears cached connection metadata and cost entries for a sandbox or entirely."""
     from sandbox.costs import clear_sandbox_cost_cache
@@ -300,56 +315,39 @@ def get_sandboxes(
         return []
 
 
-def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, Any]:
-    """Terminates a single sandbox by object ID, using the matching profile client."""
+def lookup_sandbox(
+    sandbox_id: str,
+    profile: str | None = None,
+) -> tuple[modal.Sandbox | None, str | None, str | None]:
+    """Resolves a Modal sandbox handle by ID across the specified or configured profiles."""
     if profile and profile != "all":
         try:
             client = get_client_for_profile(profile)
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
-            sb.terminate(wait=True)
-            clear_sandbox_metadata_cache(sandbox_id)
-            return {
-                "id": sandbox_id,
-                "status": "terminated",
-                "exit_code": sb.poll(),
-                "profile": profile,
-            }
+            return sb, profile, None
         except Exception as exc:
             logger.error(
-                "Failed to terminate sandbox %s with profile %s: %s",
+                "Failed to lookup sandbox %s with profile %s: %s",
                 sandbox_id,
                 profile,
                 exc,
             )
-            return {
-                "id": sandbox_id,
-                "status": "error",
-                "error": str(exc),
-                "profile": profile,
-            }
+            return None, profile, str(exc)
 
-    # First attempt termination with active profile
     active_profile = get_active_profile_name()
     if active_profile:
         try:
             client = get_client_for_profile(active_profile)
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
-            sb.terminate(wait=True)
-            clear_sandbox_metadata_cache(sandbox_id)
-            return {
-                "id": sandbox_id,
-                "status": "terminated",
-                "exit_code": sb.poll(),
-                "profile": active_profile,
-            }
+            return sb, active_profile, None
         except Exception as exc:
             logger.debug(
-                "Active profile %s terminate probe failed: %s; trying other profiles",
+                "Active profile %s lookup failed for %s: %s; trying other profiles",
                 active_profile,
+                sandbox_id,
                 exc,
             )
 
-    # Attempt termination across remaining configured profiles
     all_clients = get_all_clients()
     last_error: Exception | None = None
     for prof_name, client in all_clients.items():
@@ -357,29 +355,57 @@ def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, 
             continue
         try:
             sb = modal.Sandbox.from_id(sandbox_id, client=client)
-            sb.terminate(wait=True)
-            clear_sandbox_metadata_cache(sandbox_id)
-            return {
-                "id": sandbox_id,
-                "status": "terminated",
-                "exit_code": sb.poll(),
-                "profile": prof_name,
-            }
+            return sb, prof_name, None
         except Exception as exc:
             last_error = exc
             logger.debug(
-                "Sandbox %s termination probe failed under profile %s: %s",
+                "Sandbox %s lookup failed under profile %s: %s",
                 sandbox_id,
                 prof_name,
                 exc,
             )
 
     error_msg = str(last_error) if last_error else "Sandbox not found in any profile"
-    return {
-        "id": sandbox_id,
-        "status": "error",
-        "error": error_msg,
-    }
+    return None, None, error_msg
+
+
+def terminate_sandbox(sandbox_id: str, profile: str | None = None) -> dict[str, Any]:
+    """Terminates a single sandbox by object ID, using the matching profile client."""
+    sb, resolved_profile, error_msg = lookup_sandbox(sandbox_id, profile=profile)
+    if sb is None:
+        result: dict[str, Any] = {
+            "id": sandbox_id,
+            "status": "error",
+            "error": error_msg or "Sandbox not found in any profile",
+        }
+        if resolved_profile:
+            result["profile"] = resolved_profile
+        return result
+
+    try:
+        sb.terminate(wait=True)
+        clear_sandbox_metadata_cache(sandbox_id)
+        return {
+            "id": sandbox_id,
+            "status": "terminated",
+            "exit_code": sb.poll(),
+            "profile": resolved_profile,
+        }
+    except Exception as exc:
+        logger.error(
+            "Failed to terminate sandbox %s with profile %s: %s",
+            sandbox_id,
+            resolved_profile,
+            exc,
+        )
+        out: dict[str, Any] = {
+            "id": sandbox_id,
+            "status": "error",
+            "error": str(exc),
+        }
+        if resolved_profile:
+            out["profile"] = resolved_profile
+        return out
 
 
 def terminate_sandboxes(

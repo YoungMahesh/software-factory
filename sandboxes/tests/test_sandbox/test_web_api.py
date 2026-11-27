@@ -442,9 +442,13 @@ class TestWebAPI(unittest.TestCase):
     def test_index_page_contains_actions_section_elements(self):
         web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"
         sandboxes_src = (web_root / "app" / "sandboxes" / "page.tsx").read_text(encoding="utf-8")
+        modal_src = (web_root / "components" / "modals" / "t3-links-modal.tsx").read_text(encoding="utf-8")
         self.assertIn("handleCopySsh", sandboxes_src)
-        self.assertIn("t3_pair_url", sandboxes_src)
+        self.assertIn("openT3LinksModal", sandboxes_src)
         self.assertIn("T3 Code", sandboxes_src)
+        self.assertIn("t3_pair_url", modal_src)
+        self.assertIn("T3Code Pairing Links", modal_src)
+        self.assertIn("Generate", modal_src)
 
     def test_index_page_contains_fresh_launch_elements(self):
         web_root = Path(__file__).resolve().parents[3] / "dashboard" / "apps" / "web"

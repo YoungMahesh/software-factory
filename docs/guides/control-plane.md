@@ -56,7 +56,7 @@ Before Next.js cutover, `modal-sandbox infra caddy --wildcard` proxies the apex 
 The Next.js dashboard provides four App Router views:
 
 - **Builder (`/`)**: Prompt-first Factory App launcher with **Prime Sandbox** reuse partitioned by runtime capabilities (`vm=True`, `memory=1`, `t3=True`, `modal=True`, `sops=True`, and full sandbox-creation options under `Advanced`), manually refreshed **GitHub Repository Catalog** picker (`GET /api/github/repos`, `POST /api/github/repos/refresh`), builder model/thought-level selection (`gemini-4-hydrogen` with `Thinking: Extra` default), T3-managed Git worktrees per repo conversation (running `pnpm install` only when `web_app` is enabled), automatic card removal on sandbox termination, live launch progress, and one-click T3 Code redirect (`#token=`).
-- **Sandboxes (`/sandboxes`)**: Active sandbox discovery across apps/profiles, **Prime** badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal cost estimates (`GET /api/sandboxes/costs`), SSE streaming launch modal (`vm=True`, `memory=1` default), terminate actions, and filesystem snapshot capture.
+- **Sandboxes (`/sandboxes`)**: Active sandbox discovery across apps/profiles, **Prime** badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal cost estimates (`GET /api/sandboxes/costs`), **T3Code Pairing Links** modal (`GET/POST /api/sandboxes/{sandbox_id}/t3-links`), SSE streaming launch modal (`vm=True`, `memory=1` default), terminate actions, and filesystem snapshot capture.
 - **Snapshots (`/snapshots`)**: Persistent snapshot registry listing with capture-time apparent **Rootfs Size** (`df`), snapshot resume modal, and registry record deletion.
 - **Scratchpad (`/scratchpad`)**: Split **Ideas** (`config/scratchpad/` with AI-assisted refinement) and **Raw** (`config/raw/` verbatim capture) note views backed by a persisted `factory-state-v1` cache, with copy, Builder load, and delete actions.
 
@@ -104,6 +104,8 @@ Cloudflare application ingress requires a configured tunnel token. The enabled f
 | `POST` | `/api/sandboxes/stream` | Basic | Launch with SSE progress events (`log`, `done`, or `error`) |
 | `POST` | `/api/sandboxes/{sandbox_id}/terminate` | Basic | Terminate an instance |
 | `POST` | `/api/sandboxes/{sandbox_id}/snapshot` | Basic | Capture snapshot with name, TTL, timeout, and optional termination |
+| `GET` | `/api/sandboxes/{sandbox_id}/t3-links` | Basic | List recorded T3 Code Server **Pairing URLs** and active/used/expired statuses |
+| `POST` | `/api/sandboxes/{sandbox_id}/t3-links` | Basic | Generate and persist a new 24h one-time T3 Code Server **Pairing URL** |
 | `GET` | `/api/snapshots` | Basic | List snapshot registry records |
 | `DELETE` | `/api/snapshots/{image_id}` | Basic | Delete registry record; leaves the underlying image intact |
 | `POST` | `/api/snapshots/{image_id}/launch` | Basic | Restore an image with launch options |

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { SandboxCost } from "@dashboard/types";
-import { Camera, Copy, ExternalLink, Power, RefreshCw } from "lucide-react";
+import { Camera, Copy, Link2, Power, RefreshCw } from "lucide-react";
 import { useDashboard } from "@/components/dashboard-provider";
 import { SandboxLifespan } from "@/components/sandbox-lifespan";
 import {
@@ -86,6 +86,7 @@ export default function SandboxesPage() {
     costsFetchedAt,
     searchQuery,
     openSnapshotModal,
+    openT3LinksModal,
     terminateSandbox,
     refreshSandboxCosts,
     showToast,
@@ -251,25 +252,16 @@ export default function SandboxesPage() {
                 Copy SSH
               </button>
 
-              {sb.t3_pair_url ? (
-                <a
-                  href={sb.t3_pair_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary-active border border-primary/25 text-xs font-medium transition-colors"
-                >
-                  <span>T3Code</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-surface-card text-muted border border-hairline text-xs font-medium cursor-not-allowed opacity-50"
-                >
-                  T3Code
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={!sb.running}
+                onClick={() => openT3LinksModal(sb)}
+                title="View or generate T3 Code pairing links"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary-active border border-primary/25 text-xs font-medium transition-colors disabled:opacity-40"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>T3Code</span>
+              </button>
 
               <button
                 type="button"
@@ -408,25 +400,15 @@ export default function SandboxesPage() {
                       SSH
                     </button>
 
-                    {sb.t3_pair_url ? (
-                      <a
-                        href={sb.t3_pair_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary-active border border-primary/25 text-xs font-medium transition-colors"
-                      >
-                        T3Code
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        title="T3 Code server not running or tunnel unavailable"
-                        className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-surface-card text-muted border border-hairline text-xs font-medium cursor-not-allowed opacity-50"
-                      >
-                        T3Code
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={!sb.running}
+                      onClick={() => openT3LinksModal(sb)}
+                      title="View or generate T3 Code pairing links"
+                      className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary-active border border-primary/25 text-xs font-medium transition-colors disabled:opacity-40"
+                    >
+                      T3Code
+                    </button>
 
                     <button
                       type="button"

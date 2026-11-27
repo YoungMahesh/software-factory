@@ -5,7 +5,7 @@ Next.js 16 + React 19 web dashboard and same-origin Basic-Auth BFF proxy for the
 ## Pages & BFF Routes
 
 - **`/` (Builder)**: Prompt-first Factory App launcher with Prime Sandbox reuse, GitHub Repository Catalog picker (`GET /api/github/repos`, `POST /api/github/repos/refresh`), model/provider selection, and opt-in `web_app` mode.
-- **`/sandboxes` (Sandboxes)**: Active sandbox discovery, Prime Sandbox badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal costs (`GET /api/sandboxes/costs`), SSE streaming launch modal (`POST /api/sandboxes/stream`), terminate, and snapshot capture.
+- **`/sandboxes` (Sandboxes)**: Active sandbox discovery, Prime Sandbox badges, live 24-hour lifespan progress bars, per-sandbox accrued Modal costs (`GET /api/sandboxes/costs`), **T3Code Pairing Links** modal (`GET/POST /api/sandboxes/{id}/t3-links`), SSE streaming launch modal (`POST /api/sandboxes/stream`), terminate, and snapshot capture.
 - **`/snapshots` (Snapshots)**: Persistent snapshot registry listing, snapshot launch modal, and record deletion.
 - **`/scratchpad` (Scratchpad)**: **Ideas** (`config/scratchpad/`) with AI-assisted refinement (`POST /api/scratchpad/suggest`) and **Raw** (`config/raw/`) verbatim notes behind a persisted cache.
 - **API Proxy & Health**: `/api/health` provides an unauthenticated container health check; `/api/[...path]` forwards `GET`, `POST`, and `DELETE` requests to `SANDBOX_CONTROL_PLANE_URL` with Basic Auth and unbuffered SSE pass-through. Next.js middleware enforces Basic Auth against `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` (returning `500` in production if unset).

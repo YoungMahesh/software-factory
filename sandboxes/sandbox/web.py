@@ -45,6 +45,7 @@ from sandbox.lifecycle import get_sandboxes, terminate_sandbox
 from sandbox.profiles import get_available_profiles, get_client_for_profile
 from sandbox.provenance import resolve_host_software_factory_provenance
 from sandbox.scratchpad import scratchpad_router
+from sandbox.t3_pairing import t3_pairing_router
 from sandbox.snapshots import (
     delete_snapshot,
     get_snapshot,
@@ -448,6 +449,7 @@ def index_page() -> HTMLResponse:
 router.include_router(apps_router)
 router.include_router(costs_router)
 router.include_router(scratchpad_router)
+router.include_router(t3_pairing_router)
 
 
 def create_app() -> FastAPI:

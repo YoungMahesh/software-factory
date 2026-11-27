@@ -15,6 +15,28 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
+export const T3PairingLinkStatusSchema = z.enum(["active", "used", "expired"]);
+export type T3PairingLinkStatus = z.infer<typeof T3PairingLinkStatusSchema>;
+
+export const T3PairingLinkEntrySchema = z.object({
+  id: z.string().nullable().optional(),
+  url: z.string(),
+  status: T3PairingLinkStatusSchema,
+  label: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+});
+export type T3PairingLinkEntry = z.infer<typeof T3PairingLinkEntrySchema>;
+
+export const SandboxT3LinksResponseSchema = z.object({
+  sandbox_id: z.string(),
+  available: z.boolean(),
+  reason: z.string().nullable().optional(),
+  t3_url: z.string().nullable().optional(),
+  links: z.array(T3PairingLinkEntrySchema).default([]),
+});
+export type SandboxT3LinksResponse = z.infer<typeof SandboxT3LinksResponseSchema>;
+
 export const SandboxCostSchema = z.object({
   sandbox_id: z.string(),
   profile: z.string().nullable().optional(),
